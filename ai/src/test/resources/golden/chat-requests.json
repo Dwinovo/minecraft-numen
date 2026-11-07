@@ -1,0 +1,94 @@
+{
+  "openai-high": {
+    "model": "gpt-5",
+    "messages": [{"role": "system", "content": "你是同伴"}, {"role": "user", "content": "你好"}],
+    "tools": [{"type": "function", "function": {"name": "look", "description": "look", "parameters": {"type": "object"}}}],
+    "parallel_tool_calls": true,
+    "max_completion_tokens": 4096,
+    "reasoning_effort": "high",
+    "stream": true,
+    "stream_options": {"include_usage": true}
+  },
+  "openai-off-as-none": {
+    "model": "gpt-5.1",
+    "messages": [{"role": "system", "content": "你是同伴"}, {"role": "user", "content": "你好"}],
+    "tools": [{"type": "function", "function": {"name": "look", "description": "look", "parameters": {"type": "object"}}}],
+    "parallel_tool_calls": true,
+    "reasoning_effort": "none",
+    "stream": true,
+    "stream_options": {"include_usage": true}
+  },
+  "openrouter-medium": {
+    "model": "anthropic/claude-sonnet-4.6",
+    "messages": [{"role": "system", "content": "你是同伴"}, {"role": "user", "content": "你好"}],
+    "tools": [{"type": "function", "function": {"name": "look", "description": "look", "parameters": {"type": "object"}}}],
+    "parallel_tool_calls": true,
+    "temperature": 0.5,
+    "max_tokens": 2048,
+    "reasoning": {"effort": "medium"},
+    "stream": true,
+    "stream_options": {"include_usage": true}
+  },
+  "deepseek-high": {
+    "model": "deepseek-v4-flash",
+    "messages": [{"role": "system", "content": "你是同伴"}, {"role": "user", "content": "你好"}],
+    "tools": [{"type": "function", "function": {"name": "look", "description": "look", "parameters": {"type": "object"}}}],
+    "parallel_tool_calls": true,
+    "thinking": {"type": "enabled"},
+    "reasoning_effort": "high",
+    "stream": true,
+    "stream_options": {"include_usage": true}
+  },
+  "deepseek-off": {
+    "model": "deepseek-v4-flash",
+    "messages": [{"role": "system", "content": "你是同伴"}, {"role": "user", "content": "你好"}],
+    "tools": [{"type": "function", "function": {"name": "look", "description": "look", "parameters": {"type": "object"}}}],
+    "parallel_tool_calls": true,
+    "thinking": {"type": "disabled"},
+    "stream": true,
+    "stream_options": {"include_usage": true}
+  },
+  "zai-on": {
+    "model": "glm-5",
+    "messages": [{"role": "system", "content": "你是同伴"}, {"role": "user", "content": "你好"}],
+    "tools": [{"type": "function", "function": {"name": "look", "description": "look", "parameters": {"type": "object"}}}],
+    "parallel_tool_calls": true,
+    "max_tokens": 1024,
+    "thinking": {"type": "enabled"},
+    "stream": true,
+    "stream_options": {"include_usage": true}
+  },
+  "qwen-off": {
+    "model": "qwen3-max",
+    "messages": [{"role": "system", "content": "你是同伴"}, {"role": "user", "content": "你好"}],
+    "tools": [{"type": "function", "function": {"name": "look", "description": "look", "parameters": {"type": "object"}}}],
+    "parallel_tool_calls": true,
+    "enable_thinking": false,
+    "stream": true,
+    "stream_options": {"include_usage": true}
+  },
+  "none-format": {
+    "model": "kimi-k2",
+    "messages": [{"role": "system", "content": "你是同伴"}, {"role": "user", "content": "你好"}],
+    "tools": [{"type": "function", "function": {"name": "look", "description": "look", "parameters": {"type": "object"}}}],
+    "parallel_tool_calls": true,
+    "stream": true,
+    "stream_options": {"include_usage": true}
+  },
+  "auto-sends-nothing": {
+    "model": "gpt-5",
+    "messages": [{"role": "system", "content": "你是同伴"}, {"role": "user", "content": "你好"}],
+    "tools": [{"type": "function", "function": {"name": "look", "description": "look", "parameters": {"type": "object"}}}],
+    "parallel_tool_calls": true,
+    "stream": true,
+    "stream_options": {"include_usage": true}
+  },
+  "no-stream-usage": {
+    "model": "local-model",
+    "messages": [{"role": "system", "content": "你是同伴"}, {"role": "user", "content": "你好"}],
+    "tools": [{"type": "function", "function": {"name": "look", "description": "look", "parameters": {"type": "object"}}}],
+    "parallel_tool_calls": true,
+    "temperature": 1.3,
+    "stream": true
+  }
+}

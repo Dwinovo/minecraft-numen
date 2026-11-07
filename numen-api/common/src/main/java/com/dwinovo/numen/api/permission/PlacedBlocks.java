@@ -1,0 +1,307 @@
+package com.dwinovo.numen.api.permission;
+
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.UUIDUtil;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.datafix.DataFixTypes;
+import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
+
+/**
+ * 每维度一份:玩家放过方块的格子,和是谁放的。对象组 {@code self}、{@code owner}、{@code other} 的来源,也是"这东西是谁的"这个概念在
+ * 全仓唯一的落点。
+ *
+ * <p>记:放的人只在 {@link #placedBy} 一处认——谁放的就记谁,真玩家、同伴都一样;同伴连她的主人一起记({@link Placer#owner}),
+ * 于是主人名下别的同伴放的也算主人这一边,她被遣散以后也不变。双格方块连它带出来的另一半一起记。
+ * 经物品落位的({@code BlockItem.place} 返回处的 mixin)与建造照图直写的都走它。这里只记事实,"算不算别人的东西"
+ * 由对象组对着要动手的同伴判。
+ * 查:视图里是空气的格子视为无记号,查本身不改记录(搜索的视图可以是过时的快照或计划里的假想);读的是活世界、而那一格已是空气时才清掉({@link #placerIn})——不另挂方块变化钩子,谁挖的都一样。
+ *
+ * <p>线程:按区块各存一张并发表"格子 → 放的人"({@code ConcurrentHashMap<Long, ConcurrentHashMap<Long, Placer>>})。
+ * 写({@link #record}、{@link #forget})只在服务端主线程;读方是寻路工作线程({@link #isBuilt}、{@link #placerAt}、
+ * {@link #anyPlacedWithin},逐格 {@code get}/{@code containsKey})和主线程的 {@link #save}(遍历)。
+ * 每个读都只落在单个键上,{@code ConcurrentHashMap} 保证读到某次写完整落下的值(要么旧要么新,不会半个),无锁;
+ * 改一格是 O(1),不复制区块表。遍历(落盘、{@link #size})是弱一致的,而它们与写同在主线程,看到的就是确切的当前内容。
+ * 空了的区块表经 {@link ConcurrentHashMap#computeIfPresent} 原子摘掉,读到手里的那张表最多是空表,照样安全。
+ */
+public final class PlacedBlocks extends SavedData {
+
+    /**
+     * 放下这一格的玩家:{@code id} 认人,{@code name} 是放的那一刻的名字(主人看的"xxx 放的";查不到名字为空串),
+     * {@code owner} 是放的人是同伴时她的主人(真玩家为 null)。
+     * 记下放的人之前的存档里的格子不知道是谁放的,是 {@link #UNKNOWN}。{@code way} 是怎么放的:建造,还是走路顺手垫的路。
+     */
+    public record Placer(UUID id, String name, UUID owner, Way way) {
+
+        public static final Placer UNKNOWN = new Placer(new UUID(0L, 0L), "", null);
+
+        /** 同伴放的建造方块:有主人。 */
+        public Placer(UUID id, String name, UUID owner) {
+            this(id, name, owner, Way.BUILT);
+        }
+
+        /** 一位真玩家。 */
+        public Placer(UUID id, String name) {
+            this(id, name, null);
+        }
+
+        /** 说得出是谁:有名字。 */
+        public boolean known() {
+            return !name.isEmpty();
+        }
+    }
+
+    /**
+     * 怎么放下的这一格。由放的那个动作定,不由方块或物品猜:{@link #laying} 在走路垫路的右键里设成 {@link #PATH},
+     * 其余(建造、玩家手放、命令之外一切经物品落位的)是 {@link #BUILT}。走路路线不挖建造的格({@code Walking}):房子是要留下来的东西;
+     * 垫路的料是走路自己为过去垫的,回程要拆照常经权限层裁决。
+     */
+    public enum Way { BUILT, PATH }
+
+    /** 此刻落位算怎么放的:{@link #placedBy} 取它。只在服务端主线程上改,与 {@code Drops.breakStarts} 同一种成对嵌套的做法。 */
+    private static Way laying = Way.BUILT;
+
+    /**
+     * 把此刻落位的算法设成 {@code way},交回原来的,由调用方在落位之后用它还原(成对,无论放成没成)。
+     * 走路垫路的那一个右键({@code Mouse#usePath})是仓库里唯一设成 {@link Way#PATH} 的地方。
+     */
+    public static Way laying(Way way) {
+        Way before = laying;
+        laying = way;
+        return before;
+    }
+
+    /** 同一个人用同一种方式放的格子存成一组;{@code path} 缺省(旧存档)是建造。 */
+    private record PlacerCells(UUID id, String name, Optional<UUID> owner, boolean path, List<Long> cells) {
+        static final Codec<PlacerCells> CODEC = RecordCodecBuilder.create(i -> i.group(
+                UUIDUtil.CODEC.fieldOf("id").forGetter(PlacerCells::id),
+                Codec.STRING.fieldOf("name").forGetter(PlacerCells::name),
+                UUIDUtil.CODEC.optionalFieldOf("owner").forGetter(PlacerCells::owner),
+                Codec.BOOL.optionalFieldOf("path", false).forGetter(PlacerCells::path),
+                Codec.LONG.listOf().fieldOf("cells").forGetter(PlacerCells::cells)
+        ).apply(i, PlacerCells::new));
+    }
+
+    /**
+     * {@code cells}:不知道是谁放的格子(记下放的人之前的存档);{@code placers}:按放的人分组的格子。
+     */
+    // 包内可见:持久化是这个类的全部价值,得让单测够得着。
+    static final Codec<PlacedBlocks> CODEC = RecordCodecBuilder.create(i -> i.group(
+            Codec.LONG.listOf().optionalFieldOf("cells", List.of()).forGetter(PlacedBlocks::unknownCells),
+            PlacerCells.CODEC.listOf().optionalFieldOf("placers", List.of()).forGetter(PlacedBlocks::placerCells)
+    ).apply(i, PlacedBlocks::new));
+
+    // 1.21.5 codec 化的 SavedDataType:存储层自己驱动(反)序列化,save()/load() 重写不复存在;
+    // 读不出来时落回构造器。
+    private static final SavedDataType<PlacedBlocks> TYPE = new SavedDataType<>(
+            "numen_placed", PlacedBlocks::new, CODEC, DataFixTypes.SAVED_DATA_RANDOM_SEQUENCES);
+
+    /** {@link ChunkPos#asLong} → 该区块内玩家放过的格子({@link BlockPos#asLong})与放的人。 */
+    private final ConcurrentHashMap<Long, ConcurrentHashMap<Long, Placer>> byChunk = new ConcurrentHashMap<>();
+
+    public PlacedBlocks() {
+    }
+
+    private PlacedBlocks(List<Long> unknown, List<PlacerCells> groups) {
+        for (long cell : unknown) {
+            put(cell, Placer.UNKNOWN);
+        }
+        for (PlacerCells group : groups) {
+            Placer placer = new Placer(group.id(), group.name(), group.owner().orElse(null),
+                    group.path() ? Way.PATH : Way.BUILT);
+            for (long cell : group.cells()) {
+                put(cell, placer);
+            }
+        }
+    }
+
+    public static PlacedBlocks of(ServerLevel level) {
+        return level.getDataStorage().computeIfAbsent(TYPE);
+    }
+
+    /**
+     * {@code by} 在 {@code pos} 放下了方块(主线程):记下这一格和放的人,双格方块连它带出来的另一半(门上半、床头)。
+     * 放的人只在这里认,名字取放的那一刻的。
+     *
+     * <p><b>平台挂点。</b>模组上由 {@code BlockItemPlaceMixin} 在 {@code BlockItem.place} 成功返回时调;Paper 上由
+     * {@code BlockPlaceEvent}、{@code BlockMultiPlaceEvent} 调。调用方保证:主线程,放置已经成功(方块已在 {@code pos}),
+     * 只对经物品落位的放置调——命令、活塞、生长写下的不算"玩家放的"。
+     */
+    public static void placedBy(ServerLevel level, BlockPos pos, ServerPlayer by) {
+        PlacedBlocks placed = of(level);
+        Placer placer = new Placer(by.getUUID(), by.getGameProfile().name(),
+                by instanceof NumenPlayer companion ? companion.getOwnerUuid() : null, laying);
+        placed.record(pos, placer);
+        BlockPos other = otherHalfOf(pos, level.getBlockState(pos));
+        if (other != null && !level.getBlockState(other).isAir()) {
+            placed.record(other, placer);
+        }
+    }
+
+    /**
+     * 双格方块的主半(门的下半、床脚)带出来的另一半在哪;不是双格方块的主半为 null。放置记录、建造判"放一扇门
+     * 还要清哪一格"与画设计时"门盖掉哪两格"共用这一处。
+     */
+    public static BlockPos otherHalfOf(BlockPos pos, BlockState state) {
+        if (state == null) {
+            return null;
+        }
+        if (state.hasProperty(BlockStateProperties.BED_PART)
+                && state.getValue(BlockStateProperties.BED_PART) == BedPart.FOOT
+                && state.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
+            return pos.relative(state.getValue(BlockStateProperties.HORIZONTAL_FACING));
+        }
+        if (state.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
+                && state.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.LOWER) {
+            return pos.above();
+        }
+        return null;
+    }
+
+    /** 记一格和放它的人(主线程)。 */
+    public void record(BlockPos pos, Placer placer) {
+        put(pos.asLong(), placer);
+        setDirty();
+    }
+
+    /** 抹掉一格的记号。 */
+    public void forget(BlockPos pos) {
+        long cell = pos.asLong();
+        byChunk.computeIfPresent(chunkKey(pos), (k, cells) -> {
+            cells.remove(cell);
+            return cells.isEmpty() ? null : cells;
+        });
+        setDirty();
+    }
+
+    /** 这一格是玩家放的吗。{@code now} 是调用方读到的这一格此刻的状态:已是空气就当没有记号。任何线程可调。 */
+    public boolean isPlaced(BlockPos pos, BlockState now) {
+        return placerAt(pos, now) != null;
+    }
+
+    /**
+     * 这一格带着建造的放置记号吗({@link Way#BUILT}):只读,不看世界里此刻是什么、也不清记号,所以任何线程(寻路工作线程逐格问它)
+     * 都可以调。垫路的记号({@link Way#PATH})不算。要"这一格现在还是不是玩家放的"问 {@link #isPlaced}。
+     */
+    public boolean isBuilt(long cell) {
+        ConcurrentHashMap<Long, Placer> cells = byChunk.get(ChunkPos.asLong(BlockPos.of(cell)));
+        Placer placer = cells == null ? null : cells.get(cell);
+        return placer != null && placer.way() == Way.BUILT;
+    }
+
+    /**
+     * 放这一格的人;没有记录、或 {@code now} 是空气是 null。不知道是谁放的是 {@link Placer#UNKNOWN}。纯读取,任何线程可调:
+     * 寻路搜索拿来问的视图可以是过时的快照,或套着"计划里已经挖掉"的假想,那里的空气不是世界的话,所以这里不抹记录。
+     */
+    public Placer placerAt(BlockPos pos, BlockState now) {
+        ConcurrentHashMap<Long, Placer> cells = byChunk.get(chunkKey(pos));
+        Placer placer = cells == null ? null : cells.get(pos.asLong());
+        return placer == null || now.isAir() ? null : placer;
+    }
+
+    /**
+     * 同 {@link #placerAt(BlockPos, BlockState)},读的是 {@code view} 里这一格此刻的方块。{@code view} 是活世界({@link ServerLevel},
+     * 主线程)而这一格已是空气,就把记录一并抹掉:之后落进这一格的东西(沙砾落下、树叶长出)不算那个人放的。别的视图(搜索快照、
+     * 计划里的假想)不抹——记录清不清只看世界本身,这是唯一清记录的地方。
+     */
+    public Placer placerIn(BlockGetter view, BlockPos pos) {
+        BlockState now = view.getBlockState(pos);
+        Placer placer = placerAt(pos, now);
+        if (placer == null && now.isAir() && view instanceof ServerLevel) {
+            ConcurrentHashMap<Long, Placer> cells = byChunk.get(chunkKey(pos));
+            if (cells != null && cells.containsKey(pos.asLong())) {
+                forget(pos);
+            }
+        }
+        return placer;
+    }
+
+    /**
+     * {@code center} 周围 {@code radius} 格(切比雪夫)内有没有符合条件的人放的方块(含自身)。
+     *
+     * @param counts 放的人算不算
+     */
+    public boolean anyPlacedWithin(BlockPos center, int radius, BlockGetter view, Predicate<Placer> counts) {
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dy = -radius; dy <= radius; dy++) {
+                for (int dz = -radius; dz <= radius; dz++) {
+                    cursor.set(center.getX() + dx, center.getY() + dy, center.getZ() + dz);
+                    ConcurrentHashMap<Long, Placer> cells = byChunk.get(ChunkPos.asLong(cursor));
+                    if (cells == null || !cells.containsKey(cursor.asLong())) {
+                        continue;
+                    }
+                    Placer placer = placerIn(view, cursor.immutable());
+                    if (placer != null && counts.test(placer)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /** 记着的格子总数(测试与调试用)。 */
+    public int size() {
+        int n = 0;
+        for (ConcurrentHashMap<Long, Placer> s : byChunk.values()) {
+            n += s.size();
+        }
+        return n;
+    }
+
+    private void put(long cell, Placer placer) {
+        byChunk.computeIfAbsent(ChunkPos.asLong(BlockPos.of(cell)), k -> new ConcurrentHashMap<>()).put(cell, placer);
+    }
+
+    private List<Long> unknownCells() {
+        List<Long> out = new ArrayList<>();
+        for (ConcurrentHashMap<Long, Placer> cells : byChunk.values()) {
+            for (Map.Entry<Long, Placer> e : cells.entrySet()) {
+                if (e.getValue().equals(Placer.UNKNOWN)) {
+                    out.add(e.getKey());
+                }
+            }
+        }
+        return out;
+    }
+
+    private List<PlacerCells> placerCells() {
+        Map<Placer, List<Long>> groups = new LinkedHashMap<>();
+        for (ConcurrentHashMap<Long, Placer> cells : byChunk.values()) {
+            for (Map.Entry<Long, Placer> e : cells.entrySet()) {
+                if (!e.getValue().equals(Placer.UNKNOWN)) {
+                    groups.computeIfAbsent(e.getValue(), k -> new ArrayList<>()).add(e.getKey());
+                }
+            }
+        }
+        List<PlacerCells> out = new ArrayList<>();
+        groups.forEach((placer, cells) -> out.add(
+                new PlacerCells(placer.id(), placer.name(), Optional.ofNullable(placer.owner()),
+                        placer.way() == Way.PATH, cells)));
+        return out;
+    }
+
+    private static long chunkKey(BlockPos pos) {
+        return ChunkPos.asLong(pos);
+    }
+}

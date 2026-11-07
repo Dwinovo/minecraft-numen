@@ -2,7 +2,7 @@ package com.dwinovo.numen.plugins.curios;
 
 import com.dwinovo.numen.api.gear.GearSlot;
 import com.dwinovo.numen.api.gear.GearSource;
-import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.NumenPlayer;
 
 import net.minecraft.world.item.ItemStack;
 import top.theillusivec4.curios.api.CuriosApi;
@@ -58,7 +58,7 @@ final class CuriosGear implements GearSource {
     @Override
     public Set<String> kindsOf(NumenPlayer body, ItemStack stack) {
         boolean curio = CuriosApi.getCurio(stack).isPresent()
-                || stack.typeHolder().tags().anyMatch(tag -> tag.location().getNamespace().equals(CuriosApi.MODID));
+                || stack.getTags().anyMatch(tag -> tag.location().getNamespace().equals(CuriosApi.MODID));
         if (!curio) {
             return Set.of();
         }

@@ -1,0 +1,679 @@
+package com.dwinovo.numen.gametest;
+
+import com.dwinovo.numen.api.gametest.Checks;
+import com.dwinovo.numen.api.entity.CompanionFactory;
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import java.util.UUID;
+import net.minecraft.core.BlockPos;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Difficulty;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.Vec3;
+
+import static com.dwinovo.numen.gametest.GameTestKit.*;
+
+/**
+ * 穿戴与背包:{@code numen.gear.wear} / {@code numen.gear.hold} / {@code numen.gear.remove}、{@code numen.inv.drop} 带出的物品组件、
+ * {@code numen.inv.craft} 与模块 {@code numen.inv.make/store/fetch/smelt}、{@code numen.inv.items/count}、{@code numen.time.wait}、
+ * {@code numen.inv.eat}、换皮回收。
+ */
+public class InventoryGameTests {
+
+    /** 背包批次前置:和平难度 + 正午。 */
+    @BeforeBatch(batch = "numen_inventory")
+    public static void prepareInventoryBatch(ServerLevel level) {
+        settleWorld(level, Difficulty.PEACEFUL, NOON);
+    }
+
+    /** 进食批次前置:普通难度(和平难度下饥饿值自己会回满,测不出吃下去补了多少)+ 正午。 */
+    @BeforeBatch(batch = "numen_food")
+    public static void prepareFoodBatch(ServerLevel level) {
+        settleWorld(level, Difficulty.NORMAL, NOON);
+    }
+
+    /**
+     * 穿盔甲的回执要说真话:不给 --slot 的 numen.gear.wear 自动选位,头盔确实到了头上,
+     * 回执必须说 "in head"。曾经用含盔甲槽的总数比对来确认"离开了背包",头盔从手里挪到
+     * 头上数量不变,于是判没穿上、兜底报 "holding … in main hand"——穿对了话说错了。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void equip_armor_reply_names_the_slot(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_dresser", new BlockPos(4, 2, 4), false);
+        companion.getInventory().add(new ItemStack(Items.DIAMOND_HELMET));
+        ToolRun wear = lua(companion, "numen.gear.wear(\"minecraft:diamond_helmet\")");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
+                    .is(Items.DIAMOND_HELMET), "the helmet is not on her head");
+            String said = wear.done() ? wear.outcome() : null;
+            Checks.assertTrue(helper, said != null && said.contains("in head"),
+                    "the reply must say where it went, got: " + said);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 丢出去的是原物:附魔镐 numen.inv.drop 之后,地上的掉落物必须还带着那条附魔。
+     * 曾经按数量销毁再按种类重造,附魔/耐久/改名全部蒸发——主人递来的神器一进一出成白板。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void dropped_items_keep_their_components(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_courier", new BlockPos(4, 2, 4), false);
+        ItemStack pick = new ItemStack(Items.DIAMOND_PICKAXE);
+        var efficiency = level.registryAccess()
+                .lookupOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT)
+                .getOrThrow(net.minecraft.world.item.enchantment.Enchantments.EFFICIENCY);
+        pick.enchant(efficiency, 3);
+        companion.getInventory().add(pick);
+        // 这条测的是丢出去的是不是原物;丢东西要不要问主人另有用例,这里让主人选"全放行"
+        com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
+        lua(companion, "numen.inv.drop(\"minecraft:diamond_pickaxe\", {count = 1})");
+
+        succeedWhen(helper, () -> {
+            var drops = level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+                    companion.getBoundingBox().inflate(8));
+            Checks.assertTrue(helper, !drops.isEmpty(), "nothing was dropped");
+            ItemStack landed = drops.get(0).getItem();
+            Checks.assertTrue(helper, landed.is(Items.DIAMOND_PICKAXE), "wrong item dropped: " + landed);
+            var enchants = net.minecraft.world.item.enchantment.EnchantmentHelper.getEnchantmentsForCrafting(landed);
+            Checks.assertTrue(helper, enchants.getLevel(efficiency) == 3,
+                    "the enchantment did not survive the toss: " + enchants);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 换肤是原地换:她仍是同一个实体对象,GameProfile 挂上新的 textures,背包与手上的任务原样;旁观的玩家不会收到"加入了游戏"
+     * (没有重建身体、没有重新入服),只收到玩家信息的移除与重新加入,他的客户端据此刷新她的皮肤。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_inventory")
+    public static void reskin_in_place_keeps_the_body_the_task_and_the_silence(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var server = level.getServer();
+        BlockPos spawn = helper.absolutePos(new BlockPos(4, 2, 4));
+        NumenPlayer first = com.dwinovo.numen.api.gametest.Bodies.summon(server, UUID.randomUUID(),
+                "gametest_reskin", level,
+                new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
+        UUID uuid = first.getUUID();
+        first.getInventory().add(new ItemStack(Items.DIAMOND));
+        var watcher = GameTestKit.presentVanillaPlayer(helper, null, "gametest_reskin_watcher", "en_us");
+        ToolRun wait = lua(first, "return numen.time.wait(30)");
+        GameTestKit.said(watcher);
+
+        com.dwinovo.numen.api.entity.Companions.applySkin(server, uuid,
+                new com.dwinovo.numen.api.entity.MojangSkins.Skin("ZmFrZQ==", ""));
+
+        Checks.assertTrue(helper, NumenPlayer.findByUuid(server, uuid) == first, "she was rebuilt instead of changed in place");
+        Checks.assertTrue(helper, first.getGameProfile().properties().containsKey("textures"),
+                "the new skin is not on her profile");
+        Checks.assertTrue(helper, first.getInventory().hasAnyMatching(s -> s.is(Items.DIAMOND)), "her inventory changed");
+        Checks.assertTrue(helper, !wait.done(), "the task in her hands was cut off by the skin change");
+        Checks.assertTrue(helper, GameTestKit.said(watcher).stream().noneMatch(s -> s.text().getString().contains("joined")),
+                "changing the skin was announced as a join");
+        com.dwinovo.numen.api.entity.Companions.applySkin(server, uuid, null);
+        Checks.assertTrue(helper, !first.getGameProfile().properties().containsKey("textures"), "the skin did not come off");
+        GameTestKit.leave(watcher);
+        com.dwinovo.numen.api.entity.Companions.dismiss(server, first);
+        helper.succeed();
+    }
+
+    // ---- craft ----
+
+    /** 手上的 2×2 就够:两根橡木原木合出 8 块木板,原木用光,回执说合了多少。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void craft_planks_from_logs_in_hand(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_joiner", new BlockPos(3, 2, 3), false);
+        companion.getInventory().add(new ItemStack(Items.OAK_LOG, 2));
+        ToolRun craft = lua(companion, "numen.inv.craft(\"minecraft:oak_planks\", {count = 8})");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, craft.done(), "inv craft has not replied");
+            Checks.assertTrue(helper, craft.succeeded() && Long.valueOf(8).equals(craft.field("crafted")),
+                    "inv craft did not report 8 planks: " + craft.outcome());
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.OAK_PLANKS) == 8
+                            && companion.getInventory().countItem(Items.OAK_LOG) == 0,
+                    "the inventory does not hold 8 planks and no logs");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** numen.inv.make 自己找台:够得着的地方没有,它走到 16 格内最近的那张,打开、合出一口箱子,木板用光,界面合上。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void make_walks_to_the_nearest_table(GameTestHelper helper) {
+        BlockPos table = helper.absolutePos(new BlockPos(13, 2, 13));
+        helper.getLevel().setBlockAndUpdate(table, Blocks.CRAFTING_TABLE.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_seeker_walks", new BlockPos(2, 2, 2), false);
+        companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 8));
+        ToolRun make = lua(companion, "return numen.inv.make(\"minecraft:chest\")");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, make.done(), "inv make has not finished");
+            Checks.assertTrue(helper, make.ranToTheEnd(), "make failed: " + make.receipt());
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.CHEST) == 1
+                            && companion.getInventory().countItem(Items.OAK_PLANKS) == 0,
+                    "the inventory does not hold the chest with the planks spent");
+            Checks.assertTrue(helper, companion.position().distanceTo(Vec3.atCenterOf(table)) < 6,
+                    "she did not walk to the table");
+            Checks.assertTrue(helper, companion.containerMenu == companion.inventoryMenu, "the crafting table was left open");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 附近没有工作台,包里有一张:numen.inv.make 把它放在身边一格,打开、合出一口箱子,界面合上,那张台留在原地。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void make_puts_down_the_table_she_carries(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_tablebearer", new BlockPos(7, 2, 7), false);
+        companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 8));
+        companion.getInventory().add(new ItemStack(Items.CRAFTING_TABLE));
+        ToolRun make = lua(companion, "return numen.inv.make(\"minecraft:chest\")");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, make.done(), "inv make has not finished");
+            Checks.assertTrue(helper, make.ranToTheEnd(), "make failed: " + make.receipt());
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.CHEST) == 1
+                            && companion.getInventory().countItem(Items.CRAFTING_TABLE) == 0,
+                    "the chest was not made at the table she carried");
+            boolean placed = false;
+            for (BlockPos p : BlockPos.betweenClosed(helper.absolutePos(new BlockPos(5, 2, 5)),
+                    helper.absolutePos(new BlockPos(9, 2, 9)))) {
+                placed |= helper.getLevel().getBlockState(p).is(Blocks.CRAFTING_TABLE);
+            }
+            Checks.assertTrue(helper, placed, "no crafting table stands beside her");
+            Checks.assertTrue(helper, companion.containerMenu == companion.inventoryMenu, "the crafting table was left open");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 材料不够:回执写明缺什么,手里的一块不动。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void craft_short_of_materials_names_the_shortfall(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_skimper", new BlockPos(3, 2, 3), false);
+        companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 3));
+        ToolRun craft = lua(companion, "numen.inv.craft(\"minecraft:chest\", {count = 1})");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, craft.done(), "inv craft has not replied");
+            Checks.assertTrue(helper, !craft.succeeded() && craft.outcome().contains("not enough materials")
+                            && craft.outcome().contains("missing"),
+                    "the reply does not name the shortfall: " + craft.outcome());
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.OAK_PLANKS) == 3,
+                    "the planks were touched although nothing could be crafted");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    // ---- eat ----
+
+    /** 饿了吃面包:吃完才生效,饥饿值涨上去、面包少一个,回执报现在的饥饿值。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_food")
+    public static void eat_restores_hunger(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_eater", new BlockPos(3, 2, 3), false);
+        companion.getFoodData().setFoodLevel(10);
+        companion.getInventory().add(new ItemStack(Items.BREAD, 2));
+        ToolRun eat = lua(companion, "numen.inv.eat(\"minecraft:bread\")");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, eat.done(), "inv eat has not finished");
+            Checks.assertTrue(helper, eat.succeeded() && eat.outcome().startsWith("ate bread"),
+                    "inv eat did not report the meal: " + eat.outcome());
+            Checks.assertTrue(helper, companion.getFoodData().getFoodLevel() >= 15
+                            && companion.getInventory().countItem(Items.BREAD) == 1,
+                    "hunger is " + companion.getFoodData().getFoodLevel() + " with "
+                            + companion.getInventory().countItem(Items.BREAD) + " bread left");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 吃饱了还要吃:原版不让,回执如实说吃不下,面包还在。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_food")
+    public static void eat_on_a_full_stomach_keeps_the_food(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_sated", new BlockPos(3, 2, 3), false);
+        companion.getFoodData().setFoodLevel(20);
+        companion.getInventory().add(new ItemStack(Items.BREAD, 2));
+        ToolRun eat = lua(companion, "numen.inv.eat(\"minecraft:bread\")");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, eat.done(), "inv eat has not finished");
+            Checks.assertTrue(helper, !eat.succeeded() && eat.outcome().contains("already full"),
+                    "eating on a full stomach was not refused: " + eat.outcome());
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.BREAD) == 2, "the bread was eaten");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 没有这个物品的合成配方:numen.inv.make 以 not_found 收场、叫她去查配方,背包不动。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void craft_something_without_a_recipe_says_so(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_dreamer", new BlockPos(3, 2, 3), false);
+        companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 8));
+        ToolRun craft = lua(companion, "numen.inv.make(\"minecraft:bedrock\")");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, craft.done(), "inv make has not finished");
+            Checks.assertTrue(helper, !craft.ranToTheEnd() && craft.receipt().contains("no crafting recipe makes")
+                            && craft.receipt().contains("not_found"),
+                    "the error does not say there is no recipe: " + craft.receipt());
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.OAK_PLANKS) == 8, "the planks were touched");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 要穿的东西背包里没有:当场失败,说出缺的是什么。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void equip_something_not_carried_says_so(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_unarmed", new BlockPos(3, 2, 3), false);
+        ToolRun equip = lua(companion, "numen.gear.wear(\"minecraft:iron_helmet\")");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, equip.done(), "gear wear has not finished");
+            Checks.assertTrue(helper, !equip.succeeded() && equip.outcome().contains("in inventory to equip"),
+                    "the failure does not say the item is not carried: " + equip.outcome());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    // ---- numen.gear.wear / numen.gear.remove:换下、卸甲、没地方放 ----
+
+    /** 头上已经戴着铁头盔,再戴钻石头盔:钻石的上了头,铁的回到背包里,不掉在地上。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void equip_a_second_helmet_stows_the_first(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_milliner", new BlockPos(4, 2, 4), false);
+        companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+        companion.getInventory().add(new ItemStack(Items.DIAMOND_HELMET));
+        ToolRun equip = lua(companion, "numen.gear.wear(\"minecraft:diamond_helmet\")");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, equip.done(), "gear wear has not finished");
+            Checks.assertTrue(helper, equip.succeeded() && equip.outcome().contains("in head"),
+                    "the reply does not say the helmet went on her head: " + equip.outcome());
+            Checks.assertTrue(helper, companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
+                    .is(Items.DIAMOND_HELMET), "the diamond helmet is not on her head");
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.IRON_HELMET) == 1,
+                    "the iron helmet did not go back into her inventory");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /**
+     * 卸甲:{@code slot = "armor"} 时头盔和靴子一起脱下来收进背包,两个槽都空了,回执点名脱了哪两件;{@code --slot} 不写就是盔甲
+     * (四件甲),头盔卸进背包,手上的剑不动。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void unequip_armor_takes_every_piece_off(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_undresser", new BlockPos(4, 2, 4), false);
+        companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+        companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.FEET, new ItemStack(Items.IRON_BOOTS));
+        ToolRun unequip = lua(companion, "numen.gear.remove({slot = \"armor\"})");
+        NumenPlayer vague = spawnAt(helper, "gametest_vague", new BlockPos(11, 2, 11), false);
+        vague.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+        vague.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
+        ToolRun noSlot = lua(vague, "numen.gear.remove()");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, unequip.done(), "gear remove has not finished");
+            Checks.assertTrue(helper, unequip.succeeded() && unequip.outcome().startsWith("took off")
+                            && unequip.outcome().contains("iron_helmet") && unequip.outcome().contains("iron_boots"),
+                    "the reply does not name both pieces: " + unequip.outcome());
+            Checks.assertTrue(helper, companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).isEmpty()
+                            && companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.FEET).isEmpty(),
+                    "some armor is still worn");
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.IRON_HELMET) == 1
+                            && companion.getInventory().countItem(Items.IRON_BOOTS) == 1,
+                    "the armor did not go into her inventory");
+            Checks.assertTrue(helper, noSlot.done(), "gear remove has not replied");
+            Checks.assertTrue(helper, noSlot.succeeded() && noSlot.outcome().contains("took off iron_helmet (head)"),
+                    "gear remove without a slot did not take the armor off: " + noSlot.outcome());
+            Checks.assertTrue(helper, vague.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).isEmpty()
+                            && vague.getInventory().countItem(Items.IRON_HELMET) == 1,
+                    "the helmet did not go into the backpack");
+            Checks.assertTrue(helper, vague.getMainHandItem().is(Items.IRON_SWORD), "the sword in her hand came off");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+            CompanionFactory.despawn(helper.getLevel().getServer(), vague);
+        });
+    }
+
+    /** 背包三十六格全满时卸头盔:没地方放就不脱,头盔还戴着,也不扔在地上;回执说背包满了。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void unequip_with_a_full_inventory_keeps_the_armor_on(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_overpacked", new BlockPos(4, 2, 4), false);
+        for (int i = 0; i < 36; i++) {
+            companion.getInventory().setItem(i, new ItemStack(Items.COBBLESTONE, 64));
+        }
+        companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+        ToolRun unequip = lua(companion, "numen.gear.remove({slot = \"head\"})");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, unequip.done(), "gear remove has not finished");
+            Checks.assertTrue(helper, !unequip.succeeded() && unequip.outcome().contains("inventory is full"),
+                    "the failure does not say the inventory is full: " + unequip.outcome());
+            Checks.assertTrue(helper, companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
+                    .is(Items.IRON_HELMET), "the helmet came off with nowhere to go");
+            Checks.assertTrue(helper, helper.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+                            companion.getBoundingBox().inflate(4)).isEmpty(), "something was dropped on the ground");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 头上本来就空着还要卸:不算错,回执说没什么可脱。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void unequip_an_empty_slot_says_there_is_nothing(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_bareheaded", new BlockPos(4, 2, 4), false);
+        ToolRun unequip = lua(companion, "numen.gear.remove({slot = \"head\"})");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, unequip.done(), "gear remove has not finished");
+            Checks.assertTrue(helper, unequip.succeeded() && unequip.outcome().startsWith("nothing to take off"),
+                    "the reply does not say there was nothing to take off: " + unequip.outcome());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /**
+     * 拿东西不等于用东西:她低头对着地面,numen.gear.hold water_bucket 只把桶拿到主手,地上没有水、桶里的水还在;numen.gear.hold snowball
+     * 之后四个雪球都还在,拿在主手,周围没有飞出去的雪球。倒水、扔雪球都是改世界的动作,只能经权限层裁决,装备这条路上不许有第二个入口。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void holding_an_item_never_uses_it(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_waterbearer", new BlockPos(4, 2, 4), false);
+        companion.setXRot(90f);
+        companion.getInventory().add(new ItemStack(Items.WATER_BUCKET));
+        ToolRun equip = lua(companion, "numen.gear.hold(\"minecraft:water_bucket\")");
+        NumenPlayer keeper = spawnAt(helper, "gametest_snowkeeper", new BlockPos(11, 2, 11), false);
+        keeper.getInventory().add(new ItemStack(Items.SNOWBALL, 4));
+        ToolRun hold = lua(keeper, "numen.gear.hold(\"minecraft:snowball\")");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, equip.done(), "gear hold has not finished");
+            Checks.assertTrue(helper, equip.succeeded() && equip.outcome().contains("main hand"),
+                    "the reply does not say the bucket is in her main hand: " + equip.outcome());
+            Checks.assertTrue(helper, companion.getMainHandItem().is(Items.WATER_BUCKET),
+                    "the water bucket is not in her main hand: " + companion.getMainHandItem());
+            BlockPos feet = companion.blockPosition();
+            for (BlockPos p : BlockPos.betweenClosed(feet.offset(-3, -2, -3), feet.offset(3, 2, 3))) {
+                Checks.assertTrue(helper, helper.getLevel().getFluidState(p).isEmpty(), "water was poured at " + p);
+            }
+            Checks.assertTrue(helper, hold.done(), "gear hold has not finished");
+            Checks.assertTrue(helper, hold.succeeded() && hold.outcome().contains("main hand"),
+                    "the reply does not say the snowball is in her main hand: " + hold.outcome());
+            Checks.assertTrue(helper, keeper.getInventory().countItem(Items.SNOWBALL) == 4,
+                    "a snowball left her inventory: " + keeper.getInventory().countItem(Items.SNOWBALL));
+            Checks.assertTrue(helper, helper.getLevel().getEntitiesOfClass(
+                            net.minecraft.world.entity.projectile.throwableitemprojectile.Snowball.class,
+                            keeper.getBoundingBox().inflate(16)).isEmpty(), "a snowball was thrown");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+            CompanionFactory.despawn(helper.getLevel().getServer(), keeper);
+        });
+    }
+
+    /** 绑定诅咒的头盔脱不下来:卸下失败,说出原因,头盔还戴着、背包里没多出它。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void unequip_a_cursed_helmet_is_refused(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_cursed", new BlockPos(4, 2, 4), false);
+        ItemStack helmet = new ItemStack(Items.IRON_HELMET);
+        helmet.enchant(level.registryAccess()
+                .lookupOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT)
+                .getOrThrow(net.minecraft.world.item.enchantment.Enchantments.BINDING_CURSE), 1);
+        companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, helmet);
+        ToolRun unequip = lua(companion, "numen.gear.remove({slot = \"head\"})");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, unequip.done(), "gear remove has not finished");
+            Checks.assertTrue(helper, !unequip.succeeded() && unequip.outcome().contains("binding"),
+                    "the failure does not name the curse of binding: " + unequip.outcome());
+            Checks.assertTrue(helper, companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
+                    .is(Items.IRON_HELMET), "the cursed helmet came off");
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.IRON_HELMET) == 1,
+                    "the cursed helmet was duplicated into her inventory");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 盾不是穿戴物:numen.gear.hold 不点名哪只手时照原版进副手,回执说在副手。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void equip_a_shield_goes_to_the_offhand(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_shieldbearer", new BlockPos(4, 2, 4), false);
+        companion.getInventory().add(new ItemStack(Items.SHIELD));
+        ToolRun equip = lua(companion, "numen.gear.hold(\"minecraft:shield\")");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, equip.done(), "gear hold has not finished");
+            Checks.assertTrue(helper, equip.succeeded() && equip.outcome().contains("offhand"),
+                    "the reply does not say the shield is in her off hand: " + equip.outcome());
+            Checks.assertTrue(helper, companion.getOffhandItem().is(Items.SHIELD), "the shield is not in her off hand");
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.SHIELD) == 1, "the shield was duplicated");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    // ---- eat:叫停 ----
+
+    /** 嚼到一半主人按停止:按主人停止收场;面包一个没少,饥饿值没变,过了整段咀嚼时长也不再生效。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_food")
+    public static void owner_stop_mid_meal_keeps_the_food(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_interrupted", new BlockPos(3, 2, 3), false);
+        companion.getFoodData().setFoodLevel(10);
+        companion.getInventory().add(new ItemStack(Items.BREAD, 2));
+        ToolRun eat = lua(companion, "numen.inv.eat(\"minecraft:bread\")");
+
+        steps(helper)
+                .thenIdle(10)
+                .thenExecute(() -> com.dwinovo.numen.api.task.CompanionTickDispatcher.cancelFor(companion))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, eat.done() && eat.outcome().startsWith("the owner pressed Stop"),
+                        "the meal did not end as stopped by the owner: " + eat.outcome()))
+                .thenIdle(40)
+                .thenWaitUntil(() -> Checks.assertTrue(helper, companion.getInventory().countItem(Items.BREAD) == 2
+                                && companion.getFoodData().getFoodLevel() == 10,
+                        "the stopped meal still took effect: " + companion.getInventory().countItem(Items.BREAD)
+                                + " bread, hunger " + companion.getFoodData().getFoodLevel()))
+                .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
+                .thenSucceed();
+    }
+
+    /** 箱子的配方认"任意木板":四块橡木加四块白桦木板,在手边的工作台合出一口箱子,两种木板都用光。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void craft_a_chest_from_mixed_planks(GameTestHelper helper) {
+        helper.getLevel().setBlockAndUpdate(helper.absolutePos(new BlockPos(5, 2, 3)),
+                Blocks.CRAFTING_TABLE.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_patchworker", new BlockPos(3, 2, 3), false);
+        companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 4));
+        companion.getInventory().add(new ItemStack(Items.BIRCH_PLANKS, 4));
+        ToolRun craft = lua(companion, "return numen.inv.make(\"minecraft:chest\")");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, craft.done(), "inv make has not finished");
+            Checks.assertTrue(helper, craft.ranToTheEnd(), "craft from mixed planks failed: " + craft.receipt());
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.CHEST) == 1
+                            && companion.getInventory().countItem(Items.OAK_PLANKS) == 0
+                            && companion.getInventory().countItem(Items.BIRCH_PLANKS) == 0,
+                    "the chest was not made from both kinds of planks");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 背包里有什么、有几件:numen.inv.items 按种类合起来列出,numen.inv.count 数一种,没有的是 0。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void items_and_count_read_the_backpack(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_counter", new BlockPos(3, 2, 3), false);
+        companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
+        companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 6));
+        companion.getInventory().add(new ItemStack(Items.TORCH, 3));
+        ToolRun read = lua(companion, "local n = 0\nfor _, s in ipairs(numen.inv.items()) do\n"
+                + "  if s.item == \"minecraft:cobblestone\" then n = s.count end\nend\n"
+                + "return n .. \"/\" .. numen.inv.count(\"torch\") .. \"/\" .. numen.inv.count(\"minecraft:diamond\")");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, read.done(), "the program has not finished");
+            Checks.assertTrue(helper, read.ranToTheEnd() && read.receipt().contains("70/3/0"),
+                    "items and count do not read what she carries: " + read.receipt());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 存进箱子再取出来:numen.inv.store 走过去放进 20 块圆石,numen.inv.fetch 取回 5 块;箱子里剩 15,界面合上。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void store_and_fetch_go_through_the_chest(GameTestHelper helper) {
+        BlockPos chest = helper.absolutePos(new BlockPos(11, 2, 7));
+        helper.getLevel().setBlockAndUpdate(chest, Blocks.CHEST.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_stocker", new BlockPos(3, 2, 7), false);
+        companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 20));
+        ToolRun run = lua(companion, "local chest = " + xyz(chest) + "\nlocal put = numen.inv.store(chest, "
+                + "\"cobblestone\")\nlocal took = numen.inv.fetch(chest, \"cobblestone\", 5)\nreturn put .. \"/\" .. took");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, run.done(), "the program has not finished");
+            Checks.assertTrue(helper, run.ranToTheEnd() && run.receipt().contains("20/5"),
+                    "store and fetch did not move 20 and 5: " + run.receipt());
+            var box = (net.minecraft.world.level.block.entity.ChestBlockEntity) helper.getLevel().getBlockEntity(chest);
+            int inChest = 0;
+            for (int i = 0; i < box.getContainerSize(); i++) {
+                inChest += box.getItem(i).is(Items.COBBLESTONE) ? box.getItem(i).getCount() : 0;
+            }
+            Checks.assertTrue(helper, inChest == 15 && companion.getInventory().countItem(Items.COBBLESTONE) == 5,
+                    "the chest holds " + inChest + ", she carries " + companion.getInventory().countItem(Items.COBBLESTONE));
+            Checks.assertTrue(helper, companion.containerMenu == companion.inventoryMenu, "the chest was left open");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 烧两块粗铁:numen.inv.smelt 放进粗铁和一块煤,站着等烧完,取出两块铁锭,界面合上。 */
+    @GameTest(template = "floor16", timeoutTicks = 1326, batch = "numen_inventory")
+    public static void smelt_loads_waits_and_takes_the_output(GameTestHelper helper) {
+        BlockPos furnace = helper.absolutePos(new BlockPos(5, 2, 7));
+        helper.getLevel().setBlockAndUpdate(furnace, Blocks.FURNACE.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_smelter", new BlockPos(3, 2, 7), false);
+        companion.getInventory().add(new ItemStack(Items.RAW_IRON, 2));
+        companion.getInventory().add(new ItemStack(Items.COAL, 4));
+        ToolRun run = lua(companion, "return numen.inv.smelt(" + xyz(furnace) + ", \"raw_iron\")");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, run.done(), "smelt has not finished");
+            Checks.assertTrue(helper, run.ranToTheEnd(), "smelt failed: " + run.receipt());
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.IRON_INGOT) == 2
+                            && companion.getInventory().countItem(Items.RAW_IRON) == 0
+                            && companion.getInventory().countItem(Items.COAL) == 3,
+                    "she does not hold the two ingots with one coal spent");
+            Checks.assertTrue(helper, companion.containerMenu == companion.inventoryMenu, "the furnace was left open");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 等一会儿:numen.time.wait(1) 站着等够一秒(至少 20 刻)才回,回的是等了几秒。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void time_wait_stands_for_the_time_given(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_patient", new BlockPos(3, 2, 3), false);
+        long start = helper.getLevel().getGameTime();
+        long[] ended = {-1};
+        ToolRun wait = lua(companion, "return numen.time.wait(1)");
+        helper.onEachTick(() -> {
+            if (ended[0] < 0 && wait.done()) {
+                ended[0] = helper.getLevel().getGameTime();
+            }
+        });
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, wait.done(), "time wait has not finished");
+            Checks.assertTrue(helper, wait.ranToTheEnd() && wait.receipt().contains("1"), "wait failed: " + wait.receipt());
+            Checks.assertTrue(helper, ended[0] - start >= 20, "she came back after " + (ended[0] - start) + " ticks");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 木棍不是穿的东西:numen.gear.wear 如实失败、叫她用 numen.gear.hold,主手不变、木棍还在包里。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void wear_a_stick_says_to_hold_it(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_stickler", new BlockPos(3, 2, 3), false);
+        companion.getInventory().add(new ItemStack(Items.STICK));
+        companion.getInventory().setSelectedSlot(5);
+        ToolRun equip = lua(companion, "numen.gear.wear(\"minecraft:stick\")");
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, equip.done(), "gear wear has not finished");
+            Checks.assertTrue(helper, !equip.succeeded() && equip.outcome().contains("not something you wear")
+                            && equip.outcome().contains("numen.gear.hold(\"minecraft:stick\")"),
+                    "the failure does not send her to hold it: " + equip.outcome());
+            Checks.assertTrue(helper, companion.getMainHandItem().isEmpty(), "her main hand changed");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /**
+     * 背包满了说一次:36 格塞满石头,脚边一块泥土、一块沙子都放不下——一条 inventory_full,说的是留在地上的那一件;再等一秒也
+     * 不多一条。腾出一格,她捡起其中一件把那格占上,另一件又放不下——再满一次,再来一条。没有派任何活。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void a_full_backpack_is_told_once_each_time_it_fills(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_packrat", new BlockPos(4, 2, 4), false);
+        for (int slot = 0; slot < 36; slot++) {
+            companion.getInventory().setItem(slot, new ItemStack(Items.STONE, 64));
+        }
+        Vec3 feet = companion.position();
+        for (var item : java.util.List.of(Items.DIRT, Items.SAND)) {
+            var drop = new net.minecraft.world.entity.item.ItemEntity(level, feet.x, feet.y, feet.z, new ItemStack(item));
+            drop.setNoPickUpDelay();
+            drop.setDeltaMovement(Vec3.ZERO);
+            level.addFreshEntity(drop);
+        }
+
+        steps(helper)
+                .thenWaitUntil(() -> Checks.assertTrue(helper, fullEvents(companion).size() == 1,
+                        "not one inventory_full event: " + fullEvents(companion)))
+                .thenIdle(20)
+                .thenExecute(() -> {
+                    java.util.List<String> told = fullEvents(companion);
+                    Checks.assertTrue(helper, told.size() == 1 && told.get(0).contains("your backpack is full")
+                                    && told.get(0).contains("stayed on the ground"),
+                            "a full backpack was told more than once, or not as it is: " + told);
+                    companion.getInventory().setItem(0, ItemStack.EMPTY);
+                })
+                .thenWaitUntil(() -> Checks.assertTrue(helper, fullEvents(companion).size() == 2,
+                        "filling up again is not told again: " + fullEvents(companion)))
+                .thenExecute(() -> {
+                    ItemStack picked = companion.getInventory().getItem(0);
+                    Checks.assertTrue(helper, picked.is(Items.DIRT) || picked.is(Items.SAND),
+                            "the freed slot did not take what lay at her feet: " + picked);
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
+    /** 她的事件都在她的收件箱里:其中 inventory_full 的原文。 */
+    /** 写书:往书与笔里写两页并署名,再读它——成书署着她的名字、标题和两页字都在。 */
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_inventory")
+    public static void write_signs_a_book_and_read_reads_it_back(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_author", new BlockPos(5, 2, 5), false);
+        companion.getInventory().add(new ItemStack(Items.WRITABLE_BOOK));
+        java.util.concurrent.atomic.AtomicReference<ToolRun> read = new java.util.concurrent.atomic.AtomicReference<>();
+
+        // Paper(CraftBukkit)不收加入后一秒内的编辑书("Book edited too quickly"),等过了再写
+        Steps steps = steps(helper).thenIdle(25);
+        steps = call(helper, steps, companion,
+                "numen.inv.write({\"Day 1: iron.\", \"Day 2: a house.\"}, {title = \"Diary\"})");
+        steps = steps.thenExecute(() -> read.set(lua(companion, "numen.inv.read(\"minecraft:written_book\")")))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, read.get().succeeded() && read.get().reply().contains("\"title\":\"Diary\"")
+                                && read.get().reply().contains("Day 2: a house.")
+                                && read.get().reply().contains("\"author\":\"gametest_author\""),
+                        "inv read does not show the signed book: " + read.get().reply()));
+        steps.thenWaitUntil(() -> {
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.WRITTEN_BOOK) == 1
+                            && companion.getInventory().countItem(Items.WRITABLE_BOOK) == 0,
+                    "the book and quill did not become a written book");
+        }).thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();
+    }
+
+    private static java.util.List<String> fullEvents(NumenPlayer companion) {
+        return GameTestKit.events(companion)
+                .stream()
+                .filter(e -> com.dwinovo.numen.api.agent.inbox.EventTypes.INVENTORY_FULL.equals(e.type()))
+                .map(com.dwinovo.numen.api.agent.inbox.EventQueue.Entry::text)
+                .toList();
+    }
+}

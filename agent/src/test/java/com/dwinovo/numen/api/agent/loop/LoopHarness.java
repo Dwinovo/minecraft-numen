@@ -1,0 +1,315 @@
+package com.dwinovo.numen.api.agent.loop;
+
+import com.dwinovo.numen.api.agent.http.CancelToken;
+import com.dwinovo.numen.api.agent.inbox.EventQueue;
+import com.dwinovo.numen.api.agent.inbox.EventTypes;
+import com.dwinovo.numen.api.agent.llm.ConvoState;
+import com.dwinovo.numen.api.agent.provider.AssistantTurn;
+import com.dwinovo.numen.api.agent.provider.LlmToolCall;
+import com.dwinovo.numen.api.agent.provider.Usage;
+import org.junit.jupiter.api.BeforeEach;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Consumer;
+
+/**
+ * 驱动一个真的循环内核的测试底座。端口全是假的、同步的:模型调用停在 {@link FakeModel#calls} 里等测试替它回话,
+ * 工具停在 {@link FakeTools} 里等测试替它结算。测试就是按真实的先后顺序把这些回调喂回去。
+ *
+ * <p>内核自己的测试和挂在内核上的组件(长期目标)的测试共用这一份,假端口只有一处。
+ */
+public abstract class LoopHarness {
+
+    protected static final long T0 = 1_000_000L;
+
+    protected final ConvoState transcript = new ConvoState();
+    protected final EventQueue inbox = new EventQueue(EventQueue.Journal.NONE);
+    protected final FakeModel model = new FakeModel();
+    protected final FakeTools tools = new FakeTools();
+    protected final FakeMemory memory = new FakeMemory();
+    protected final FakeHost host = new FakeHost();
+    protected final List<LoopEvent> events = new ArrayList<>();
+    protected AgentLoop loop;
+
+    @BeforeEach
+    protected void setUpLoop() {
+        loop = new AgentLoop("test", model, tools, transcript, inbox, memory, host);
+        loop.subscribe(events::add);
+    }
+
+    // ---- 假端口 ----
+
+    /** 一次停着等回话的模型调用。 */
+    public record Call(ModelRequest request, CancelToken cancel, Consumer<ModelPort.Delta> onDelta,
+                       Consumer<ModelOutcome> onDone) {
+
+        public void say(String text) {
+            onDone.accept(new ModelOutcome.Answered(new AssistantTurn(text, List.of(), null), Usage.ZERO));
+        }
+
+        public void callTools(LlmToolCall... calls) {
+            onDone.accept(new ModelOutcome.Answered(new AssistantTurn("", List.of(calls), null), Usage.ZERO));
+        }
+
+        public void fail(Cause cause) {
+            onDone.accept(new ModelOutcome.Failed(cause));
+        }
+
+        public void stream(String content) {
+            onDelta.accept(new ModelPort.Delta(content, ""));
+        }
+
+        /** 这次请求里最后一条 user 消息的原文。 */
+        public String lastUser() {
+            List<ConvoState.Msg> messages = request.messages();
+            for (int i = messages.size() - 1; i >= 0; i--) {
+                if (messages.get(i) instanceof ConvoState.Msg.User u) {
+                    return u.content();
+                }
+            }
+            return null;
+        }
+    }
+
+    public final class FakeModel implements ModelPort {
+        public Cause unavailable;
+        public int turnRequests;
+        /** 非空时每次调用当场就用这句话答完,回调同步回到内核里——模拟回得比调用栈退得还快的端口。 */
+        public String replyAtOnce;
+        public final List<Call> calls = new ArrayList<>();
+
+        @Override
+        public Cause unavailable() {
+            return unavailable;
+        }
+
+        @Override
+        public ModelRequest turnRequest() {
+            turnRequests++;
+            return new ModelRequest(transcript.snapshot(), List.of(), "system");
+        }
+
+        @Override
+        public void call(ModelRequest request, CancelToken cancel, Consumer<Delta> onDelta,
+                         Consumer<ModelOutcome> onDone) {
+            Call call = new Call(request, cancel, onDelta, onDone);
+            calls.add(call);
+            if (replyAtOnce != null) {
+                call.say(replyAtOnce);
+            }
+        }
+
+        public Call last() {
+            return calls.get(calls.size() - 1);
+        }
+    }
+
+    /**
+     * 工具口。{@link #parked} 模拟传输层的在飞表:这批调用之外,还挂着一个外接模型经 actuator 派的调用,
+     * 内脑的打断只许按自己这批的 id 收拾。
+     */
+    public final class FakeTools implements ToolPort {
+        public static final String EXTERNAL_CALL = "ext-1";
+        public final Set<String> parked = new LinkedHashSet<>(Set.of(EXTERNAL_CALL));
+        public final List<LlmToolCall> batch = new ArrayList<>();
+        public final List<Boolean> cancels = new ArrayList<>();
+        /** 转来的输入,依次:条目类型与它急不急。 */
+        public final List<String> arrivals = new ArrayList<>();
+        public Sink sink;
+
+        @Override
+        public void run(List<LlmToolCall> calls, Sink sink) {
+            this.sink = sink;
+            batch.addAll(calls);
+            for (LlmToolCall call : calls) {
+                parked.add(call.id());
+                sink.started(call);
+            }
+        }
+
+        @Override
+        public void arrived(EventQueue.Entry entry, boolean urgent) {
+            arrivals.add(entry.type() + (urgent ? " urgent" : ""));
+        }
+
+        @Override
+        public List<String> cancel(boolean stopBody) {
+            cancels.add(stopBody);
+            List<String> ids = batch.stream().map(LlmToolCall::id).toList();
+            ids.forEach(parked::remove);
+            batch.clear();
+            return ids;
+        }
+
+        /** 结算一个调用;这批全部结算就报 settled。{@code via} 让测试模拟切断之后才迟到的结果。 */
+        public void finish(Sink via, String id, String json) {
+            LlmToolCall call = new LlmToolCall(id, "mine", "{}");
+            batch.removeIf(c -> c.id().equals(id));
+            parked.remove(id);
+            via.finished(call, json);
+            if (batch.isEmpty()) {
+                via.settled();
+            }
+        }
+
+        public void finish(String id) {
+            finish(sink, id, "{\"success\":true}");
+        }
+    }
+
+    public final class FakeMemory implements MemoryPort {
+        public boolean due;
+        /** 切完没有新消息可总结:不压,不发请求。 */
+        public boolean nothingToCompact;
+        public int clears;
+        public int applied;
+        public final List<Boolean> compactions = new ArrayList<>();
+        /** 一次整理要依次发的摘要请求;缺省一份,测试要看"劈轮之后两份"时自己放两份。 */
+        public List<ModelRequest> compactRequests = List.of(
+                new ModelRequest(List.of(new ConvoState.Msg.User("请总结")), List.of(), "compact"));
+        /** 每次切分收到的关注点,和 {@link #compactions} 一一对应。 */
+        public final List<String> focuses = new ArrayList<>();
+        public final List<String> failures = new ArrayList<>();
+        /** 切分那一刻的历史——自动压缩在注入之前,主人刚说的话不该在这里面。 */
+        public List<ConvoState.Msg> historyAtSplit;
+
+        @Override
+        public boolean compactionDue() {
+            return due && !nothingToCompact;   // 和真实的闸门一样:压不出东西就不放行
+        }
+
+        @Override
+        public Optional<Compaction> compaction(boolean auto, String focus) {
+            compactions.add(auto);
+            focuses.add(focus);
+            historyAtSplit = transcript.snapshot();
+            if (nothingToCompact) {
+                return Optional.empty();
+            }
+            return Optional.of(new Compaction() {
+                @Override
+                public List<ModelRequest> requests() {
+                    return compactRequests;
+                }
+
+                @Override
+                public boolean apply(List<ModelOutcome.Answered> answers) {
+                    AssistantTurn reply = answers.get(0).turn();
+                    if (reply.content().isBlank()) {
+                        return false;
+                    }
+                    applied++;
+                    due = false;
+                    transcript.replaceAll(List.of(new ConvoState.Msg.User("[摘要] " + reply.content())));
+                    return true;
+                }
+
+                @Override
+                public void failed(String why) {
+                    failures.add(why);
+                    due = false;
+                }
+            });
+        }
+
+        @Override
+        public void clear() {
+            clears++;
+            transcript.replaceAll(List.of());
+        }
+    }
+
+    public static final class FakeHost implements HostPort {
+        public long now = T0;
+        public long dayTime;
+        public int level = 3;
+        public boolean external;
+        public boolean away;
+        public String preamble = "";
+        public boolean bodyTask;
+
+        @Override
+        public long now() {
+            return now;
+        }
+
+        @Override
+        public long dayTime() {
+            return dayTime;
+        }
+
+        @Override
+        public int initiativeLevel() {
+            return level;
+        }
+
+        @Override
+        public boolean externallyDriven() {
+            return external;
+        }
+
+        @Override
+        public boolean ownerPresent() {
+            return !away;
+        }
+
+        @Override
+        public String injectionPreamble() {
+            return preamble;
+        }
+
+        @Override
+        public boolean bodyTaskRunning() {
+            return bodyTask;
+        }
+
+        @Override
+        public LoopStatus.Doing activity() {
+            return bodyTask ? new LoopStatus.Doing("numen.activity.dig", List.of("64")) : null;
+        }
+    }
+
+    // ---- 输入与读事件的小工具 ----
+
+    protected void ownerSays(String words) {
+        loop.push(List.of(new EventQueue.Entry(EventTypes.QUERY, EventQueue.query(words, 0L), 0, false)));
+    }
+
+    protected void worldEvent(String text, boolean urgent) {
+        loop.push(List.of(new EventQueue.Entry(EventTypes.TASK_FINISHED, "<event>" + text + "</event>", 0, urgent)));
+    }
+
+    /** 群聊里旁听到别人说的一句(捎带投递)。发送方标急也没用——测试照标,钉住这一点。 */
+    protected void overhears(String text) {
+        loop.push(List.of(new EventQueue.Entry(EventTypes.TALK, "<event kind=\"talk\">" + text + "</event>", 0, true)));
+    }
+
+    protected void goalContinues(String text) {
+        loop.push(List.of(new EventQueue.Entry(EventTypes.GOAL, "<goal-progress>" + text + "</goal-progress>", 0, false)));
+    }
+
+    protected void control(String type) {
+        control(type, type);
+    }
+
+    protected void control(String type, String text) {
+        loop.push(List.of(new EventQueue.Entry(type, text, 0, false)));
+    }
+
+    protected <E extends LoopEvent> List<E> eventsOf(Class<E> type) {
+        return events.stream().filter(type::isInstance).map(type::cast).toList();
+    }
+
+    protected static LlmToolCall tool(String id) {
+        return new LlmToolCall(id, "mine", "{}");
+    }
+
+    protected ConvoState.Msg lastMessage() {
+        return transcript.lastMessage();
+    }
+
+}

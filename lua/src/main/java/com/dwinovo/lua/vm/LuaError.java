@@ -46,6 +46,9 @@ public class LuaError extends RuntimeException {
 	protected String fileline;
 	
 	protected String traceback;
+
+	/** Numen:报错已经带上"这是方法,要用冒号调用"的提示(沿调用栈往外,只提示一次)。 */
+	protected boolean methodHinted;
 	
 	protected Throwable cause;
 
@@ -65,6 +68,15 @@ public class LuaError extends RuntimeException {
 		if (fileline != null && level > 0)
 			return fileline + ": " + m;
 		return m;
+	}
+
+	/**
+	 * Numen:虚拟机自己的类型错误(对 nil 取字段、对 nil 做运算、调用 nil……):原版 Lua 都以 "attempt to" 起头,走的是单参数的构造;
+	 * 脚本里 {@code error(消息)} 走带层级的构造,不算。
+	 */
+	boolean isTypeError() {
+		String m = super.getMessage();
+		return level == 1 && m != null && m.startsWith("attempt to");
 	}
 
 	/** Get the LuaValue that was provided in the constructor, or 

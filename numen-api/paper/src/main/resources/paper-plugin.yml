@@ -1,0 +1,16 @@
+name: numen_api
+version: '${version}'
+description: 'Numen API: the engine behind Numen, an AI companion that is a server-side fake player.'
+main: com.dwinovo.numen.api.NumenApiPlugin
+bootstrapper: com.dwinovo.numen.api.NumenApiBootstrap
+api-version: '1.21'
+authors:
+  - dwinovo
+website: https://github.com/Dwinovo/minecraft-numen
+dependencies:
+  server:
+    # 主人不在线时她的权限经 Vault 查主人;没装也行
+    Vault:
+      load: BEFORE
+      required: false
+      join-classpath: true

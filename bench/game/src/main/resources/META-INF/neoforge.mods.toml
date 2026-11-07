@@ -10,7 +10,7 @@ displayName = "Numen Bench"
 description = '''真模型评测:在 GameTest 服务器里用产品的大脑与提示词接真实模型跑场景。'''
 
 [[dependencies.numen_bench]]
-modId = "numen"
+modId = "numen_api"
 type = "required"
 versionRange = "[0,)"
 ordering = "AFTER"
