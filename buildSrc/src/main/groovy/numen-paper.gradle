@@ -1,0 +1,77 @@
+// Paper 端两个插件(numen-api/paper、numen/paper)共用的那部分,设计稿 docs/paper.md §三。
+//
+// Paper 是第三个"加载器":common 的服务端源码在这里对着 Paper 的开发包(Mojang 名、带补丁的服务端)重新编译,
+// 不直接打包对着原版编出来的字节码——Paper 改过不少原版方法的签名,对着原版编的字节码在 Paper 上会 NoSuchMethodError。
+// 编得过但链不上、覆写悄悄失效的那类问题,由 linkCheck 任务(buildSrc 的 LinkCheck)在每次 check 里查。
+//
+// 父目录里的 common 子项目(numen-api/common 或 numen/common)是源码的出处。客户端源码集(src/client)不进来:
+// 服务端没有客户端类。
+// 子项目自己的 build.gradle 里还要做:应用 paperweight-userdev、选开发包、选 Mojang 名的产物。
+import com.dwinovo.numen.build.LinkCheckTask
+
+plugins {
+    id 'java-library'
+}
+
+def common = project("${project.parent.path}:common")
+// 链接检查要读 common 的编译类路径(原版 jar),它得先配置好
+evaluationDependsOn(common.path)
+
+configurations {
+    commonJava {
+        canBeResolved = true
+    }
+    commonResources {
+        canBeResolved = true
+    }
+}
+
+dependencies {
+    commonJava project(path: common.path, configuration: 'commonJava')
+    commonResources project(path: common.path, configuration: 'commonResources')
+}
+
+tasks.named('compileJava', JavaCompile) {
+    dependsOn(configurations.commonJava)
+    source(configurations.commonJava)
+    // Mixin 包是模组加载器那一侧的实现(common 的 mixin 包之外不引用它,所以整包排除也编得过):Paper 不用 Mixin,靠它自己的服务实现
+    exclude '**/mixin/**'
+    options.release = java_version as int
+}
+
+// Mixin 的配置是模组加载器的东西,Paper 不读;贴图、音效表和语音识别的服务商表只有客户端读。
+tasks.named('processResources', ProcessResources) {
+    dependsOn(configurations.commonResources)
+    from(configurations.commonResources) {
+        exclude '*.mixins.json', 'assets/*/textures/**', 'assets/*/sounds.json', 'numen_stt.json'
+    }
+    // 语言文件与标签是数据生成的产物(datagenAll),两个加载器生成的内容相同,Paper 取 NeoForge 那一份:
+    // 它们和模组的成品 jar 里带的是同一批文件,Paper 端不另有一套生成器。
+    from(project("${project.parent.path}:neoforge").file('src/generated/resources')) {
+        exclude '.cache/**'
+    }
+    filesMatching('paper-plugin.yml') {
+        expand(version: project.version, description: project.description)
+    }
+    inputs.property('paperPluginVersion', project.version)
+}
+
+// 链接检查(docs/paper.md §三):成品里对服务端类的每一处引用与覆写,在 Paper 服务端 jar 里解析得到吗。
+// 默认对着编译用的开发包里那一份服务端;换一版 Paper 以后要核对,-PlinkCheckPaperServer=<服务端 jar>,
+// 起过一次 runServer 的话,服务器真正跑的那个在运行目录的 versions/<mc 版本>/paper-<mc 版本>.jar。
+// 原版 jar 是"本来是覆写"的依据,取 common 编译用的那一份(Mojang 名)。
+def paperServerJar = { configurations.compileClasspath.files.find { it.name.startsWith('paper-server-') } }
+def linkCheck = tasks.register('linkCheck', LinkCheckTask) {
+    group = 'verification'
+    description = '成品里对 Paper 服务端类的引用与覆写,在 Paper 服务端 jar 里解析得到吗'
+    dependsOn(configurations.compileClasspath)
+    product.from(tasks.named('jar'))
+    libraries.from(configurations.compileClasspath.filter { !it.name.startsWith('paper-server-') })
+    vanillaServer.from(common.sourceSets.main.compileClasspath.filter { it.name.startsWith('vanilla-') })
+    paperServer.set(providers.gradleProperty('linkCheckPaperServer')
+            .map { layout.projectDirectory.file(it) }
+            .orElse(layout.file(providers.provider(paperServerJar))))
+}
+tasks.named('check') {
+    dependsOn(linkCheck)
+}

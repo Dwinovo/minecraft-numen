@@ -1,0 +1,26 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.dwinovo.numen.api.gametest.mixin.inject",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "ChunkTickShuffleMixin",
+    "EntityRandomMixin",
+    "GameTestBatchOrderMixin",
+    "GameTestBatchStartMixin",
+    "GameTestHelperOriginMixin",
+    "GameTestRegistrationMixin",
+    "GameTestSelectionMixin",
+    "GameTestServerOriginMixin",
+    "GameTestServerTickMixin",
+    "GameTestServerWorldMixin",
+    "GameTestTickOrderMixin",
+    "StructureChunksMixin",
+    "StructureBoundaryMixin",
+    "StructureClearMixin",
+    "StructureSiteClearMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -1,0 +1,49 @@
+package com.dwinovo.numen.api.program;
+
+import com.dwinovo.numen.script.ApiReply;
+import com.dwinovo.numen.script.Invocation;
+import com.dwinovo.numen.script.ScriptCatalog;
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.sdk.ApiFunction;
+import com.dwinovo.numen.api.sdk.ApiRegistry;
+import com.dwinovo.numen.api.sdk.Dispatcher;
+
+import java.util.UUID;
+import java.util.function.Consumer;
+
+/**
+ * 服务端函数在进程内执行:排进这段程序的车道({@link MainQueue.Lane}),服务端主线程轮到它时在身体旁边执行。程序在自己的线程上
+ * 等结果,主线程不等程序。
+ */
+final class ServerCalls implements ProgramCalls {
+
+    private final NumenPlayer her;
+    private final UUID companion;
+    private final MainQueue.Lane lane;
+    /** 受理了一件占身体的活,收到它的编号:程序要等的这件活的收尾归程序({@link ServerPrograms})。 */
+    private final Consumer<String> accepted;
+
+    ServerCalls(NumenPlayer her, UUID companion, MainQueue.Lane lane, Consumer<String> accepted) {
+        this.her = her;
+        this.companion = companion;
+        this.lane = lane;
+        this.accepted = accepted;
+    }
+
+    @Override
+    public void execute(String callId, Invocation invocation, Consumer<String> done, Runnable sent) {
+        ApiFunction fn = ApiRegistry.function(invocation.function());
+        boolean job = fn != null && fn.kind() == ScriptCatalog.Kind.JOB;
+        Consumer<String> landed = !job ? done : reply -> {
+            ApiReply.Parsed parsed = ApiReply.parse(reply);
+            if (parsed.ok() && parsed.job() != null) {
+                accepted.accept(parsed.job());
+            }
+            done.accept(reply);
+        };
+        lane.post(() -> {
+            Dispatcher.serve(invocation.function(), invocation.args(), her, companion, callId, landed);
+            sent.run();
+        });
+    }
+}

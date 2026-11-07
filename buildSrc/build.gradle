@@ -1,3 +1,20 @@
 plugins {
     id 'groovy-gradle-plugin'
 }
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // 链接检查(src/main/java 下的 LinkCheck):读成品与服务端 jar 的字节码
+    implementation 'org.ow2.asm:asm:9.7.1'
+
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

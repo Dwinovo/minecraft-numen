@@ -1,0 +1,130 @@
+package com.dwinovo.numen.gametest;
+
+import com.dwinovo.numen.api.gametest.Checks;
+import static com.dwinovo.numen.gametest.GameTestKit.*;
+
+import com.dwinovo.numen.nav.Trip;
+import com.dwinovo.numen.api.entity.CompanionFactory;
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.plan.Breath;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.tags.FluidTags;
+import com.dwinovo.numen.api.gametest.GameTest;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+
+/**
+ * 水下的路,从 {@code numen.move.walk} 的入口:封顶的水道短到一口气游得完,她游过去,换气本能不在半路把她
+ * 拽上去,回执说潜过一段水、憋了多久。
+ */
+public class SwimGameTests {
+
+    /** 水道所在的那一行。 */
+    private static final int Z = 20;
+
+    private static void fill(GameTestHelper helper, int x0, int y0, int z0, int x1, int y1, int z1, BlockState state) {
+        for (int x = x0; x <= x1; x++) {
+            for (int y = y0; y <= y1; y++) {
+                for (int z = z0; z <= z1; z++) {
+                    helper.getLevel().setBlock(helper.absolutePos(new BlockPos(x, y, z)), state, 3);
+                }
+            }
+        }
+    }
+
+    /**
+     * 地板(y = 1)下面一条封顶的水道:沿 x 从 {@code a} 到 {@code b},水两格高(脚在 y = -1),顶是地板那一层基岩,两头各一口竖井
+     * 通到地面。四壁与底都是基岩。一道基岩墙在两头之间横贯整个场地,地面上过不去:两边只有这条水道连着。
+     */
+    private static void sealedChannel(GameTestHelper helper, int a, int b) {
+        fill(helper, (a + b) / 2, 2, 0, (a + b) / 2, 26, 51, Blocks.BEDROCK.defaultBlockState());
+        fill(helper, a - 1, -2, Z - 1, b + 1, 1, Z + 1, Blocks.BEDROCK.defaultBlockState());
+        fill(helper, a, -1, Z, b, 0, Z, Blocks.WATER.defaultBlockState());
+        fill(helper, a, 1, Z, a, 1, Z, Blocks.WATER.defaultBlockState());
+        fill(helper, b, 1, Z, b, 1, Z, Blocks.WATER.defaultBlockState());
+    }
+
+    /**
+     * 8 格长的封顶水道(一口气约 110 刻):{@code numen.move.walk} 到对岸,她游过去,一口气到头——换气本能没有在计划内的水下把她拽上去;
+     * 回执说潜过一段水、憋了多久、氧气最低到多少;一点血不掉。
+     */
+    @GameTest(template = "floor52", timeoutTicks = 453, batch = ON_FOOT)
+    public static void goto_swims_a_short_sealed_channel_and_says_so(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        sealedChannel(helper, 10, 18);
+        NumenPlayer companion = spawnAt(helper, "gametest_diver", new BlockPos(7, 2, Z), false);
+        BlockPos there = helper.absolutePos(new BlockPos(21, 2, Z));
+        ToolRun walk = lua(companion, "numen.move.walk(" + xyz(there) + ")");
+        float[] lowest = {Float.MAX_VALUE};
+        helper.onEachTick(() -> lowest[0] = Math.min(lowest[0], companion.getHealth()));
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, walk.done(), "numen.move.walk has not finished");
+            Checks.assertTrue(helper, walk.succeeded() && companion.blockPosition().equals(there),
+                    "she did not get through the channel: " + walk.outcome());
+            Checks.assertTrue(helper, walk.outcome().contains("I went under water once:")
+                            && walk.outcome().contains("without a breath") && walk.outcome().contains("air down to"),
+                    "the reply does not tell the one dive: " + walk.outcome());
+            Checks.assertTrue(helper, lowest[0] >= companion.getMaxHealth(), "she got hurt: lowest health " + lowest[0]);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 17 格长的封顶水道(一口气约 200 刻,满氧气憋得住),离出口两格的顶上有一个封死的小气室(一格水、上面一格空气,四周是基岩),
+     * 不通地面。她游到气室底下、往东的那一步刚开始,前面那一格被一堵基岩挡住:这一步卡住,拖得比这一段剩下的憋气长。
+     * <ul>
+     *   <li>导航说这一段是计划内的每一刻,她的氧气都还够游完剩下的水下再留出余量({@link Breath#RESERVE})——撑不到的那一刻导航
+     *       就停下那一步,不等这一步的期限(期限按一步的估价给,够她把余量憋光);</li>
+     *   <li>换气本能接手,把她带进气室换气,事件说她差点淹着、游上去换了气;一点血不掉;</li>
+     *   <li>唯一的路被挡死,{@code numen.move.walk} 没走到,回执说潜过一段水、憋了多久。</li>
+     * </ul>
+     */
+    @GameTest(template = "floor52", timeoutTicks = 600, batch = ON_FOOT)
+    public static void a_planned_dive_held_up_under_water_lets_go_before_the_air_runs_out(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        sealedChannel(helper, 10, 27);
+        // 气室:水道顶上 x = 25 那一格是水,再上面一格空气,四周与顶上是基岩(挖不开,不通地面)
+        fill(helper, 24, 2, Z - 1, 26, 3, Z + 1, Blocks.BEDROCK.defaultBlockState());
+        fill(helper, 25, 1, Z, 25, 1, Z, Blocks.WATER.defaultBlockState());
+        fill(helper, 25, 2, Z, 25, 2, Z, Blocks.AIR.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_held_diver", new BlockPos(7, 2, Z), false);
+        BlockPos there = helper.absolutePos(new BlockPos(30, 2, Z));
+        ToolRun walk = lua(companion, "numen.move.walk(" + xyz(there) + ")");
+        double wallX = helper.absolutePos(new BlockPos(25, 0, Z)).getX() + 0.5;
+        boolean[] walled = {false};
+        int[] plannedAir = {Integer.MAX_VALUE};
+        float[] lowest = {Float.MAX_VALUE};
+        helper.onEachTick(() -> {
+            lowest[0] = Math.min(lowest[0], companion.getHealth());
+            Trip trip = Trip.current(companion);
+            if (trip != null && trip.plannedDive()) {
+                plannedAir[0] = Math.min(plannedAir[0], companion.getAirSupply());
+            }
+            // 她在气室底下、往东的那一步已经开始:挡住它要去的那一格
+            if (!walled[0] && companion.getX() >= wallX && companion.isEyeInFluid(FluidTags.WATER)) {
+                walled[0] = true;
+                fill(helper, 26, -1, Z, 26, 0, Z, Blocks.BEDROCK.defaultBlockState());
+            }
+        });
+
+        succeedWhen(helper, () -> {
+            Checks.assertTrue(helper, walled[0], "she never reached the air pocket under water");
+            Checks.assertTrue(helper, walk.done(), "numen.move.walk has not finished");
+            Checks.assertTrue(helper, plannedAir[0] >= Breath.RESERVE,
+                    "the navigation still called the dive planned with only " + plannedAir[0] + " air left");
+            Checks.assertTrue(helper, lowest[0] >= companion.getMaxHealth(), "she drowned a little: lowest health " + lowest[0]);
+            var told = GameTestKit.events(companion).stream()
+                    .filter(e -> e.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.REFLEX))
+                    .map(e -> e.text()).toList();
+            Checks.assertTrue(helper, told.stream().anyMatch(t -> t.contains("reflex=\"breath\"") && t.contains("to swim up for a breath")),
+                    "no breath reflex event: " + told);
+            Checks.assertTrue(helper, !walk.succeeded() && walk.outcome().contains("I went under water"),
+                    "the reply does not tell the failed walk and the dive: " + walk.outcome());
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+}

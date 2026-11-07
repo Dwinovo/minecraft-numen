@@ -1,0 +1,27 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.dwinovo.numen.api.mixin.inject",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "BlockItemPlaceMixin",
+    "BoatAccessor",
+    "GameModeAccessor",
+    "ItemEntityTouchMixin",
+    "PlayerAdvancementsRewardMixin",
+    "PlayerListRespawnMixin",
+    "MixinPlayerListCompanionSpawn",
+    "MixinServerCommonPacketListener"
+  ],
+  "client": [
+    "ChatComponentAccessor",
+    "ToastManagerAccessor",
+    "MixinKeyboardInput",
+    "MixinGuiGraphics",
+    "MixinLivingEntityRenderer"
+  ],
+  "server": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

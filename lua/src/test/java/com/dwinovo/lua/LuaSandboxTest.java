@@ -86,6 +86,29 @@ class LuaSandboxTest {
     }
 
     @Test
+    void aTypeErrorInsideAMethodSaysToCallItWithAColon() throws InterruptedException {
+        String classes = """
+                local C = {}
+                C.__index = C
+                local function where(c) return c.x end
+                function C:dist(other) return where(other) - self.x end
+                function C:fail() error("boom") end
+                local function plain(t) return t.x end
+                local a = setmetatable({x = 1}, C)
+                assert(a:dist(a) == 0, "冒号调用照常")
+                """;
+        LuaSandbox.Outcome dot = run(classes + "return a.dist(a)");
+        assertEquals(LuaSandbox.Ending.ERROR, dot.ending());
+        assertTrue(dot.message().contains("attempt to index"), dot.message());
+        assertTrue(dot.message().contains("call it as obj:name(args), not obj.name(args)"), "点号调用方法:" + dot.message());
+        assertEquals(1, dot.message().split("not obj.name", -1).length - 1, "提示只说一次:" + dot.message());
+        LuaSandbox.Outcome selfless = run(classes + "return C.dist(5, a)");
+        assertTrue(selfless.message().contains("call it as obj:name(args)"), "self 错位成别的值:" + selfless.message());
+        assertFalse(run(classes + "return plain(nil)").message().contains("obj:name"), "不在方法里的类型错误不提示");
+        assertFalse(run(classes + "return a:fail()").message().contains("obj:name"), "脚本自己 error 的不是类型错误,不提示");
+    }
+
+    @Test
     void aSyntaxErrorSaysWhereAndCheckReadsWithoutRunning() throws InterruptedException {
         LuaSandbox.Outcome o = run("local x = 1\nif x then\n");
         assertEquals(LuaSandbox.Ending.UNREADABLE, o.ending());

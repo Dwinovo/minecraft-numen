@@ -1,0 +1,413 @@
+package com.dwinovo.numen.api;
+
+import com.dwinovo.numen.api.agent.inbox.EventTypes;
+import com.dwinovo.numen.api.agent.scope.Handle;
+import com.dwinovo.numen.api.agent.scope.Scope;
+import com.dwinovo.numen.api.gear.GearSlot;
+import com.dwinovo.numen.api.gear.GearSource;
+import com.dwinovo.numen.api.entity.CompanionEvents;
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.WaterState;
+import com.dwinovo.numen.api.event.NumenEvents;
+import com.dwinovo.numen.api.plugin.PluginRoster;
+import com.dwinovo.numen.api.plugin.PluginRoster.Source;
+import com.dwinovo.numen.api.plugin.PluginRoster.Unloading;
+import com.dwinovo.numen.api.plugin.PluginSwitches;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.item.ItemStack;
+
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.UUID;
+import java.util.function.Consumer;
+import java.util.function.Function;
+
+/**
+ * 插件的登记处:{@code NumenPlugins.register("mymod", numen -> …)}。
+ *
+ * <h2>名字空间由登记者给出</h2>
+ * 插件登记时写自己的 id(一般就是 mod id 或它的简写:{@code tlm}、{@code ftbquests}),拿到的那扇门只往这个名字空间里登记:组
+ * {@code maid} 就是 {@code tlm.maid},模块 {@code skin.lua} 就是 {@code tlm.skin}。Numen API 自己的内容用 {@link #NUMEN}。
+ *
+ * <h2>时机不必你操心</h2>
+ * 插件在自己模组的构造期登记就行。Numen API 内部该就绪的东西各有各的时机(工具注册表在
+ * 类加载时就有,头像要等客户端起来),这里替你等——先登记的先跑,能跑的立刻跑,
+ * 跑不了的等它就绪。
+ *
+ * <h2>专用服务器上会安静地少几样</h2>
+ * 头像只活在玩家的客户端上,它由客户端启动时{@linkplain #bindClient 接上来};专用服务器上没人接,
+ * 于是 {@code registerPortrait} 与 {@code onClient} 就是空操作。<b>"有没有接上"本身就是判据</b>,不必再去问一遍
+ * "我现在是不是客户端"——那种问法每个加载器一个写法,写在插件里就是每个插件一个写法。
+ */
+public final class NumenPlugins {
+
+    /** 客户端接上来的输入口;专用服务器上一直是 null。 */
+    private static volatile ClientInput clientInput;
+    /** 客户端接上来了没有。它同时就是"我现在是不是客户端"的答案。 */
+    private static volatile boolean clientReady;
+
+    /** Numen API 自己的名字空间:Numen 与 Numen API 登记的组与模块都在它下面。 */
+    public static final String NUMEN = "numen";
+
+    private NumenPlugins() {}
+
+    /**
+     * 登记一个插件。可在任何时候调用,通常在你模组的构造期。
+     *
+     * <p>登记里有一处会破坏系统(名字写不出来、组已经有主、函数绑定不了……),异常原样抛出,启动就此失败;那句话写着是哪个函数、
+     * 哪一条。写法上的问题不拦,看 {@code ApiTester.lint} 的报告。
+     *
+     * @param namespace 你的名字空间:小写字母开头,只含 [a-z0-9_];她的程序里你的函数都写成 {@code <namespace>.<组>.<动作>}
+     */
+    public static void register(String namespace, NumenPlugin plugin) {
+        register(namespace, Unloading.LIVE, plugin);
+    }
+
+    /**
+     * 登记一个插件,并声明卸下它要不要重启。{@link Unloading#LIVE}(默认,即 {@link #register(String, NumenPlugin)})说它只经门登记:
+     * 服主关它、脚本重载时,门里登记的一切当场撤回,再开时 setup 再跑一遍。在门外动了东西——Mixin、直接挂在加载器上的监听、改不回的
+     * 客户端块——的插件用 {@link Unloading#NEEDS_RESTART}:它装着时关它,登记照旧留着、花名册标"重启后生效"。门外的东西撤不回,
+     * 撤了一半比不撤更糟,所以只看这一句声明,不去猜。
+     *
+     * <p>撤回之后,这次登记时拿到的那扇门再登记任何东西都抛 {@link IllegalStateException},点名是哪个插件:重登的 setup 会拿到新的门,
+     * 旧的不该还有人拿着用。
+     */
+    public static void register(String namespace, Unloading unloading, NumenPlugin plugin) {
+        if (plugin == null) return;
+        com.dwinovo.numen.api.sdk.ApiRegistry.checkNamespace(namespace);
+        ROSTER.run(namespace, plugin, unloading, scope -> new Impl(namespace, scope));
+    }
+
+    /**
+     * 登记一个<b>目标模组只在客户端</b>的联动(Litematica 这一类纯客户端模组):函数全是客户端函数({@code ClientCall}),真正碰目标模组的代码
+     * 只在主人的客户端上跑。和 {@link #register} 一样登记,区别在"有没有"的判据:
+     * <ul>
+     *   <li><b>登记在两侧无条件</b>。服务端装不装目标模组都登记,所以你的登记({@code NumenPlugin#setup})与函数签名里<b>不许出现目标模组的类</b>——
+     *       服务端读签名、生成文档时会加载它们;碰目标模组的代码只放在函数体里被调用到的类里。</li>
+     *   <li><b>判据只有一处:主人的客户端。</b>客户端起来时问平台"{@code targetMod} 装了没有",装了就在报到时把 {@code namespace} 报给服务端
+     *       ({@link com.dwinovo.numen.api.plugin.ClientMods#provided}、{@code ClientCapsPayload})。服务端只读这份报告:主人的客户端没报,
+     *       模型的 API 清单、帮助与技能表里就没有这个名字空间,调用它当场以 {@code no_function} 失败、说明缺的是哪个模组。</li>
+     *   <li>主人换了客户端或中途装了目标模组,重新进服才刷新。</li>
+     * </ul>
+     * 目标模组<b>两侧都装</b>的联动(它的函数有服务端的、客户端只是读界面)用 {@link #register} 加你自己的"目标在不在"的闸门,不用这个。
+     *
+     * @param namespace 你的名字空间,规矩同 {@link #register}
+     * @param targetMod 目标模组的 id,问平台({@code Services.platform().modName})用
+     */
+    public static void registerForClientMod(String namespace, String targetMod, NumenPlugin plugin) {
+        com.dwinovo.numen.api.sdk.ApiRegistry.checkNamespace(namespace);
+        com.dwinovo.numen.api.plugin.ClientMods.declare(namespace, targetMod);
+        register(namespace, plugin);
+    }
+
+    /**
+     * 引擎自己的登记(帮助、原版指令、手上的活、模块那几组):引擎是宿主不是插件,不进花名册、停用名单也管不着。
+     * <b>Numen API 内部调用</b>。
+     */
+    public static void registerHost(NumenPlugin plugin) {
+        plugin.setup(new Impl(NUMEN, HOST));
+    }
+
+    /** 引擎自己的登记的作用域:进程一生都不撤,但和插件的登记走同一条路(同样的句柄、同样的表)。 */
+    private static final Scope HOST = new Scope();
+
+    /**
+     * 联动型插件在装之前报到,让花名册里有它的一行:{@code id} 是它之后 {@link #register} 用的名字空间,{@code targetMod}
+     * 是它联动的模组。<b>目标模组在场才报到</b>——不在场的联动不算这台服务器上的插件,不进花名册。返回能不能接着装:
+     * 服主在停用名单里关了它,就是 false,别再装。
+     *
+     * <p>Numen 内嵌的联动由 Numen 的闸门报到({@link Source#BUNDLED});单独发布的联动插件报 {@link Source#JAR}。
+     */
+    public static boolean admit(Source source, String id, String targetMod) {
+        return ROSTER.admit(source, id, targetMod);
+    }
+
+    /** 插件装到一半出了事(不是它的 setup 里抛的,比如装之前的准备):记进花名册,界面上显示原因。 */
+    public static void failed(String id, Throwable cause) {
+        ROSTER.failed(id, cause);
+    }
+
+    /** 这台服务器上的插件花名册:界面、停用名单都读写它。<b>Numen API 内部调用</b>。 */
+    public static PluginRoster roster() {
+        return ROSTER;
+    }
+
+    private static volatile PluginRoster ROSTER = new PluginRoster(PluginSwitches::onDisk, PluginRoster::platformMeta);
+
+    /** 单测用:单测里没有加载器给的配置目录,换一份名单不在服务器配置目录里的花名册。必须在第一次登记之前。 */
+    public static void useRoster(PluginRoster roster) {
+        ROSTER = roster;
+    }
+
+    /** 主人客户端那一侧的输入口,形状与 {@link NumenApi#emit(UUID, String, String)} 相同。 */
+    @FunctionalInterface
+    public interface ClientInput {
+        Delivery emit(UUID companion, String type, String text);
+    }
+
+    /**
+     * 客户端起来时把只在客户端存在的能力接上来。<b>Numen API 内部调用</b>,插件不该碰。
+     */
+    public static void bindClient(ClientInput input) {
+        clientInput = input;
+        clientReady = true;
+        for (Runnable r : PENDING) runClientBlock(r);
+        PENDING.clear();
+    }
+
+    /**
+     * 客户端还没接上时先攒着,接上再跑。
+     *
+     * <p>插件在自己的 {@code @Mod} 构造器里登记,而 Numen API 的客户端入口也是一个
+     * {@code @Mod} 构造器——谁先谁后由加载器的模组排序决定。不攒的话,插件生不生效
+     * 就成了排序的函数:同一份代码换个加载器、加个别的模组就可能整块静默失效,
+     * 而且没有任何报错。专用服务器上没人来接,这两个表原样留着不跑,正是要的行为。
+     */
+    /**
+     * 登记过的穿戴来源,按登记顺序——那也是自动选位的优先级。见 {@link NumenApi#registerGear}。
+     * 原版四件甲由 Numen 在加载期最先登记,所以总在最前。
+     */
+    private static final List<GearSource> GEAR = new CopyOnWriteArrayList<>();
+
+    /**
+     * 身体状态片段。打头的是 Numen API 自己读的:穿戴来源渲染的 {@code <worn>}、碰着水时的 {@code <water>}
+     * ({@link WaterState});其后是插件经 {@link NumenApi#contributeBodyState} 登记的——同一条出错隔离、同一次变化检测。
+     */
+    private static final List<Function<NumenPlayer, String>> BODY_STATE =
+            new CopyOnWriteArrayList<>(List.of(NumenPlugins::worn, WaterState::describe));
+
+    /** 这具身体此刻所有的穿戴位置:各来源按登记顺序接起来。<b>Numen API 内部调用</b>(服务端主线程)。 */
+    public static List<GearSlot> gearSlots(NumenPlayer body) {
+        List<GearSlot> out = new ArrayList<>();
+        for (GearSource source : GEAR) {
+            out.addAll(source.slots(body));
+        }
+        return out;
+    }
+
+    /** 各来源认为这件该戴在哪类位置,合在一起;空集 = 不是穿戴物。<b>Numen API 内部调用</b>(服务端主线程)。 */
+    public static Set<String> gearKinds(NumenPlayer body, ItemStack stack) {
+        Set<String> out = new LinkedHashSet<>();
+        for (GearSource source : GEAR) {
+            out.addAll(source.kindsOf(body, stack));
+        }
+        return out;
+    }
+
+    /**
+     * {@code <worn>head: minecraft:iron_helmet; chest: empty; …; curios:ring: minecraft:gold_ring, empty</worn>}
+     *
+     * <p>空位也列出:这是模型知道自己有哪些槽名的唯一来源。只写物品 id,不写耐久和组件——变化检测按整段
+     * 字符串比,耐久一掉就推包是噪声。一个位置都没有时不出这一段。
+     */
+    private static String worn(NumenPlayer body) {
+        return worn(gearSlots(body));
+    }
+
+    /** 同上,对着一串已经取出来的位置(原版的四件甲在前,别的来源的接着)写。 */
+    static String worn(List<GearSlot> slots) {
+        Map<String, List<String>> byName = new LinkedHashMap<>();
+        for (GearSlot slot : slots) {
+            ItemStack stack = slot.worn();
+            byName.computeIfAbsent(slot.name(), ignored -> new ArrayList<>()).add(stack.isEmpty() ? "empty"
+                    : BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+        }
+        if (byName.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder("<worn>");
+        byName.forEach((name, items) -> {
+            if (sb.length() > "<worn>".length()) sb.append("; ");
+            sb.append(name).append(": ").append(String.join(", ", items));
+        });
+        return sb.append("</worn>").toString();
+    }
+
+    /** 汇总所有插件从这具身体上读的状态片段。<b>Numen API 内部调用</b>(服务端)。 */
+    public static String bodyStateFragments(NumenPlayer body) {
+        return joinFragments(BODY_STATE, body);
+    }
+
+    /** 正算不出来的片段。身体片段每次状态检查都要算,一个坏插件不能每秒把日志刷二十条。 */
+    private static final Set<Function<?, String>> FAILING = ConcurrentHashMap.newKeySet();
+
+    /**
+     * 按登记顺序拼起来,空的不占位。
+     *
+     * <p>某个插件算炸了不能连累整条请求或整个身体检查——它自己那段丢掉,别人的照常挂上。同一个片段连着出错
+     * 只在第一次记日志,算出来一次就重新计。
+     */
+    static <T> String joinFragments(List<Function<T, String>> fragments, T subject) {
+        if (fragments.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (Function<T, String> f : fragments) {
+            try {
+                String x = f.apply(subject);
+                if (FAILING.remove(f)) {
+                    Constants.LOG.info("[numen] 插件的运行期状态又算得出来了");
+                }
+                if (x != null && !x.isBlank()) sb.append(x);
+            } catch (RuntimeException e) {
+                if (FAILING.add(f)) {
+                    Constants.LOG.error("[numen] 插件的运行期状态算不出来,这一段跳过(接着出错不再重复记)", e);
+                }
+            }
+        }
+        return sb.toString();
+    }
+
+    private static final List<Runnable> PENDING = new CopyOnWriteArrayList<>();
+
+    private static void runClientBlock(Runnable r) {
+        try {
+            r.run();
+        } catch (RuntimeException e) {
+            Constants.LOG.error("[numen] 插件的客户端初始化出错", e);
+        }
+    }
+
+    private static final class Impl implements NumenApi {
+
+        /** 这扇门登记进的名字空间。 */
+        private final String namespace;
+        /** 这扇门登记的每一条的句柄都收在这里;作用域关了,门就过期了。 */
+        private final Scope scope;
+
+        Impl(String namespace, Scope scope) {
+            this.namespace = namespace;
+            this.scope = scope;
+        }
+
+        /** 撤回之后还拿着这扇门登记,是拿着上一次登记的门:点名是哪个插件,别让半死的登记留下。 */
+        private Scope open() {
+            if (scope.closed()) {
+                throw new IllegalStateException("the door of plugin '" + namespace + "' is stale: the plugin was "
+                        + "withdrawn (switched off or reloaded), so this door registers nothing any more; use the "
+                        + "door its setup is given when it registers again");
+            }
+            return scope;
+        }
+
+        @Override
+        public <T> void on(CompanionEvent<T> event, Consumer<T> handler) {
+            open().add(CompanionEvents.subscribe(event, handler));
+        }
+
+        @Override
+        public void api(String group, String summary, Class<?> functions) {
+            open().add(com.dwinovo.numen.api.sdk.ApiRegistry.register(namespace, group, summary, functions));
+        }
+
+        @Override
+        public void api(String group, String summary, java.util.List<com.dwinovo.numen.api.sdk.ApiFunction> functions) {
+            open().add(com.dwinovo.numen.api.sdk.ApiRegistry.register(namespace, group, summary, functions));
+        }
+
+        @Override
+        public <R extends com.dwinovo.numen.api.task.TaskRecord<?>> void taskRunner(Class<R> record,
+                com.dwinovo.numen.api.task.TaskFactory.Runner<R> runner) {
+            open().add(com.dwinovo.numen.api.task.TaskFactory.register(record, runner));
+        }
+
+        @Override
+        public void rangedWeapon(com.dwinovo.numen.api.combat.RangedWeapon weapon) {
+            open().add(com.dwinovo.numen.api.combat.RangedWeapons.register(weapon));
+        }
+
+        @Override
+        public <T> void codec(Class<T> type, com.dwinovo.numen.api.sdk.Codec<T> codec) {
+            open().add(com.dwinovo.numen.api.sdk.LuaCodecs.register(type, codec));
+        }
+
+        @Override
+        public void bundleContent(Path root) {
+            if (root == null) return;
+            Scope scope = open();
+            Path modules = root.resolve(com.dwinovo.numen.api.script.Modules.KIND.dir());
+            java.util.Optional<Handle> bundled = com.dwinovo.numen.api.library.Shipped.bundle(namespace, root);
+            bundled.ifPresent(scope::add);
+            if (bundled.isPresent() && java.nio.file.Files.isDirectory(modules)) {
+                scope.add(com.dwinovo.numen.api.script.BuiltinModules.bundle(modules));
+            }
+        }
+
+        @Override
+        public void knowledgeSource(com.dwinovo.numen.api.knowledge.KnowledgeKind kind, String provides,
+                                    java.util.List<String> notProvided, Class<?> function) {
+            open().add(com.dwinovo.numen.api.knowledge.KnowledgeSources.register(namespace, kind, provides, notProvided,
+                    function));
+        }
+
+        @Override
+        public void knowledgeSource(com.dwinovo.numen.api.knowledge.KnowledgeKind kind, String provides,
+                                    java.util.List<String> notProvided, com.dwinovo.numen.api.sdk.ApiFunction function) {
+            open().add(com.dwinovo.numen.api.knowledge.KnowledgeSources.register(namespace, kind, provides, notProvided,
+                    function));
+        }
+
+        @Override
+        public void command(com.mojang.brigadier.builder.LiteralArgumentBuilder<net.minecraft.commands.CommandSourceStack> verb) {
+            if (verb != null) open().add(com.dwinovo.numen.api.entity.NumenCommands.plug(verb));
+        }
+
+        @Override
+        public void onClient(Runnable clientOnly) {
+            if (clientOnly == null) return;
+            Scope scope = open();
+            if (clientReady) {
+                runClientBlock(clientOnly);
+            } else {
+                // 还没接上时攒着:撤回时没跑的撤掉;跑过的撤不回,动了门外东西的插件声明了要重启
+                PENDING.add(clientOnly);
+                scope.add(Handle.once(() -> PENDING.remove(clientOnly)));
+            }
+        }
+
+        @Override
+        public void contributeBodyState(Function<NumenPlayer, String> fragment) {
+            if (fragment == null) return;
+            BODY_STATE.add(fragment);
+            open().add(Handle.once(() -> {
+                BODY_STATE.remove(fragment);
+                FAILING.remove(fragment);
+            }));
+        }
+
+        @Override
+        public void registerGear(GearSource source) {
+            if (source == null) return;
+            GEAR.add(source);
+            open().add(Handle.once(() -> GEAR.remove(source)));
+        }
+
+        @Override
+        public Path configDir() {
+            return com.dwinovo.numen.api.NumenPaths.config();
+        }
+
+        @Override
+        public void registerEventType(String type, boolean alwaysUrgent) {
+            open().add(EventTypes.register(EventTypes.event(type, alwaysUrgent)));
+        }
+
+        @Override
+        public void emit(NumenPlayer companion, String type, Map<String, String> attrs, String text,
+                         boolean urgent) {
+            open();
+            NumenEvents.emit(companion, type, attrs, text, urgent);
+        }
+
+        @Override
+        public Delivery emit(UUID companion, String type, String text) {
+            open();
+            NumenEvents.requireClientInput(type);
+            ClientInput input = clientInput;
+            return input == null ? Delivery.REJECTED : input.emit(companion, type, text);
+        }
+    }
+}

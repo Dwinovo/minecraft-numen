@@ -1,0 +1,53 @@
+import com.dwinovo.numen.build.Modules
+
+plugins {
+    id 'numen-api-common'
+    id 'numen-paper'
+    id 'io.papermc.paperweight.userdev'
+}
+
+// Numen API 的 Paper 插件(docs/paper.md):common 的服务端源码对着 Paper 开发包重新编译(见 numen-paper.gradle),
+// 纯 JVM 模块的类平铺进这个插件的 jar,和 NeoForge / Fabric 的发行 jar 一样。ui 和 commonmark 只给客户端,不带;
+// Gson、slf4j、Brigadier、netty 用 Paper 自带的。
+// Paper 1.20.5+ 的服务端本身就是 Mojang 名,成品不再重映射(MOJANG_PRODUCTION),Paper 加载时也不重映射。
+paperweight.reobfArtifactConfiguration = io.papermc.paperweight.userdev.ReobfArtifactConfiguration.getMOJANG_PRODUCTION()
+
+repositories {
+    // Vault 的接口(只用来编译):装了 Vault 的服务器上,主人不在线时她的权限经它查主人
+    maven {
+        url = 'https://jitpack.io'
+        content { includeGroup 'com.github.MilkBowl' }
+    }
+}
+
+dependencies {
+    paperweight.paperDevBundle(paper_dev_bundle)
+    // 它依赖一份老的 Bukkit API,传递进来会盖掉 Paper 的
+    compileOnly('com.github.MilkBowl:VaultAPI:1.7') { transitive = false }
+    Modules.SERVER.each { compileOnly project(it) }
+}
+
+// mcp 的其余第三方库(Reactor、Tomcat……):Paper 没有嵌套 jar,和纯 JVM 模块一样把类平铺进插件 jar。
+// 清单与加载器的嵌套库是同一份(Modules.nestedLibraries),Gson、slf4j 用 Paper 自带的。
+evaluationDependsOn(':mcp')
+def nestedLibraries = Modules.nestedLibraries(project(':mcp')) as Set
+def nestedJars = project(':mcp').configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts
+        .findAll { nestedLibraries.contains("${it.moduleVersion.id.group}:${it.name}:${it.moduleVersion.id.version}".toString()) }
+        .collect { it.file }
+
+tasks.named('jar', Jar) {
+    Modules.SERVER.each { path -> from({ project(path).sourceSets.main.output }) }
+    // mcp 的官方 SDK 连同重定位过的 Jackson、Nimbus(见 mcp/build.gradle)
+    dependsOn(':mcp:relocatedSdk')
+    from({ zipTree(project(':mcp').relocatedSdk.get().archiveFile) }) {
+        exclude 'META-INF/MANIFEST.MF', 'META-INF/LICENSE*', 'META-INF/NOTICE*'
+    }
+    from(nestedJars.collect { zipTree(it) }) {
+        // 各库自己的清单、签名、模块描述符与协议文本不平铺(同名的会互相盖掉);服务发现文件(META-INF/services)留着
+        exclude 'META-INF/MANIFEST.MF', 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA', '**/module-info.class',
+                'META-INF/LICENSE*', 'META-INF/NOTICE*', 'META-INF/DEPENDENCIES'
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    }
+    // 沙箱 Lua 的底子是 LuaJ(MIT):它的许可证随平铺进来的类一起发
+    from(project(':lua').file('LICENSE')) { rename { 'LICENSE_numen-lua' } }
+}

@@ -1,0 +1,9 @@
+data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"","reasoning":"嗯"},"finish_reason":null}]}
+
+data: {"choices":[{"index":0,"delta":{"content":"行。","reasoning":null},"finish_reason":null}]}
+
+data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: {"choices":[],"usage":{"prompt_tokens":300,"completion_tokens":20,"total_tokens":320,"prompt_tokens_details":{"cached_tokens":200,"cache_write_tokens":40}}}
+
+data: [DONE]

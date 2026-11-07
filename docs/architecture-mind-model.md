@@ -1,20 +1,63 @@
 # numen 心智模型宪法
 
-一个同伴 = 一具身体(服务端)+ 一个大脑(客户端 LLM)+ 两个消息口。
+一个同伴 = 一具身体 + 一个大脑 + 两个消息口,都住在服务端;客户端是可选的前端。大脑二选一:服务端大脑(服务端跑循环、用主人自己的或服主提供的模型)
+或外部大脑(外部 agent 经远程端点驾驶)。循环、收件箱、记忆都在服务端(落地见 `docs/input-pipeline.md` §十四)。
+数据与处理都在服务端;客户端只做这台电脑的设备进出——录音、放音和它们用的 key(存储的归属见 `docs/input-pipeline.md` §六)。
 任何新功能必须能在本文档里找到自己的位置;找不到,先修宪再动工。
 
-**仓界(2026-07-16 裁决):机器在 numen-api,内容在 numen-core。** 判定口诀:
+**仓界(2026-07-16 裁决):机器在 Numen API,内容在 Numen。** 判定口诀:
 "这是机器,还是塞进机器的内容?"——收件箱/大脑循环/任务队列与竞价调度/
 工具运输/异步受理/闲时生命体征是机器;本能链/任务执行器/30 个工具/寻路是
 内容,经四个登记口插入(BrainChains 链、CompanionTaskFactory 任务执行器、
-ToolRegistry 工具、ReflexRegistry 本能名册)。第三方内容包与 core 地位平等。
+ToolRegistry 工具、ReflexRegistry 本能名册)。第三方内容包与 Numen 地位平等。
 
-**寻路是独立模块,Numen 经端口接入;规划与执行共用一份地形几何。** `pathing` 只依赖原版,
-设计稿见 `docs/pathing.md`。同伴的身体就是它的身体端口(`NumenPlayer implements Body`:一副键盘、
-每刻一次物理步进);手、许可、垫路料、要避开的生物四个端口由 core 的适配层 `core/nav` 实现。
-core 的任务、命令、感知、反射只经门面、规格、目标与身体机制用寻路,地形几何、挖掘定价这类机器
+**测试是被测项目的源码集(`test`、`gametest`、`e2e`),评测(bench)是独立模块。** 单测、GameTest 用例、端到端场景都放在它们测的那个项目里
+(如 `numen/common/src/gametest`、`numen/common/src/e2e`),按平台跑的任务挂在平台项目上(`:numen:neoforge:runGameTestServer`、
+`:numen:paper:e2eTest`);不为测试另开模块。评测要真模型、有自己的统计与记录,是独立模块 `bench`。
+
+**寻路是 Numen(Numen API 的第一个插件)的内容,独立成模块,经端口接入;规划与执行共用一份地形几何。** `pathing` 只依赖
+原版与 Numen API 公开的那部分(瘦 api jar),随 Numen 的加载器 jar 发出,Numen API 不依赖它。设计稿见 `docs/pathing.md`。
+她缺的那半个客户端——一副键盘 `Controls`、一个视角 `Look`、一个鼠标 `Mouse`(准星、左键挖、右键用,动手之前身体是同伴就过权限层)、
+一个快捷栏 `Hotbar` 与它留下的记录 `BodyAction`、每刻一次的物理步进 `Physics`,以及身体与寻路规划共用的原版公式与几何(`DigTime`、`Reach`、
+`Sight`、`Faces`、`Replaceable`)——是 Numen API 的公开部分(`com.dwinovo.numen.api.entity`),`NumenPlayer.controls()`、`look()`、`mouse()`、
+`hotbar()` 各给出一件,谁驱动她都用同一份;第三方想自己写一套寻路(还能挖、能放),按它们让她动。设计与取舍见 `docs/input-pipeline.md` §七。
+寻路模块的身体端口 `Body` 在寻路这一侧,Numen 的适配层 `numen/nav` 的 `CompanionBody` 把同伴接进去(无状态:寻路只经
+`entity()`、`controls()`、`look()`、`mouse()`、`hotbar()`、`snapshot()` 用身体,不按身体对象存状态);许可、垫路料、要避开的生物三个端口也由适配层实现。
+`CompanionBrain` 换驱动者时统一松开键盘与鼠标。
+Numen 的任务、命令、感知、反射只经门面、规格、目标与身体机制用寻路,地形几何、挖掘定价这类机器
 只在适配层里接;结局与实际账说给模型听只在 `NavText` 一处。
 
+**模块依赖(照各模块的 `build.gradle` 写,编译器守边界)。** `A → B, C` 读作"A 依赖 B 和 C",依赖只许向下,不许回头:
+
+```
+store, lua, ui, permission     纯 JVM,不依赖任何人
+ai        → store              纯 JVM
+script    → lua, ai            纯 JVM
+agent     → ai, script         纯 JVM
+numen-api → store, ai, script, agent, permission, ui, lua + Minecraft
+numen(含 pathing)、plugins/*  → numen-api 的瘦 api jar(只看得见它公开的部分)
+bench:game → bench, numen-api  bench 纯 JVM;考场不认识 numen 与插件
+```
+| 模块 | 干什么 | 依赖谁 | 不许依赖谁 |
+|---|---|---|---|
+| `store` | 落盘的两种基础件(只追加日志、小文档) | 只 Gson | 其余一切 |
+| `lua` | 沙箱里的 Lua 5.2(虚拟机、预算、打断、值互转) | 无 | Minecraft、Numen、其余一切 |
+| `ui` | 控件库、令牌、缓动、排版 | 无 | Minecraft、Numen API |
+| `permission` | 权限规则的语法、判决与判定顺序 | 无 | Minecraft、Numen API(游戏里的适配在 `numen-api` 的 `permission` 包) |
+| `ai` | LLM 传输、服务商适配、型号目录、会话状态、工具结果成败判据 | `store` | Minecraft、`script`、`agent`、Numen API |
+| `script` | 她写的一段程序:语言接口、回执、API 答复与错误、函数说明、资源上限、Lua 适配 | `lua`、`ai` | Minecraft、`agent`、Numen API |
+| `agent` | 大脑本身:收件箱、长期目标、对话、记忆压缩、循环与一段程序的执行(`Program`,要读收件箱的急件规则,所以在这里不在 `script`) | `ai`、`script` | Minecraft、Numen API |
+| `numen-api` | 机器:身体、任务槽、登记口、工具运输、权限适配、程序在服务端的入口;发行 jar 平铺上面所有纯 JVM 模块 | 上面全部 + Minecraft | `numen`、`plugins/*`、`bench` |
+| `numen`(含 `numen/pathing`) | 第一个插件:工具、任务、本能、内容与寻路 | Numen API 的瘦 api jar,以及纯 JVM 模块的类型;`numen/pathing` 只依赖原版与瘦 api jar | `plugins/*`;`numen-api` 不引用它 |
+| `plugins/*` | 与别的模组的联动,一个联动一个目录,目标模组不在就不加载 | Numen API 的瘦 api jar,以及纯 JVM 模块的类型 | `numen`、彼此、被 `numen-api` 引用 |
+| `bench` / `bench:game` | 真模型评测:`bench` 是记录与统计;`bench:game` 是游戏里那一半 | `bench:game` 依赖 `bench` 与 `numen-api`;`bench` 无 | 插件与 `numen` 的类(考场只认 Numen API);不发布、不进发行 jar |
+
+**平台(10-19 定):服务端代码只碰原版类,加载器只做"服务"与"挂点"两件事。** 服务是 common 问平台要的东西(`platform/services`,每个平台一份实现);
+挂点是平台把世界里发生的事告诉 common——每件事在 common 里有且只有一个入口,NeoForge 与 Fabric 用 Mixin 或加载器事件调它,Paper 用 Bukkit/Paper 事件调它,
+common 不分平台走两条路。Mixin 类只在各自的 `mixin` 包里,`mixin` 包外不引用它们。**客户端与服务端之间的协议是 Numen 自己的规范**:每种包一个频道名,
+字节布局由 common 里的 `StreamCodec` 定,不带任何加载器的封装,所以 Fabric、NeoForge 的客户端与 NeoForge、Fabric、Paper 的服务端两两相通。Paper 端见 `docs/paper.md`。
+
+寻路留在 `numen/pathing`:它是 Numen 这个插件的内容,第三方插件要寻路自己带一份;Numen API 不开寻路扩展点,只公开寻路和手动驱动共用的身体机制(键盘、视角、鼠标、快捷栏、物理步进与原版公式几何)。
 ## 零、总纲:她看一眼很贵
 
 **根本约束:人能一直盯着屏幕,看一眼几乎免费;她每看一次要花一轮模型调用。** 所以凡是会改世界的决定,
@@ -25,8 +68,8 @@ core 的任务、命令、感知、反射只经门面、规格、目标与身体
   每刻在承诺内细算、身体每刻对准按键),但内层不做外层该做的决定。
 - **五层**(落地见 `docs/shell.md` §九):⓪ 身体控制(Java,模型看不见:寻路执行、瞄准、换工具、追着转头、等冷却、憋气);
   ① 原子 API(Java,登记处生成 Lua 函数 `numen.<组>.<函数>`、插件的 `<模组 id>.<组>.<函数>`:对一个对象做一种意图,每刻控制
-  在里面,过权限层,做的事报告给模型);② 出厂模块(Lua,随模组与插件发布,装进主人客户端的模块目录);③ 她的模块(Lua,同一个
-  目录,路径就是名字);④ 这一轮的程序(`lua` 工具的 `code`)。权限层只守在 ①;反射独立于各层,能打断程序。**判据:秒级的决策进
+  在里面,过权限层,做的事报告给模型);② 内置模块(Lua,随模组与插件发布,同步进服务器目录,玩家看到的"内置");③ 她的模块(Lua,在主人的
+  "我的"里,路径就是名字;改一份内置的,是在这里存一份同名的盖着它,服务器目录里的原样不动);④ 这一轮的程序(`lua` 工具的 `code`)。权限层只守在 ①;反射独立于各层,能打断程序。**判据:秒级的决策进
   Lua;每刻的控制、重计算(寻路搜索、大范围扫描)、身体自己走的时间窗、权限、反射留 Java。** 更新能力就是加第 ① 层的 API,组合
   都在 Lua 里写。
 - **世界就是状态,命令是小工具,组合是脚本。** Lua 不留状态,没有名词的增删改查:查询交回带方法的值(Pos、Block、Cells、
@@ -34,12 +77,12 @@ core 的任务、命令、感知、反射只经门面、规格、目标与身体
   **一条原子命令 = 对一个对象做一种意图**:可以含完成这个意图必需的动作层控制(对准、换工具、清掉挡着它的格),
   不在几种会改世界的方案之间替她选,不碰它那个对象以外的东西。挖只挖、寻路只寻路、移动只移动、合成只合一次。
 - **组合交给脚本(DSL),不交给胖命令。** 脚本用 Lua 写,每个命令函数背后是一条普通命令;流程固定的活(挖一团矿、
-  照蓝图建造、挑配方找工作台)写成随模组发布的模块(`numen.work.mine`、`numen.build.raise`、`numen.inv.make`),她读得到、
-  改得了(改的就是装进目录的那一份,出厂升级照 dpkg 的 conffile 不覆盖她改过的)。**没有不可拆的行为:秒级的决策循环进脚本(打哪只、
+  照蓝图建造、挑配方找工作台)写成随模组发布的模块(`numen.work.mine`、`numen.inv.make`),她读得到、
+  改得了(改的是主人"我的"里同名的一份,盖着内置的;内置的由 jar 同步进服务器目录,升级照 dpkg 的 conffile 不覆盖管理员改过的)。**没有不可拆的行为:秒级的决策循环进脚本(打哪只、
   下一只、何时撤),每刻都要转的控制进原子命令内部(追着保持在够得着处、等冷却出手)。**
 - **反射是事先写好、条件触发的策略**,不是框架的例外;当前计划已覆盖的情况它让开。
 - **受理 = 此刻真能开始**;能快速判断的当场拒绝(`TaskDispatch` 的准备阶段)。
-- 命令行规矩、原子判据与脚本规范见 `docs/shell.md`;先看、再规划、后执行的落地见 `docs/look-plan-act.md`。
+- 原子判据与脚本规范见 `docs/shell.md`。
 
 ## 一、身体层:每 tick 一次竞价
 
@@ -58,10 +101,9 @@ MLG(10) > 换气(20) > 逃跑(25) > 自卫(30) > 脱困(50) > LLM 任务
 
 ## 二、大脑层:事件驱动,平时不在场
 
-LLM 不在 tick 循环里。每只同伴在主人的客户端上有一个循环内核(`AgentLoop`,纯 Java 的 `agent`
-模块),它对身体的全部控制 = 派工具。设计稿见 `docs/agent-loop.md`。
+LLM 不在 tick 循环里。每只同伴有一个循环内核(`AgentLoop`,纯 Java 的 `agent` 模块),在服务端跑;它对身体的全部控制 = 派工具。外部大脑驾驶时内核停牌(`EXTERNAL`)。设计稿见 `docs/agent-loop.md`。
 
-- **唯一的推进点 `pump()`**:只在四种时刻被调——有输入进队列、一次 run 结束、停牌解开、每个客户端 tick
+- **唯一的推进点 `pump()`**:只在四种时刻被调——有输入进队列、一次 run 结束、停牌解开、每个 tick
   (只为"攒够时长"这一条熟度)。闲着、没停牌、队列熟了才开一次 run;只在真的开 run 或执行控制条目时
   打日志,停牌时每 tick 调一次也没有输出。
 - **一次 run 是 ReAct 的两层循环**:(该自动整理就先整理)→ 注入排着的输入 → 调模型 → 串行跑完它派的
@@ -73,7 +115,8 @@ LLM 不在 tick 循环里。每只同伴在主人的客户端上有一个循环�
   (叫不叫停身体、清不清队列、进哪种停牌、目标收不收工)。
 - **内核不碰界面**:它只发 `LoopEvent`,打字机与语音与气泡(`TurnPresenter`)、token 台账、整理记忆
   (`Compactor`)、长期目标(`GoalSteward`)、工作站坐标、当前任务镜像各自订阅。"她忙不忙、为什么不动、
-  排着什么"只从 `LoopStatus` 一处读。
+  排着什么"只从 `LoopStatus` 一处读。订阅者逐个隔离(一个抛了只记日志,其余照收)。插件经门只读地听大脑:`BrainEventBridge` 把 run 的开收
+  攒下,在 `CompanionLoops.tick` 里于内核两步之间派成 `CompanionEvent.RUN_STARTED`/`RUN_ENDED`;`TASK_FINISHED` 从 `NumenEvents.taskFinished` 那一处发。
 
 ## 三、模型输入全景
 
@@ -89,7 +132,7 @@ C. 注入的输入(每次一条 user 消息,进历史)
    C2 世界的事 <events>(按发生时间排)
    C3 主人的话(垫底);目标续跑也是这里的一条
 D. 请求期挂载(每轮现算,不进历史)
-   D1 <runtime_state> = 当前任务 + 背包 + 状态效果 + 骑乘 + 插件的身体状态片段
+   D1 <runtime_state> = 现在几点 <now> + 当前任务 + 背包 + 状态效果 + 骑乘 + 身体状态片段(穿戴、碰着水时的水况、插件的) + 附近 <nearby>(半径 16 格此刻的样子)
 E. turn 内回填(tool 侧)
    E1 工具结果
 ```
@@ -116,31 +159,44 @@ STEER     是      下一次调模型带上(这批工具结算后、   参与熟
 FOLLOW_UP 是      只在本来要停时接上                  参与熟度判断
 AMBIENT   否      随下一次调模型捎带,自己不引起调用   不参与熟度,等别的事叫醒她
                   (群聊里旁听到的话)
+NOTICE    否*     同 AMBIENT;发送方标了急件的那一条   同 AMBIENT;标了急件的那一条按 STEER 办
+                  按 STEER 办(本能做了事:常态知会,   (叫醒她)
+                  险情标急件)
 CONTROL   否      不插进 run,等闲下来执行            开不了 run 时立即执行;不受停止/端点/失败停牌
                   (整理记忆、清空上下文)              影响,死着、外接驾驶时拒绝并说明原因
 ```
 
-每一档只声明两件事——叫不叫醒她、随哪一次调模型交出去——收件箱与循环只读这两件,加一档只改类型表一处。
+每一档只声明两件事(NOTICE 另加一句"急件时按哪一档办")——叫不叫醒她、随哪一次调模型交出去——收件箱与循环只读这些,加一档只改类型表一处。
 
 - **熟度**:只看第一条控制条目之前那一段里叫醒她的条目。有急件就开;否则按主人设的主动性档位,攒够条数
   或最老的一条等够时长才开。急件的意思是"立刻叫醒她",所以只有叫醒她的条目可能急。
 - **推进只有一个判断**:闲时要么开 run(那一段熟了),要么执行控制条目(开不了 run 时),要么什么也不做;
   熟度与 run 取件看同一段,熟了开出来的 run 一定取得到东西。推进一步步往下走,不递归。
 - **注入一次取光**,拼成一条 user 消息:现场块在前 → 世界的事按时间排进 `<events>` → 主人的话垫底。
-  躺超过 10 分钟的条目标注年龄(跨会话恢复的旧闻尤其要紧)。
+  每个给模型看的条目都带发生那一刻的游戏日期与钟点——事件是 `<event day="3" t="21:15">`,主人的话是 `<query day="3" t="21:15">`,
+  系统条目同样(写法只在 `EventClock` 一处);请求里的 `<now day="3" t="21:15"/>` 是现在。多久以前的事,模型自己对着两个时刻读。
 - **进行中的请求永不因输入掐断**;主人的停止键是 `halt(OWNER_STOP)`,不是一条输入。
-- **事件的种类就是类型表的一行**:`task_finished`、`death`、`hungry`、`inventory_full`(背包一格空的都没有、碰到的东西放不下
-  留在了地上;一轮满只发一次,又有空格才复位,判据只在身体上一处,挖、捡这些活不各自判)、`owner_hurt`、`timer`、`woke`、
+- **主人的定时**(`OwnerSchedules`,存她家目录的 `schedules.json`)到点等于主人说了这句话:`CompanionLoop.tick` 在主人在场时问一次到期的,经 `submitScheduled` 进收件箱
+  (和主人的话同一条路,`<query … source="schedule">`,面板据此标"定时");先落盘下次到期刻再送,错过不补,主人不在时留着、回来合成一次。
+- **事件的种类就是类型表的一行**:`task_finished`、`death`、`respawned`(她按原版规则重生了:落在哪、重生点还是世界出生点、主人在哪个方向多远;恒为急件,不传送、回不回主人身边由她定)、`removed`(身体被外面的人或插件请出了服务器,恒为急件;停牌压着,主人再召唤她时交出)、`hungry`、`inventory_full`(背包一格空的都没有、碰到的东西放不下
+  留在了地上;一轮满只发一次,又有空格才复位,判据只在身体上一处,挖、捡这些活不各自判)、`owner_hurt`、`companion_hurt`(她挨打,带攻击者与方位,恒为急件)、`targeted`(半径内一只怪的攻击目标变成她,恒为急件;盯着期间只发一次)、
+  `gone`(她留意的对象——最近打她、盯上她的,以及她正在打、用、骑的——被移出世界,附原版的移除原因与击杀者;走出半径不发;捎带投递不叫醒她)、`timer`、`woke`、
   `advancement_reward`(她达成进度、奖励进了身上:背包与经验的实际变化;她自己发起的动作不走事件,身体前后的变化写进那次调用的结果,出处只有 `BodyDelta`)、`dimension_change`、`reflex`(本能做了什么,带上是哪个本能)、`server_message`(服务端对她说的系统聊天与动作栏,
   捎带投递不叫醒她;聊天栏同一句刷屏折叠,动作栏当一格、最新的为准)、`dropped`。服务端只有一个发出口
-  `NumenEvents.emit`:主人在线直送,离线进出箱,重连时整批打成一个包补发。
-- **插件同一扇门**:`NumenApi` 登记事件类型、发出事件,与内置事件同一条路;客户端上的桥接(弹幕、群消息)
+  `NumenEvents.emit`:直接进她的收件箱,主人在不在线都一样(离线只是攒着,他回来再处理)。
+- **插件同一扇门**:`NumenApi` 登记事件类型、发出事件,与内置事件同一条路;桥接(弹幕、群消息)
   发主人的话或登记过的世界事件,入口是 `NumenGateway.emit`——游戏里的面板和快捷对话也走它。
-- **死亡**:`halt(DEATH)` 进停牌 `DEAD`,队列照收不误(条目盖着真实时间戳,模型分得清哪些发生在死前);
-  复活时推一条急件死亡叙事,解开停牌,和死着期间攒的一起走。
+  服务端化以后入口合成服务端一个,桥接改走远程端点的渠道令牌(`input-pipeline.md` §二、§五)。
+- **死亡**:`halt(DEATH)` 进停牌 `DEAD`,并推一条急件死亡事件(死因、死在哪、背包怎么处置了),队列照收不误(条目盖着真实时间戳,
+  模型分得清哪些发生在死前);身体由原版重生流程当场放回世界(body 0006:重生点规则、不传送到主人身边),再推一条急件 `respawned` 事件
+  (落在哪、主人在哪个方向多远),解开停牌,和死着期间攒的一起走。
 - **状态不是事件**:"她这一轮身上是什么样"(饰品、模组装备位)每轮都要在、不能进历史——走服务端的身体状态
   片段,随状态包推给主人的客户端,进 `<runtime_state>` 和 `status_self`。
-- 判定口诀:"这是发生了一件事,还是她此刻的样子?"事 → 发事件进队列;样子 → 状态片段。
+- 判定口诀:"这是发生了一件事,还是她此刻的样子?"事 → 发事件进队列;样子 → 状态片段。她四周此刻有谁是后一种:`<nearby>`
+  每次请求现取(`Nearby`),不进历史。
+- **一只生物只有一种名字**:`种类@短码`(`zombie@3f9a1c`,短码是 UUID 前六位),玩家(含别的同伴)也一样,写 `player@ab12cd`;名字只是附在后面给人读的(`player@ab12cd (Steve)`),不是身份。事件、`<nearby>`、
+  `numen.scan.entities` 的 `id` 和所有收实体的函数参数是同一套(`EntityLabel` 一处生成与解析),跨重启不变。点名的那只不在附近,
+  工具当场如实拒绝;撞码也拒绝并列出候选。
 
 ## 五、Reflex(本能)登记处
 
@@ -174,7 +230,7 @@ interface Reflex {
   - 能当场判的当场回;要搜索的,结论出来那一刻才回——调用的回信口晚一点回,和 `route plan` 同一种写法。内脑的派发器
     本来就等这条回执才派下一个,串行规矩不变;外接大脑的回执同一处写成。
   - 一具身体只有一件在准备:后派的顶替先派的(先派的回"没开始"),主人按停止、身体离开世界同样让它回"没开始";
-    她死了不回(客户端按死因结算在飞的调用)。准备期间身体可能还在干上一件活:规划按调用那一刻的位置,受理时
+    她死了不回(大脑按死因结算在飞的调用)。准备期间身体可能还在干上一件活:规划按调用那一刻的位置,受理时
     她已不在规划的起点,就从这里重新规划、拿准备时那份当承诺比(与 `move go` 从别处出发同一口径)。
   - 受理之后才冒出来的(路上世界变了、主人拒绝、中途卡住)照旧走 task_finished。等主人点头不算开始不了:
     计划里有要问的格照样受理,运行中问。
@@ -188,24 +244,24 @@ interface Reflex {
     排在当前任务之上,做完交还,不顶掉它。
   - 同一轮按顺序:模型一次回复里的调用由内脑的派发器(`SerialCalls`)一个做完才派下一个;程序整段在服务端跑
     (`docs/shell.md` §十四),身体活只经程序派,程序里每件活受理了就等它的 task_finished 到了再往下走,常驻的活没有收尾,不等。
-    判据是这件活结束了没有,不猜哪几件是"同一批"。等的时候主人说话(客户端上行"停止程序")或服务端来了急件(队列的急件规则,
+    判据是这件活结束了没有,不猜哪几件是"同一批"。等的时候主人说话(大脑让程序停在调用之间)或来了急件(队列的急件规则,
     两端共用同一份代码),程序停下,余下的调用不再执行,各回一条写明原因(取自程序结局里结构化的那一句)的结果,这一轮结算,
     模型读到那条输入再决定;等的那件活照常跑。工具本身有界短,在跑的时候不看输入。
   - 外接大脑的调用没有"同一轮",每一条当场执行;要一件做完再派下一件,它自己用 `task status` 等身体空闲。
-  - 给模型读的说法只在 `NumenPrompts.ONE_BODY` 一处,系统提示与外接大脑的说明都引用它。
+  - 给模型读的说法只在 `NumenPrompts.ONE_BODY` 一处;外接大脑的说明直接带内置系统提示里的同一份操作核心(`SystemPromptComposer.core`),不另写。
   - 同行:pi、Claude Code 让会改东西的调用按顺序执行、一个做完才开始下一个;mc_agent 主人插话时跳过同一轮
     还没开始的调用并写明原因;Mindcraft、chatclef、Baritone 下一轮的新动作替换当前的。
 - **一件活的收尾只说一次**:服务端发 task_finished 的那一刻、主线程上就判这条归谁(`NumenEvents.Watcher`)——在跑的程序等着的那件,
   收尾归程序:结局交给 Lua,整段实际账写进这次 `lua` 工具回执的 stderr(那件活一条),不再发给主人的大脑;没有程序等的那件(程序被主人说话、
-  急件停下时还在跑的,停止键与切断照样收尾的,重启后接回或没接回来的,管理员 drive 派的),收尾发给主人客户端进收件箱(§四)成一条事件,
+  急件停下时还在跑的,停止键与切断照样收尾的,重启后接回或没接回来的,管理员 drive 派的),收尾进她的收件箱(§四)成一条事件,
   完成、失败等要她当场知道的由发送方标成急件。程序停下之后才到的、本来归程序的收尾由程序转交出去,不丢。timeout 携带进度,重派同一调用
   可续做;stopped 是叫停的回执。
-- **事件唯一入口**(numen-api `NumenEvents`):所有 `<event>` 的 kind 在此登记,
+- **事件唯一入口**(Numen API `NumenEvents`):所有 `<event>` 的 kind 在此登记,
   XML 组装、转义、游戏内时间戳在此收口——散装手搓 `<event>` 字符串违宪。
   入口不管时机:何时被消费是队列按自己规则说了算,事件类型没有贵贱之分。
-- **模型侧感知**:每个用户回合注入 `<current_task>`,内容由**服务端推**
-  (`CurrentTaskPayload`,槽一变就发),客户端只照抄不推断——重启重放、
-  死亡复活重放起来的活,客户端自己是看不见的。命令 `task status` 拉取现场,
+- **模型侧感知**:每个用户回合注入 `<current_task>`,内容由**任务槽交给大脑**
+  (`TaskReport`,槽一变就交),大脑只照抄不推断——重启重放、
+  死亡复活重放起来的活,大脑自己是看不见的。命令 `task status` 拉取现场,
   task_stop 叫停。禁止轮询——完成必然主动送达,所以 `task status` 只作命令,不提升成快捷工具。
 - **重启前的活**:身体进世界那一刻落盘记录里的那件,由调度器在那一刻接手、第一次 tick 时重放;
   那之前派下新活就是新活顶替了它,告诉她一声。不在第一次 tick 时再读落盘记录——那时它可能已被新活改写。
@@ -215,7 +271,7 @@ interface Reflex {
   且无陈旧状态(2026-07-16 裁决)。
 - **表不是身体任务**(命令 `task timer` / `TimerRegistry`):不占身体、不进任务槽,当场
   返回。到期时刻记的是主世界游戏刻的**绝对值**(世界不跑表就不走,重启不重新
-  计时),跟着存档落盘。到点发一条 `timer` 事件(类型表里恒为急件)——主人离线进出箱、
+  计时),跟着存档落盘。到点发一条 `timer` 事件(类型表里恒为急件)——主人离线就攒在收件箱、
   她死着停牌不开 run,都由既有的那条路答,这里不重复实现。它是给"世界不会主动
   通知你"的事准备的:炉子、庄稼、天亮;自己派出去的活会发 task_finished,
   用表去盯就是把轮询换了个马甲。
@@ -233,28 +289,20 @@ interface Reflex {
 
 ## 八、权限层:身体的任何动作在动手前怎么过门
 
-设计稿 `docs/permission-layer.md`。放在 api,它是机器;core 的任务与工具是往里送动作的
+设计稿 `docs/permission-layer.md`。放在 Numen API,它是机器;Numen 的任务与工具是往里送动作的
 内容。五个零件:
 
 **动作(Action)。** 身体要对世界做的一件具体的事及其目标:`break(pos)`、`place(pos, block)`、
 `attack(entity)`、`use_block(pos)`、`use_entity(entity)`、`take(container, item)`、`drop(item)`、
 `command(整行)`。不带工具名、不带 JSON。
 
-**信号(Signal)。** 给动作贴事实的函数,每个只回答一个通用问题,不按种类枚举:
+**对象组与属性。** 规则判的是"这东西是谁的"。方块恰好属于六类之一,按次序判、判出来就停:`self`(放置记录:她放的)、
+`owner`(放置记录:主人或主人名下别的同伴放的)、`other`(别的玩家或别人名下同伴放的)、`structure`(世界生成时记下的结构件范围,
+`structure(#minecraft:village)` 按结构类型分)、`nature`(种类在数据标签 `numen:natural` 里;树叶要不持久,原木要连着不持久的树叶)、
+`unknown`(其余;专用服务器上按 `other` 算,服主可在 `config/numen/server/server.json` 的 `unknownAsOther` 改)。实体用 `self`、`owner`、`other`、`nature`,
+认的是驯服记录。放置记录的放的人只在 `PlacedBlocks.placedBy` 一处认。属性:`block_entity`、`contents`(只在主线程读;搜索线程按"有")、
+`named`、`villager`、`hostile`、`hazard_item`、`near(<组>)`。组与属性的名字登记在规则核心的 `Vocabulary`,判断在 `Groups`。
 
-| 信号 | 问题 | 来源 |
-|---|---|---|
-| placed | 这格是不是别人放的 | 放置记录(每维度一份 SavedData):放的人只在 `PlacedBlocks.placedBy` 一处认,谁放的记谁(物品落位的 mixin 与建造照图直写都调它);查询时格子已是空气视为无记号;放的人不是要动手的这只同伴 |
-| self_placed | 这格是不是她自己放的 | 同一份放置记录,放的人就是要动手的这只同伴 |
-| block_entity | 这格有没有方块实体 | 方块状态 |
-| contents | 容器里有没有东西 | 世界(只在主线程读;搜索线程按"有") |
-| owned | 这只实体有没有主人(她自己也算) | `OwnableEntity`,主人只在 `Signals.ownerOf` 一处读 |
-| self_owned | 这只实体的主人是不是她自己 | 同一处读法,主人就是要动手的这只同伴 |
-| named | 有没有自定义名字 | 实体 |
-| villager | 是不是村民 | 实体类型 |
-| hostile | 是不是敌对 | 实体分类 |
-| hazard_item | 放的是不是岩浆、火、TNT、水 | 物品 |
-| near_placed | 放置点附近有没有别人放的方块 | placed 的邻域查询 |
 权限层只做原版,领地模组之后以联动插件做。原生通道里服务器退回的挖掘,由挖掘落点如实报成被拒,
 那是身体汇报,不是权限裁决。
 
@@ -262,19 +310,15 @@ interface Reflex {
 deny 行与主人选的 observe;其余一律问。身体的物理与安全判断(岩浆、摔落上限、
 挖不动)不属权限,不经裁决。
 
-**规则(Rule)。** deny、allow、ask 三张表。一条规则一行字符串 `动作(信号 & 信号 & !信号)`,
-项也可以是方块或实体种类 id、`#标签`、`entity:<uuid>`;`command` 的项是指令根名(`command(msg)`),别名同认。查的顺序 deny → allow → ask → 都不中
-也问(allow 在 ask 之前,因为"允许并记住"存的是从 ask 行里抠出来的更细的 allow 行)。出厂:
-deny 空;allow 为 `break(!placed & !self_placed & !block_entity & !#minecraft:beds & !#minecraft:doors &
-!#minecraft:trapdoors & !#minecraft:fence_gates)`、`break(self_placed & !contents)`、`place(!hazard_item)`、
-`place(hazard_item & !near_placed)`、`attack(!owned & !named & !villager)`、`use_block(*)`、
-`use_entity(!owned)`、`use_entity(self_owned)`、`take(*)`;ask 为 `break(block_entity & contents)`、`break(placed)`、
-`break(block_entity)`、`break(#minecraft:beds)`、`break(#minecraft:doors)`、
-`break(#minecraft:trapdoors)`、`break(#minecraft:fence_gates)`、`attack(owned)`、`attack(named)`、
-`attack(villager)`、`drop(*)`、`place(hazard_item & near_placed)`。
+**规则(Rule)。** 一条规则一行字符串 `判决 动作(对象条件) [@同伴名]`,条件由组、属性、方块或实体种类 id、`#标签`、`entity:<uuid>`
+用 `&`、`|`、`!` 与括号拼成;`command` 的项是指令根名(`command(msg)`),别名同认。解析与打印只在纯 JVM 模块 `permission/` 的 `Rule` 里。
+判定顺序:模式 → 硬规则(命中即拒,主人解不开,服主可关)→ 任何一层的 deny → 主人层 allow、ask → 出厂层 allow、ask → 都不中也问
+(同层 allow 在 ask 之前,因为"允许并记住"存的是从 ask 行里抠出来的更细的 allow 行)。出厂规则原文在 `FactoryRules`。
+每条规则记命中次数与最近一次命中,账在主人的 `PermissionStore`,规则列表上显示。她(模型)只能收紧:`numen.permission.deny/ask`
+直接写入主人层并回执;`allow` 与删行发一张征询卡,主人答应才写。
 
-**不可逆提示。** `attack(owned)`、`break(block_entity & contents)` 是普通 ask 行,允许与记住都
-盖得住;征询卡片把命中它们的清单项标出"撤不回"。
+**不可逆提示。** 在某个动词下命中即撤不回的名字(`contents`、`owner`/`self`/`other` 对 `attack`)由 `Vocabulary` 登记;
+允许与记住都盖得住,征询卡片把这些清单项标出"撤不回"。
 
 **裁决(Verdict)。** 唯一入口 `Permission`:主线程 `judge(companion, action)` 对活世界问一个动作;
 `gateFor(companion)` 取一份快照(模式、规则、放置记录、任务期授权)交给搜索线程逐格问。答复
@@ -289,7 +333,7 @@ deny 空;allow 为 `break(!placed & !self_placed & !block_entity & !#minecraft:b
 |---|---|
 | 规划 | 成本模型只读裁决:拒绝无穷大;要问的格在 `alter=any` 下按有限代价算进路线、其余规格下无穷大;路线上那一格的改动(`Edit.Dig`)带着许可给的凭据,就是那一条征询(`ConsentItem`) |
 | 执行开始 | 整条路线或整个动作过一次裁决,需要同意就发起一次征询;不是走到墙边才问 |
-| 每次动作 | 她的两只手(`CompanionHands`,导航、挖矿、`use block` 共用的唯一挖掘与放置落点)、攻击落点强制,不发起征询;到这里还没授权就当动作失败,任务按既有机制重算或收尾 |
+| 每次动作 | 她的鼠标(`NumenPlayer.mouse()`,导航、挖矿、`use block` 共用的唯一挖掘与放置落点,身体是同伴就在动手那一刻过权限层)、攻击落点强制,不发起征询;到这里还没授权就当动作失败,任务按既有机制重算或收尾 |
 
 **各内容的接入点。** 内容只提出动作(`AbstractCompanionTask.permit`),判与问归权限层。mine 选目标
 不看权限,规格 `alter=any`,按"走过去 + 挖它"的同一套定价挑,动手前把挖掘交给权限层;goto、follow

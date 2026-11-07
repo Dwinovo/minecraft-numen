@@ -1,0 +1,155 @@
+package com.dwinovo.numen.api.brain;
+
+import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.NumenIo;
+import com.dwinovo.numen.api.agent.tool.ToolRegistry;
+import com.dwinovo.numen.api.home.Homes;
+import com.dwinovo.numen.api.keys.Keychain;
+import com.dwinovo.numen.api.keys.KeychainCredentials;
+import com.dwinovo.numen.api.library.Library;
+import com.dwinovo.numen.api.library.LibraryHub;
+import com.dwinovo.numen.api.library.Shelf;
+import com.dwinovo.numen.api.mcp.client.McpClientConfig;
+import com.dwinovo.numen.api.mcp.client.RemoteTools;
+import com.dwinovo.numen.api.platform.ServerLifecycle;
+import com.dwinovo.numen.api.platform.Services;
+import com.dwinovo.numen.mcp.client.McpConnections;
+import com.dwinovo.numen.mcp.client.McpServerSpec;
+import com.dwinovo.numen.mcp.client.auth.LegacyTokens;
+import com.dwinovo.numen.mcp.client.auth.McpOAuth;
+import net.minecraft.server.MinecraftServer;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * 这台服务器上接进来的 MCP 服务器的连接:服务器的一处(服务器目录里的,管理员配的,工具人人可见;房主的也在这里)和每位玩家自己的一处(他自己目录里的,
+ * 工具只有他的同伴看得到)。连什么由库里的文件定({@link McpClientConfig#KIND}),库变了就 {@link #reconcile} 让连接跟上;
+ * 玩家对服务器目录那几台的开关只管他的同伴看不看得到它们的工具({@link OwnerTools}),不动连接。关服时放手。
+ *
+ * <p>线程:服务端主线程。
+ */
+public final class McpClients {
+
+    private static McpClients current;
+
+    static {
+        ServerLifecycle.onStopped(() -> {
+            synchronized (McpClients.class) {
+                if (current != null) {
+                    current.shutdown();
+                }
+                current = null;
+            }
+        });
+    }
+
+    private final MinecraftServer server;
+    private final LibraryHub hub;
+    private final ModelServices models;
+    private final McpConnections shared;
+    private final Map<UUID, McpConnections> owned = new ConcurrentHashMap<>();
+
+    private McpClients(MinecraftServer server) {
+        this.server = server;
+        this.hub = LibraryHub.of(server);
+        this.models = ModelServices.of(server);
+        this.shared = connections(Library.Group.SERVER, () -> Replies.share(server, null, Libraries.MCP_CLIENT),
+                Homes.of(server).server().dir(), models.serverKeychain(), ToolRegistry::register, ToolRegistry::remove,
+                service -> models.serverKeychain().get(service));
+    }
+
+    /**
+     * 一处连接:登录令牌存进这一处的钥匙串(旧版留在家里的 {@code mcp_oauth.json} 先搬进去),工具登记到 {@code register}。
+     *
+     * @param keys 钥匙串里这个服务的 key(服务名 → key)
+     */
+    private McpConnections connections(Library.Group group, Runnable changed, java.nio.file.Path home, Keychain keychain,
+                                       java.util.function.Consumer<com.dwinovo.numen.api.agent.tool.NumenTool> register,
+                                       java.util.function.Consumer<String> remove,
+                                       java.util.function.Function<String, String> keys) {
+        KeychainCredentials credentials = new KeychainCredentials(keychain);
+        LegacyTokens.migrate(home.resolve("mcp_oauth.json"), NumenIo.inline("numen-mcp-oauth"), credentials);
+        return new McpConnections(server, changed, new McpOAuth(credentials, System::currentTimeMillis),
+                new RemoteTools(group, server, register, remove), keys,
+                Services.platform().modVersion(Constants.MOD_ID));
+    }
+
+    /** 服务器起来时调一次:按服务器目录连上服务器的那几台。 */
+    public static synchronized McpClients start(MinecraftServer server) {
+        current = new McpClients(server);
+        current.reconcileShared();
+        return current;
+    }
+
+    public static synchronized McpClients of(MinecraftServer server) {
+        if (current == null || current.server != server) {
+            throw new IllegalStateException("MCP 连接还没开张——服务器起好时 McpClients.start 该被调用");
+        }
+        return current;
+    }
+
+    /** 服务器的那一处。 */
+    public McpConnections shared() {
+        return shared;
+    }
+
+    /** 这位玩家自己的那一处;第一次要时按他的"我的"组连上。 */
+    public McpConnections owner(UUID owner) {
+        return owned.computeIfAbsent(owner, id -> {
+            McpConnections manager = connections(Library.Group.MINE, () -> Replies.pushTo(server, id, Libraries.MCP_CLIENT),
+                    Homes.of(server).owner(id).dir(), models.ownerKeychain(id), tool -> ToolRegistry.register(id, tool),
+                    name -> ToolRegistry.remove(id, name), service -> {
+                        var found = models.keys(id).find(service);
+                        return found == null ? null : found.key();
+                    });
+            manager.reconcile(ownSpecs(id));
+            return manager;
+        });
+    }
+
+    /** 库变了(这位玩家改了他的、或管理员改了服务器目录的):两处的连接都跟上。 */
+    public void reconcile(UUID owner) {
+        reconcileShared();
+        owner(owner).reconcile(ownSpecs(owner));
+    }
+
+    /** 服务器目录变了(或 {@code /reload}):服务器那一处跟上,已经开着的玩家那几处也跟上。 */
+    public void reconcileAll() {
+        reconcileShared();
+        owned.forEach((id, manager) -> manager.reconcile(ownSpecs(id)));
+    }
+
+    private void reconcileShared() {
+        shared.reconcile(specs(hub.server(McpClientConfig.KIND)));
+    }
+
+    /** 这位玩家自己目录里的服务器;房主没有自己的目录(他的那几台就在服务器目录里,由服务器的那一处连)。 */
+    private Map<String, McpServerSpec> ownSpecs(UUID owner) {
+        Library library = hub.library(McpClientConfig.KIND, owner);
+        return library.merged() ? Map.of() : specs(library.mine());
+    }
+
+    /** 一个货架里的服务器:库里的名字 → 怎么连。读不通的一条记一笔并跳过。 */
+    private static Map<String, McpServerSpec> specs(Shelf shelf) {
+        Map<String, McpServerSpec> out = new LinkedHashMap<>();
+        for (Shelf.Item item : shelf.items()) {
+            try {
+                out.put(item.id().toString(), McpServerSpec.read(item.id().name(), item.text()));
+            } catch (RuntimeException unreadable) {
+                Constants.LOG.warn("[numen-mcp-client] {} 读不通,跳过: {}", item.path(), unreadable.toString());
+            }
+        }
+        return out;
+    }
+
+    private void shutdown() {
+        // 等授权回调的线程一并放掉:浏览器那头可能永远不回来,关服不该被它拖住
+        McpOAuth.cancelAll();
+        shared.shutdown();
+        owned.values().forEach(McpConnections::shutdown);
+        owned.clear();
+    }
+}
