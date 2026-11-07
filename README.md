@@ -1,15 +1,18 @@
 <div align="center">
 
+<img src="assets/branding/logo/svg/numen-square-transparent.svg" alt="言出法随" width="128">
+
 # 言出法随
 
 [English](README_EN.md) · [**简体中文**](README.md)
 
-![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1%20~%2026.2-62B47A?style=flat-square)
-![Loaders](https://img.shields.io/badge/Loaders-Fabric%20%7C%20NeoForge%20%7C%20Forge%20%E2%89%A41.20.4-DE7C36?style=flat-square)
-![Java](https://img.shields.io/badge/Java-17%20%7C%2021%20%7C%2025-007396?style=flat-square&logo=openjdk&logoColor=white)
+![Minecraft](https://img.shields.io/badge/Minecraft-62B47A?style=flat-square)
+![Java](https://img.shields.io/badge/Java-007396?style=flat-square&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/code-LGPL--3.0-A8731E?style=flat-square)
+![QQ](https://img.shields.io/badge/QQ%E7%BE%A4-1121662678-12B7F5?style=flat-square&logo=qq&logoColor=white)
+[![Discord](https://img.shields.io/badge/Discord-%E5%8A%A0%E5%85%A5-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/FpDCV327vX)
 
-[**网站**](https://numen.dwinovo.cn) · [**安装**](#安装) · [**快速开始**](#快速开始) · [**架构**](#架构) · [**插件**](#插件) · [**常见问题**](#常见问题)
+[**官网**](https://numen.dwinovo.cn) · [**安装**](#安装) · [**快速开始**](#快速开始) · [**架构**](#架构) · [**插件**](#插件) · [**常见问题**](#常见问题)
 
 <img src="assets/branding/numen-hero-2560.webp" alt="Numen 言出法随" width="100%">
 
@@ -17,7 +20,8 @@
 
 言出法随是一个**运行在 Minecraft 内部的具身智能体**，*作为模组直接存在于游戏之中*，它能够不断探索 Minecraft 世界，**自主决策并采取行动完成任务**。
 
-详情请见[网站](https://numen.dwinovo.cn)。
+> [!TIP]
+> 欢迎加入 QQ 交流群 **1121662678** 或 [Discord](https://discord.gg/FpDCV327vX)交流。更多详情请见[官网](https://numen.dwinovo.cn)。
 
 ## 安装
 
@@ -53,7 +57,7 @@
 面板的设置页还提供以下功能。
 
 - **人设**：内置了几种简单的人设，你也可以写入任何自己喜欢的人设。
-- **皮肤**：为召唤出的智能体设置皮肤，上传的皮肤经由 [MineSkin](https://mineskin.org) 签名后生效。
+- **皮肤**：把皮肤 png 放进 `config/numen/skins/` 文件夹，在编辑卡里选一张给智能体穿上；第一次用到时经由 [MineSkin](https://mineskin.org) 签名，签过的不再重复签。
 - **语音**：配置语音输入与语音输出，让智能体能听会说。
 - **群聊**：把不同智能体的头像拖到一起即可建立群聊。在群聊中可以 @ 某个成员让它回复，也可以不 @ 任何人向全体广播。
 
@@ -65,11 +69,11 @@
 
 言出法随的架构自下而上分为**三层**。最底层是 **Minecraft**，智能体在其中*操纵一个真实的玩家*。中间层是开放给大语言模型的接口，主体是由**原子动作**构成的 **Lua API**，涵盖感知、移动、挖掘、建造与交互，*其他模组也能经由插件接入*；另有少量 **Java API** 以工具调用的形式提供，例如加载技能。最上层是**大语言模型**，它编写在沙箱中运行的 Lua 程序，自由组合原子动作，**一次调用即可连续完成数十个步骤**。
 
-更详细的架构见[网站](https://numen.dwinovo.cn)。
+更详细的架构见[官网](https://numen.dwinovo.cn)。
 
 ## 插件
 
-基于上述架构，**任何开发者都可以通过插件**向言出法随注册新的 Lua API，供模型调用，从而*让智能体学会使用其他模组*。本仓库的 `plugins` 目录已经为[是，史蒂夫模型](https://github.com/YesSteveModel/YesSteveModel)、[车万女仆](https://github.com/TartaricAcid/TouhouLittleMaid)等模组提供了插件，例如模型可以通过"是，史蒂夫模型"的 Lua API 切换自己的皮肤，也可以通过"车万女仆"的 Lua API 驯服女仆。这些插件可以作为编写插件的*参考模板*，完整的开发者文档见[网站](https://numen.dwinovo.cn)。
+基于上述架构，**任何开发者都可以通过插件**向言出法随注册新的 Lua API，供模型调用，从而*让智能体学会使用其他模组*。本仓库的 `plugins` 目录已经为[是，史蒂夫模型](https://github.com/YesSteveModel/YesSteveModel)、[车万女仆](https://github.com/TartaricAcid/TouhouLittleMaid)等模组提供了插件，例如模型可以通过"是，史蒂夫模型"的 Lua API 切换自己的皮肤，也可以通过"车万女仆"的 Lua API 驯服女仆。这些插件可以作为编写插件的*参考模板*，完整的开发者文档见[官网](https://numen.dwinovo.cn)。
 
 ## 常见问题
 
@@ -91,4 +95,4 @@
 
 ## 致谢
 
-感谢每一位关注、下载与使用言出法随的玩家，以及提交问题与代码的[贡献者](https://github.com/Dwinovo/minecraft-numen/graphs/contributors)。言出法随所借鉴的开源项目与研究工作，详情请见[网站](https://numen.dwinovo.cn)。
+感谢每一位关注、下载与使用言出法随的玩家，以及提交问题与代码的[贡献者](https://github.com/Dwinovo/minecraft-numen/graphs/contributors)。言出法随所借鉴的开源项目与研究工作，详情请见[官网](https://numen.dwinovo.cn)。

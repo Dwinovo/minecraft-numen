@@ -1,0 +1,17 @@
+name: numen_gametest
+version: '${version}'
+description: 'Numen GameTest on Paper: registers the vanilla GameTest cases, runs them, writes the result and stops the server. Test-only, never shipped.'
+main: com.dwinovo.numen.paper.gametest.PaperGameTestPlugin
+api-version: '1.21'
+authors:
+  - dwinovo
+dependencies:
+  server:
+    numen_api:
+      load: BEFORE
+      required: true
+      join-classpath: true
+    numen:
+      load: BEFORE
+      required: true
+      join-classpath: true

@@ -1,0 +1,208 @@
+<div align="center">
+
+# Numen API
+
+### The layer under Numen — and the stable API addons build against
+
+*The heart of [Numen · 言出法随](https://github.com/Dwinovo/minecraft-numen): the AI companion is one cartridge; this is the console.*
+
+[**English**](README_EN.md) · [简体中文](README.md)
+
+![Minecraft](https://img.shields.io/badge/Minecraft-1.21.1-62B47A?style=flat-square)
+![Loaders](https://img.shields.io/badge/Loaders-common%20%7C%20Fabric%20%7C%20NeoForge%20%7C%20Forge%20%E2%89%A41.20.4-DE7C36?style=flat-square)
+![Java](https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white)
+![License](https://img.shields.io/badge/code-LGPL--3.0-4B6BFB?style=flat-square)
+![Version](https://img.shields.io/maven-metadata/v?metadataUrl=https%3A%2F%2Fraw.githubusercontent.com%2FDwinovo%2Fnumen-maven%2Fmain%2Fcom%2Fdwinovo%2Fnumen%2Fnumen-api-fabric-1.21.1%2Fmaven-metadata.xml&label=version&color=A8731E&style=flat-square)
+
+[**What it is**](#what-it-is) · [**Public API**](#public-api) · [**Depend on it**](#depend-on-it) · [**Build & publish**](#build--publish) · [**Ecosystem**](#ecosystem) · [**License**](#license)
+
+</div>
+
+---
+
+## What it is
+
+**Numen API** (mod id `numen_api`) is the layer that powers the [Numen](https://github.com/Dwinovo/minecraft-numen) mod, packaged as a standalone project with a **stable public API**. The Numen mod bundles Numen API; addons compile against it. Everything the companion can do — think, talk, move, mine, fight, remember — lives here; Numen is just one set of tools and skills stacked on top.
+
+What Numen API provides:
+
+- **A server-side agent loop** (`CompanionLoop`) — hears a message, picks a tool, runs it, reads the result, decides the next move. The brain runs on the server with the server's model profiles, whether or not the owner is online; the client is an optional front end.
+- **Programs run on the server** — a call to the Lua tool is a whole program: the brain hands it to the server's entry point in this process, it runs beside the body and comes back as one receipt; her modules are files in the owner's directory on the server. Functions only the owner's client has data for (`ClientCall`) are answered by a reverse request from the server to the owner's client.
+- **A tool contract** — `NumenTool` / `ToolRegistry` / `ToolCall` / `TaskResult`. A tool is any capability the companion can call; Numen API schedules it and routes the result back into the conversation.
+- **OpenAI-compatible LLM providers** — DeepSeek, DashScope (Qwen), OpenAI, Moonshot (Kimi), Zhipu (GLM), Minimax, SiliconFlow, Volcengine (Doubao). Transport is hand-rolled on the JDK's `HttpClient` + Gson, so there are **zero third-party runtime dependencies**.
+- **Conversation memory** — persists across saves and auto-compacts (Claude-Code-style) when it grows long.
+- **A companion body** — `NumenPlayer`, a server-side fake player (`ServerPlayer`). Every action runs through native player code paths, so redstone, mob AI, containers, and other mods treat it as a real player.
+- **A skill system** — plain-text Markdown workflows that teach the companion how to play, loaded only when relevant.
+- **Multi-loader** — one codebase across `common` / `fabric` / `forge` / `neoforge`.
+
+---
+
+## Public API
+
+Addons touch Numen API through two doors: one feeds a companion, one teaches it a new capability. An outside brain does not use a Java door but the MCP endpoint below. Everything below is on the stable, published API surface.
+
+### Door 1 — `NumenGateway`: feed the built-in brain
+
+Hand a companion's **built-in brain** an input, verbatim (called on the client; it goes to the server as one of the owner's actions). It lands in the companion's inbox and is spliced into the conversation at the next protocol-valid point, exactly as if the owner had typed it; the built-in LLM then decides what to do. This is how a plugin that carries an outside channel works — the QQ plugin turns a QQ message into an `emit`.
+
+```java
+import com.dwinovo.numen.api.NumenGateway;
+import com.dwinovo.numen.api.agent.inbox.EventTypes;
+
+// A message arrives from QQ / Discord / stream chat. Hand it to the companion's brain as-is.
+Delivery delivery = NumenGateway.emit(companionUuid, EventTypes.QUERY, "someone in QQ says: go mine me a stack of iron");
+// HANDED_OFF (given to the server), or REJECTED (blank text, or that companion is not on the roster).
+```
+
+Replies leave the companion by **calling a tool** (Door 2), not through a callback. Inbound = message queue; outbound = tool call. Safe to call from any thread.
+
+### The external brain — the server's MCP endpoint
+
+Skip the built-in LLM entirely and let an outside agent drive a companion's **body**. This is not a Java door but an MCP endpoint the server hosts (an admin switches it on in the "External brain" settings page): the outside brain lists companions, takes events with `get_events`, speaks for her with `say`, and calls any registered tool. While it drives, the built-in brain is held (`Hold.EXTERNAL`), so the two never fight over one body; every call is addressed to a companion UUID and bodies run tasks independently, so one outside brain can drive a **parallel fleet**. What the outside brain does goes into the companion's conversation history like the built-in brain's own turns, so after the hand-back the built-in brain knows what happened in between. See `docs/input-pipeline.md` §5.
+
+### Door 2 — `NumenTool` + `ToolRegistry.register`: teach a new capability
+
+A tool is any capability the companion can call. Implement four methods and register the instance during mod init. There is deliberately **nothing about Minecraft on the contract** — a tool can drive the body, hook an external service, or call a web API; Numen API only presents it to the LLM, delivers the call, and routes the result back.
+
+```java
+import com.dwinovo.numen.api.agent.tool.*;
+import com.dwinovo.numen.api.task.TaskResult;
+import java.util.Map;
+
+public final class SendQqMessageTool implements NumenTool {
+    public String name()        { return "send_qq_message"; }
+    public String description() { return "Send a reply to the owner over QQ. Use when you have something to say to them."; }
+
+    public Map<String, Object> parameterSchema() {
+        return Map.of("type", "object",
+                "properties", Map.of("text", Map.of("type", "string")),
+                "required", java.util.List.of("text"));
+    }
+
+    public void invoke(ToolCall call) {
+        String text = call.args().get("text").getAsString();
+        // Do anything — run now, hop a thread, POST to an external service — then complete exactly once:
+        myQqClient.send(text);
+        call.complete(TaskResult.ok("sent to owner over QQ").toJson());
+    }
+}
+```
+
+```java
+// during mod init:
+ToolRegistry.register(new SendQqMessageTool());
+```
+
+`invoke` reports its result through the one verb, `ToolCall.complete(json)` — synchronously, or later after handing work off to another thread or the server body. `ToolRegistry.register` throws on a duplicate name and preserves registration order (stable tool order helps prompt caching).
+
+### What is stable
+
+The public API is the set of packages whose `package-info` declares them so, mirroring Applied Energistics 2's convention. Anything outside these packages — or annotated `@Internal` inside them — may change in any release.
+
+| Package | Public types | Role |
+|---|---|---|
+| `com.dwinovo.numen.api` | `NumenGateway` | the door that feeds a companion |
+| `com.dwinovo.numen.api.agent.tool` | `NumenTool`, `ToolRegistry`, `ToolCall` | the tool contract + registration |
+| `com.dwinovo.numen.api.agent.tool.api` | `ToolContext` | per-call context for a server-side tool |
+| `com.dwinovo.numen.api.task` | `TaskResult` | the result envelope a tool hands back |
+| `com.dwinovo.numen.api.entity` | `NumenPlayer` | the server-side companion body |
+
+Everything else — providers, agent loop, memory, skill system, networking, UI — is `@Internal`. For a full worked reference, [Numen](https://github.com/Dwinovo/minecraft-numen) builds its entire tool and skill set on exactly this surface, with no back doors.
+
+---
+
+## Depend on it
+
+Artifacts are published to [numen-maven](https://github.com/Dwinovo/numen-maven). The coordinate carries the loader and Minecraft version:
+
+```
+com.dwinovo.numen:numen-api-<loader>-<mcversion>:<version>
+```
+
+Depend on the slim public-API jar (classifier `api`). At runtime Numen API is **provided by the Numen mod**, which bundles it — an addon ships no Numen API code of its own.
+
+```gradle
+repositories {
+    maven { url = 'https://raw.githubusercontent.com/Dwinovo/numen-maven/main' }
+}
+
+dependencies {
+    // Fabric: the slim jar carries intermediary names, same as the full jar. Use
+    // modCompileOnly so Loom maps it into your own namespace — yarn or mojmap.
+    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:<version>:api"
+
+    // NeoForge / Forge: runtime names are Mojang names, so plain compileOnly works.
+    // compileOnly "com.dwinovo.numen:numen-api-neoforge-1.21.1:<version>:api"
+}
+```
+
+Swap the loader (`fabric` / `forge` / `neoforge`) and Minecraft version to match your target. Use the latest version from the badge at the top for `<version>`. This branch builds `1.21.1` on Java 21.
+
+`numen-ai` (model access and usage accounting) and `numen-ui` (widgets) come along transitively — `IToolSpec`, which `NumenTool` extends, lives in `numen-ai`, so without it your tool will not compile. Their coordinates carry the MC-version suffix too: the code itself has nothing to do with Minecraft, but the copy on each version branch is not currently the same.
+
+**To change Numen API mechanics themselves**, depend on Numen:
+
+```gradle
+dependencies {
+    // Fabric
+    modImplementation "com.dwinovo.numen:numen-fabric-1.21.1:<version>"
+
+    // NeoForge / Forge (there is no modImplementation there — that's a Loom keyword)
+    // implementation "com.dwinovo.numen:numen-neoforge-1.21.1:<version>"
+}
+```
+
+Numen pulls the matching `numen-api-*` in with it — no second line needed. Numen API's types appear in Numen's own public signatures (`AbstractCompanionTask<R extends TaskRecord>` and friends), so it is an `api` dependency, not a runtime one.
+
+> Do not depend on either mod's `-common` coordinate (`numen-api-common-*` / `numen-common-*`). They hold only the cross-loader code: no loader entrypoint; `numen-api-common-*` also has no language files, and `numen-common-*` does not nest Numen API. They compile, and then do nothing in game. **The loader-named coordinate is the complete one.**
+
+---
+
+## Build & publish
+
+Standard MultiLoader-Template layout (`common` + per-loader subprojects).
+
+```bash
+./gradlew build         # build every loader
+./gradlew datagenAll    # run data generation for both mods, both loaders
+./gradlew publishAll    # publish Numen API + Numen + ai + ui
+./gradlew releaseJars   # collect the jar each loader ships to players into build/release/<loader>/
+```
+
+The target repo comes from `local_maven_url` in `gradle.properties`, which defaults to the in-repo `build/local-maven` — that is where day-to-day debugging publishes; override with `-Plocal_maven_url=...`. `datagenAll` / `publishAll` / `releaseJars` pick the branch's second loader (Forge or NeoForge) themselves — callers never need to know which.
+
+Artifacts fall into three kinds: the full jar (runtime, bundled by the Numen mod), the slim `api`-classifier jar (what addons `compileOnly`), and sources / javadoc.
+
+**Versions are locked in step across the tree**, with a single source: `version` in `gradle.properties`. Numen API, Numen, ai and ui all share it, so "which Numen API goes with which Numen" never comes up — Numen 0.1.3 takes Numen API 0.1.3, and it is also the version shown in game. The docs carry no concrete version: coordinates say `<version>`, and the badge at the top reads numen-maven directly.
+
+**Releasing is one click on GitHub:** Actions → Publish → Run workflow, pick the branch (that is, the MC version) and the channel (beta / release). From the command line:
+
+```bash
+gh workflow run publish.yml --ref 1.21.1 -f channel=beta
+```
+
+One run covers both audiences: it builds once; pushes the artifacts to numen-maven for developers and tags `v<version>-<mc>[-beta]` to pin that version to this commit; uploads the jars to Modrinth and CurseForge for players; and finally creates the GitHub Release. The changelog is the `feat` / `fix` commits since the previous version. If this version was already released on this MC, or this commit's Build is not green, it stops before touching anything. If something fails halfway, use Re-run failed jobs on that run — only the failed parts run again.
+
+---
+
+## Ecosystem
+
+**Numen** ([minecraft-numen](https://github.com/Dwinovo/minecraft-numen)) is the mod — the AI companion. Numen API (`numen-api/`), the MCP server and the mod itself all live in this one repository; Numen API is also published through **[numen-maven](https://github.com/Dwinovo/numen-maven)** and exposes a small public API.
+
+Two things build on it:
+
+**A plugin** is a third-party mod that gives a companion new abilities through the public API. It does two things: registers tools through `NumenGateway`, and ships a `/skills` directory inside its own jar. The companion's own brain stays in charge — the plugin supplies the capability, the companion decides whether and when to use it.
+
+**A skill** is markdown that teaches a companion how to behave, loaded into its context only when relevant. Bundled with Numen, community-written, or shipped inside a plugin's jar.
+
+As for **handing the controls to an outside brain** (any external agent driving companions directly), that is the built-in MCP server — nothing extra to install. See [External brain](#external-brain).
+
+---
+
+## License
+
+- **Source code — [LGPL-3.0](../LICENSE).** Forks you distribute must stay open under the same license.
+- **Plugins and compatibility mods may use any license.** Work distributed separately that uses Numen through its API is not bound by the LGPL, including proprietary projects.
+- **Art & assets — [All Rights Reserved](../licenses/ASSETS.txt).** The names "Numen" / "言出法随" are reserved.
+
+Built on the [MultiLoader Template](https://github.com/jaredlll08/MultiLoader-Template).
