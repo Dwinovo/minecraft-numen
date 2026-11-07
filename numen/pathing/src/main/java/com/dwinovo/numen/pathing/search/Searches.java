@@ -1,6 +1,7 @@
 package com.dwinovo.numen.pathing.search;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -8,6 +9,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
@@ -52,6 +54,27 @@ public final class Searches {
     public static String busy() {
         int inFlight = IN_FLIGHT.get();
         return inFlight == 0 ? null : inFlight + " pathing search(es) running or queued";
+    }
+
+    /**
+     * 主线程问到一件还没跑完的活时做什么({@link Pending#poll} 之前调)。正式运行什么都不做:没跑完就是还没有结论,下一刻再问,
+     * 主线程从不为搜索停。
+     */
+    private static volatile Consumer<Future<?>> onUnfinishedPoll = unfinished -> { };
+
+    /**
+     * 从此主线程问到还没跑完的活时交给 {@code wait}(它返回时活应当跑完了)。GameTest 服务器用它让主线程等结论回来:每刻开头与收尾
+     * 等齐在飞的活({@link #busy})管的是刻与刻之间,一件活在一刻当中派出、又在同一刻里被问到(受理前的规划派出之后同一刻里再问一次、
+     * 规划没交出路之后接着派的诊断),问到的是不是结论就看工作线程赶没赶上;在这里等它回来,哪一刻拿到结论就只看主线程问的先后。
+     */
+    public static void onUnfinishedPoll(Consumer<Future<?>> wait) {
+        onUnfinishedPoll = wait;
+    }
+
+    static void beforePoll(Future<?> future) {
+        if (!future.isDone()) {
+            onUnfinishedPoll.accept(future);
+        }
     }
 
     private static ThreadPoolExecutor pool() {
