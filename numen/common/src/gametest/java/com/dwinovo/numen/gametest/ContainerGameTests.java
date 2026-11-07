@@ -1,12 +1,13 @@
 package com.dwinovo.numen.gametest;
 
 import net.minecraft.world.entity.EntitySpawnReason;
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import java.util.concurrent.atomic.AtomicReference;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
@@ -43,23 +44,23 @@ public class ContainerGameTests {
         steps(helper)
                 // 还没开任何界面时关界面:不算错,交回 false
                 .thenExecute(() -> step.set(lua(companion, "numen.gui.close()")))
-                .thenWaitUntil(() -> helper.assertTrue(step.get().succeeded() && Boolean.FALSE.equals(step.get().value()),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, step.get().succeeded() && Boolean.FALSE.equals(step.get().value()),
                         "closing with nothing open does not say so: " + step.get().reply()))
                 .thenExecute(() -> step.set(lua(companion, "numen.use.block(" + xyz(chest) + ")")))
-                .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
+                .thenWaitUntil(() -> Checks.assertTrue(helper, step.get().done() && step.get().succeeded()
                                 && companion.containerMenu instanceof ChestMenu,
                         "the chest did not open: " + step.get().outcome()))
                 .thenExecute(() -> step.set(lua(companion, "numen.gui.view()")))
-                .thenWaitUntil(() -> helper.assertTrue(step.get().succeeded()
+                .thenWaitUntil(() -> Checks.assertTrue(helper, step.get().succeeded()
                                 && step.get().reply().contains("{\"index\":0,\"side\":\"container\",\"item\":\"minecraft:diamond\",\"count\":5}"),
                         "gui view does not show the diamonds in slot 0: " + step.get().reply()))
                 .thenExecute(() -> step.set(lua(companion, "numen.gui.quick(0)")))
-                .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
+                .thenWaitUntil(() -> Checks.assertTrue(helper, step.get().done() && step.get().succeeded()
                                 && companion.getInventory().countItem(Items.DIAMOND) == 5
                                 && ((ChestBlockEntity) helper.getLevel().getBlockEntity(chest)).isEmpty(),
                         "the diamonds did not move from the chest into her inventory: " + step.get().outcome()))
                 .thenExecute(() -> step.set(lua(companion, "numen.gui.close()")))
-                .thenWaitUntil(() -> helper.assertTrue(step.get().succeeded()
+                .thenWaitUntil(() -> Checks.assertTrue(helper, step.get().succeeded()
                                 && companion.containerMenu == companion.inventoryMenu,
                         "gui close did not close the chest: " + step.get().reply()))
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
@@ -84,14 +85,14 @@ public class ContainerGameTests {
 
         steps(helper)
                 .thenExecute(() -> step.set(lua(companion, "numen.use.block(" + xyz(chest) + ")")))
-                .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
+                .thenWaitUntil(() -> Checks.assertTrue(helper, step.get().done() && step.get().succeeded()
                                 && companion.containerMenu instanceof ChestMenu,
                         "the chest did not open: " + step.get().outcome()))
                 .thenExecute(() -> step.set(lua(companion, "numen.gui.quick(" + menuSlotOf(companion, Items.DIAMOND) + ")")))
-                .thenWaitUntil(() -> helper.assertTrue(step.get().done()
+                .thenWaitUntil(() -> Checks.assertTrue(helper, step.get().done()
                                 && step.get().outcome().contains("didn't move"),
                         "the reply does not say the diamonds stayed: " + step.get().outcome()))
-                .thenWaitUntil(() -> helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 5
+                .thenWaitUntil(() -> Checks.assertTrue(helper, companion.getInventory().countItem(Items.DIAMOND) == 5
                                 && box.countItem(Items.COBBLESTONE) == box.getContainerSize() * 64
                                 && box.countItem(Items.DIAMOND) == 0,
                         "something moved between her and the full chest"))
@@ -110,14 +111,14 @@ public class ContainerGameTests {
 
         steps(helper)
                 .thenExecute(() -> step.set(lua(companion, "numen.use.block(" + xyz(chest) + ")")))
-                .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
+                .thenWaitUntil(() -> Checks.assertTrue(helper, step.get().done() && step.get().succeeded()
                                 && companion.containerMenu instanceof ChestMenu,
                         "the chest did not open: " + step.get().outcome()))
                 .thenExecute(() -> step.set(lua(companion, "numen.gui.move(0, " + menuSlotOf(companion, Items.AIR) + ", {count = 2})")))
-                .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
+                .thenWaitUntil(() -> Checks.assertTrue(helper, step.get().done() && step.get().succeeded()
                                 && step.get().outcome().contains("moved 2 diamond"),
                         "the reply does not say two diamonds moved: " + step.get().outcome()))
-                .thenWaitUntil(() -> helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 2
+                .thenWaitUntil(() -> Checks.assertTrue(helper, companion.getInventory().countItem(Items.DIAMOND) == 2
                                 && box.countItem(Items.DIAMOND) == 3,
                         "she has " + companion.getInventory().countItem(Items.DIAMOND) + " and the chest "
                                 + box.countItem(Items.DIAMOND)))
@@ -141,15 +142,15 @@ public class ContainerGameTests {
         steps = call(helper, steps, companion, "numen.gui.put(\"minecraft:diamond_sword\")");
         steps = call(helper, steps, companion, "numen.gui.put(\"minecraft:lapis_lazuli\")");
         steps = steps.thenExecute(() -> view.set(lua(companion, "numen.gui.view()")))
-                .thenWaitUntil(() -> helper.assertTrue(view.get().succeeded() && view.get().reply().contains("\"options\"")
+                .thenWaitUntil(() -> Checks.assertTrue(helper, view.get().succeeded() && view.get().reply().contains("\"options\"")
                                 && view.get().reply().contains("\"cost\""),
                         "gui view does not show the enchanting options: " + view.get().reply()));
         steps = call(helper, steps, companion, "numen.gui.choose(1)");
         steps.thenWaitUntil(() -> {
             var menu = (net.minecraft.world.inventory.EnchantmentMenu) companion.containerMenu;
-            helper.assertTrue(menu.getSlot(0).getItem().isEnchanted(), "the sword was not enchanted");
-            helper.assertTrue(menu.getGoldCount() == 2, "the table holds " + menu.getGoldCount() + " lapis, not 2");
-            helper.assertTrue(companion.experienceLevel == 29, "her level is " + companion.experienceLevel + ", not 29");
+            Checks.assertTrue(helper, menu.getSlot(0).getItem().isEnchanted(), "the sword was not enchanted");
+            Checks.assertTrue(helper, menu.getGoldCount() == 2, "the table holds " + menu.getGoldCount() + " lapis, not 2");
+            Checks.assertTrue(helper, companion.experienceLevel == 29, "her level is " + companion.experienceLevel + ", not 29");
         }).thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();
     }
 
@@ -168,12 +169,12 @@ public class ContainerGameTests {
         steps = call(helper, steps, companion, "numen.gui.put(\"minecraft:lapis_lazuli\")");
         steps.thenExecute(() -> choose.set(lua(companion, "numen.gui.choose(1)")))
                 .thenWaitUntil(() -> {
-                    helper.assertTrue(choose.get().done() && !choose.get().succeeded()
+                    Checks.assertTrue(helper, choose.get().done() && !choose.get().succeeded()
                                     && choose.get().outcome().contains("experience levels")
                                     && choose.get().outcome().contains("you have 0 levels"),
                             "the refusal does not say what it needs: " + choose.get().outcome());
                     var menu = (net.minecraft.world.inventory.EnchantmentMenu) companion.containerMenu;
-                    helper.assertTrue(!menu.getSlot(0).getItem().isEnchanted() && menu.getGoldCount() == 3,
+                    Checks.assertTrue(helper, !menu.getSlot(0).getItem().isEnchanted() && menu.getGoldCount() == 3,
                             "the table changed although it refused");
                 }).thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();
     }
@@ -190,14 +191,14 @@ public class ContainerGameTests {
         steps = call(helper, steps, companion, "numen.use.block(" + xyz(cutter) + ")");
         steps = call(helper, steps, companion, "numen.gui.put(\"minecraft:stone\", 1)");
         steps = steps.thenExecute(() -> view.set(lua(companion, "numen.gui.view()")))
-                .thenWaitUntil(() -> helper.assertTrue(view.get().succeeded() && view.get().reply().contains("\"recipes\""),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, view.get().succeeded() && view.get().reply().contains("\"recipes\""),
                         "gui view does not list the recipes: " + view.get().reply()));
         steps = call(helper, steps, companion, "numen.gui.choose(1)");
         var made = new AtomicReference<net.minecraft.world.item.ItemStack>();
         steps = steps.thenExecute(() -> made.set(companion.containerMenu.getSlot(1).getItem().copy()));
         steps = call(helper, steps, companion, "numen.gui.quick(1)");
         steps.thenWaitUntil(() -> {
-            helper.assertTrue(!made.get().isEmpty() && companion.getInventory().countItem(made.get().getItem())
+            Checks.assertTrue(helper, !made.get().isEmpty() && companion.getInventory().countItem(made.get().getItem())
                             == made.get().getCount(), "she did not take the first recipe's result " + made.get());
         }).thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();
     }
@@ -217,8 +218,8 @@ public class ContainerGameTests {
         steps = call(helper, steps, companion, "numen.gui.choose(1)");
         steps = call(helper, steps, companion, "numen.gui.quick(3)");
         steps.thenWaitUntil(() -> {
-            var banner = companion.getInventory().items.stream().filter(it -> it.is(Items.WHITE_BANNER)).findFirst();
-            helper.assertTrue(banner.isPresent() && banner.get().getOrDefault(
+            var banner = companion.getInventory().getNonEquipmentItems().stream().filter(it -> it.is(Items.WHITE_BANNER)).findFirst();
+            Checks.assertTrue(helper, banner.isPresent() && banner.get().getOrDefault(
                             net.minecraft.core.component.DataComponents.BANNER_PATTERNS,
                             net.minecraft.world.level.block.entity.BannerPatternLayers.EMPTY).layers().size() == 1,
                     "she carries no banner with one woven pattern");
@@ -230,10 +231,10 @@ public class ContainerGameTests {
     public static void gui_choose_a_trade_and_take_the_result(GameTestHelper helper) {
         var villager = net.minecraft.world.entity.EntityType.VILLAGER.create(helper.getLevel(), EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(8, 2, 8));
-        villager.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        villager.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         villager.setNoAi(true);
         villager.setVillagerData(villager.getVillagerData()
-                .setProfession(net.minecraft.world.entity.npc.VillagerProfession.FARMER));
+                .withProfession(helper.getLevel().registryAccess(), net.minecraft.world.entity.npc.VillagerProfession.FARMER));
         var offers = villager.getOffers();
         offers.clear();
         offers.add(new net.minecraft.world.item.trading.MerchantOffer(
@@ -249,12 +250,12 @@ public class ContainerGameTests {
         // 右键村民和右键箱子一样交回打开的那个界面(#118:点实体的声明也要有"打开界面")
         Steps steps = steps(helper)
                 .thenExecute(() -> press.set(lua(companion, "numen.use.entity(" + ref(villager) + ")")))
-                .thenWaitUntil(() -> helper.assertTrue(press.get().done() && press.get().succeeded()
+                .thenWaitUntil(() -> Checks.assertTrue(helper, press.get().done() && press.get().succeeded()
                                 && companion.containerMenu instanceof net.minecraft.world.inventory.MerchantMenu
                                 && press.get().reply().contains("\"menu\""),
                         "use entity did not hand back the trade window: " + press.get().reply()));
         steps = steps.thenExecute(() -> view.set(lua(companion, "numen.gui.view()")))
-                .thenWaitUntil(() -> helper.assertTrue(view.get().succeeded() && view.get().reply().contains("\"trades\"")
+                .thenWaitUntil(() -> Checks.assertTrue(helper, view.get().succeeded() && view.get().reply().contains("\"trades\"")
                                 && view.get().reply().contains("minecraft:bread") && view.get().reply().contains("\"max\":5"),
                         "gui view does not list the trade: " + view.get().reply()));
         steps = call(helper, steps, companion, "numen.gui.choose(1)");
@@ -262,7 +263,7 @@ public class ContainerGameTests {
         steps.thenWaitUntil(() -> {
             // 原版把背包里的翠绿宝石一次全填进付款格,Shift 点结果格是能买几次就买几次
             int uses = offers.get(0).getUses();
-            helper.assertTrue(uses >= 1 && companion.getInventory().countItem(Items.BREAD) == 6 * uses,
+            Checks.assertTrue(helper, uses >= 1 && companion.getInventory().countItem(Items.BREAD) == 6 * uses,
                     "she holds " + companion.getInventory().countItem(Items.BREAD) + " bread after " + uses + " uses");
         }).thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();
     }
@@ -286,16 +287,16 @@ public class ContainerGameTests {
         steps = steps.thenExecute(() -> ((net.minecraft.world.inventory.BeaconMenu) companion.containerMenu).setData(0, 1));
         steps = call(helper, steps, companion, "numen.gui.put(\"minecraft:iron_ingot\", 1)");
         steps = steps.thenExecute(() -> view.set(lua(companion, "numen.gui.view()")))
-                .thenWaitUntil(() -> helper.assertTrue(view.get().succeeded()
+                .thenWaitUntil(() -> Checks.assertTrue(helper, view.get().succeeded()
                                 && view.get().reply().contains("\"primaries\":[\"speed\",\"haste\"]"),
                         "gui view does not list the one-level effects: " + view.get().reply()));
         steps = call(helper, steps, companion, "numen.gui.choose(\"haste\")");
         steps.thenWaitUntil(() -> {
             var menu = (net.minecraft.world.inventory.BeaconMenu) companion.containerMenu;
-            helper.assertTrue(menu.getPrimaryEffect() != null
-                            && menu.getPrimaryEffect().is(net.minecraft.world.effect.MobEffects.DIG_SPEED),
+            Checks.assertTrue(helper, menu.getPrimaryEffect() != null
+                            && menu.getPrimaryEffect().is(net.minecraft.world.effect.MobEffects.HASTE),
                     "the beacon's primary effect is " + menu.getPrimaryEffect());
-            helper.assertTrue(!menu.hasPayment(), "the payment was not taken");
+            Checks.assertTrue(helper, !menu.hasPayment(), "the payment was not taken");
         }).thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();
     }
 
@@ -313,10 +314,10 @@ public class ContainerGameTests {
         steps = call(helper, steps, companion, "numen.gui.rename(\"Excalibur\")");
         steps = call(helper, steps, companion, "numen.gui.quick(2)");
         steps.thenWaitUntil(() -> {
-            var sword = companion.getInventory().items.stream().filter(it -> it.is(Items.IRON_SWORD)).findFirst();
-            helper.assertTrue(sword.isPresent() && sword.get().getHoverName().getString().equals("Excalibur"),
+            var sword = companion.getInventory().getNonEquipmentItems().stream().filter(it -> it.is(Items.IRON_SWORD)).findFirst();
+            Checks.assertTrue(helper, sword.isPresent() && sword.get().getHoverName().getString().equals("Excalibur"),
                     "no sword named Excalibur in her inventory");
-            helper.assertTrue(companion.experienceLevel < 5, "the rename cost no levels");
+            Checks.assertTrue(helper, companion.experienceLevel < 5, "the rename cost no levels");
         }).thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();
     }
 
@@ -337,17 +338,17 @@ public class ContainerGameTests {
         Steps steps = steps(helper);
         steps = call(helper, steps, companion, "numen.use.block(" + xyz(lectern) + ")");
         steps = steps.thenExecute(() -> view.set(lua(companion, "numen.gui.view()")))
-                .thenWaitUntil(() -> helper.assertTrue(view.get().succeeded() && view.get().reply().contains("\"pages\":3")
+                .thenWaitUntil(() -> Checks.assertTrue(helper, view.get().succeeded() && view.get().reply().contains("\"pages\":3")
                                 && view.get().reply().contains("\"text\":\"one\""),
                         "gui view does not show the book: " + view.get().reply()));
         steps = call(helper, steps, companion, "numen.gui.page(3)");
-        steps = steps.thenWaitUntil(() -> helper.assertTrue(
+        steps = steps.thenWaitUntil(() -> Checks.assertTrue(helper, 
                 ((net.minecraft.world.inventory.LecternMenu) companion.containerMenu).getPage() == 2,
                 "the lectern is not on page 3"));
         steps = call(helper, steps, companion, "numen.gui.take(\"minecraft:written_book\")");
         steps.thenWaitUntil(() -> {
-            helper.assertTrue(companion.getInventory().countItem(Items.WRITTEN_BOOK) == 1, "she did not take the book");
-            helper.assertTrue(!helper.getLevel().getBlockState(lectern)
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.WRITTEN_BOOK) == 1, "she did not take the book");
+            Checks.assertTrue(helper, !helper.getLevel().getBlockState(lectern)
                             .getValue(net.minecraft.world.level.block.LecternBlock.HAS_BOOK),
                     "the lectern still has the book");
         }).thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();
@@ -366,7 +367,7 @@ public class ContainerGameTests {
         Steps steps = steps(helper);
         steps = call(helper, steps, companion, "numen.use.block(" + xyz(crafter) + ")");
         steps = call(helper, steps, companion, "numen.gui.toggle(4)");
-        steps.thenWaitUntil(() -> helper.assertTrue(
+        steps.thenWaitUntil(() -> Checks.assertTrue(helper, 
                 ((net.minecraft.world.inventory.CrafterMenu) companion.containerMenu).isSlotDisabled(4),
                 "slot 4 of the crafter is still open")).thenExecute(
                 () -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();
@@ -377,7 +378,7 @@ public class ContainerGameTests {
     public static void gui_open_on_a_horse_opens_the_horse_inventory(GameTestHelper helper) {
         var horse = net.minecraft.world.entity.EntityType.HORSE.create(helper.getLevel(), EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(6, 2, 6));
-        horse.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        horse.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         horse.setNoAi(true);
         horse.setTamed(true);
         helper.getLevel().addFreshEntity(horse);
@@ -386,7 +387,7 @@ public class ContainerGameTests {
 
         Steps steps = steps(helper);
         steps = call(helper, steps, companion, "numen.gui.open()");
-        steps.thenWaitUntil(() -> helper.assertTrue(
+        steps.thenWaitUntil(() -> Checks.assertTrue(helper, 
                 companion.containerMenu instanceof net.minecraft.world.inventory.HorseInventoryMenu,
                 "the horse's inventory did not open")).thenExecute(
                 () -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();

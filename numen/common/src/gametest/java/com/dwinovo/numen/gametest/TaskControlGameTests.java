@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.gametest.Bodies;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.agent.tool.ToolRegistry;
@@ -27,8 +28,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
@@ -130,13 +131,13 @@ public class TaskControlGameTests {
 
         // goto 规划过、受理了才在走:那之后再定表(她手上的程序一次只有一段,走路那一段停在调用之间,活照常跑)、再查
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(walk.accepted(), "goto did not go through: " + walk.reply()))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, walk.accepted(), "goto did not go through: " + walk.reply()))
                 .thenExecute(() -> timer.set(lua(companion, "numen.task.timer(\"check the furnace\", {after = 600})")))
-                .thenWaitUntil(() -> helper.assertTrue(timer.get().succeeded(),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, timer.get().succeeded(),
                         "the timer did not go through: " + timer.get().reply()))
                 .thenExecute(() -> status.set(lua(companion, "numen.task.status()")))
                 .thenExecute(() -> {
-                    helper.assertTrue(status.get().succeeded()
+                    Checks.assertTrue(helper, status.get().succeeded()
                                     && status.get().reply().contains(walk.task().publicId())
                                     && status.get().reply().contains("numen.move.walk")
                                     && status.get().reply().contains("check the furnace"),
@@ -155,12 +156,12 @@ public class TaskControlGameTests {
         AtomicReference<ToolRun> stop = new AtomicReference<>();
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(walk.accepted(), "goto has not been accepted: " + walk.reply()))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, walk.accepted(), "goto has not been accepted: " + walk.reply()))
                 .thenExecuteAfter(5, () -> stop.set(lua(companion, "numen.task.stop()")))
-                .thenWaitUntil(() -> helper.assertTrue(stop.get().succeeded()
+                .thenWaitUntil(() -> Checks.assertTrue(helper, stop.get().succeeded()
                                 && walk.task().getState() == TaskState.CANCELLED,
                         "the walk was not stopped: " + stop.get().reply()))
-                .thenWaitUntil(() -> helper.assertTrue(GameTestKit.events(companion).stream()
+                .thenWaitUntil(() -> Checks.assertTrue(helper, GameTestKit.events(companion).stream()
                                 .anyMatch(e -> e.type().equals("task_finished") && e.text().contains("stopped")),
                         "no task_finished with status stopped went out: " + GameTestKit.events(companion)))
                 .thenExecute(() -> {
@@ -176,8 +177,8 @@ public class TaskControlGameTests {
         ToolRun timer = lua(companion, "numen.task.timer(\"the bread should be baked\", {after = 1})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(timer.succeeded(), "the timer failed: " + timer.reply());
-            helper.assertTrue(GameTestKit.events(companion).stream()
+            Checks.assertTrue(helper, timer.succeeded(), "the timer failed: " + timer.reply());
+            Checks.assertTrue(helper, GameTestKit.events(companion).stream()
                             .anyMatch(e -> e.type().equals("timer") && e.text().contains("the bread should be baked")),
                     "the timer has not fired with its reason: " + GameTestKit.events(companion));
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -201,28 +202,28 @@ public class TaskControlGameTests {
         ToolRun viaCommand = lua(refused, "numen.task.stop({task_id = \"t9999\"})");
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(walk.accepted(), "goto has not been accepted: " + walk.reply()))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, walk.accepted(), "goto has not been accepted: " + walk.reply()))
                 .thenExecuteAfter(3, () -> status.set(lua(companion, "numen.task.status()")))
-                .thenWaitUntil(() -> helper.assertTrue(cellarTimer.done() && viaTool.done() && viaCommand.done(),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, cellarTimer.done() && viaTool.done() && viaCommand.done(),
                         "the timer and the refused stops have not answered"))
                 .thenExecute(() -> {
-                    helper.assertTrue(ToolRegistry.get("task_status") == null && ToolRegistry.get("set_timer") == null
+                    Checks.assertTrue(helper, ToolRegistry.get("task_status") == null && ToolRegistry.get("set_timer") == null
                                     && ToolRegistry.get("task_stop") == null,
                             "task_status, set_timer or task_stop is still a tool");
-                    helper.assertTrue(ToolRegistry.get(com.dwinovo.numen.script.ScriptEngine.IN_USE.toolName())
+                    Checks.assertTrue(helper, ToolRegistry.get(com.dwinovo.numen.script.ScriptEngine.IN_USE.toolName())
                             != null, "the lua tool is missing");
-                    helper.assertTrue(walk.task() != null && timer.succeeded(), "setup failed: " + timer.reply());
-                    helper.assertTrue(status.get().succeeded()
+                    Checks.assertTrue(helper, walk.task() != null && timer.succeeded(), "setup failed: " + timer.reply());
+                    Checks.assertTrue(helper, status.get().succeeded()
                                     && status.get().reply().contains(walk.task().publicId())
                                     && status.get().reply().contains("turn the compost"),
                             "task status does not name the walk and the timer: " + status.get().reply());
-                    helper.assertTrue(cellarTimer.succeeded(), "the timer failed: " + cellarTimer.reply());
-                    helper.assertTrue(!viaTool.succeeded() && viaTool.reply().contains("air out the cellar"),
+                    Checks.assertTrue(helper, cellarTimer.succeeded(), "the timer failed: " + cellarTimer.reply());
+                    Checks.assertTrue(helper, !viaTool.succeeded() && viaTool.reply().contains("air out the cellar"),
                             "the refusal does not list what is pending: " + viaTool.reply());
-                    helper.assertTrue(viaTool.reply().equals(viaCommand.reply()),
+                    Checks.assertTrue(helper, viaTool.reply().equals(viaCommand.reply()),
                             "the tool and the command refuse differently: " + viaTool.reply() + " / "
                                     + viaCommand.reply());
-                    helper.assertTrue(TimerRegistry.get(helper.getLevel().getServer()).list(refused.getUUID()).size() == 1,
+                    Checks.assertTrue(helper, TimerRegistry.get(helper.getLevel().getServer()).list(refused.getUUID()).size() == 1,
                             "a refused stop removed the timer");
                     CompanionFactory.despawn(helper.getLevel().getServer(), companion);
                     CompanionFactory.despawn(helper.getLevel().getServer(), refused);
@@ -244,15 +245,15 @@ public class TaskControlGameTests {
         CompanionRegistry.Entry recorded = CompanionRegistry.get(server).find(body.getUUID());
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(linger.task() != null && linger.task().getToolName().equals("gt.gt_long.linger")
+            Checks.assertTrue(helper, linger.task() != null && linger.task().getToolName().equals("gt.gt_long.linger")
                             && linger.reply().contains("\"job\":\"" + linger.task().publicId() + "\""),
                     "the task is not named after its function: " + linger.reply());
-            helper.assertTrue(recorded.taskLua().equals("gt.gt_long.linger(20)"),
+            Checks.assertTrue(helper, recorded.taskLua().equals("gt.gt_long.linger(20)"),
                     "the replayed line is not the call itself: " + recorded.taskLua());
-            helper.assertTrue(recorded.taskName().equals("gt.gt_long.linger"),
+            Checks.assertTrue(helper, recorded.taskName().equals("gt.gt_long.linger"),
                     "the task is recorded under another name: " + recorded.taskName());
             // 程序等着的这件活的收尾写在它的回执里,不另发事件
-            helper.assertTrue(linger.receipt() != null && linger.receipt().contains("line 1 gt.gt_long.linger: stood for 20 ticks"),
+            Checks.assertTrue(helper, linger.receipt() != null && linger.receipt().contains("line 1 gt.gt_long.linger: stood for 20 ticks"),
                     "the receipt does not name the task's end: " + linger.receipt());
             Companions.dismiss(server, body);
         });
@@ -271,16 +272,16 @@ public class TaskControlGameTests {
         AtomicReference<ToolRun> hold = new AtomicReference<>();
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(linger.task() != null, "the long work was not accepted: " + linger.reply()))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, linger.task() != null, "the long work was not accepted: " + linger.reply()))
                 .thenExecute(() -> {
                     companion.look().at(Vec3.atCenterOf(stone));
                     companion.controls().press(com.dwinovo.numen.api.entity.Controls.Key.FORWARD);
                     companion.controls().press(com.dwinovo.numen.api.entity.Controls.Key.SNEAK);
                     companion.mouse().dig();
-                    helper.assertTrue(companion.mouse().digging(), "the left button did not go down on the stone");
+                    Checks.assertTrue(helper, companion.mouse().digging(), "the left button did not go down on the stone");
                     hold.set(lua(companion, "gt.gt_sync.hold(3)"));
                 })
-                .thenWaitUntil(() -> helper.assertTrue(hold.get().done() && hold.get().succeeded()
+                .thenWaitUntil(() -> Checks.assertTrue(helper, hold.get().done() && hold.get().succeeded()
                                 && !companion.controls().held(com.dwinovo.numen.api.entity.Controls.Key.FORWARD)
                                 && !companion.controls().held(com.dwinovo.numen.api.entity.Controls.Key.SNEAK)
                                 && !companion.mouse().digging(),
@@ -307,21 +308,21 @@ public class TaskControlGameTests {
         Companions.dormant(server, first);
         registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), recorded.taskLua()));
         NumenPlayer second = Bodies.respawn(server, uuid);
-        helper.assertTrue(second != null, "the body was not rebuilt");
+        Checks.assertTrue(helper, second != null, "the body was not rebuilt");
         EventQueue inbox = CompanionLoops.get(uuid).orElseThrow().inbox();   // 她有服务端大脑:事件进她的收件箱
         AtomicReference<TaskRecord<?>> restored = new AtomicReference<>();
 
         steps(helper)
                 .thenWaitUntil(() -> {
-                    helper.assertTrue(before.task() != null, "the first dispatch failed: " + before.reply());
+                    Checks.assertTrue(helper, before.task() != null, "the first dispatch failed: " + before.reply());
                     TaskRecord<?> now = CompanionTickDispatcher.currentTaskFor(uuid);
-                    helper.assertTrue(now != null && now != before.task(), "the task was not replayed");
+                    Checks.assertTrue(helper, now != null && now != before.task(), "the task was not replayed");
                     restored.set(now);
                 })
-                .thenWaitUntil(() -> helper.assertTrue(restored.get().getToolName().equals("gt.gt_long.linger"),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, restored.get().getToolName().equals("gt.gt_long.linger"),
                         "the replayed task is named " + restored.get().getToolName()))
                 .thenExecute(() -> CompanionTickDispatcher.stopActive(second, TaskRecord.StopCause.TASK_STOP))
-                .thenWaitUntil(() -> helper.assertTrue(inbox.entries().stream()
+                .thenWaitUntil(() -> Checks.assertTrue(helper, inbox.entries().stream()
                                 .anyMatch(e -> e.type().equals("task_finished")
                                         && e.text().contains("task=\"gt.gt_long.linger\"")
                                         && e.text().contains(restored.get().publicId())),
@@ -350,14 +351,14 @@ public class TaskControlGameTests {
         Companions.dormant(server, first);
         registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), "gt.gt_long.linger(\"soon\")"));
         NumenPlayer second = Bodies.respawn(server, uuid);
-        helper.assertTrue(second != null, "the body was not rebuilt");
+        Checks.assertTrue(helper, second != null, "the body was not rebuilt");
         EventQueue inbox = CompanionLoops.get(uuid).orElseThrow().inbox();   // 她有服务端大脑:事件进她的收件箱
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(before.task() != null, "the first dispatch failed: " + before.reply());
-            helper.assertTrue(registry.find(uuid).taskName().isBlank(),
+            Checks.assertTrue(helper, before.task() != null, "the first dispatch failed: " + before.reply());
+            Checks.assertTrue(helper, registry.find(uuid).taskName().isBlank(),
                     "the task that cannot be replayed is still on record");
-            helper.assertTrue(inbox.entries().stream()
+            Checks.assertTrue(helper, inbox.entries().stream()
                             .anyMatch(e -> e.type().equals("task_finished")
                                     && e.text().contains("task=\"gt.gt_long.linger\"")
                                     && e.text().contains("status=\"failed\"")
@@ -389,20 +390,20 @@ public class TaskControlGameTests {
         EventQueue inbox = CompanionLoops.get(uuid).orElseThrow().inbox();   // 她有服务端大脑:事件进她的收件箱
         inbox.takeEntries(System.currentTimeMillis(), 0L);   // 先清掉第一次派活留下的
         NumenPlayer second = Bodies.respawn(server, uuid);
-        helper.assertTrue(second != null, "the body was not rebuilt");
+        Checks.assertTrue(helper, second != null, "the body was not rebuilt");
         ToolRun woken = lua(second, "gt.gt_long.linger(900)");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(before.task() != null, "the first dispatch failed: " + before.reply());
-            helper.assertTrue(woken.task() != null, "the new dispatch was refused: " + woken.reply());
-            helper.assertTrue(CompanionTickDispatcher.currentTaskFor(uuid) == woken.task(),
+            Checks.assertTrue(helper, before.task() != null, "the first dispatch failed: " + before.reply());
+            Checks.assertTrue(helper, woken.task() != null, "the new dispatch was refused: " + woken.reply());
+            Checks.assertTrue(helper, CompanionTickDispatcher.currentTaskFor(uuid) == woken.task(),
                     "the new task is not the one running: " + CompanionTickDispatcher.currentTaskFor(uuid));
-            helper.assertTrue(registry.find(uuid).taskLua().equals("gt.gt_long.linger(900)"),
+            Checks.assertTrue(helper, registry.find(uuid).taskLua().equals("gt.gt_long.linger(900)"),
                     "the new task is not on record: " + registry.find(uuid).taskLua());
             var entries = inbox.entries();
-            helper.assertTrue(entries.stream().noneMatch(e -> e.text().contains("could not be resumed")),
+            Checks.assertTrue(helper, entries.stream().noneMatch(e -> e.text().contains("could not be resumed")),
                     "a task was reported as not taken back: " + entries);
-            helper.assertTrue(entries.stream().anyMatch(e -> e.type().equals("task_finished")
+            Checks.assertTrue(helper, entries.stream().anyMatch(e -> e.type().equals("task_finished")
                             && e.text().contains("task=\"gt.gt_long.linger\"")
                             && e.text().contains("status=\"stopped\"")
                             && e.text().contains("a newer one replaced it")),
@@ -423,11 +424,11 @@ public class TaskControlGameTests {
         Round round = round(helper, companion, walk, look);
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(round.hasSettled(), "the round has not settled");
+            Checks.assertTrue(helper, round.hasSettled(), "the round has not settled");
             Vec3 at = round.startedAt(look);
             double off = Math.hypot(at.x - (far.getX() + 0.5), at.z - (far.getZ() + 0.5));
-            helper.assertTrue(off < 1.5, "status self ran " + off + " blocks from where the walk ends");
-            helper.assertTrue(round.result(look).contains("pos = {"), "status self did not answer: "
+            Checks.assertTrue(helper, off < 1.5, "status self ran " + off + " blocks from where the walk ends");
+            Checks.assertTrue(helper, round.result(look).contains("pos = {"), "status self did not answer: "
                     + round.result(look));
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -449,10 +450,10 @@ public class TaskControlGameTests {
         });
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(following[0], "following was never what she was doing");
-            helper.assertTrue(round.hasSettled() && round.result(look) != null,
+            Checks.assertTrue(helper, following[0], "following was never what she was doing");
+            Checks.assertTrue(helper, round.hasSettled() && round.result(look) != null,
                     "the call after the follow is still waiting: " + round.result(follow));
-            helper.assertTrue(CompanionTickDispatcher.currentTaskFor(companion.getUUID()) == null,
+            Checks.assertTrue(helper, CompanionTickDispatcher.currentTaskFor(companion.getUUID()) == null,
                     "the follow did not end on time: " + CompanionTickDispatcher.currentTaskFor(companion.getUUID()));
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -472,20 +473,20 @@ public class TaskControlGameTests {
 
         steps(helper)
                 .thenExecuteAfter(5, () -> {
-                    helper.assertTrue(!round.hasSettled() && round.result(look) == null,
+                    Checks.assertTrue(helper, !round.hasSettled() && round.result(look) == null,
                             "the query did not wait for the walk: " + round.result(look));
                     round.ownerSays("wait, come back");
                 })
-                .thenWaitUntil(() -> helper.assertTrue(round.hasSettled(), "the round did not settle when the owner spoke"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, round.hasSettled(), "the round did not settle when the owner spoke"))
                 .thenExecute(() -> {
                     for (LlmToolCall skipped : List.of(look, around)) {
                         String result = round.result(skipped);
-                        helper.assertTrue(result != null && result.contains("Not run")
+                        Checks.assertTrue(helper, result != null && result.contains("Not run")
                                         && result.contains("your owner spoke") && result.contains("keeps running"),
                                 "a call left unrun does not say why: " + result);
                     }
                     TaskRecord<?> now = CompanionTickDispatcher.currentTaskFor(companion.getUUID());
-                    helper.assertTrue(now != null && now.getToolName().equals("numen.move.walk"),
+                    Checks.assertTrue(helper, now != null && now.getToolName().equals("numen.move.walk"),
                             "the walk is no longer running: " + now);
                     CompanionFactory.despawn(helper.getLevel().getServer(), companion);
                 })
@@ -502,15 +503,15 @@ public class TaskControlGameTests {
         AtomicReference<ToolRun> instead = new AtomicReference<>();
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(walk.accepted(), "the first walk has not been accepted: "
+                .thenWaitUntil(() -> Checks.assertTrue(helper, walk.accepted(), "the first walk has not been accepted: "
                         + walk.reply()))
                 .thenExecuteAfter(3, () -> instead.set(lua(companion, "numen.move.walk({x = " + near.getX() + ", z = " + near.getZ() + "})")))
                 .thenWaitUntil(() -> {
-                    helper.assertTrue(instead.get().accepted(), "the second walk has not been accepted");
-                    helper.assertTrue(walk.task().getState() == TaskState.CANCELLED,
+                    Checks.assertTrue(helper, instead.get().accepted(), "the second walk has not been accepted");
+                    Checks.assertTrue(helper, walk.task().getState() == TaskState.CANCELLED,
                             "the first walk was not stopped: " + walk.task().getState());
                 })
-                .thenWaitUntil(() -> helper.assertTrue(GameTestKit.events(companion).stream()
+                .thenWaitUntil(() -> Checks.assertTrue(helper, GameTestKit.events(companion).stream()
                                 .anyMatch(e -> e.type().equals("task_finished")
                                         && e.text().contains("id=\"" + walk.task().publicId() + "\"")
                                         && e.text().contains("status=\"stopped\"")),
@@ -536,40 +537,40 @@ public class TaskControlGameTests {
         String absent = absentCode(companion.getServer());
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(walk.reply() != null, "the first walk has not replied"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, walk.reply() != null, "the first walk has not replied"))
                 .thenExecute(() -> {
-                    helper.assertTrue(walk.accepted(), "the first walk was not accepted: " + walk.reply());
+                    Checks.assertTrue(helper, walk.accepted(), "the first walk was not accepted: " + walk.reply());
                     String reply = walk.reply();
                     Constants.LOG.info("[numen-task] numen.move.walk accepted -> {}", reply);
-                    helper.assertTrue(reply.contains("\"job\":\"" + walk.task().publicId() + "\""),
+                    Checks.assertTrue(helper, reply.contains("\"job\":\"" + walk.task().publicId() + "\""),
                             "the walk was not accepted with its task id: " + reply);
                 })
-                .thenWaitUntil(() -> helper.assertTrue(walk.done() && walk.succeeded(),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, walk.done() && walk.succeeded(),
                         "the first walk did not arrive: " + walk.outcome()))
                 .thenExecute(() -> follow.set(lua(companion, "numen.move.follow()")))
-                .thenWaitUntil(() -> helper.assertTrue(follow.get().accepted(),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, follow.get().accepted(),
                         "following was not accepted: " + follow.get().reply()))
                 .thenExecute(() -> blocked.set(lua(companion, "numen.move.walk(\"pig@" + absent + "\")")))
-                .thenWaitUntil(() -> helper.assertTrue(blocked.get().done(), "the blocked walk has not replied"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, blocked.get().done(), "the blocked walk has not replied"))
                 .thenExecute(() -> {
                     ToolRun refused = blocked.get();
-                    helper.assertTrue(refused.refused(), "a walk to nothing was accepted: " + refused.reply());
+                    Checks.assertTrue(helper, refused.refused(), "a walk to nothing was accepted: " + refused.reply());
                     String reply = refused.outcome();
                     Constants.LOG.info("[numen-task] numen.move.walk refused -> {}", reply);
-                    helper.assertTrue(reply.contains("pig@" + absent + " is not near you") && !reply.contains("task_id"),
+                    Checks.assertTrue(helper, reply.contains("pig@" + absent + " is not near you") && !reply.contains("task_id"),
                             "the refusal does not say why, or carries a task id: " + reply);
                     TaskRecord<?> inHand = CompanionTickDispatcher.currentTaskFor(companion.getUUID());
-                    helper.assertTrue(inHand == follow.get().task() && inHand.getState() == TaskState.RUNNING,
+                    Checks.assertTrue(helper, inHand == follow.get().task() && inHand.getState() == TaskState.RUNNING,
                             "the refused call interrupted the work in hand: " + inHand);
                 })
                 .thenExecuteAfter(10, () -> {
                     // 收件箱里只有那段路自己的收尾:被拒的调用没有任务编号,也就没有 task_finished
-                    helper.assertTrue(GameTestKit.events(companion).stream()
+                    Checks.assertTrue(helper, GameTestKit.events(companion).stream()
                                     .filter(e -> e.type().equals("task_finished"))
                                     .allMatch(e -> e.text().contains("id=\"" + walk.task().publicId() + "\"")
                                             && e.text().contains("status=\"done\"")),
                             "a refused call sent task_finished: " + GameTestKit.events(companion));
-                    helper.assertTrue(CompanionTickDispatcher.currentTaskFor(companion.getUUID()) == follow.get().task()
+                    Checks.assertTrue(helper, CompanionTickDispatcher.currentTaskFor(companion.getUUID()) == follow.get().task()
                                     && follow.get().task().getState() == TaskState.RUNNING,
                             "the work in hand stopped after the refusal");
                     CompanionFactory.despawn(helper.getLevel().getServer(), companion);

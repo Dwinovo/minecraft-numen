@@ -1,10 +1,11 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
@@ -30,11 +31,11 @@ public class LocateGameTests {
         ToolRun locate = lua(companion, "numen.locate.biome(\"minecraft:plains\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(locate.done(), "locate biome has not finished");
-            helper.assertTrue(locate.succeeded() && locate.outcome().startsWith("nearest ")
+            Checks.assertTrue(helper, locate.done(), "locate biome has not finished");
+            Checks.assertTrue(helper, locate.succeeded() && locate.outcome().startsWith("nearest ")
                             && locate.outcome().contains("plains"),
                     "the plains underfoot were not found: " + locate.outcome());
-            helper.assertTrue(locate.task().getToolName().equals("numen.locate.biome"),
+            Checks.assertTrue(helper, locate.task().getToolName().equals("numen.locate.biome"),
                     "the search is not named after the command: " + locate.task().getToolName());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -47,8 +48,8 @@ public class LocateGameTests {
         ToolRun locate = lua(companion, "numen.locate.biome(\"minecraft:desert\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(locate.done(), "locate biome has not finished");
-            helper.assertTrue(locate.outcome().startsWith("no ") && locate.outcome().contains("desert")
+            Checks.assertTrue(helper, locate.done(), "locate biome has not finished");
+            Checks.assertTrue(helper, locate.outcome().startsWith("no ") && locate.outcome().contains("desert")
                             && locate.outcome().contains("within"),
                     "the reply does not say the desert was not found within the search: " + locate.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -62,8 +63,8 @@ public class LocateGameTests {
         ToolRun locate = lua(companion, "numen.locate.biome(\"minecraft:village_plains\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(locate.done(), "locate biome has not finished");
-            helper.assertTrue(!locate.succeeded()
+            Checks.assertTrue(helper, locate.done(), "locate biome has not finished");
+            Checks.assertTrue(helper, !locate.succeeded()
                             && locate.outcome().contains("locate structure minecraft:village_plains"),
                     "the failure does not point at locate structure: " + locate.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -77,8 +78,8 @@ public class LocateGameTests {
         ToolRun locate = lua(companion, "numen.locate.structure(\"minecraft:village\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(locate.done(), "locate structure has not finished");
-            helper.assertTrue(!locate.outcome().startsWith("nearest ") && locate.outcome().contains("village"),
+            Checks.assertTrue(helper, locate.done(), "locate structure has not finished");
+            Checks.assertTrue(helper, !locate.outcome().startsWith("nearest ") && locate.outcome().contains("village"),
                     "the reply claims a village or does not name it: " + locate.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });

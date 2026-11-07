@@ -1,13 +1,14 @@
 package com.dwinovo.numen.gametest;
 
 import net.minecraft.world.entity.EntitySpawnReason;
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -43,17 +44,17 @@ public class BodyReportGameTests {
     public static void riding_a_saddled_pig_is_reported(GameTestHelper helper) {
         Pig pig = EntityType.PIG.create(helper.getLevel(), EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(10, 2, 8));
-        pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        pig.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pig.setNoAi(true);
-        pig.equipSaddle(new ItemStack(Items.SADDLE), SoundSource.NEUTRAL);
+        pig.setItemSlot(net.minecraft.world.entity.EquipmentSlot.SADDLE, new ItemStack(Items.SADDLE));
         helper.getLevel().addFreshEntity(pig);
         NumenPlayer companion = spawnAt(helper, "gametest_rider", new BlockPos(8, 2, 8), false);
         ToolRun ride = lua(companion, "numen.use.entity(" + ref(pig) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(ride.done() && ride.succeeded(), "use entity did not finish: " + ride.outcome());
-            helper.assertTrue(companion.getVehicle() == pig, "she is not riding the pig");
-            helper.assertTrue(ride.outcome().contains("now riding " + com.dwinovo.numen.api.sdk.EntityLabel.of(pig)),
+            Checks.assertTrue(helper, ride.done() && ride.succeeded(), "use entity did not finish: " + ride.outcome());
+            Checks.assertTrue(helper, companion.getVehicle() == pig, "she is not riding the pig");
+            Checks.assertTrue(helper, ride.outcome().contains("now riding " + com.dwinovo.numen.api.sdk.EntityLabel.of(pig)),
                     "the reply does not say she is riding the pig: " + ride.outcome());
             sample("ride a saddled pig", ride);
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -72,9 +73,9 @@ public class BodyReportGameTests {
         ToolRun dig = lua(companion, "numen.work.dig(" + xyz(stone) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(dig.done(), "dig has not finished");
-            helper.assertTrue(helper.getLevel().getBlockState(stone).isAir(), "the stone was not dug: " + dig.outcome());
-            helper.assertTrue(dig.outcome().contains("your minecraft:stone_pickaxe broke while it was in your main hand"),
+            Checks.assertTrue(helper, dig.done(), "dig has not finished");
+            Checks.assertTrue(helper, helper.getLevel().getBlockState(stone).isAir(), "the stone was not dug: " + dig.outcome());
+            Checks.assertTrue(helper, dig.outcome().contains("your minecraft:stone_pickaxe broke while it was in your main hand"),
                     "the reply does not say the pickaxe broke: " + dig.outcome());
             sample("pickaxe breaks in a dig", dig);
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -96,7 +97,7 @@ public class BodyReportGameTests {
             List<String> told = GameTestKit.events(companion).stream()
                     .filter(e -> EventTypes.ADVANCEMENT_REWARD.equals(e.type()))
                     .map(com.dwinovo.numen.api.agent.inbox.EventQueue.Entry::text).toList();
-            helper.assertTrue(told.size() == 1 && told.get(0).contains("experience +40 points"),
+            Checks.assertTrue(helper, told.size() == 1 && told.get(0).contains("experience +40 points"),
                     "not one advancement_reward event with the experience: " + told);
             Constants.LOG.info("[numen-sample] advancement reward event -> {}", told.get(0));
             CompanionFactory.despawn(level.getServer(), companion);

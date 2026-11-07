@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 import static com.dwinovo.numen.pathing.gametest.Trial.LONG;
 import static com.dwinovo.numen.pathing.gametest.Trial.TALL;
@@ -11,9 +12,8 @@ import com.dwinovo.numen.pathing.world.Kinematics.Keys;
 import com.dwinovo.numen.pathing.world.Kinematics.Motion;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
-import net.minecraft.gametest.framework.GameTestAssertException;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.GameType;
@@ -54,19 +54,19 @@ public class FlightGameTests {
         t.fly(body, Goals.at(far), RouteSpec.defaults())
                 .during(r -> {
                     if (r.body.getY() < t.origin.getY() - 0.5) {
-                        throw new GameTestAssertException("掉进了峡谷:脚在 " + (r.body.getY() - t.origin.getY()));
+                        throw Checks.failure("掉进了峡谷:脚在 " + (r.body.getY() - t.origin.getY()));
                     }
                 })
                 .then(r -> {
                     if (!r.body.onGround() || r.body.getAbilities().flying) {
-                        throw new GameTestAssertException("到了对岸却没落地:onGround=" + r.body.onGround() + " flying=" + r.body.getAbilities().flying);
+                        throw Checks.failure("到了对岸却没落地:onGround=" + r.body.onGround() + " flying=" + r.body.getAbilities().flying);
                     }
                     var ledger = r.report.ledger();
                     if (ledger.launches().size() != 1 || ledger.landings().size() != 1) {
-                        throw new GameTestAssertException("账上该有一次起飞一次降落,实际起飞 " + ledger.launches() + " 降落 " + ledger.landings());
+                        throw Checks.failure("账上该有一次起飞一次降落,实际起飞 " + ledger.launches() + " 降落 " + ledger.landings());
                     }
                     if (ledger.flown() < 14) {
-                        throw new GameTestAssertException("飞过峡谷至少十几格,账上只飞了 " + ledger.flown());
+                        throw Checks.failure("飞过峡谷至少十几格,账上只飞了 " + ledger.flown());
                     }
                 })
                 .arrives();
@@ -111,13 +111,13 @@ public class FlightGameTests {
         int limit = (int) (ideal * SLACK) + EXTRA;
         run.within(limit).then(r -> {
             if (r.report.journal().blockages() != 0) {
-                throw new GameTestAssertException("飞行不该有走不下去的步:" + r.report.journal().replans());
+                throw Checks.failure("飞行不该有走不下去的步:" + r.report.journal().replans());
             }
             if (r.body.getAbilities().flying != hovers) {
-                throw new GameTestAssertException(hovers ? "该悬停在目标上,却落了地" : "该落在地上,却还在飞");
+                throw Checks.failure(hovers ? "该悬停在目标上,却落了地" : "该落在地上,却还在飞");
             }
             if (r.ticks > limit) {
-                throw new GameTestAssertException("用了 " + r.ticks + " 刻,理想 " + ideal + " 刻,上限 " + limit);
+                throw Checks.failure("用了 " + r.ticks + " 刻,理想 " + ideal + " 刻,上限 " + limit);
             }
         }).arrives();
     }

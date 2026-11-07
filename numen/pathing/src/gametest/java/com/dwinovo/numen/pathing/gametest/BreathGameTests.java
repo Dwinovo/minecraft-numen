@@ -1,14 +1,14 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
 import com.dwinovo.numen.pathing.drive.DiveLog;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
-import net.minecraft.gametest.framework.GameTestAssertException;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -55,7 +55,7 @@ public class BreathGameTests {
     /** 收场时:身体没掉过血;游过了封顶的水道,潜过的水记在账上,每一段都憋得住(氧气没见底)。 */
     private static void heldEveryBreath(Trial.Run r) {
         if (r.report.dives().isEmpty()) {
-            throw new GameTestAssertException("游过了封顶的水道,账上却没有潜过的水");
+            throw Checks.failure("游过了封顶的水道,账上却没有潜过的水");
         }
         neverOutOfAir(r);
     }
@@ -65,7 +65,7 @@ public class BreathGameTests {
         UpDownGameTests.unhurt(r);
         for (DiveLog.Dive dive : r.report.dives()) {
             if (dive.lowestAir() <= 0) {
-                throw new GameTestAssertException("憋到氧气见底:" + dive);
+                throw Checks.failure("憋到氧气见底:" + dive);
             }
         }
     }

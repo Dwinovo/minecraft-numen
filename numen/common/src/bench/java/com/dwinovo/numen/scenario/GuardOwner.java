@@ -62,7 +62,7 @@ public final class GuardOwner implements Scenario {
         for (BlockPos rel : ZOMBIES) {
             BlockPos at = scene.pos(rel);
             Zombie zombie = EntityType.ZOMBIE.create(scene.level(), EntitySpawnReason.STRUCTURE);
-            zombie.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
+            zombie.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
             zombie.setPersistenceRequired();
             scene.level().addFreshEntity(zombie);
             zombies.add(zombie);

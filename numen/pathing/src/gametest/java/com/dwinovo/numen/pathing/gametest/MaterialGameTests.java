@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
 import com.dwinovo.numen.api.entity.BodyAction;
@@ -7,9 +8,8 @@ import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
-import net.minecraft.gametest.framework.GameTestAssertException;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
@@ -51,12 +51,12 @@ public class MaterialGameTests {
             if (e instanceof EditLedger.Placed p) {
                 any = true;
                 if (!p.after().is(block)) {
-                    throw new GameTestAssertException("应当放 " + block + ",却放了 " + p.after() + " 在 " + p.pos());
+                    throw Checks.failure("应当放 " + block + ",却放了 " + p.after() + " 在 " + p.pos());
                 }
             }
         }
         if (!any) {
-            throw new GameTestAssertException("一块也没放");
+            throw Checks.failure("一块也没放");
         }
     }
 
@@ -74,7 +74,7 @@ public class MaterialGameTests {
             boolean conjured = r.report.actions().stream().anyMatch(a -> a instanceof BodyAction.Conjured c
                     && c.item() == Items.OAK_PLANKS);
             if (!conjured) {
-                throw new GameTestAssertException("凭空取料没记进身体动作:" + r.report.actions());
+                throw Checks.failure("凭空取料没记进身体动作:" + r.report.actions());
             }
         });
     }
@@ -112,14 +112,14 @@ public class MaterialGameTests {
                 }
             }
             if (swords != Inventory.getSelectionSize()) {
-                throw new GameTestAssertException("剑少了:还剩 " + swords + " 把");
+                throw Checks.failure("剑少了:还剩 " + swords + " 把");
             }
         });
     }
 
     private static void stillHasSword(Trial.Run r) {
         if (!r.body.getInventory().contains(new ItemStack(Items.IRON_SWORD))) {
-            throw new GameTestAssertException("手上原来的剑不见了");
+            throw Checks.failure("手上原来的剑不见了");
         }
     }
 }

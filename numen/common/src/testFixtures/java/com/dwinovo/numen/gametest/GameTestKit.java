@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.gametest.Bodies;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
@@ -131,7 +132,7 @@ public final class GameTestKit {
     static Steps call(GameTestHelper helper, Steps steps, NumenPlayer companion, String code) {
         AtomicReference<ToolRun> run = new AtomicReference<>();
         return steps.thenExecute(() -> run.set(lua(companion, code)))
-                .thenWaitUntil(() -> helper.assertTrue(run.get().done() && run.get().succeeded(),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, run.get().done() && run.get().succeeded(),
                         code + " did not succeed: " + run.get().outcome()));
     }
 
@@ -196,7 +197,7 @@ public final class GameTestKit {
     /** 把她提到 rel 那一格上空放手。 */
     static void drop(GameTestHelper helper, NumenPlayer companion, BlockPos rel) {
         BlockPos at = helper.absolutePos(rel);
-        companion.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5,
+        companion.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5,
                 companion.getYRot(), companion.getXRot());
     }
 
@@ -244,7 +245,7 @@ public final class GameTestKit {
         long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(60);
         while (!lit.getAsBoolean()) {
             if (System.nanoTime() > deadline) {
-                throw new net.minecraft.gametest.framework.GameTestAssertException("the light engine did not settle within 60 s");
+                throw com.dwinovo.numen.api.gametest.Checks.failure("the light engine did not settle within 60 s");
             }
             engine.tryScheduleUpdate();
             java.util.concurrent.locks.LockSupport.parkNanos(200_000);

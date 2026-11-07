@@ -49,8 +49,8 @@ public final class TestCleanup {
 
     /** 用例收场:执行它登记的复原,再让还在场地里的同伴离开世界。 */
     static void finished(GameTestInfo info) {
-        NAMES.values().remove(info.getTestName());
-        List<Runnable> restores = RESTORES.remove(info.getTestName());
+        NAMES.values().remove(NumenTestInstance.name(info));
+        List<Runnable> restores = RESTORES.remove(NumenTestInstance.name(info));
         if (restores != null) {
             for (int i = restores.size() - 1; i >= 0; i--) {
                 restores.get(i).run();

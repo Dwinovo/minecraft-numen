@@ -8,17 +8,16 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 /**
- * 用例里的相对坐标从结构方块那一格起算:模板的内容从它上面一格开始,所以模板第一层是相对 y=1,地板底下(相对 y=0)是空的。
- * 1.21.2 起原版改从内容原点起算(模板第一层成了相对 y=0);这里把 {@code GameTestHelper} 换算相对与绝对坐标的四处起点换回结构方块,
- * 用例与模板照写,摆出来的场地与它们写下时一模一样。
+ * 用例里的场地坐标从场地内容底下那一层算起:{@code (0, 0, 0)} 是内容最低一层的正下方,内容的第一层是 {@code y = 1}。
+ * 原版从内容原点算(内容第一层是 {@code y = 0});用例、夹具与结构模板都按"第一层是 y = 1"写,
+ * 这里把相对与绝对坐标互换时的基准点放回内容原点的正下方,场地与世界里真正摆出来的样子不变。
  */
 @Mixin(GameTestHelper.class)
 public abstract class GameTestHelperOriginMixin {
 
-    @Redirect(method = {"absolutePos", "relativePos", "absoluteVec", "relativeVec"},
-            at = @At(value = "INVOKE",
-                    target = "Lnet/minecraft/gametest/framework/GameTestInfo;getTestOrigin()Lnet/minecraft/core/BlockPos;"))
-    private BlockPos numen$fromTheStructureBlock(GameTestInfo info) {
-        return info.getStructureBlockPos();
+    @Redirect(method = {"absolutePos", "relativePos", "absoluteVec", "relativeVec"}, at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/gametest/framework/GameTestInfo;getTestOrigin()Lnet/minecraft/core/BlockPos;"))
+    private BlockPos numen$belowTheContent(GameTestInfo info) {
+        return info.getTestOrigin().below();
     }
 }

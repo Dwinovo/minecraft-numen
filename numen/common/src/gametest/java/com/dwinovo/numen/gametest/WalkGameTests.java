@@ -1,6 +1,7 @@
 package com.dwinovo.numen.gametest;
 
 import net.minecraft.world.entity.EntitySpawnReason;
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.gametest.GameTestKit.*;
 
 import com.dwinovo.numen.api.entity.CompanionFactory;
@@ -9,8 +10,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
@@ -52,23 +53,23 @@ public class WalkGameTests {
         ToolRun walk = lua(companion, "return numen.move.walk(" + xyz(target) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "move to has not finished");
-            helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(target) <= 2,
+            Checks.assertTrue(helper, walk.done(), "move to has not finished");
+            Checks.assertTrue(helper, walk.succeeded() && companion.blockPosition().distSqr(target) <= 2,
                     "she did not walk out: " + walk.outcome());
-            helper.assertTrue(walk.outcome().contains("En route") && walk.outcome().contains("stone"),
+            Checks.assertTrue(helper, walk.outcome().contains("En route") && walk.outcome().contains("stone"),
                     "the reply does not say what was broken: " + walk.outcome());
             int broken = wallBefore - roomCount(helper, 7, 7, Blocks.STONE);
-            helper.assertTrue(broken > 0, "no block of the wall was broken");
+            Checks.assertTrue(helper, broken > 0, "no block of the wall was broken");
             JsonObject account = returned(walk);
-            helper.assertTrue(account.get("dug").getAsInt() == broken && account.get("distance_left").getAsDouble() < 2,
+            Checks.assertTrue(helper, account.get("dug").getAsInt() == broken && account.get("distance_left").getAsDouble() < 2,
                     "the account does not match the world (" + broken + " blocks gone): " + account);
             // 结构化回执给全路上挖掉的每一格坐标(文字回执只列前几个),都是世界里已经空了的格
             var dugAt = account.getAsJsonArray("dug_at");
-            helper.assertTrue(dugAt.size() == broken, "dug_at does not list every broken cell: " + account);
+            Checks.assertTrue(helper, dugAt.size() == broken, "dug_at does not list every broken cell: " + account);
             for (var cell : dugAt) {
                 var at = cell.getAsJsonObject();
                 BlockPos pos = new BlockPos(at.get("x").getAsInt(), at.get("y").getAsInt(), at.get("z").getAsInt());
-                helper.assertTrue(level.getBlockState(pos).isAir(), "dug_at names " + pos.toShortString() + ", which is not empty");
+                Checks.assertTrue(helper, level.getBlockState(pos).isAir(), "dug_at names " + pos.toShortString() + ", which is not empty");
             }
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -108,12 +109,12 @@ public class WalkGameTests {
         });
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "move to has not finished");
-            helper.assertTrue(walled[0], "she never set off, so the wall was never put in her way");
-            helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(goal) <= 2,
+            Checks.assertTrue(helper, walk.done(), "move to has not finished");
+            Checks.assertTrue(helper, walled[0], "she never set off, so the wall was never put in her way");
+            Checks.assertTrue(helper, walk.succeeded() && companion.blockPosition().distSqr(goal) <= 2,
                     "she did not get through: " + walk.outcome());
-            helper.assertTrue(returned(walk).get("dug").getAsInt() >= 4, "the account does not count the stone: " + returned(walk));
-            helper.assertTrue(level.getBlockState(low).isAir() && level.getBlockState(low.above()).isAir(),
+            Checks.assertTrue(helper, returned(walk).get("dug").getAsInt() >= 4, "the account does not count the stone: " + returned(walk));
+            Checks.assertTrue(helper, level.getBlockState(low).isAir() && level.getBlockState(low.above()).isAir(),
                     "the stone wall is still there");
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -128,15 +129,15 @@ public class WalkGameTests {
         ToolRun away = lua(companion, "return numen.move.away(" + xyz(danger) + ", 6)");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(away.done(), "away has not finished");
-            helper.assertTrue(away.succeeded(), "away failed: " + away.outcome());
+            Checks.assertTrue(helper, away.done(), "away has not finished");
+            Checks.assertTrue(helper, away.succeeded(), "away failed: " + away.outcome());
             BlockPos at = companion.blockPosition();
             double dx = at.getX() - danger.getX();
             double dy = at.getY() - danger.getY();
             double dz = at.getZ() - danger.getZ();
-            helper.assertTrue(dx * dx + dy * dy + dz * dz >= 36, "she stopped too close: " + at.toShortString());
-            helper.assertTrue(away.outcome().contains("at least 6 blocks away"), away.outcome());
-            helper.assertTrue(returned(away).get("distance_left").getAsDouble() == 0, "away is done but says it is not: " + returned(away));
+            Checks.assertTrue(helper, dx * dx + dy * dy + dz * dz >= 36, "she stopped too close: " + at.toShortString());
+            Checks.assertTrue(helper, away.outcome().contains("at least 6 blocks away"), away.outcome());
+            Checks.assertTrue(helper, returned(away).get("distance_left").getAsDouble() == 0, "away is done but says it is not: " + returned(away));
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
@@ -148,7 +149,7 @@ public class WalkGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_rower", new BlockPos(7, 2, 7), false);
         Boat boat = EntityType.OAK_BOAT.create(level, EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(7, 2, 7));
-        boat.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
+        boat.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
         level.addFreshEntity(boat);
         companion.startRiding(boat, true);
         ToolRun[] off = new ToolRun[1];
@@ -156,20 +157,20 @@ public class WalkGameTests {
 
         steps(helper)
                 .thenExecute(() -> {
-                    helper.assertTrue(companion.getVehicle() == boat, "she did not board the boat");
+                    Checks.assertTrue(helper, companion.getVehicle() == boat, "she did not board the boat");
                     off[0] = lua(companion, "return numen.use.dismount()");
                 })
-                .thenWaitUntil(() -> helper.assertTrue(off[0].done(), "dismount has not replied"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, off[0].done(), "dismount has not replied"))
                 .thenExecute(() -> {
-                    helper.assertTrue(off[0].ranToTheEnd() && !companion.isPassenger(),
+                    Checks.assertTrue(helper, off[0].ranToTheEnd() && !companion.isPassenger(),
                             "she is still in the boat: " + off[0].receipt());
-                    helper.assertTrue(returned(off[0]).get("vehicle").getAsString().contains("boat"),
+                    Checks.assertTrue(helper, returned(off[0]).get("vehicle").getAsString().contains("boat"),
                             "the reply does not say what she stepped off: " + off[0].receipt());
                     again[0] = lua(companion, "numen.use.dismount()");
                 })
-                .thenWaitUntil(() -> helper.assertTrue(again[0].done(), "the second dismount has not replied"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, again[0].done(), "the second dismount has not replied"))
                 .thenExecute(() -> {
-                    helper.assertTrue(!again[0].ranToTheEnd() && "failed".equals(again[0].kind()),
+                    Checks.assertTrue(helper, !again[0].ranToTheEnd() && "failed".equals(again[0].kind()),
                             "riding nothing should fail: " + again[0].receipt());
                     boat.discard();
                     CompanionFactory.despawn(level.getServer(), companion);
@@ -186,20 +187,20 @@ public class WalkGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_passenger", new BlockPos(7, 2, 7), false);
         net.minecraft.world.entity.vehicle.Minecart cart = EntityType.MINECART.create(level, EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(7, 2, 7));
-        cart.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
+        cart.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
         level.addFreshEntity(cart);
         companion.startRiding(cart, true);
         ToolRun walk = lua(companion, "numen.move.walk(" + xyz(helper.absolutePos(new BlockPos(12, 2, 12))) + ")");
         ToolRun away = lua(companion, "numen.move.away(" + xyz(helper.absolutePos(new BlockPos(9, 2, 9))) + ", 5)");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done() && away.done(), "the refusals have not replied");
+            Checks.assertTrue(helper, walk.done() && away.done(), "the refusals have not replied");
             for (ToolRun refused : new ToolRun[] {walk, away}) {
-                helper.assertTrue(!refused.ranToTheEnd() && refused.tasks("numen.move.walk").isEmpty()
+                Checks.assertTrue(helper, !refused.ranToTheEnd() && refused.tasks("numen.move.walk").isEmpty()
                                 && refused.receipt().contains("numen.use.dismount()"),
                         "riding should refuse the walk and name numen.use.dismount(): " + refused.receipt());
             }
-            helper.assertTrue(companion.getVehicle() == cart, "the walk stepped off by itself");
+            Checks.assertTrue(helper, companion.getVehicle() == cart, "the walk stepped off by itself");
             cart.discard();
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -237,11 +238,11 @@ public class WalkGameTests {
         ToolRun walk = lua(companion, "return numen.move.walk({x = " + far.getX() + ", z = " + far.getZ() + "})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "the walk has not finished");
-            helper.assertTrue(walk.ranToTheEnd(), "the far walk did not arrive: " + walk.receipt());
-            helper.assertTrue(companion.getBlockX() == far.getX() && companion.getBlockZ() == far.getZ(),
+            Checks.assertTrue(helper, walk.done(), "the walk has not finished");
+            Checks.assertTrue(helper, walk.ranToTheEnd(), "the far walk did not arrive: " + walk.receipt());
+            Checks.assertTrue(helper, companion.getBlockX() == far.getX() && companion.getBlockZ() == far.getZ(),
                     "she stopped short at " + companion.blockPosition().toShortString());
-            helper.assertTrue(returned(walk).get("dug").getAsInt() == 0 && returned(walk).get("placed").getAsInt() == 0,
+            Checks.assertTrue(helper, returned(walk).get("dug").getAsInt() == 0 && returned(walk).get("placed").getAsInt() == 0,
                     "a walk on open ground changed the world: " + returned(walk));
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -262,8 +263,8 @@ public class WalkGameTests {
         ToolRun walk = lua(companion, "return numen.move.walk(" + xyz(goal) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "the walk has not finished");
-            helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(goal) <= 2,
+            Checks.assertTrue(helper, walk.done(), "the walk has not finished");
+            Checks.assertTrue(helper, walk.succeeded() && companion.blockPosition().distSqr(goal) <= 2,
                     "she did not get through both walls: " + walk.outcome());
             int stone = 0;
             for (int y = 1; y < 16; y++) {
@@ -273,7 +274,7 @@ public class WalkGameTests {
                     }
                 }
             }
-            helper.assertTrue(stone < 15 * 24 && stone >= 15 * 24 - 8, "the stone wall was not dug through by a narrow tunnel: " + stone);
+            Checks.assertTrue(helper, stone < 15 * 24 && stone >= 15 * 24 - 8, "the stone wall was not dug through by a narrow tunnel: " + stone);
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
@@ -294,9 +295,9 @@ public class WalkGameTests {
         int[] marked = {0};
         steps(helper)
                 .thenExecute(() -> runs[0] = lua(companion, "return numen.move.walk(" + xyz(perch) + ")"))
-                .thenWaitUntil(() -> helper.assertTrue(runs[0].done(), "the climb has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, runs[0].done(), "the climb has not finished"))
                 .thenExecute(() -> {
-                    helper.assertTrue(runs[0].succeeded() && companion.blockPosition().distSqr(perch) <= 2,
+                    Checks.assertTrue(helper, runs[0].succeeded() && companion.blockPosition().distSqr(perch) <= 2,
                             "she did not get up: " + runs[0].outcome());
                     // 只数这块场地里记在她名下的格:记号表是全世界一张,别的用例留下的记号不算
                     var marks = com.dwinovo.numen.api.permission.PlacedBlocks.of(level);
@@ -307,13 +308,13 @@ public class WalkGameTests {
                             marked[0]++;
                         }
                     }
-                    helper.assertTrue(marked[0] > 0, "the pillar blocks she placed carry no placement marks");
+                    Checks.assertTrue(helper, marked[0] > 0, "the pillar blocks she placed carry no placement marks");
                     runs[1] = lua(companion, "return numen.move.walk(" + xyz(home) + ")");
                 })
-                .thenWaitUntil(() -> helper.assertTrue(runs[1].done(), "the way back has not finished (the cell at home carries a mark: "
+                .thenWaitUntil(() -> Checks.assertTrue(helper, runs[1].done(), "the way back has not finished (the cell at home carries a mark: "
                         + marked[0] + ")"))
                 .thenExecute(() -> {
-                    helper.assertTrue(runs[1].succeeded() && companion.blockPosition().distSqr(home) <= 4,
+                    Checks.assertTrue(helper, runs[1].succeeded() && companion.blockPosition().distSqr(home) <= 4,
                             "she did not get back down (pillar blocks marked: " + marked[0] + "): " + runs[1].outcome());
                     CompanionFactory.despawn(level.getServer(), companion);
                 })

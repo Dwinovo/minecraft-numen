@@ -1,11 +1,12 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
@@ -48,10 +49,10 @@ public class InventoryGameTests {
         ToolRun wear = lua(companion, "numen.gear.wear(\"minecraft:diamond_helmet\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
+            Checks.assertTrue(helper, companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
                     .is(Items.DIAMOND_HELMET), "the helmet is not on her head");
             String said = wear.done() ? wear.outcome() : null;
-            helper.assertTrue(said != null && said.contains("in head"),
+            Checks.assertTrue(helper, said != null && said.contains("in head"),
                     "the reply must say where it went, got: " + said);
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -78,11 +79,11 @@ public class InventoryGameTests {
         succeedWhen(helper, () -> {
             var drops = level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
                     companion.getBoundingBox().inflate(8));
-            helper.assertTrue(!drops.isEmpty(), "nothing was dropped");
+            Checks.assertTrue(helper, !drops.isEmpty(), "nothing was dropped");
             ItemStack landed = drops.get(0).getItem();
-            helper.assertTrue(landed.is(Items.DIAMOND_PICKAXE), "wrong item dropped: " + landed);
+            Checks.assertTrue(helper, landed.is(Items.DIAMOND_PICKAXE), "wrong item dropped: " + landed);
             var enchants = net.minecraft.world.item.enchantment.EnchantmentHelper.getEnchantmentsForCrafting(landed);
-            helper.assertTrue(enchants.getLevel(efficiency) == 3,
+            Checks.assertTrue(helper, enchants.getLevel(efficiency) == 3,
                     "the enchantment did not survive the toss: " + enchants);
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -109,15 +110,15 @@ public class InventoryGameTests {
         com.dwinovo.numen.api.entity.Companions.applySkin(server, uuid,
                 new com.dwinovo.numen.api.entity.MojangSkins.Skin("ZmFrZQ==", ""));
 
-        helper.assertTrue(NumenPlayer.findByUuid(server, uuid) == first, "she was rebuilt instead of changed in place");
-        helper.assertTrue(first.getGameProfile().getProperties().containsKey("textures"),
+        Checks.assertTrue(helper, NumenPlayer.findByUuid(server, uuid) == first, "she was rebuilt instead of changed in place");
+        Checks.assertTrue(helper, first.getGameProfile().getProperties().containsKey("textures"),
                 "the new skin is not on her profile");
-        helper.assertTrue(first.getInventory().hasAnyMatching(s -> s.is(Items.DIAMOND)), "her inventory changed");
-        helper.assertTrue(!wait.done(), "the task in her hands was cut off by the skin change");
-        helper.assertTrue(GameTestKit.said(watcher).stream().noneMatch(s -> s.text().getString().contains("joined")),
+        Checks.assertTrue(helper, first.getInventory().hasAnyMatching(s -> s.is(Items.DIAMOND)), "her inventory changed");
+        Checks.assertTrue(helper, !wait.done(), "the task in her hands was cut off by the skin change");
+        Checks.assertTrue(helper, GameTestKit.said(watcher).stream().noneMatch(s -> s.text().getString().contains("joined")),
                 "changing the skin was announced as a join");
         com.dwinovo.numen.api.entity.Companions.applySkin(server, uuid, null);
-        helper.assertTrue(!first.getGameProfile().getProperties().containsKey("textures"), "the skin did not come off");
+        Checks.assertTrue(helper, !first.getGameProfile().getProperties().containsKey("textures"), "the skin did not come off");
         GameTestKit.leave(watcher);
         com.dwinovo.numen.api.entity.Companions.dismiss(server, first);
         helper.succeed();
@@ -133,10 +134,10 @@ public class InventoryGameTests {
         ToolRun craft = lua(companion, "numen.inv.craft(\"minecraft:oak_planks\", {count = 8})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(craft.done(), "inv craft has not replied");
-            helper.assertTrue(craft.succeeded() && Long.valueOf(8).equals(craft.field("crafted")),
+            Checks.assertTrue(helper, craft.done(), "inv craft has not replied");
+            Checks.assertTrue(helper, craft.succeeded() && Long.valueOf(8).equals(craft.field("crafted")),
                     "inv craft did not report 8 planks: " + craft.outcome());
-            helper.assertTrue(companion.getInventory().countItem(Items.OAK_PLANKS) == 8
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.OAK_PLANKS) == 8
                             && companion.getInventory().countItem(Items.OAK_LOG) == 0,
                     "the inventory does not hold 8 planks and no logs");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -153,14 +154,14 @@ public class InventoryGameTests {
         ToolRun make = lua(companion, "return numen.inv.make(\"minecraft:chest\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(make.done(), "inv make has not finished");
-            helper.assertTrue(make.ranToTheEnd(), "make failed: " + make.receipt());
-            helper.assertTrue(companion.getInventory().countItem(Items.CHEST) == 1
+            Checks.assertTrue(helper, make.done(), "inv make has not finished");
+            Checks.assertTrue(helper, make.ranToTheEnd(), "make failed: " + make.receipt());
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.CHEST) == 1
                             && companion.getInventory().countItem(Items.OAK_PLANKS) == 0,
                     "the inventory does not hold the chest with the planks spent");
-            helper.assertTrue(companion.position().distanceTo(Vec3.atCenterOf(table)) < 6,
+            Checks.assertTrue(helper, companion.position().distanceTo(Vec3.atCenterOf(table)) < 6,
                     "she did not walk to the table");
-            helper.assertTrue(companion.containerMenu == companion.inventoryMenu, "the crafting table was left open");
+            Checks.assertTrue(helper, companion.containerMenu == companion.inventoryMenu, "the crafting table was left open");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -174,9 +175,9 @@ public class InventoryGameTests {
         ToolRun make = lua(companion, "return numen.inv.make(\"minecraft:chest\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(make.done(), "inv make has not finished");
-            helper.assertTrue(make.ranToTheEnd(), "make failed: " + make.receipt());
-            helper.assertTrue(companion.getInventory().countItem(Items.CHEST) == 1
+            Checks.assertTrue(helper, make.done(), "inv make has not finished");
+            Checks.assertTrue(helper, make.ranToTheEnd(), "make failed: " + make.receipt());
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.CHEST) == 1
                             && companion.getInventory().countItem(Items.CRAFTING_TABLE) == 0,
                     "the chest was not made at the table she carried");
             boolean placed = false;
@@ -184,8 +185,8 @@ public class InventoryGameTests {
                     helper.absolutePos(new BlockPos(9, 2, 9)))) {
                 placed |= helper.getLevel().getBlockState(p).is(Blocks.CRAFTING_TABLE);
             }
-            helper.assertTrue(placed, "no crafting table stands beside her");
-            helper.assertTrue(companion.containerMenu == companion.inventoryMenu, "the crafting table was left open");
+            Checks.assertTrue(helper, placed, "no crafting table stands beside her");
+            Checks.assertTrue(helper, companion.containerMenu == companion.inventoryMenu, "the crafting table was left open");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -198,11 +199,11 @@ public class InventoryGameTests {
         ToolRun craft = lua(companion, "numen.inv.craft(\"minecraft:chest\", {count = 1})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(craft.done(), "inv craft has not replied");
-            helper.assertTrue(!craft.succeeded() && craft.outcome().contains("not enough materials")
+            Checks.assertTrue(helper, craft.done(), "inv craft has not replied");
+            Checks.assertTrue(helper, !craft.succeeded() && craft.outcome().contains("not enough materials")
                             && craft.outcome().contains("missing"),
                     "the reply does not name the shortfall: " + craft.outcome());
-            helper.assertTrue(companion.getInventory().countItem(Items.OAK_PLANKS) == 3,
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.OAK_PLANKS) == 3,
                     "the planks were touched although nothing could be crafted");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -219,10 +220,10 @@ public class InventoryGameTests {
         ToolRun eat = lua(companion, "numen.inv.eat(\"minecraft:bread\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(eat.done(), "inv eat has not finished");
-            helper.assertTrue(eat.succeeded() && eat.outcome().startsWith("ate bread"),
+            Checks.assertTrue(helper, eat.done(), "inv eat has not finished");
+            Checks.assertTrue(helper, eat.succeeded() && eat.outcome().startsWith("ate bread"),
                     "inv eat did not report the meal: " + eat.outcome());
-            helper.assertTrue(companion.getFoodData().getFoodLevel() >= 15
+            Checks.assertTrue(helper, companion.getFoodData().getFoodLevel() >= 15
                             && companion.getInventory().countItem(Items.BREAD) == 1,
                     "hunger is " + companion.getFoodData().getFoodLevel() + " with "
                             + companion.getInventory().countItem(Items.BREAD) + " bread left");
@@ -239,10 +240,10 @@ public class InventoryGameTests {
         ToolRun eat = lua(companion, "numen.inv.eat(\"minecraft:bread\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(eat.done(), "inv eat has not finished");
-            helper.assertTrue(!eat.succeeded() && eat.outcome().contains("already full"),
+            Checks.assertTrue(helper, eat.done(), "inv eat has not finished");
+            Checks.assertTrue(helper, !eat.succeeded() && eat.outcome().contains("already full"),
                     "eating on a full stomach was not refused: " + eat.outcome());
-            helper.assertTrue(companion.getInventory().countItem(Items.BREAD) == 2, "the bread was eaten");
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.BREAD) == 2, "the bread was eaten");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -255,11 +256,11 @@ public class InventoryGameTests {
         ToolRun craft = lua(companion, "numen.inv.make(\"minecraft:bedrock\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(craft.done(), "inv make has not finished");
-            helper.assertTrue(!craft.ranToTheEnd() && craft.receipt().contains("no crafting recipe makes")
+            Checks.assertTrue(helper, craft.done(), "inv make has not finished");
+            Checks.assertTrue(helper, !craft.ranToTheEnd() && craft.receipt().contains("no crafting recipe makes")
                             && craft.receipt().contains("not_found"),
                     "the error does not say there is no recipe: " + craft.receipt());
-            helper.assertTrue(companion.getInventory().countItem(Items.OAK_PLANKS) == 8, "the planks were touched");
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.OAK_PLANKS) == 8, "the planks were touched");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -271,8 +272,8 @@ public class InventoryGameTests {
         ToolRun equip = lua(companion, "numen.gear.wear(\"minecraft:iron_helmet\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(equip.done(), "gear wear has not finished");
-            helper.assertTrue(!equip.succeeded() && equip.outcome().contains("in inventory to equip"),
+            Checks.assertTrue(helper, equip.done(), "gear wear has not finished");
+            Checks.assertTrue(helper, !equip.succeeded() && equip.outcome().contains("in inventory to equip"),
                     "the failure does not say the item is not carried: " + equip.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -289,12 +290,12 @@ public class InventoryGameTests {
         ToolRun equip = lua(companion, "numen.gear.wear(\"minecraft:diamond_helmet\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(equip.done(), "gear wear has not finished");
-            helper.assertTrue(equip.succeeded() && equip.outcome().contains("in head"),
+            Checks.assertTrue(helper, equip.done(), "gear wear has not finished");
+            Checks.assertTrue(helper, equip.succeeded() && equip.outcome().contains("in head"),
                     "the reply does not say the helmet went on her head: " + equip.outcome());
-            helper.assertTrue(companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
+            Checks.assertTrue(helper, companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
                     .is(Items.DIAMOND_HELMET), "the diamond helmet is not on her head");
-            helper.assertTrue(companion.getInventory().countItem(Items.IRON_HELMET) == 1,
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.IRON_HELMET) == 1,
                     "the iron helmet did not go back into her inventory");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -316,23 +317,23 @@ public class InventoryGameTests {
         ToolRun noSlot = lua(vague, "numen.gear.remove()");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(unequip.done(), "gear remove has not finished");
-            helper.assertTrue(unequip.succeeded() && unequip.outcome().startsWith("took off")
+            Checks.assertTrue(helper, unequip.done(), "gear remove has not finished");
+            Checks.assertTrue(helper, unequip.succeeded() && unequip.outcome().startsWith("took off")
                             && unequip.outcome().contains("iron_helmet") && unequip.outcome().contains("iron_boots"),
                     "the reply does not name both pieces: " + unequip.outcome());
-            helper.assertTrue(companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).isEmpty()
+            Checks.assertTrue(helper, companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).isEmpty()
                             && companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.FEET).isEmpty(),
                     "some armor is still worn");
-            helper.assertTrue(companion.getInventory().countItem(Items.IRON_HELMET) == 1
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.IRON_HELMET) == 1
                             && companion.getInventory().countItem(Items.IRON_BOOTS) == 1,
                     "the armor did not go into her inventory");
-            helper.assertTrue(noSlot.done(), "gear remove has not replied");
-            helper.assertTrue(noSlot.succeeded() && noSlot.outcome().contains("took off iron_helmet (head)"),
+            Checks.assertTrue(helper, noSlot.done(), "gear remove has not replied");
+            Checks.assertTrue(helper, noSlot.succeeded() && noSlot.outcome().contains("took off iron_helmet (head)"),
                     "gear remove without a slot did not take the armor off: " + noSlot.outcome());
-            helper.assertTrue(vague.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).isEmpty()
+            Checks.assertTrue(helper, vague.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).isEmpty()
                             && vague.getInventory().countItem(Items.IRON_HELMET) == 1,
                     "the helmet did not go into the backpack");
-            helper.assertTrue(vague.getMainHandItem().is(Items.IRON_SWORD), "the sword in her hand came off");
+            Checks.assertTrue(helper, vague.getMainHandItem().is(Items.IRON_SWORD), "the sword in her hand came off");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
             CompanionFactory.despawn(helper.getLevel().getServer(), vague);
         });
@@ -349,12 +350,12 @@ public class InventoryGameTests {
         ToolRun unequip = lua(companion, "numen.gear.remove({slot = \"head\"})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(unequip.done(), "gear remove has not finished");
-            helper.assertTrue(!unequip.succeeded() && unequip.outcome().contains("inventory is full"),
+            Checks.assertTrue(helper, unequip.done(), "gear remove has not finished");
+            Checks.assertTrue(helper, !unequip.succeeded() && unequip.outcome().contains("inventory is full"),
                     "the failure does not say the inventory is full: " + unequip.outcome());
-            helper.assertTrue(companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
+            Checks.assertTrue(helper, companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
                     .is(Items.IRON_HELMET), "the helmet came off with nowhere to go");
-            helper.assertTrue(helper.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+            Checks.assertTrue(helper, helper.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
                             companion.getBoundingBox().inflate(4)).isEmpty(), "something was dropped on the ground");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -367,8 +368,8 @@ public class InventoryGameTests {
         ToolRun unequip = lua(companion, "numen.gear.remove({slot = \"head\"})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(unequip.done(), "gear remove has not finished");
-            helper.assertTrue(unequip.succeeded() && unequip.outcome().startsWith("nothing to take off"),
+            Checks.assertTrue(helper, unequip.done(), "gear remove has not finished");
+            Checks.assertTrue(helper, unequip.succeeded() && unequip.outcome().startsWith("nothing to take off"),
                     "the reply does not say there was nothing to take off: " + unequip.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -389,21 +390,21 @@ public class InventoryGameTests {
         ToolRun hold = lua(keeper, "numen.gear.hold(\"minecraft:snowball\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(equip.done(), "gear hold has not finished");
-            helper.assertTrue(equip.succeeded() && equip.outcome().contains("main hand"),
+            Checks.assertTrue(helper, equip.done(), "gear hold has not finished");
+            Checks.assertTrue(helper, equip.succeeded() && equip.outcome().contains("main hand"),
                     "the reply does not say the bucket is in her main hand: " + equip.outcome());
-            helper.assertTrue(companion.getMainHandItem().is(Items.WATER_BUCKET),
+            Checks.assertTrue(helper, companion.getMainHandItem().is(Items.WATER_BUCKET),
                     "the water bucket is not in her main hand: " + companion.getMainHandItem());
             BlockPos feet = companion.blockPosition();
             for (BlockPos p : BlockPos.betweenClosed(feet.offset(-3, -2, -3), feet.offset(3, 2, 3))) {
-                helper.assertTrue(helper.getLevel().getFluidState(p).isEmpty(), "water was poured at " + p);
+                Checks.assertTrue(helper, helper.getLevel().getFluidState(p).isEmpty(), "water was poured at " + p);
             }
-            helper.assertTrue(hold.done(), "gear hold has not finished");
-            helper.assertTrue(hold.succeeded() && hold.outcome().contains("main hand"),
+            Checks.assertTrue(helper, hold.done(), "gear hold has not finished");
+            Checks.assertTrue(helper, hold.succeeded() && hold.outcome().contains("main hand"),
                     "the reply does not say the snowball is in her main hand: " + hold.outcome());
-            helper.assertTrue(keeper.getInventory().countItem(Items.SNOWBALL) == 4,
+            Checks.assertTrue(helper, keeper.getInventory().countItem(Items.SNOWBALL) == 4,
                     "a snowball left her inventory: " + keeper.getInventory().countItem(Items.SNOWBALL));
-            helper.assertTrue(helper.getLevel().getEntitiesOfClass(
+            Checks.assertTrue(helper, helper.getLevel().getEntitiesOfClass(
                             net.minecraft.world.entity.projectile.Snowball.class,
                             keeper.getBoundingBox().inflate(16)).isEmpty(), "a snowball was thrown");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -424,12 +425,12 @@ public class InventoryGameTests {
         ToolRun unequip = lua(companion, "numen.gear.remove({slot = \"head\"})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(unequip.done(), "gear remove has not finished");
-            helper.assertTrue(!unequip.succeeded() && unequip.outcome().contains("binding"),
+            Checks.assertTrue(helper, unequip.done(), "gear remove has not finished");
+            Checks.assertTrue(helper, !unequip.succeeded() && unequip.outcome().contains("binding"),
                     "the failure does not name the curse of binding: " + unequip.outcome());
-            helper.assertTrue(companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
+            Checks.assertTrue(helper, companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
                     .is(Items.IRON_HELMET), "the cursed helmet came off");
-            helper.assertTrue(companion.getInventory().countItem(Items.IRON_HELMET) == 1,
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.IRON_HELMET) == 1,
                     "the cursed helmet was duplicated into her inventory");
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -443,11 +444,11 @@ public class InventoryGameTests {
         ToolRun equip = lua(companion, "numen.gear.hold(\"minecraft:shield\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(equip.done(), "gear hold has not finished");
-            helper.assertTrue(equip.succeeded() && equip.outcome().contains("offhand"),
+            Checks.assertTrue(helper, equip.done(), "gear hold has not finished");
+            Checks.assertTrue(helper, equip.succeeded() && equip.outcome().contains("offhand"),
                     "the reply does not say the shield is in her off hand: " + equip.outcome());
-            helper.assertTrue(companion.getOffhandItem().is(Items.SHIELD), "the shield is not in her off hand");
-            helper.assertTrue(companion.getInventory().countItem(Items.SHIELD) == 1, "the shield was duplicated");
+            Checks.assertTrue(helper, companion.getOffhandItem().is(Items.SHIELD), "the shield is not in her off hand");
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.SHIELD) == 1, "the shield was duplicated");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -465,10 +466,10 @@ public class InventoryGameTests {
         steps(helper)
                 .thenIdle(10)
                 .thenExecute(() -> com.dwinovo.numen.api.task.CompanionTickDispatcher.cancelFor(companion))
-                .thenWaitUntil(() -> helper.assertTrue(eat.done() && eat.outcome().startsWith("the owner pressed Stop"),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, eat.done() && eat.outcome().startsWith("the owner pressed Stop"),
                         "the meal did not end as stopped by the owner: " + eat.outcome()))
                 .thenIdle(40)
-                .thenWaitUntil(() -> helper.assertTrue(companion.getInventory().countItem(Items.BREAD) == 2
+                .thenWaitUntil(() -> Checks.assertTrue(helper, companion.getInventory().countItem(Items.BREAD) == 2
                                 && companion.getFoodData().getFoodLevel() == 10,
                         "the stopped meal still took effect: " + companion.getInventory().countItem(Items.BREAD)
                                 + " bread, hunger " + companion.getFoodData().getFoodLevel()))
@@ -487,9 +488,9 @@ public class InventoryGameTests {
         ToolRun craft = lua(companion, "return numen.inv.make(\"minecraft:chest\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(craft.done(), "inv make has not finished");
-            helper.assertTrue(craft.ranToTheEnd(), "craft from mixed planks failed: " + craft.receipt());
-            helper.assertTrue(companion.getInventory().countItem(Items.CHEST) == 1
+            Checks.assertTrue(helper, craft.done(), "inv make has not finished");
+            Checks.assertTrue(helper, craft.ranToTheEnd(), "craft from mixed planks failed: " + craft.receipt());
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.CHEST) == 1
                             && companion.getInventory().countItem(Items.OAK_PLANKS) == 0
                             && companion.getInventory().countItem(Items.BIRCH_PLANKS) == 0,
                     "the chest was not made from both kinds of planks");
@@ -509,8 +510,8 @@ public class InventoryGameTests {
                 + "return n .. \"/\" .. numen.inv.count(\"torch\") .. \"/\" .. numen.inv.count(\"minecraft:diamond\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(read.done(), "the program has not finished");
-            helper.assertTrue(read.ranToTheEnd() && read.receipt().contains("70/3/0"),
+            Checks.assertTrue(helper, read.done(), "the program has not finished");
+            Checks.assertTrue(helper, read.ranToTheEnd() && read.receipt().contains("70/3/0"),
                     "items and count do not read what she carries: " + read.receipt());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -527,17 +528,17 @@ public class InventoryGameTests {
                 + "\"cobblestone\")\nlocal took = numen.inv.fetch(chest, \"cobblestone\", 5)\nreturn put .. \"/\" .. took");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(run.done(), "the program has not finished");
-            helper.assertTrue(run.ranToTheEnd() && run.receipt().contains("20/5"),
+            Checks.assertTrue(helper, run.done(), "the program has not finished");
+            Checks.assertTrue(helper, run.ranToTheEnd() && run.receipt().contains("20/5"),
                     "store and fetch did not move 20 and 5: " + run.receipt());
             var box = (net.minecraft.world.level.block.entity.ChestBlockEntity) helper.getLevel().getBlockEntity(chest);
             int inChest = 0;
             for (int i = 0; i < box.getContainerSize(); i++) {
                 inChest += box.getItem(i).is(Items.COBBLESTONE) ? box.getItem(i).getCount() : 0;
             }
-            helper.assertTrue(inChest == 15 && companion.getInventory().countItem(Items.COBBLESTONE) == 5,
+            Checks.assertTrue(helper, inChest == 15 && companion.getInventory().countItem(Items.COBBLESTONE) == 5,
                     "the chest holds " + inChest + ", she carries " + companion.getInventory().countItem(Items.COBBLESTONE));
-            helper.assertTrue(companion.containerMenu == companion.inventoryMenu, "the chest was left open");
+            Checks.assertTrue(helper, companion.containerMenu == companion.inventoryMenu, "the chest was left open");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -553,13 +554,13 @@ public class InventoryGameTests {
         ToolRun run = lua(companion, "return numen.inv.smelt(" + xyz(furnace) + ", \"raw_iron\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(run.done(), "smelt has not finished");
-            helper.assertTrue(run.ranToTheEnd(), "smelt failed: " + run.receipt());
-            helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 2
+            Checks.assertTrue(helper, run.done(), "smelt has not finished");
+            Checks.assertTrue(helper, run.ranToTheEnd(), "smelt failed: " + run.receipt());
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.IRON_INGOT) == 2
                             && companion.getInventory().countItem(Items.RAW_IRON) == 0
                             && companion.getInventory().countItem(Items.COAL) == 3,
                     "she does not hold the two ingots with one coal spent");
-            helper.assertTrue(companion.containerMenu == companion.inventoryMenu, "the furnace was left open");
+            Checks.assertTrue(helper, companion.containerMenu == companion.inventoryMenu, "the furnace was left open");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -578,9 +579,9 @@ public class InventoryGameTests {
         });
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(wait.done(), "time wait has not finished");
-            helper.assertTrue(wait.ranToTheEnd() && wait.receipt().contains("1"), "wait failed: " + wait.receipt());
-            helper.assertTrue(ended[0] - start >= 20, "she came back after " + (ended[0] - start) + " ticks");
+            Checks.assertTrue(helper, wait.done(), "time wait has not finished");
+            Checks.assertTrue(helper, wait.ranToTheEnd() && wait.receipt().contains("1"), "wait failed: " + wait.receipt());
+            Checks.assertTrue(helper, ended[0] - start >= 20, "she came back after " + (ended[0] - start) + " ticks");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -590,15 +591,15 @@ public class InventoryGameTests {
     public static void wear_a_stick_says_to_hold_it(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_stickler", new BlockPos(3, 2, 3), false);
         companion.getInventory().add(new ItemStack(Items.STICK));
-        companion.getInventory().selected = 5;
+        companion.getInventory().setSelectedSlot(5);
         ToolRun equip = lua(companion, "numen.gear.wear(\"minecraft:stick\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(equip.done(), "gear wear has not finished");
-            helper.assertTrue(!equip.succeeded() && equip.outcome().contains("not something you wear")
+            Checks.assertTrue(helper, equip.done(), "gear wear has not finished");
+            Checks.assertTrue(helper, !equip.succeeded() && equip.outcome().contains("not something you wear")
                             && equip.outcome().contains("numen.gear.hold(\"minecraft:stick\")"),
                     "the failure does not send her to hold it: " + equip.outcome());
-            helper.assertTrue(companion.getMainHandItem().isEmpty(), "her main hand changed");
+            Checks.assertTrue(helper, companion.getMainHandItem().isEmpty(), "her main hand changed");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -623,21 +624,21 @@ public class InventoryGameTests {
         }
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(fullEvents(companion).size() == 1,
+                .thenWaitUntil(() -> Checks.assertTrue(helper, fullEvents(companion).size() == 1,
                         "not one inventory_full event: " + fullEvents(companion)))
                 .thenIdle(20)
                 .thenExecute(() -> {
                     java.util.List<String> told = fullEvents(companion);
-                    helper.assertTrue(told.size() == 1 && told.get(0).contains("your backpack is full")
+                    Checks.assertTrue(helper, told.size() == 1 && told.get(0).contains("your backpack is full")
                                     && told.get(0).contains("stayed on the ground"),
                             "a full backpack was told more than once, or not as it is: " + told);
                     companion.getInventory().setItem(0, ItemStack.EMPTY);
                 })
-                .thenWaitUntil(() -> helper.assertTrue(fullEvents(companion).size() == 2,
+                .thenWaitUntil(() -> Checks.assertTrue(helper, fullEvents(companion).size() == 2,
                         "filling up again is not told again: " + fullEvents(companion)))
                 .thenExecute(() -> {
                     ItemStack picked = companion.getInventory().getItem(0);
-                    helper.assertTrue(picked.is(Items.DIRT) || picked.is(Items.SAND),
+                    Checks.assertTrue(helper, picked.is(Items.DIRT) || picked.is(Items.SAND),
                             "the freed slot did not take what lay at her feet: " + picked);
                     CompanionFactory.despawn(level.getServer(), companion);
                 })
@@ -657,12 +658,12 @@ public class InventoryGameTests {
         steps = call(helper, steps, companion,
                 "numen.inv.write({\"Day 1: iron.\", \"Day 2: a house.\"}, {title = \"Diary\"})");
         steps = steps.thenExecute(() -> read.set(lua(companion, "numen.inv.read(\"minecraft:written_book\")")))
-                .thenWaitUntil(() -> helper.assertTrue(read.get().succeeded() && read.get().reply().contains("\"title\":\"Diary\"")
+                .thenWaitUntil(() -> Checks.assertTrue(helper, read.get().succeeded() && read.get().reply().contains("\"title\":\"Diary\"")
                                 && read.get().reply().contains("Day 2: a house.")
                                 && read.get().reply().contains("\"author\":\"gametest_author\""),
                         "inv read does not show the signed book: " + read.get().reply()));
         steps.thenWaitUntil(() -> {
-            helper.assertTrue(companion.getInventory().countItem(Items.WRITTEN_BOOK) == 1
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.WRITTEN_BOOK) == 1
                             && companion.getInventory().countItem(Items.WRITABLE_BOOK) == 0,
                     "the book and quill did not become a written book");
         }).thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.agent.loop.HaltReason;
 import com.dwinovo.numen.api.agent.loop.Hold;
 import com.dwinovo.numen.api.agent.loop.LoopEvent;
@@ -16,11 +17,11 @@ import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.mcp.server.McpConfig;
 import com.dwinovo.numen.api.mcp.server.McpMode;
 import com.dwinovo.numen.mcp.server.McpToken;
-import net.minecraft.gametest.framework.BeforeBatch;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -149,14 +150,14 @@ public class RemoteBrainGameTests {
     public static void an_external_brain_connecting_wakes_her_and_leaving_puts_her_away_again(GameTestHelper helper)
             throws Exception {
         Rig her = new Rig(helper, "gametest_remote_away", null);
-        helper.assertTrue(her.hold() == Hold.AWAY, "not away while nobody is here: " + her.hold());
-        helper.assertTrue(her.disconnects() == 0, "collected before anyone had been here: " + her.halts);
+        Checks.assertTrue(helper, her.hold() == Hold.AWAY, "not away while nobody is here: " + her.hold());
+        Checks.assertTrue(helper, her.disconnects() == 0, "collected before anyone had been here: " + her.halts);
 
         her.brain.connectLater();
 
         her.brain.afterConnected(helper, 5, () -> {
-            helper.assertTrue(her.hold() == Hold.EXTERNAL, "the external brain did not take the seat: " + her.hold());
-            helper.assertTrue(her.disconnects() == 0, "she was collected while the brain was connected");
+            Checks.assertTrue(helper, her.hold() == Hold.EXTERNAL, "the external brain did not take the seat: " + her.hold());
+            Checks.assertTrue(helper, her.disconnects() == 0, "she was collected while the brain was connected");
             try {
                 her.brain.disconnect(her.server);
             } catch (Exception e) {
@@ -164,8 +165,8 @@ public class RemoteBrainGameTests {
             }
         });
         succeedWhen(helper, () -> {
-            helper.assertTrue(her.hold() == Hold.AWAY, "not put away after the brain left: " + her.hold());
-            helper.assertTrue(her.disconnects() == 1, "not collected once after the brain left: " + her.halts);
+            Checks.assertTrue(helper, her.hold() == Hold.AWAY, "not put away after the brain left: " + her.hold());
+            Checks.assertTrue(helper, her.disconnects() == 1, "not collected once after the brain left: " + her.halts);
             her.close();
         });
     }
@@ -179,16 +180,16 @@ public class RemoteBrainGameTests {
         her.brain.connectLater();
 
         her.brain.afterConnected(helper, 5, () -> {
-            helper.assertTrue(her.hold() == Hold.EXTERNAL, "the external brain did not take the seat: " + her.hold());
+            Checks.assertTrue(helper, her.hold() == Hold.EXTERNAL, "the external brain did not take the seat: " + her.hold());
             try {
                 her.brain.disconnect(her.server);
             } catch (Exception e) {
                 throw new IllegalStateException(e);
             }
             helper.runAfterDelay(10, () -> {
-                helper.assertTrue(her.hold() != Hold.EXTERNAL && her.hold() != Hold.AWAY,
+                Checks.assertTrue(helper, her.hold() != Hold.EXTERNAL && her.hold() != Hold.AWAY,
                         "the seat did not come back to her own brain: " + her.hold());
-                helper.assertTrue(her.disconnects() == 0, "collected although the owner is in the game: " + her.halts);
+                Checks.assertTrue(helper, her.disconnects() == 0, "collected although the owner is in the game: " + her.halts);
                 her.close();
                 GameTestKit.leave(owner);
                 helper.succeed();
@@ -206,9 +207,9 @@ public class RemoteBrainGameTests {
         her.brain.afterConnected(helper, 3, () -> {
             GameTestKit.leave(owner);
             helper.runAfterDelay(7, () -> {
-                helper.assertTrue(her.hold() == Hold.EXTERNAL, "she stopped driving when only the player left: "
+                Checks.assertTrue(helper, her.hold() == Hold.EXTERNAL, "she stopped driving when only the player left: "
                         + her.hold());
-                helper.assertTrue(her.disconnects() == 0, "collected while his brain was still connected: " + her.halts);
+                Checks.assertTrue(helper, her.disconnects() == 0, "collected while his brain was still connected: " + her.halts);
                 try {
                     her.brain.disconnect(her.server);
                 } catch (Exception e) {
@@ -217,8 +218,8 @@ public class RemoteBrainGameTests {
             });
         });
         succeedWhen(helper, () -> {
-            helper.assertTrue(her.hold() == Hold.AWAY, "not put away after both were gone: " + her.hold());
-            helper.assertTrue(her.disconnects() == 1, "not collected once: " + her.halts);
+            Checks.assertTrue(helper, her.hold() == Hold.AWAY, "not put away after both were gone: " + her.hold());
+            Checks.assertTrue(helper, her.disconnects() == 1, "not collected once: " + her.halts);
             her.close();
         });
     }
@@ -256,18 +257,18 @@ public class RemoteBrainGameTests {
             });
             helper.runAfterDelay(20, () -> {   // 长等待已经在飞
                 ticket[0] = desk.ask(scope, List.of(oakLog()));
-                helper.assertTrue(ticket[0].poll() == null, "refused at once although his brain is connected: "
+                Checks.assertTrue(helper, ticket[0].poll() == null, "refused at once although his brain is connected: "
                         + ticket[0].poll());
             });
         });
         succeedWhen(helper, () -> {
-            helper.assertTrue(!her.brain.asked.isEmpty(), "the human was not asked at the external brain's client");
+            Checks.assertTrue(helper, !her.brain.asked.isEmpty(), "the human was not asked at the external brain's client");
             String message = her.brain.asked.get(0).message();
-            helper.assertTrue(message.contains("gt_remote_asks") && message.contains("oak_log"),
+            Checks.assertTrue(helper, message.contains("gt_remote_asks") && message.contains("oak_log"),
                     "the question does not say who wants what: " + message);
-            helper.assertTrue(ticket[0] != null && ticket[0].poll() != null && ticket[0].poll().allowed(),
+            Checks.assertTrue(helper, ticket[0] != null && ticket[0].poll() != null && ticket[0].poll().allowed(),
                     "his choice did not reach the desk: " + (ticket[0] == null ? null : ticket[0].poll()));
-            helper.assertTrue(desk.pending() == null, "the request is still pending");
+            Checks.assertTrue(helper, desk.pending() == null, "the request is still pending");
             her.close();
         });
     }
@@ -282,7 +283,7 @@ public class RemoteBrainGameTests {
         BrainGameTests.Scripted mind = new BrainGameTests.Scripted();
         mind.say("在的,马上来");
         Rig her = new Rig(helper, "gametest_remote_chat", null, mind, McpToken.Role.CHANNEL);
-        helper.assertTrue(her.hold() == Hold.AWAY, "not standing by before anyone spoke: " + her.hold());
+        Checks.assertTrue(helper, her.hold() == Hold.AWAY, "not standing by before anyone spoke: " + her.hold());
         java.util.concurrent.atomic.AtomicReference<String> sent = new java.util.concurrent.atomic.AtomicReference<>();
         java.util.concurrent.atomic.AtomicReference<String> replies = new java.util.concurrent.atomic.AtomicReference<>();
         java.util.concurrent.atomic.AtomicReference<Throwable> failure = new java.util.concurrent.atomic.AtomicReference<>();
@@ -299,13 +300,13 @@ public class RemoteBrainGameTests {
         }, failure::set);
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(failure.get() == null, "the bridge failed: " + failure.get());
-            helper.assertTrue(replies.get() != null, "no reply came back to the channel (sent: " + sent.get() + ")");
-            helper.assertTrue(mind.asked.size() == 1, "her brain was not asked once: " + mind.asked.size());
-            helper.assertTrue(replies.get().contains("在的,马上来") && replies.get().contains("\"said\""),
+            Checks.assertTrue(helper, failure.get() == null, "the bridge failed: " + failure.get());
+            Checks.assertTrue(helper, replies.get() != null, "no reply came back to the channel (sent: " + sent.get() + ")");
+            Checks.assertTrue(helper, mind.asked.size() == 1, "her brain was not asked once: " + mind.asked.size());
+            Checks.assertTrue(helper, replies.get().contains("在的,马上来") && replies.get().contains("\"said\""),
                     "the channel did not get her answer: " + replies.get());
-            helper.assertTrue(her.hold() == Hold.AWAY, "she did not go back to standing by: " + her.hold());
-            helper.assertTrue(her.disconnects() == 1, "not collected once after the round: " + her.halts);
+            Checks.assertTrue(helper, her.hold() == Hold.AWAY, "she did not go back to standing by: " + her.hold());
+            Checks.assertTrue(helper, her.disconnects() == 1, "not collected once after the round: " + her.halts);
             her.close();
         });
     }
@@ -336,14 +337,14 @@ public class RemoteBrainGameTests {
 
         var ticket = desk.ask(new Object(), List.of(oakLog()));
 
-        helper.assertTrue(ticket.poll() == null, "refused at once although the owner is on a channel: " + ticket.poll());
-        helper.assertTrue(offered.size() == 1 && offered.get(0).id() == ticket.request().id()
+        Checks.assertTrue(helper, ticket.poll() == null, "refused at once although the owner is on a channel: " + ticket.poll());
+        Checks.assertTrue(helper, offered.size() == 1 && offered.get(0).id() == ticket.request().id()
                         && offered.get(0).doing().contains("oak_log") && offered.get(0).companion().equals(her.companion.getUUID()),
                 "the channel was not handed the question in the general form: " + offered);
         var reply = com.dwinovo.numen.api.permission.ConsentDesk.reply(her.owner, her.companion, ticket.request().id(),
                 com.dwinovo.numen.api.permission.ConsentAnswer.Decision.DENY, "用箱子里的");
-        helper.assertTrue(reply == com.dwinovo.numen.api.permission.ConsentDesk.Reply.ANSWERED, "answer refused: " + reply);
-        helper.assertTrue(ticket.poll() != null && !ticket.poll().allowed()
+        Checks.assertTrue(helper, reply == com.dwinovo.numen.api.permission.ConsentDesk.Reply.ANSWERED, "answer refused: " + reply);
+        Checks.assertTrue(helper, ticket.poll() != null && !ticket.poll().allowed()
                 && ticket.poll().words().equals("用箱子里的"), "the owner's answer did not reach the asker: " + ticket.poll());
         com.dwinovo.numen.api.brain.Visits.end(her.companion.getUUID());
         her.close();

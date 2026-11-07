@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.task.build.BuildTaskRecord;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
@@ -8,8 +9,8 @@ import com.dwinovo.numen.api.task.TaskRecord;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
@@ -49,14 +50,14 @@ public class ModeGameTests {
         TaskDispatch.setTask(companion, record, null, refused::set, () -> accepted[0] = true);
         succeedWhen(helper, () -> {
             com.dwinovo.numen.api.task.TaskResult result = refused.get();
-            helper.assertTrue(result != null || accepted[0], "the build has not replied");
-            helper.assertTrue(result != null && !result.success() && result.message().contains("not enough materials"),
+            Checks.assertTrue(helper, result != null || accepted[0], "the build has not replied");
+            Checks.assertTrue(helper, result != null && !result.success() && result.message().contains("not enough materials"),
                     "expected an itemized missing-materials refusal, got: " + result);
-            helper.assertTrue(!accepted[0] && record.getResult() == null
+            Checks.assertTrue(helper, !accepted[0] && record.getResult() == null
                             && com.dwinovo.numen.api.task.CompanionTickDispatcher.currentTaskFor(companion.getUUID()) == null,
                     "a build without materials was accepted instead of refused at once: " + result);
             for (BuildTaskRecord.Target t : targets) {
-                helper.assertTrue(!level.getBlockState(t.pos()).is(Blocks.COBBLESTONE),
+                Checks.assertTrue(helper, !level.getBlockState(t.pos()).is(Blocks.COBBLESTONE),
                         "must not build anything without materials");
             }
             CompanionFactory.despawn(level.getServer(), companion);
@@ -86,9 +87,9 @@ public class ModeGameTests {
         BlockPos target = helper.absolutePos(new BlockPos(14, 2, 14));
         TaskRecord<?> record = lua(companion, "numen.move.walk(" + xyz(target) + ")").task();
         succeedWhen(helper, () -> {
-            helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
+            Checks.assertTrue(helper, companion.blockPosition().distSqr(target) <= 2 * 2,
                     "empty-handed creative companion has not pillared out");
-            helper.assertTrue(com.dwinovo.numen.nav.ThrowawayBlocks.factory().contains(
+            Checks.assertTrue(helper, com.dwinovo.numen.nav.ThrowawayBlocks.factory().contains(
                             level.getBlockState(helper.absolutePos(new BlockPos(7, 2, 7))).getBlock().asItem()),
                     "the pillar is not the throwaway blocks she conjured: "
                             + level.getBlockState(helper.absolutePos(new BlockPos(7, 2, 7))));
@@ -117,13 +118,13 @@ public class ModeGameTests {
                         + "local r = numen.work.dig(" + xyz(first) + ")\n"
                         + "return {mode = mode, dug = r.dug, drops = #r.drops}");
             }
-            helper.assertTrue(runs[0].done(), "the creative dig has not finished");
+            Checks.assertTrue(helper, runs[0].done(), "the creative dig has not finished");
             com.google.gson.JsonObject creative = runs[0].data().getAsJsonObject("returned");
-            helper.assertTrue(creative.get("mode").getAsString().equals("creative")
+            Checks.assertTrue(helper, creative.get("mode").getAsString().equals("creative")
                             && creative.get("dug").getAsInt() == 1 && creative.get("drops").getAsInt() == 0
                             && level.getBlockState(first).isAir(),
                     "in creative the status and the dig disagree: " + runs[0].receipt());
-            helper.assertTrue(runs[0].receipt().contains("Nothing dropped."),
+            Checks.assertTrue(helper, runs[0].receipt().contains("Nothing dropped."),
                     "the creative dig does not say nothing dropped: " + runs[0].receipt());
             if (runs[1] == null) {
                 companion.setGameMode(GameType.SURVIVAL);
@@ -131,9 +132,9 @@ public class ModeGameTests {
                         + "local ok, err = pcall(numen.work.dig, " + xyz(second) + ")\n"
                         + "return {mode = mode, dug = ok, why = ok and \"\" or err.message}");
             }
-            helper.assertTrue(runs[1].done(), "the survival dig has not finished");
+            Checks.assertTrue(helper, runs[1].done(), "the survival dig has not finished");
             com.google.gson.JsonObject survival = runs[1].data().getAsJsonObject("returned");
-            helper.assertTrue(survival.get("mode").getAsString().equals("survival")
+            Checks.assertTrue(helper, survival.get("mode").getAsString().equals("survival")
                             && !survival.get("dug").getAsBoolean()
                             && survival.get("why").getAsString().contains("my tools can't harvest")
                             && level.getBlockState(second).is(Blocks.OBSIDIAN),
@@ -149,9 +150,9 @@ public class ModeGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_conjure", new BlockPos(2, 2, 2), true);
         ToolRun reply = lua(companion, "numen.creative.give(\"minecraft:diamond\", {count = 100})");
         succeedWhen(helper, () -> {
-            helper.assertTrue(reply.succeeded(),
+            Checks.assertTrue(helper, reply.succeeded(),
                     "creative give should succeed in creative, got: " + reply.reply());
-            helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 100,
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.DIAMOND) == 100,
                     "expected 100 diamonds in inventory");
             CompanionFactory.despawn(level.getServer(), companion);
         });

@@ -1,12 +1,13 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.gametest.Bodies;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import java.util.List;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
@@ -54,11 +55,11 @@ public class DigGameTests {
         Mining mine = mineScanned(helper, companion, 9, "minecraft:acacia_log", 2);
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(mine.done(), "dig has not finished");
-            helper.assertTrue(mine.succeeded() && companion.getInventory().countItem(Items.ACACIA_LOG) >= 2,
+            Checks.assertTrue(helper, mine.done(), "dig has not finished");
+            Checks.assertTrue(helper, mine.succeeded() && companion.getInventory().countItem(Items.ACACIA_LOG) >= 2,
                     "the canopy logs were not gathered from the ground: " + mine.outcome());
             for (BlockPos rel : logs) {
-                helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).isAir(),
+                Checks.assertTrue(helper, level.getBlockState(helper.absolutePos(rel)).isAir(),
                         "a canopy log is still up at " + rel.toShortString());
             }
             CompanionFactory.despawn(level.getServer(), companion);
@@ -80,12 +81,12 @@ public class DigGameTests {
         Mining mine = mineScanned(helper, companion, 9, "minecraft:stripped_birch_log", 1);
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(mine.done(), "dig has not finished");
+            Checks.assertTrue(helper, mine.done(), "dig has not finished");
             String reply = mine.outcome();
-            helper.assertTrue(!mine.succeeded() && reply.contains("found no path to target")
+            Checks.assertTrue(helper, !mine.succeeded() && reply.contains("found no path to target")
                             && reply.contains("every way needs blocks to pillar or bridge with"),
                     "an out-of-reach log did not end as unreachable for want of blocks to pillar with: " + reply);
-            helper.assertTrue(level.getBlockState(helper.absolutePos(logRel)).is(Blocks.STRIPPED_BIRCH_LOG),
+            Checks.assertTrue(helper, level.getBlockState(helper.absolutePos(logRel)).is(Blocks.STRIPPED_BIRCH_LOG),
                     "the out-of-reach log is gone");
             // 悬着的原木收走,后面批次的扫描不会把它当目标
             level.removeBlock(helper.absolutePos(logRel), false);
@@ -123,7 +124,7 @@ public class DigGameTests {
         mineScanned(helper, companion, 8, "minecraft:deepslate_diamond_ore", 2);
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) >= 2,
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.DIAMOND) >= 2,
                     "companion has not gathered 2 diamonds");
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -149,10 +150,10 @@ public class DigGameTests {
         Mining mine = mineScanned(helper, companion, 8, "minecraft:iron_ore", 1);
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(mine.done(), "dig has not finished");
-            helper.assertTrue(!mine.succeeded() && mine.outcome().contains("can't be dug: breaking it would let liquid in"),
+            Checks.assertTrue(helper, mine.done(), "dig has not finished");
+            Checks.assertTrue(helper, !mine.succeeded() && mine.outcome().contains("can't be dug: breaking it would let liquid in"),
                     "the reply does not say the ore by the lava cannot be broken: " + mine.outcome());
-            helper.assertTrue(level.getBlockState(ore).is(Blocks.IRON_ORE)
+            Checks.assertTrue(helper, level.getBlockState(ore).is(Blocks.IRON_ORE)
                             && level.getBlockState(lava).is(Blocks.LAVA),
                     "the ore was broken or the lava got out");
             CompanionFactory.despawn(level.getServer(), companion);
@@ -190,10 +191,10 @@ public class DigGameTests {
         Mining mine = mineScanned(helper, companion, 8, "minecraft:diamond_ore", 1);
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(mine.done(), "dig has not finished");
-            helper.assertTrue(!mine.succeeded() && mine.outcome().contains("my tools can't harvest diamond_ore"),
+            Checks.assertTrue(helper, mine.done(), "dig has not finished");
+            Checks.assertTrue(helper, !mine.succeeded() && mine.outcome().contains("my tools can't harvest diamond_ore"),
                     "the failure does not say the tool is short: " + mine.outcome());
-            helper.assertTrue(helper.getLevel().getBlockState(ore).is(Blocks.DIAMOND_ORE), "the ore was broken");
+            Checks.assertTrue(helper, helper.getLevel().getBlockState(ore).is(Blocks.DIAMOND_ORE), "the ore was broken");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -213,17 +214,17 @@ public class DigGameTests {
         ToolRun dug = lua(companion, "numen.work.dig(" + xyz(air) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(dig.done() && dug.done(), "dig has not finished");
-            helper.assertTrue(!dig.succeeded() && dig.task() == null && "not_found".equals(dig.kind())
+            Checks.assertTrue(helper, dig.done() && dug.done(), "dig has not finished");
+            Checks.assertTrue(helper, !dig.succeeded() && dig.task() == null && "not_found".equals(dig.kind())
                             && dig.outcome().contains("the blocks given are all gone or have changed since they were "
                                     + "seen, so I did not start")
                             && "numen.scan.blocks(\"minecraft:emerald_ore\")".equals(dig.hint()),
                     "the refusal does not say the blocks are gone and how to look again: " + dig.outcome() + " | "
                             + dig.hint());
-            helper.assertTrue(!dug.succeeded() && dug.task() == null && "not_found".equals(dug.kind())
+            Checks.assertTrue(helper, !dug.succeeded() && dug.task() == null && "not_found".equals(dug.kind())
                             && dug.outcome().contains("the 1 cell(s) given hold nothing to dig — air or fluid"),
                     "the refusal does not say the cells hold nothing: " + dug.outcome());
-            helper.assertTrue(companion.blockPosition().distSqr(start) <= 4, "she wandered off looking for it");
+            Checks.assertTrue(helper, companion.blockPosition().distSqr(start) <= 4, "she wandered off looking for it");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -238,15 +239,15 @@ public class DigGameTests {
         Mining mine = mineScanned(helper, companion, 8, "minecraft:obsidian", 1);
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(digging(companion),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, digging(companion),
                         "she has not started digging the obsidian"))
                 .thenExecute(() -> com.dwinovo.numen.api.task.CompanionTickDispatcher.cancelFor(companion))
-                .thenWaitUntil(() -> helper.assertTrue(mine.done() && mine.outcome().startsWith("the owner pressed Stop"),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, mine.done() && mine.outcome().startsWith("the owner pressed Stop"),
                         "the dig did not end as stopped by the owner: " + mine.outcome()))
                 .thenWaitUntil(() -> {
-                    helper.assertTrue(helper.getLevel().getBlockState(block).is(Blocks.OBSIDIAN),
+                    Checks.assertTrue(helper, helper.getLevel().getBlockState(block).is(Blocks.OBSIDIAN),
                             "the obsidian was broken after the stop");
-                    helper.assertTrue(!digging(companion), "she is still digging after the stop");
+                    Checks.assertTrue(helper, !digging(companion), "she is still digging after the stop");
                 })
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
                 .thenSucceed();
@@ -276,11 +277,11 @@ public class DigGameTests {
         Mining mine = mineScanned(helper, companion, 7, "minecraft:gold_block", 12);
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(mine.done(), "dig has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, mine.done(), "dig has not finished"))
                 .thenWaitUntil(() -> {
-                    helper.assertTrue(mine.succeeded(), "dig failed: " + mine.outcome());
+                    Checks.assertTrue(helper, mine.succeeded(), "dig failed: " + mine.outcome());
                     int held = companion.getInventory().countItem(Items.GOLD_BLOCK);
-                    helper.assertTrue(held == 12, "asked for 12, came back with " + held);
+                    Checks.assertTrue(helper, held == 12, "asked for 12, came back with " + held);
                     int left = 0;
                     for (int x = 4; x <= 13; x++) {
                         for (int z : new int[]{6, 10}) {
@@ -290,14 +291,14 @@ public class DigGameTests {
                             }
                         }
                     }
-                    helper.assertTrue(blocks - left == 12,
+                    Checks.assertTrue(helper, blocks - left == 12,
                             "asked for 12 blocks, broke " + (blocks - left));
                     long onTheGround = level.getEntitiesOfClass(
                             net.minecraft.world.entity.item.ItemEntity.class,
                             new net.minecraft.world.phys.AABB(helper.absolutePos(new BlockPos(8, 2, 8)))
                                     .inflate(24.0),
                             ie -> ie.getItem().is(Items.GOLD_BLOCK)).size();
-                    helper.assertTrue(onTheGround == 0,
+                    Checks.assertTrue(helper, onTheGround == 0,
                             onTheGround + " gold blocks left lying around — she walked off without them");
                 })
                 .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
@@ -322,23 +323,23 @@ public class DigGameTests {
         ToolRun dig = lua(companion, "numen.work.dig(" + xyz(hay) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(dig.done(), "work dig has not finished");
-            helper.assertTrue(dig.succeeded() && dig.outcome().startsWith("dug 1 cell(s) of hay_block"),
+            Checks.assertTrue(helper, dig.done(), "work dig has not finished");
+            Checks.assertTrue(helper, dig.succeeded() && dig.outcome().startsWith("dug 1 cell(s) of hay_block"),
                     "the cell was not dug: " + dig.outcome());
             var drop = onlyDrop(dig);
             BlockPos landed = drop.pos();
-            helper.assertTrue(drop.fate() == com.dwinovo.numen.act.Drops.Fate.LANDED && drop.count() == 1
+            Checks.assertTrue(helper, drop.fate() == com.dwinovo.numen.act.Drops.Fate.LANDED && drop.count() == 1
                             && landed.getY() == hay.getY() && Math.abs(landed.getX() - hay.getX()) <= 1
                             && Math.abs(landed.getZ() - hay.getZ()) <= 1,
                     "the drop did not land by the dug cell: " + drop);
-            helper.assertTrue(dig.outcome().contains("Drops: 1 hay_block landed at " + xyz(landed) + "."),
+            Checks.assertTrue(helper, dig.outcome().contains("Drops: 1 hay_block landed at " + xyz(landed) + "."),
                     "the reply does not say where the drop landed: " + dig.outcome());
-            helper.assertTrue(drop.id().isPresent() && new com.dwinovo.numen.api.sdk.EntityRef(drop.id().get()).in(level)
+            Checks.assertTrue(helper, drop.id().isPresent() && new com.dwinovo.numen.api.sdk.EntityRef(drop.id().get()).in(level)
                             instanceof net.minecraft.world.entity.item.ItemEntity item && item.getItem().is(Items.HAY_BLOCK),
                     "the id given is not the hay lying there: " + drop);
-            helper.assertTrue(level.getBlockState(hay).isAir(), "the hay is still there");
-            helper.assertTrue(level.getBlockState(spare).is(Blocks.HAY_BLOCK), "the hay that was not named was dug");
-            helper.assertTrue(companion.blockPosition().equals(stand), "she moved to dig a cell within her reach");
+            Checks.assertTrue(helper, level.getBlockState(hay).isAir(), "the hay is still there");
+            Checks.assertTrue(helper, level.getBlockState(spare).is(Blocks.HAY_BLOCK), "the hay that was not named was dug");
+            Checks.assertTrue(helper, companion.blockPosition().equals(stand), "she moved to dig a cell within her reach");
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
@@ -364,15 +365,15 @@ public class DigGameTests {
         ToolRun dig = lua(companion, "numen.work.dig(" + xyz(obsidian) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(dig.done(), "work dig has not finished");
-            helper.assertTrue(dig.succeeded() && dig.outcome().startsWith("dug 1 cell(s) of obsidian"),
+            Checks.assertTrue(helper, dig.done(), "work dig has not finished");
+            Checks.assertTrue(helper, dig.succeeded() && dig.outcome().startsWith("dug 1 cell(s) of obsidian"),
                     "the obsidian was not dug: " + dig.outcome());
             var drop = onlyDrop(dig);
-            helper.assertTrue(drop.fate() == com.dwinovo.numen.act.Drops.Fate.DESTROYED
+            Checks.assertTrue(helper, drop.fate() == com.dwinovo.numen.act.Drops.Fate.DESTROYED
                             && drop.cause().equals(java.util.Optional.of("minecraft:lava"))
                             && drop.item().equals("minecraft:obsidian") && drop.id().isEmpty(),
                     "the drop is not told as burned in the lava: " + drop);
-            helper.assertTrue(dig.outcome().contains("Drops: 1 obsidian fell into lava and burned up at "),
+            Checks.assertTrue(helper, dig.outcome().contains("Drops: 1 obsidian fell into lava and burned up at "),
                     "the reply does not say the drop burned in the lava: " + dig.outcome());
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -403,19 +404,19 @@ public class DigGameTests {
                             break;
                         }
                     }
-                    helper.assertTrue(level.getBlockState(obsidian).is(Blocks.OBSIDIAN) && mouse.pressing() != null,
+                    Checks.assertTrue(helper, level.getBlockState(obsidian).is(Blocks.OBSIDIAN) && mouse.pressing() != null,
                             "the server did not hold the block as a delayed destroy: " + level.getBlockState(obsidian));
                 })
                 .thenWaitUntil(() -> {
                     var strike = mouse.dig();
-                    helper.assertTrue(strike instanceof com.dwinovo.numen.api.entity.Mouse.Strike.Broke,
+                    Checks.assertTrue(helper, strike instanceof com.dwinovo.numen.api.entity.Mouse.Strike.Broke,
                             "the mouse gave up on a block the server still held: " + strike);
-                    helper.assertTrue(level.getBlockState(obsidian).isAir(), "the block is still there");
+                    Checks.assertTrue(helper, level.getBlockState(obsidian).isAir(), "the block is still there");
                     boolean dropped = !level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
                             new net.minecraft.world.phys.AABB(obsidian).inflate(4),
                             item -> item.getItem().is(Items.OBSIDIAN)).isEmpty()
                             || companion.getInventory().countItem(Items.OBSIDIAN) > 0;
-                    helper.assertTrue(dropped, "the obsidian drop is nowhere");
+                    Checks.assertTrue(helper, dropped, "the obsidian drop is nowhere");
                     CompanionFactory.despawn(level.getServer(), companion);
                 })
                 .thenSucceed();
@@ -433,19 +434,19 @@ public class DigGameTests {
         level.setBlockAndUpdate(obsidian, Blocks.OBSIDIAN.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_hasty", new BlockPos(6, 2, 8), false);
         companion.getInventory().add(new ItemStack(Items.DIAMOND_PICKAXE));
-        companion.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.DIG_SPEED,
+        companion.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.HASTE,
                 100000, 4, false, false));
         ToolRun dig = lua(companion, "numen.work.dig(" + xyz(obsidian) + ")");
 
         succeedWhen(helper, () -> {
-            if (companion.mouse().progress() >= 0.9f && companion.hasEffect(net.minecraft.world.effect.MobEffects.DIG_SPEED)) {
+            if (companion.mouse().progress() >= 0.9f && companion.hasEffect(net.minecraft.world.effect.MobEffects.HASTE)) {
                 companion.removeAllEffects();
             }
-            helper.assertTrue(dig.done(), "work dig has not finished");
-            helper.assertTrue(dig.succeeded() && dig.outcome().startsWith("dug 1 cell(s) of obsidian"),
+            Checks.assertTrue(helper, dig.done(), "work dig has not finished");
+            Checks.assertTrue(helper, dig.succeeded() && dig.outcome().startsWith("dug 1 cell(s) of obsidian"),
                     "the obsidian the server broke was not counted: " + dig.outcome());
             var drop = onlyDrop(dig);
-            helper.assertTrue(drop.item().equals("minecraft:obsidian"), "the drop does not match: " + drop);
+            Checks.assertTrue(helper, drop.item().equals("minecraft:obsidian"), "the drop does not match: " + drop);
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
@@ -454,7 +455,7 @@ public class DigGameTests {
     private static com.dwinovo.numen.act.Drops.Drop onlyDrop(ToolRun dig) {
         var drops = dig.result(com.dwinovo.numen.task.dig.DigCompanionTask.Dug.class).drops();
         if (drops.size() != 1) {
-            throw new net.minecraft.gametest.framework.GameTestAssertException("expected one drop: " + drops);
+            throw com.dwinovo.numen.api.gametest.Checks.failure("expected one drop: " + drops);
         }
         return drops.get(0);
     }
@@ -479,16 +480,16 @@ public class DigGameTests {
 
         succeedWhen(helper, () -> {
             if (dig[0] == null) {
-                helper.assertTrue(scanned.reply() != null, "the scan has not replied");
+                Checks.assertTrue(helper, scanned.reply() != null, "the scan has not replied");
                 level.setBlockAndUpdate(changed, Blocks.STONE.defaultBlockState());
                 dig[0] = lua(companion, "numen.work.dig(" + blocksIn(scanned.reply()) + ")");
             }
-            helper.assertTrue(dig[0].done(), "work dig has not finished");
-            helper.assertTrue(dig[0].succeeded() && dig[0].outcome().startsWith("dug 3 cell(s) of copper_ore"),
+            Checks.assertTrue(helper, dig[0].done(), "work dig has not finished");
+            Checks.assertTrue(helper, dig[0].succeeded() && dig[0].outcome().startsWith("dug 3 cell(s) of copper_ore"),
                     "the three copper ores still there were not dug out: " + dig[0].outcome());
             for (BlockPos rel : ores) {
                 BlockPos cell = helper.absolutePos(rel);
-                helper.assertTrue(cell.equals(changed) ? level.getBlockState(cell).is(Blocks.STONE)
+                Checks.assertTrue(helper, cell.equals(changed) ? level.getBlockState(cell).is(Blocks.STONE)
                                 : level.getBlockState(cell).isAir(),
                         "the wrong cell was dug or left at " + rel.toShortString());
             }
@@ -516,18 +517,18 @@ public class DigGameTests {
 
         succeedWhen(helper, () -> {
             if (dig[0] == null) {
-                helper.assertTrue(scanned.done() && scanned.succeeded(), "the scan has not replied: " + scanned.reply());
+                Checks.assertTrue(helper, scanned.done() && scanned.succeeded(), "the scan has not replied: " + scanned.reply());
                 dig[0] = lua(companion, "numen.work.dig(" + blocksIn(scanned.reply()) + ")");
             }
-            helper.assertTrue(dig[0].done(), "work dig has not finished");
+            Checks.assertTrue(helper, dig[0].done(), "work dig has not finished");
             String said = dig[0].outcome();
-            helper.assertTrue(dig[0].succeeded() && said.startsWith("dug " + vein.size() + " cell(s) of pearlescent_froglight")
+            Checks.assertTrue(helper, dig[0].succeeded() && said.startsWith("dug " + vein.size() + " cell(s) of pearlescent_froglight")
                             && !said.contains("out of my reach"),
                     "the reply does not say the whole vein was dug: " + said);
             for (BlockPos cell : vein) {
-                helper.assertTrue(level.getBlockState(cell).isAir(), "a froglight is left at " + cell.toShortString());
+                Checks.assertTrue(helper, level.getBlockState(cell).isAir(), "a froglight is left at " + cell.toShortString());
             }
-            helper.assertTrue(companion.blockPosition().distSqr(stand) > 9, "she dug it all without walking along it");
+            Checks.assertTrue(helper, companion.blockPosition().distSqr(stand) > 9, "she dug it all without walking along it");
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }

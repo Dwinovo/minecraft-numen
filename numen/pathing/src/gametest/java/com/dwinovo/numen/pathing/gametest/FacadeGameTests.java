@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
@@ -15,9 +16,8 @@ import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
-import net.minecraft.gametest.framework.GameTestAssertException;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
@@ -60,11 +60,11 @@ public class FacadeGameTests {
                 })
                 .stops().then(r -> {
                     if (r.body.controls().held(Controls.Key.SNEAK)) {
-                        throw new GameTestAssertException("叫停之后还按着潜行");
+                        throw Checks.failure("叫停之后还按着潜行");
                     }
                     List<EditLedger.Entry> handedOut = handed[0].ledger().entries();
                     if (handedOut.size() < 2 || !handedOut.equals(r.report.ledger().entries())) {
-                        throw new GameTestAssertException("叫停交出的账不对:" + handedOut + " / " + r.report.ledger().entries());
+                        throw Checks.failure("叫停交出的账不对:" + handedOut + " / " + r.report.ledger().entries());
                     }
                 });
     }
@@ -87,14 +87,14 @@ public class FacadeGameTests {
         NavRequest request = NavRequest.to(Goals.at(t.at(15, 1, 12)), RouteSpec.defaults());
         t.plan(body, PlanQuery.of(request.goal(), request.spec()), direct -> {
             if (direct.route() == null || direct.route().nodes().contains(far)) {
-                throw new GameTestAssertException("直接去处的路就穿远处的口,场景没起作用:" + direct.outcome());
+                throw Checks.failure("直接去处的路就穿远处的口,场景没起作用:" + direct.outcome());
             }
             // 只搜不走:身体一动不动,手上还是那把剑,背包没变,世界一格不变
             if (!body.position().equals(start)) {
-                throw new GameTestAssertException("只搜不走,身体却从 " + start + " 挪到了 " + body.position());
+                throw Checks.failure("只搜不走,身体却从 " + start + " 挪到了 " + body.position());
             }
             if (!body.getMainHandItem().is(Items.IRON_SWORD) || !body.getInventory().getItem(20).is(Items.IRON_SHOVEL)) {
-                throw new GameTestAssertException("只搜不走,手上或背包却变了");
+                throw Checks.failure("只搜不走,手上或背包却变了");
             }
             t.untouched();
             t.plan(body, PlanQuery.of(Goals.at(far), request.spec()), toGap -> {
@@ -108,7 +108,7 @@ public class FacadeGameTests {
                         })
                         .arrives().then(Scenes::unaltered).then(r -> {
                             if (crossedAt[0] != far.getZ()) {
-                                throw new GameTestAssertException("没从给的路线穿过去:" + (crossedAt[0] - t.origin.getZ()));
+                                throw Checks.failure("没从给的路线穿过去:" + (crossedAt[0] - t.origin.getZ()));
                             }
                         });
             });

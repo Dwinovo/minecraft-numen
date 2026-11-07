@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.brain.CompanionLoops;
 import com.dwinovo.numen.api.brain.Replies;
 import com.dwinovo.numen.api.brain.ServerSkins;
@@ -14,7 +15,7 @@ import com.dwinovo.numen.api.skin.SkinError;
 import com.dwinovo.numen.api.skin.SkinFolder;
 import com.dwinovo.numen.api.skin.SkinSigning;
 import com.dwinovo.numen.api.voice.VoiceProfile;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -49,21 +50,21 @@ public class LibraryCommandGameTests {
 
         run(owner, "numen companion gametest_bound persona " + persona, heard);
         run(owner, "numen companion gametest_bound voice " + voice, heard);
-        helper.assertTrue(persona.toString().equals(her.loop.bound(Slot.PERSONA)), "persona: " + heard);
-        helper.assertTrue(voice.toString().equals(her.loop.bound(Slot.VOICE)), "voice: " + heard);
-        helper.assertTrue(heard.stream().allMatch(m -> isKey(m, Keys.COMMAND_BOUND)), "not told: " + heard);
+        Checks.assertTrue(helper, persona.toString().equals(her.loop.bound(Slot.PERSONA)), "persona: " + heard);
+        Checks.assertTrue(helper, voice.toString().equals(her.loop.bound(Slot.VOICE)), "voice: " + heard);
+        Checks.assertTrue(helper, heard.stream().allMatch(m -> isKey(m, Keys.COMMAND_BOUND)), "not told: " + heard);
 
         heard.clear();
         run(owner, "numen companion gametest_bound voice my:not_there", heard);
-        helper.assertTrue(heard.size() == 1 && isKey(heard.get(0), Keys.COMMAND_BIND_FAILED), "refusal not said: " + heard);
-        helper.assertTrue(voice.toString().equals(her.loop.bound(Slot.VOICE)), "a refused bind changed her voice");
+        Checks.assertTrue(helper, heard.size() == 1 && isKey(heard.get(0), Keys.COMMAND_BIND_FAILED), "refusal not said: " + heard);
+        Checks.assertTrue(helper, voice.toString().equals(her.loop.bound(Slot.VOICE)), "a refused bind changed her voice");
 
         heard.clear();
         run(owner, "numen companion gametest_bound voice", heard);
-        helper.assertTrue(her.loop.bound(Slot.VOICE) == null && isKey(heard.get(0), Keys.COMMAND_UNBOUND),
+        Checks.assertTrue(helper, her.loop.bound(Slot.VOICE) == null && isKey(heard.get(0), Keys.COMMAND_UNBOUND),
                 "the voice was not taken off: " + heard);
         run(owner, "numen companion gametest_bound profile", heard);
-        helper.assertTrue(her.loop.bound(Slot.PROVIDER) == null, "a profile cannot be unbound by leaving it out");
+        Checks.assertTrue(helper, her.loop.bound(Slot.PROVIDER) == null, "a profile cannot be unbound by leaving it out");
 
         hub.library(PersonaLibrary.KIND, owner.getUUID()).mine().delete(persona);
         hub.library(VoiceProfile.KIND, owner.getUUID()).mine().delete(voice);
@@ -169,37 +170,37 @@ public class LibraryCommandGameTests {
 
         run(owner, "numen companion gametest_dressed skin server gametest_dress", heard);
         GameTestKit.steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue("v-slim".equals(registry.find(id).skinValue()),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, "v-slim".equals(registry.find(id).skinValue()),
                         "she does not wear the signed skin (透明的区域说明是细手臂): " + heard))
                 .thenExecute(() -> {
                     var live = com.dwinovo.numen.api.entity.NumenPlayer.findByUuid(server, id);
-                    helper.assertTrue(live != null && live.getGameProfile().getProperties().containsKey("textures")
+                    Checks.assertTrue(helper, live != null && live.getGameProfile().getProperties().containsKey("textures")
                                     && "v-slim".equals(live.getGameProfile().getProperties().get("textures")
                                     .iterator().next().value()),
                             "the rebuilt body does not carry the cached signature");
-                    helper.assertTrue(GameTestKit.said(owner).stream().anyMatch(m -> m.text().getString().contains("now wears skin")),
+                    Checks.assertTrue(helper, GameTestKit.said(owner).stream().anyMatch(m -> m.text().getString().contains("now wears skin")),
                             "the owner was not told it was worn");
-                    helper.assertTrue(CompanionLoops.get(id).orElseThrow().state().skinId() != null,
+                    Checks.assertTrue(helper, CompanionLoops.get(id).orElseThrow().state().skinId() != null,
                             "her binding does not say which skin she wears");
                     heard.clear();
                     run(owner, "numen companion gametest_dressed skin server gametest_dress", heard);
-                    helper.assertTrue(GameTestKit.said(owner).stream().anyMatch(m -> m.text().getString().contains("now wears skin")),
+                    Checks.assertTrue(helper, GameTestKit.said(owner).stream().anyMatch(m -> m.text().getString().contains("now wears skin")),
                             "a skin signed before was not worn at once");
-                    helper.assertTrue(signed.get() == 1, "the same image was signed again: " + signed.get());
+                    Checks.assertTrue(helper, signed.get() == 1, "the same image was signed again: " + signed.get());
                     heard.clear();
                     run(owner, "numen companion gametest_dressed skin player Notch", heard);
                 })
-                .thenWaitUntil(() -> helper.assertTrue(BORROWED.equals(registry.find(id).skinValue()),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, BORROWED.equals(registry.find(id).skinValue()),
                         "the borrowed skin did not arrive: " + heard))
                 .thenExecute(() -> {
-                    helper.assertTrue(signed.get() == 1, "a borrowed skin was sent to MineSkin");
+                    Checks.assertTrue(helper, signed.get() == 1, "a borrowed skin was sent to MineSkin");
                     heard.clear();
                     run(owner, "numen companion gametest_dressed skin", heard);
-                    helper.assertTrue(registry.find(id).skinValue().isEmpty()
+                    Checks.assertTrue(helper, registry.find(id).skinValue().isEmpty()
                                     && CompanionLoops.get(id).orElseThrow().state().skinId() == null,
                             "the skin was not taken off: " + heard);
                     run(owner, "numen companion gametest_dressed skin server no_such_skin", heard);
-                    helper.assertTrue(heard.stream().anyMatch(m -> isKey(m, Keys.COMMAND_SKIN_FAILED)),
+                    Checks.assertTrue(helper, heard.stream().anyMatch(m -> isKey(m, Keys.COMMAND_SKIN_FAILED)),
                             "a missing file was not said: " + heard);
                     CompanionLoops.dismissed(server, id);
                     var live = com.dwinovo.numen.api.entity.NumenPlayer.findByUuid(server, id);

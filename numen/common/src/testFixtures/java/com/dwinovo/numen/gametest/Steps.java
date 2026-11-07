@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.Constants;
 import java.util.ArrayList;
 import java.util.List;
@@ -64,7 +65,7 @@ final class Steps {
                 idleFrom = now;
             }
             if (now < idleFrom + ticks) {
-                throw new GameTestAssertException("still idling");
+                throw Checks.failure("still idling");
             }
             idleFrom = -1;
         }, true));
@@ -100,7 +101,7 @@ final class Steps {
                 return;
             } catch (RuntimeException | AssertionError thrown) {
                 Constants.LOG.error("[numen-gametest] step {} ({}) threw", next + 1, step.kind(), thrown);
-                GameTestAssertException failed = new GameTestAssertException("step " + (next + 1) + " (" + step.kind()
+                GameTestAssertException failed = Checks.failure("step " + (next + 1) + " (" + step.kind()
                         + ") threw " + thrown);
                 failed.initCause(thrown);
                 failure = failed;

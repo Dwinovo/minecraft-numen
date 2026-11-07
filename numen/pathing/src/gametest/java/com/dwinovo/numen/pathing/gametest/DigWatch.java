@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.entity.Mouse;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -8,7 +9,6 @@ import java.util.Map;
 
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
@@ -107,7 +107,7 @@ final class DigWatch {
     void eachStartedOnce() {
         for (Dig d : digs.values()) {
             if (d.starts != 1) {
-                throw new GameTestAssertException("这一格开挖了 " + d.starts + " 次:" + d);
+                throw Checks.failure("这一格开挖了 " + d.starts + " 次:" + d);
             }
         }
     }

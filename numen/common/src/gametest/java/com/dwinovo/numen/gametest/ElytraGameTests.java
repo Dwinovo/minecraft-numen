@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.gametest.GameTestKit.*;
 
 import com.dwinovo.numen.api.entity.CompanionFactory;
@@ -9,8 +10,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
@@ -103,19 +104,19 @@ public class ElytraGameTests {
      * 离目标不超过 16 格加滑翔误差、一路满血。
      */
     private static void assertGlidedAndEnded(GameTestHelper helper, ToolRun glide, NumenPlayer her, float[] lowest, BlockPos target) {
-        helper.assertTrue(glide.done(), "the glide has not finished");
-        helper.assertTrue(glide.succeeded(), "she did not make it: " + glide.outcome());
+        Checks.assertTrue(helper, glide.done(), "the glide has not finished");
+        Checks.assertTrue(helper, glide.succeeded(), "she did not make it: " + glide.outcome());
         JsonObject account = account(glide);
         JsonArray glided = account.getAsJsonArray("glided");
-        helper.assertTrue(glided.size() == 1 && account.getAsJsonArray("took_off_at").size() == 1, "the account should hold one glide and one take-off: " + account);
+        Checks.assertTrue(helper, glided.size() == 1 && account.getAsJsonArray("took_off_at").size() == 1, "the account should hold one glide and one take-off: " + account);
         BlockPos landed = landedAt(glided);
         double apart = Math.hypot(landed.getX() - target.getX(), landed.getZ() - target.getZ());
-        helper.assertTrue(apart <= DESCENT + GLIDE_ERROR, "she came down " + apart + " blocks from the place, more than " + DESCENT + " + " + GLIDE_ERROR);
-        helper.assertTrue(Math.abs(account.get("distance_left").getAsDouble() - apart) <= SLIDE, "the receipt should say how far from the place she is: " + account);
-        helper.assertTrue(glide.outcome().contains("landed at") && glide.outcome().contains("blocks (horizontally) from"), glide.outcome());
-        helper.assertTrue(Math.hypot(her.getX() - landed.getX(), her.getZ() - landed.getZ()) <= SLIDE, "she walked on after landing: " + her.blockPosition().toShortString() + " vs " + landed.toShortString());
-        helper.assertTrue(!her.isFallFlying() && !her.getAbilities().flying, "she should end on the ground");
-        helper.assertTrue(lowest[0] >= 20, "she lost health on the way: " + lowest[0]);
+        Checks.assertTrue(helper, apart <= DESCENT + GLIDE_ERROR, "she came down " + apart + " blocks from the place, more than " + DESCENT + " + " + GLIDE_ERROR);
+        Checks.assertTrue(helper, Math.abs(account.get("distance_left").getAsDouble() - apart) <= SLIDE, "the receipt should say how far from the place she is: " + account);
+        Checks.assertTrue(helper, glide.outcome().contains("landed at") && glide.outcome().contains("blocks (horizontally) from"), glide.outcome());
+        Checks.assertTrue(helper, Math.hypot(her.getX() - landed.getX(), her.getZ() - landed.getZ()) <= SLIDE, "she walked on after landing: " + her.blockPosition().toShortString() + " vs " + landed.toShortString());
+        Checks.assertTrue(helper, !her.isFallFlying() && !her.getAbilities().flying, "she should end on the ground");
+        Checks.assertTrue(helper, lowest[0] >= 20, "she lost health on the way: " + lowest[0]);
     }
 
     /** 只收一列:给了带 y 的格子,按它所在的那一列处理(y 不参与);只给高度没有列,当场拒绝并说要一列。 */
@@ -130,12 +131,12 @@ public class ElytraGameTests {
         ToolRun[] glide = new ToolRun[1];
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(refused.done(), "the call has not come back"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, refused.done(), "the call has not come back"))
                 .thenExecute(() -> {
-                    helper.assertTrue(!refused.succeeded() && refused.outcome().contains("column"), "a height alone should be refused as having no column: " + refused.outcome());
+                    Checks.assertTrue(helper, !refused.succeeded() && refused.outcome().contains("column"), "a height alone should be refused as having no column: " + refused.outcome());
                     glide[0] = lua(her, "return numen.move.glide({x = " + target.getX() + ", y = 200, z = " + target.getZ() + "})");
                 })
-                .thenWaitUntil(() -> helper.assertTrue(glide[0].done(), "the glide has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, glide[0].done(), "the glide has not finished"))
                 .thenExecute(() -> {
                     assertGlidedAndEnded(helper, glide[0], her, lowest, target);
                     CompanionFactory.despawn(level.getServer(), her);
@@ -155,11 +156,11 @@ public class ElytraGameTests {
         ToolRun glide = lua(her, "return numen.move.glide(" + xyz(helper.absolutePos(new BlockPos(120, 3, MID))) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(glide.done(), "the call has not come back");
-            helper.assertTrue(!glide.succeeded() && "no_material".equals(glide.kind()), "should be refused as missing material: " + glide.outcome());
-            helper.assertTrue(glide.outcome().contains("have 4") || glide.outcome().contains("I have 4"), glide.outcome());
-            helper.assertTrue(glide.outcome().contains("at least 5") && glide.outcome().contains("numen.move.walk"), glide.outcome());
-            helper.assertTrue(her.blockPosition().equals(start), "she moved though the glide was refused");
+            Checks.assertTrue(helper, glide.done(), "the call has not come back");
+            Checks.assertTrue(helper, !glide.succeeded() && "no_material".equals(glide.kind()), "should be refused as missing material: " + glide.outcome());
+            Checks.assertTrue(helper, glide.outcome().contains("have 4") || glide.outcome().contains("I have 4"), glide.outcome());
+            Checks.assertTrue(helper, glide.outcome().contains("at least 5") && glide.outcome().contains("numen.move.walk"), glide.outcome());
+            Checks.assertTrue(helper, her.blockPosition().equals(start), "she moved though the glide was refused");
             CompanionFactory.despawn(level.getServer(), her);
         });
     }
@@ -174,9 +175,9 @@ public class ElytraGameTests {
         ToolRun glide = lua(her, "return numen.move.glide(" + xyz(helper.absolutePos(new BlockPos(120, 3, MID))) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(glide.done(), "the call has not come back");
-            helper.assertTrue(!glide.succeeded() && "no_material".equals(glide.kind()), "should be refused as missing material: " + glide.outcome());
-            helper.assertTrue(glide.outcome().contains("elytra") && glide.outcome().contains("numen.gear.wear"), glide.outcome());
+            Checks.assertTrue(helper, glide.done(), "the call has not come back");
+            Checks.assertTrue(helper, !glide.succeeded() && "no_material".equals(glide.kind()), "should be refused as missing material: " + glide.outcome());
+            Checks.assertTrue(helper, glide.outcome().contains("elytra") && glide.outcome().contains("numen.gear.wear"), glide.outcome());
             CompanionFactory.despawn(level.getServer(), her);
         });
     }
@@ -190,8 +191,8 @@ public class ElytraGameTests {
         ToolRun glide = lua(her, "return numen.move.glide(" + xyz(helper.absolutePos(new BlockPos(15, 3, MID))) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(glide.done(), "the call has not come back");
-            helper.assertTrue(!glide.succeeded() && glide.outcome().contains("numen.move.walk") && glide.outcome().contains("16 blocks"), glide.outcome());
+            Checks.assertTrue(helper, glide.done(), "the call has not come back");
+            Checks.assertTrue(helper, !glide.succeeded() && glide.outcome().contains("numen.move.walk") && glide.outcome().contains("16 blocks"), glide.outcome());
             CompanionFactory.despawn(level.getServer(), her);
         });
     }
@@ -208,9 +209,9 @@ public class ElytraGameTests {
 
         helper.onEachTick(() -> flew[0] |= her.getAbilities().flying);
         succeedWhen(helper, () -> {
-            helper.assertTrue(glide.done() && glide.succeeded(), "she did not make it: " + glide.outcome());
-            helper.assertTrue(account(glide).getAsJsonArray("glided").size() >= 1, "the account should hold a glide: " + account(glide));
-            helper.assertTrue(!flew[0] && !her.getAbilities().flying, "a glide must never use creative flight");
+            Checks.assertTrue(helper, glide.done() && glide.succeeded(), "she did not make it: " + glide.outcome());
+            Checks.assertTrue(helper, account(glide).getAsJsonArray("glided").size() >= 1, "the account should hold a glide: " + account(glide));
+            Checks.assertTrue(helper, !flew[0] && !her.getAbilities().flying, "a glide must never use creative flight");
             CompanionFactory.despawn(level.getServer(), her);
         });
     }

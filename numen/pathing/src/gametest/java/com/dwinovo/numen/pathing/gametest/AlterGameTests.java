@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.entity.Mouse;
 import static com.dwinovo.numen.pathing.gametest.Scenes.dug;
 import static com.dwinovo.numen.pathing.gametest.Scenes.placed;
@@ -16,9 +17,8 @@ import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
-import net.minecraft.gametest.framework.GameTestAssertException;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
@@ -61,7 +61,7 @@ public class AlterGameTests {
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
         t.go(body, Goals.at(t.at(14, 5, 5)), NATURAL).within(380).arrives().then(r -> {
             if (!dug(r).isEmpty() || placed(r).size() < 3) {
-                throw new GameTestAssertException("应当垫柱上去、不挖:" + r.report.ledger().entries());
+                throw Checks.failure("应当垫柱上去、不挖:" + r.report.ledger().entries());
             }
         });
     }
@@ -77,7 +77,7 @@ public class AlterGameTests {
         t.go(body, Goals.at(t.at(17, 5, 5)), NATURAL).within(413).arrives().then(r -> {
             List<EditLedger.Placed> placed = placed(r);
             if (placed.size() != 4 || placed.stream().anyMatch(p -> p.pos().getY() - t.origin.getY() != 4)) {
-                throw new GameTestAssertException("应当在台面那一层搭四格桥:" + placed);
+                throw Checks.failure("应当在台面那一层搭四格桥:" + placed);
             }
         });
     }
@@ -101,7 +101,7 @@ public class AlterGameTests {
         t.go(body, Goals.at(t.at(5, 5, 4)), NATURAL).within(203).arrives().then(r -> {
             List<EditLedger.Placed> placed = placed(r);
             if (placed.size() != 1 || !placed.get(0).pos().equals(t.at(5, 4, 4))) {
-                throw new GameTestAssertException("应当只在桥位放一块:" + placed);
+                throw Checks.failure("应当只在桥位放一块:" + placed);
             }
         });
     }
@@ -114,7 +114,7 @@ public class AlterGameTests {
         TestBody body = t.body(5, 5, 5);
         t.go(body, Goals.at(t.at(5, 1, 5)), NATURAL).within(440).arrives().then(r -> {
             if (dug(r).size() < 4) {
-                throw new GameTestAssertException("应当挖下去四格:" + dug(r));
+                throw Checks.failure("应当挖下去四格:" + dug(r));
             }
         });
     }
@@ -131,10 +131,10 @@ public class AlterGameTests {
         TestBody body = t.body(5, 5, 5);
         t.go(body, Goals.at(t.at(5, 1, 5)), NATURAL).within(440).arrives().then(r -> {
             if (dug(r).size() < 5 || !dug(r).get(0).pos().equals(t.at(5, 5, 5))) {
-                throw new GameTestAssertException("应当先打掉脚下那株草再往下挖四格:" + dug(r));
+                throw Checks.failure("应当先打掉脚下那株草再往下挖四格:" + dug(r));
             }
             if (r.report.journal().blockages() > 0) {
-                throw new GameTestAssertException("被脚下的草挡着走不通:" + r.report.journal().replans());
+                throw Checks.failure("被脚下的草挡着走不通:" + r.report.journal().replans());
             }
         });
     }
@@ -156,10 +156,10 @@ public class AlterGameTests {
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
         t.go(body, Goals.at(t.at(8, 3, 5)), NATURAL).within(590).arrives().then(r -> {
             if (placed(r).isEmpty() || dug(r).size() < 3) {
-                throw new GameTestAssertException("应当先垫后挖:放 " + placed(r) + ",挖 " + dug(r));
+                throw Checks.failure("应当先垫后挖:放 " + placed(r) + ",挖 " + dug(r));
             }
             if (r.report.journal().blockages() > 0) {
-                throw new GameTestAssertException("垫完紧接着往下挖走不通:" + r.report.journal().replans());
+                throw Checks.failure("垫完紧接着往下挖走不通:" + r.report.journal().replans());
             }
         });
     }
@@ -193,7 +193,7 @@ public class AlterGameTests {
         t.go(body, Goals.at(t.at(12, 1, 5)), ANY).within(278).arrives().then(r -> {
             List<EditLedger.Placed> placed = placed(r);
             if (placed.size() != 1 || placed.get(0).pos().getY() != snowRow.getY() || !placed.get(0).before().is(Blocks.SNOW)) {
-                throw new GameTestAssertException("应当把块放进薄雪那一格:" + placed);
+                throw Checks.failure("应当把块放进薄雪那一格:" + placed);
             }
         });
     }
@@ -223,10 +223,10 @@ public class AlterGameTests {
         });
         t.go(body, Goals.at(t.at(11, 1, 5)), NATURAL).within(1100).arrives().then(r -> {
             if (dug(r).size() < 16) {
-                throw new GameTestAssertException("应当挖一条隧道过去:" + dug(r));
+                throw Checks.failure("应当挖一条隧道过去:" + dug(r));
             }
             if (!violations.isEmpty()) {
-                throw new GameTestAssertException("挖掉了唯一托着身体的那一格:" + violations);
+                throw Checks.failure("挖掉了唯一托着身体的那一格:" + violations);
             }
         });
     }

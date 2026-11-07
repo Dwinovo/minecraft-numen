@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.gametest.GameTestKit.*;
 
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
@@ -9,8 +10,8 @@ import com.dwinovo.numen.api.entity.NumenPlayer;
 
 import java.util.List;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.FluidTags;
@@ -93,11 +94,11 @@ public class FloatGameTests {
             }
         });
         succeedWhen(helper, () -> {
-            helper.assertTrue(ticks[0] >= 580, "still idling");
-            helper.assertTrue(wait == null || !wait.done(), "the wait ended before the 30 seconds were up");
-            helper.assertTrue(!headUnder[0], "her head went under water while idle at the surface");
-            helper.assertTrue(lowest[0] > topY - 1.5, "she sank: lowest y " + lowest[0] + " vs the top water cell at " + topY);
-            helper.assertTrue(reflexes(level, companion).isEmpty(),
+            Checks.assertTrue(helper, ticks[0] >= 580, "still idling");
+            Checks.assertTrue(helper, wait == null || !wait.done(), "the wait ended before the 30 seconds were up");
+            Checks.assertTrue(helper, !headUnder[0], "her head went under water while idle at the surface");
+            Checks.assertTrue(helper, lowest[0] > topY - 1.5, "she sank: lowest y " + lowest[0] + " vs the top water cell at " + topY);
+            Checks.assertTrue(helper, reflexes(level, companion).isEmpty(),
                     "floating said something: " + reflexes(level, companion));
             finish(level, companion);
         });
@@ -127,16 +128,16 @@ public class FloatGameTests {
             }
         });
         succeedWhen(helper, () -> {
-            helper.assertTrue(ticks[0] >= 800, "still waiting");
-            helper.assertTrue(!rose[0], "she was pulled up while idle under water within the first 5 seconds");
+            Checks.assertTrue(helper, ticks[0] >= 800, "still waiting");
+            Checks.assertTrue(helper, !rose[0], "she was pulled up while idle under water within the first 5 seconds");
             List<EventQueue.Entry> told = reflexes(level, companion);
-            helper.assertTrue(told.size() == 1, "expected exactly one breath event, got " + told);
-            helper.assertTrue(!told.get(0).urgent() && told.get(0).text().contains("reflex=\"breath\"")
+            Checks.assertTrue(helper, told.size() == 1, "expected exactly one breath event, got " + told);
+            Checks.assertTrue(helper, !told.get(0).urgent() && told.get(0).text().contains("reflex=\"breath\"")
                             && told.get(0).text().contains("idle under water"),
                     "the breath event is not the calm idle one: " + told.get(0));
-            helper.assertTrue(!companion.isEyeInFluid(FluidTags.WATER), "she did not come up for air");
-            helper.assertTrue(companion.getAirSupply() >= companion.getMaxAirSupply(), "she did not get her air back");
-            helper.assertTrue(companion.getHealth() >= companion.getMaxHealth(), "she got hurt");
+            Checks.assertTrue(helper, !companion.isEyeInFluid(FluidTags.WATER), "she did not come up for air");
+            Checks.assertTrue(helper, companion.getAirSupply() >= companion.getMaxAirSupply(), "she did not get her air back");
+            Checks.assertTrue(helper, companion.getHealth() >= companion.getMaxHealth(), "she got hurt");
             finish(level, companion);
         });
     }
@@ -161,17 +162,17 @@ public class FloatGameTests {
                 dig[0] = lua(companion, "numen.work.dig({" + String.join(", ",
                         cells.stream().map(c -> xyz(helper.absolutePos(c))).toList()) + "})");
             }
-            helper.assertTrue(dig[0].done(), "work dig has not finished");
-            helper.assertTrue(dig[0].succeeded(), "the underwater dig did not succeed: " + dig[0].outcome());
+            Checks.assertTrue(helper, dig[0].done(), "work dig has not finished");
+            Checks.assertTrue(helper, dig[0].succeeded(), "the underwater dig did not succeed: " + dig[0].outcome());
             for (BlockPos cell : cells) {
-                helper.assertTrue(!level.getBlockState(helper.absolutePos(cell)).is(Blocks.CLAY), "clay left at " + cell);
+                Checks.assertTrue(helper, !level.getBlockState(helper.absolutePos(cell)).is(Blocks.CLAY), "clay left at " + cell);
             }
             List<EventQueue.Entry> told = reflexes(level, companion);
-            helper.assertTrue(told.size() == 1, "expected exactly one breath event, got " + told);
-            helper.assertTrue(!told.get(0).urgent() && told.get(0).text().contains("I paused")
+            Checks.assertTrue(helper, told.size() == 1, "expected exactly one breath event, got " + told);
+            Checks.assertTrue(helper, !told.get(0).urgent() && told.get(0).text().contains("I paused")
                             && told.get(0).text().contains("carries on once my air is back"),
                     "the breath event does not say what it interrupted: " + told.get(0));
-            helper.assertTrue(companion.getHealth() >= companion.getMaxHealth(), "she got hurt");
+            Checks.assertTrue(helper, companion.getHealth() >= companion.getMaxHealth(), "she got hurt");
             finish(level, companion);
         });
     }
@@ -194,13 +195,13 @@ public class FloatGameTests {
             }
         });
         succeedWhen(helper, () -> {
-            helper.assertTrue(raisedAt[0] >= 0 && ticks[0] >= raisedAt[0] + 100, "no alarm yet (tick " + ticks[0] + ")");
+            Checks.assertTrue(helper, raisedAt[0] >= 0 && ticks[0] >= raisedAt[0] + 100, "no alarm yet (tick " + ticks[0] + ")");
             List<EventQueue.Entry> told = reflexes(level, companion);
-            helper.assertTrue(told.size() == 1, "expected exactly one alarm, got " + told);
-            helper.assertTrue(told.get(0).urgent() && told.get(0).text().contains("reflex=\"breath\"")
+            Checks.assertTrue(helper, told.size() == 1, "expected exactly one alarm, got " + told);
+            Checks.assertTrue(helper, told.get(0).urgent() && told.get(0).text().contains("reflex=\"breath\"")
                             && told.get(0).text().contains("sealed ceiling"),
                     "the alarm is not the urgent sealed-ceiling one: " + told.get(0));
-            helper.assertTrue(companion.getHealth() >= companion.getMaxHealth(), "she drowned before the alarm helped");
+            Checks.assertTrue(helper, companion.getHealth() >= companion.getMaxHealth(), "she drowned before the alarm helped");
             finish(level, companion);
         });
     }

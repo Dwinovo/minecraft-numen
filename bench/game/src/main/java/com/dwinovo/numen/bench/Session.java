@@ -1,11 +1,11 @@
 package com.dwinovo.numen.bench;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.bench.report.EndReason;
 import com.dwinovo.numen.bench.report.Run;
 import com.dwinovo.numen.bench.report.Summary;
 import com.dwinovo.numen.bench.report.Variant;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 
@@ -75,12 +75,12 @@ final class Session {
         helper.startSequence()
                 .thenWaitUntil(() -> {
                     if (!step()) {
-                        throw new GameTestAssertException("评测进行中");
+                        throw Checks.failure("评测进行中");
                     }
                 })
                 .thenExecute(() -> {
                     if (!problems.isEmpty()) {
-                        throw new GameTestAssertException(String.join(";", problems));
+                        throw Checks.failure(String.join(";", problems));
                     }
                 })
                 .thenSucceed();

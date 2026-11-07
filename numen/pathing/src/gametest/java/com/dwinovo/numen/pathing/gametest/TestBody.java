@@ -69,10 +69,10 @@ final class TestBody extends ServerPlayer implements Body {
         ServerGamePacketListenerImpl listener = new ServerGamePacketListenerImpl(server, body.wire, body, CommonListenerCookie.createInitial(profile, false));
         // 连接认得这个监听器(原版放玩家进来时也这么设):断开时才会通知它,挂在连接上的东西才跟着收场
         body.wire.setupInboundProtocol(
-                GameProtocols.SERVERBOUND_TEMPLATE.bind(RegistryFriendlyByteBuf.decorator(server.registryAccess())), listener);
+                GameProtocols.SERVERBOUND_TEMPLATE.bind(RegistryFriendlyByteBuf.decorator(server.registryAccess()), listener), listener);
         // 没有客户端要加载世界:当场报"加载好了"(1.21.2 起服务端在这之前不收动作包、玩家也不受伤)
         listener.handleAcceptPlayerLoad(new ServerboundPlayerLoadedPacket());
-        body.moveTo(x, y, z, 0, 0);
+        body.snapTo(x, y, z, 0, 0);
         server.getPlayerList().broadcastAll(
                 new ClientboundPlayerInfoUpdatePacket(EnumSet.of(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER), List.of(body)));
         level.addNewPlayer(body);

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.gametest.GameTestKit.*;
 
 import com.dwinovo.numen.Constants;
@@ -18,8 +19,8 @@ import java.util.Locale;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
@@ -251,15 +252,15 @@ public class DetourGameTests {
         probe.walk = walk;
         helper.onEachTick(probe::sample);
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "move to has not finished");
+            Checks.assertTrue(helper, walk.done(), "move to has not finished");
             probe.summarise(walk);
             if (mustArrive) {
-                helper.assertTrue(walk.succeeded(), "she did not get there: " + walk.outcome());
+                Checks.assertTrue(helper, walk.succeeded(), "she did not get there: " + walk.outcome());
             }
             // 一趟走到时限还没到:回执说走了多久、停在哪、最近处被什么挡住(回执在放手之前拼,读得到这一趟的寻路)
             String said = walk.outcome();
             if (said.startsWith("timed out")) {
-                helper.assertTrue(said.startsWith("timed out after ") && !said.contains("progress had stopped")
+                Checks.assertTrue(helper, said.startsWith("timed out after ") && !said.contains("progress had stopped")
                                 && said.contains("nearest to the target"),
                         "the timeout receipt does not say what blocked the nearest approach: " + said);
             }

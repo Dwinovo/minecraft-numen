@@ -34,6 +34,11 @@ public final class PaperGameTestWorld implements GameTestWorld {
         rule.set(value, level);
     }
 
+    @Override
+    public void setRule(ServerLevel level, GameRules.IntegerValue rule, int value) {
+        rule.set(value, level);
+    }
+
     /**
      * Paper 的接纳先把异步任务排进调度器,要等调度器的心跳才交给线程池,心跳是每刻开头做的一件事;用例在一刻的中间等,
      * 所以这里自己推心跳(此刻调度器没有在跑任务,不会重入),再把排给主线程的任务做完(答复正是其中之一)。

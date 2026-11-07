@@ -1,10 +1,11 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
@@ -33,7 +34,7 @@ public class ItemComponentsGameTests {
     /** 背包里所有潜影盒物品里的钻石数。 */
     private static int diamondsInBoxes(NumenPlayer companion) {
         int n = 0;
-        for (ItemStack stack : companion.getInventory().items) {
+        for (ItemStack stack : companion.getInventory().getNonEquipmentItems()) {
             if (stack.is(Items.SHULKER_BOX)) {
                 n += stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).stream()
                         .filter(s -> s.is(Items.DIAMOND)).mapToInt(ItemStack::getCount).sum();
@@ -87,11 +88,11 @@ public class ItemComponentsGameTests {
         ToolRun place = lua(companion, "numen.use.block(" + xyz(floor) + ", {item = \"minecraft:shulker_box\"})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(place.done() && place.succeeded(), "use.block did not succeed: " + place.outcome());
-            helper.assertTrue(level.getBlockState(placedAt).is(Blocks.SHULKER_BOX), "no shulker box was placed");
-            helper.assertTrue(boxesCarried(companion) == 1, "she should carry one box now, has " + boxesCarried(companion));
+            Checks.assertTrue(helper, place.done() && place.succeeded(), "use.block did not succeed: " + place.outcome());
+            Checks.assertTrue(helper, level.getBlockState(placedAt).is(Blocks.SHULKER_BOX), "no shulker box was placed");
+            Checks.assertTrue(helper, boxesCarried(companion) == 1, "she should carry one box now, has " + boxesCarried(companion));
             int total = diamondsPlaced(level, placedAt) + diamondsInBoxes(companion);
-            helper.assertTrue(total == DIAMONDS, "diamonds lost: placed box holds " + diamondsPlaced(level, placedAt)
+            Checks.assertTrue(helper, total == DIAMONDS, "diamonds lost: placed box holds " + diamondsPlaced(level, placedAt)
                     + ", carried boxes hold " + diamondsInBoxes(companion) + " (of " + DIAMONDS + ")");
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -130,11 +131,11 @@ public class ItemComponentsGameTests {
                 "numen.build.place({{name = \"" + block + "\", pos = " + xyz(placedAt) + "}})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(place.done() && place.succeeded(), "build.place did not succeed: " + place.outcome());
-            helper.assertTrue(level.getBlockState(placedAt).is(Blocks.SHULKER_BOX), "no shulker box was placed");
-            helper.assertTrue(boxesCarried(companion) == 1, "she should carry one box now, has " + boxesCarried(companion));
+            Checks.assertTrue(helper, place.done() && place.succeeded(), "build.place did not succeed: " + place.outcome());
+            Checks.assertTrue(helper, level.getBlockState(placedAt).is(Blocks.SHULKER_BOX), "no shulker box was placed");
+            Checks.assertTrue(helper, boxesCarried(companion) == 1, "she should carry one box now, has " + boxesCarried(companion));
             int total = diamondsPlaced(level, placedAt) + diamondsInBoxes(companion);
-            helper.assertTrue(total == DIAMONDS, "diamonds lost: placed box holds " + diamondsPlaced(level, placedAt)
+            Checks.assertTrue(helper, total == DIAMONDS, "diamonds lost: placed box holds " + diamondsPlaced(level, placedAt)
                     + ", carried boxes hold " + diamondsInBoxes(companion) + " (of " + DIAMONDS + ")");
             CompanionFactory.despawn(level.getServer(), companion);
         });

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 import static com.dwinovo.numen.pathing.gametest.Trial.LONG;
 import static com.dwinovo.numen.pathing.gametest.Trial.TALL;
@@ -14,10 +15,9 @@ import com.mojang.logging.LogUtils;
 
 import org.slf4j.Logger;
 
-import net.minecraft.gametest.framework.AfterBatch;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
-import net.minecraft.gametest.framework.GameTestAssertException;
+import com.dwinovo.numen.api.gametest.AfterBatch;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
@@ -118,7 +118,7 @@ public class UpDownGameTests {
         t.go(beforeLava, Goals.at(t.at(6, 1, 32)), RouteSpec.defaults())
                 .during(r -> {
                     if (r.body.getX() >= lava.getX() - 0.3 + 0.01 && Math.abs(r.body.getZ() - lava.getZ() - 0.5) < 2) {
-                        throw new GameTestAssertException("冲过了头,身体到了岩浆坑上方");
+                        throw Checks.failure("冲过了头,身体到了岩浆坑上方");
                     }
                 })
                 .arrives().then(UpDownGameTests::unhurt);
@@ -141,7 +141,7 @@ public class UpDownGameTests {
                 .during(r -> {
                     double x = r.body.getX();
                     if (x < farthest[0] - 0.05 && x - t.origin.getX() < 18) {
-                        throw new GameTestAssertException("往回走了:到过 x=" + (farthest[0] - t.origin.getX()) + ",此刻 " + (x - t.origin.getX()));
+                        throw Checks.failure("往回走了:到过 x=" + (farthest[0] - t.origin.getX()) + ",此刻 " + (x - t.origin.getX()));
                     }
                     farthest[0] = Math.max(farthest[0], x);
                 })
@@ -196,7 +196,7 @@ public class UpDownGameTests {
                     })
                     .arrives().then(UpDownGameTests::unhurt).then(r -> {
                         if (lateral[0] >= 0.5) {
-                            throw new GameTestAssertException("偏离了台阶的中心线 " + lateral[0]);
+                            throw Checks.failure("偏离了台阶的中心线 " + lateral[0]);
                         }
                         LOG.info("[hanging-stairs] {} {}: {} ticks, sprint {} ticks, max lateral {}", up ? "up" : "down", lane[1], r.ticks,
                                 sprinting[0], String.format("%.3f", lateral[0]));
@@ -225,7 +225,7 @@ public class UpDownGameTests {
         Trial t = new Trial(helper).floor();
         t.fill(8, 1, 2, 14, 2, 8, Blocks.STONE);
         TestBody body = t.body(6, 1, 5);
-        body.moveTo(body.getX() + 0.35, body.getY(), body.getZ(), -90, 0);
+        body.snapTo(body.getX() + 0.35, body.getY(), body.getZ(), -90, 0);
         Trial.give(body, new ItemStack(Items.COBBLESTONE, 16));
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
         t.go(body, Goals.at(t.at(10, 3, 5)), RouteSpec.defaults().edit().changes(true).consent(false).build())
@@ -262,12 +262,12 @@ public class UpDownGameTests {
         t.go(stone, Goals.at(t.at(8, 1, 4)), spec).within(266)
                 .fails(com.dwinovo.numen.pathing.api.Outcome.NeedsChanges.class).then(r -> {
                     if (r.lowestHealth < 8) {
-                        throw new GameTestAssertException("落在石头上摔不起,却摔了下去:最低 " + r.lowestHealth);
+                        throw Checks.failure("落在石头上摔不起,却摔了下去:最低 " + r.lowestHealth);
                     }
                 });
         t.go(hay, Goals.at(t.at(27, 1, 4)), spec).within(266).arrives().then(r -> {
             if (r.lowestHealth != 7) {
-                throw new GameTestAssertException("落在干草块上应当只掉 1 点血:最低 " + r.lowestHealth);
+                throw Checks.failure("落在干草块上应当只掉 1 点血:最低 " + r.lowestHealth);
             }
         });
     }
@@ -292,10 +292,10 @@ public class UpDownGameTests {
             boolean scooped = entries.stream().anyMatch(e -> e instanceof com.dwinovo.numen.pathing.drive.EditLedger.Placed p
                     && p.before().is(Blocks.WATER) && p.after().isAir());
             if (!poured || !scooped) {
-                throw new GameTestAssertException("水没倒下或没收回:" + entries);
+                throw Checks.failure("水没倒下或没收回:" + entries);
             }
             if (!r.body.getInventory().contains(new ItemStack(Items.WATER_BUCKET))) {
-                throw new GameTestAssertException("水没收回桶里");
+                throw Checks.failure("水没收回桶里");
             }
         });
         // 去处就是柱脚紧挨着的那一格:水倒在去处那一格里接住自己,再收回。目标格保护不许往要站的格里放方块,倒下又当场收回的水不在其列
@@ -311,7 +311,7 @@ public class UpDownGameTests {
             boolean scooped = entries.stream().anyMatch(e -> e instanceof com.dwinovo.numen.pathing.drive.EditLedger.Placed p
                     && p.pos().equals(goal) && p.before().is(Blocks.WATER) && p.after().isAir());
             if (!poured || !scooped) {
-                throw new GameTestAssertException("水应当倒在去处那一格、再收回:" + entries);
+                throw Checks.failure("水应当倒在去处那一格、再收回:" + entries);
             }
         });
         t.fill(20, 1, 4, 22, 3, 6, Blocks.STONE);
@@ -321,7 +321,7 @@ public class UpDownGameTests {
             boolean held = r.report.actions().stream().anyMatch(a -> a instanceof com.dwinovo.numen.api.entity.BodyAction.Held h
                     && h.item() == Items.WATER_BUCKET);
             if (held) {
-                throw new GameTestAssertException("摔不疼的一跳也备了水桶");
+                throw Checks.failure("摔不疼的一跳也备了水桶");
             }
         });
     }
@@ -330,10 +330,10 @@ public class UpDownGameTests {
     private static void paced(Trial.Run r, MoveKind kind, double limit) {
         Journal.Timing timing = r.report.journal().timings().get(kind);
         if (timing == null || timing.steps() < 3) {
-            throw new GameTestAssertException("路线里没有走够几步 " + kind + ":" + r.report.journal().timings());
+            throw Checks.failure("路线里没有走够几步 " + kind + ":" + r.report.journal().timings());
         }
         if (timing.ticks() > limit * timing.estimated()) {
-            throw new GameTestAssertException(kind + " 走得比几何最短慢:实际 " + timing.ticks() + " 刻,最短 " + timing.estimated() + " 刻("
+            throw Checks.failure(kind + " 走得比几何最短慢:实际 " + timing.ticks() + " 刻,最短 " + timing.estimated() + " 刻("
                     + timing.steps() + " 步),超过 " + limit + " 倍");
         }
     }
@@ -367,7 +367,7 @@ public class UpDownGameTests {
 
     static void unhurt(Trial.Run r) {
         if (r.lowestHealth < r.body.getMaxHealth()) {
-            throw new GameTestAssertException("掉了血:最低 " + r.lowestHealth);
+            throw Checks.failure("掉了血:最低 " + r.lowestHealth);
         }
     }
 
@@ -395,12 +395,12 @@ public class UpDownGameTests {
         t.go(body, Goals.level(level), natural).within(1529)
                 .during(r -> {
                     if (r.ticks > 1 && !r.navigation.progressing()) {
-                        throw new GameTestAssertException("爬到 " + t.rel(r.body.blockPosition()) + " 时不算在推进了");
+                        throw Checks.failure("爬到 " + t.rel(r.body.blockPosition()) + " 时不算在推进了");
                     }
                 })
                 .arrives().then(r -> {
                     if (r.body.blockPosition().getY() != level) {
-                        throw new GameTestAssertException("没到那一层:" + t.rel(r.body.blockPosition()));
+                        throw Checks.failure("没到那一层:" + t.rel(r.body.blockPosition()));
                     }
                 });
     }

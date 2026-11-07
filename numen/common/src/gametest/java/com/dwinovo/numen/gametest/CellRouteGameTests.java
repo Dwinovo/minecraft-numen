@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.gametest.GameTestKit.*;
 
 import java.util.ArrayList;
@@ -9,7 +10,7 @@ import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
@@ -58,10 +59,10 @@ public class CellRouteGameTests {
         ToolRun walk = lua(companion, "numen.move.walk({" + block(near) + ", " + block(far) + "})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "numen.move.walk has not finished");
-            helper.assertTrue(walk.succeeded() && walk.outcome().contains("within 2 blocks"),
+            Checks.assertTrue(helper, walk.done(), "numen.move.walk has not finished");
+            Checks.assertTrue(helper, walk.succeeded() && walk.outcome().contains("within 2 blocks"),
                     "she did not go beside the near chest: " + walk.outcome());
-            helper.assertTrue(Math.sqrt(companion.blockPosition().distSqr(near)) <= 2
+            Checks.assertTrue(helper, Math.sqrt(companion.blockPosition().distSqr(near)) <= 2
                     && !companion.blockPosition().equals(near), "she is not beside the near chest");
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -76,13 +77,13 @@ public class CellRouteGameTests {
         ToolRun walk = lua(companion, "numen.move.walk(" + cells(pen) + ", 3)");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "numen.move.walk has not finished");
-            helper.assertTrue(walk.succeeded() && walk.outcome().contains("arrived within 3 blocks of 16 cells"),
+            Checks.assertTrue(helper, walk.done(), "numen.move.walk has not finished");
+            Checks.assertTrue(helper, walk.succeeded() && walk.outcome().contains("arrived within 3 blocks of 16 cells"),
                     "she did not stop near the cells: " + walk.outcome());
             BlockPos at = companion.blockPosition();
             double nearest = nearest(pen, at);
-            helper.assertTrue(nearest <= 3, "she stopped " + nearest + " blocks from the cells");
-            helper.assertTrue(!pen.contains(at), "near should stop at the edge, not walk in");
+            Checks.assertTrue(helper, nearest <= 3, "she stopped " + nearest + " blocks from the cells");
+            Checks.assertTrue(helper, !pen.contains(at), "near should stop at the edge, not walk in");
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }

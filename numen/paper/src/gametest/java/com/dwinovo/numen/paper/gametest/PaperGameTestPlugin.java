@@ -4,6 +4,11 @@ import com.destroystokyo.paper.event.server.ServerTickEndEvent;
 import com.dwinovo.numen.api.gametest.BackgroundSettle;
 import com.dwinovo.numen.api.gametest.GameTestOrigin;
 import com.dwinovo.numen.api.gametest.GameTestSuites;
+import com.dwinovo.numen.api.gametest.GameTestRegistration;
+import com.dwinovo.numen.api.gametest.NumenTestInstance;
+import java.lang.reflect.Field;
+import net.minecraft.core.Holder;
+import net.minecraft.core.MappedRegistry;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
@@ -18,20 +23,20 @@ import java.util.List;
 import java.util.Map;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.gametest.framework.GameTestBatch;
-import net.minecraft.gametest.framework.GameTestBatchFactory;
+import net.minecraft.gametest.framework.RetryOptions;
+import net.minecraft.gametest.framework.TestEnvironmentDefinition;
 import net.minecraft.gametest.framework.GameTestInfo;
-import net.minecraft.gametest.framework.GameTestRegistry;
+import net.minecraft.gametest.framework.GameTestInstance;
 import net.minecraft.gametest.framework.GameTestRunner;
 import net.minecraft.gametest.framework.GameTestTicker;
 import net.minecraft.gametest.framework.MultipleTestTracker;
 import net.minecraft.gametest.framework.StructureGridSpawner;
-import net.minecraft.gametest.framework.TestFunction;
+import com.dwinovo.numen.api.gametest.TestFunction;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
 import org.bukkit.craftbukkit.CraftServer;
 import org.bukkit.event.EventHandler;
@@ -44,8 +49,8 @@ import org.bukkit.plugin.java.JavaPlugin;
  * Paper 起的是普通服务端,所以这个插件做 {@code GameTestServer} 和模组加载器各做的那几件事,用例本身一个字不改:
  *
  * <ul>
- *   <li><b>登记</b>:{@link GameTestRegistry#register} 登记套件入口 {@link GameTestSuites}(与 NeoForge 的
- *       {@code RegisterGameTestsEvent} 做的是同一件事);</li>
+ *   <li><b>登记</b>:插件起来时读出选中套件的用例({@link GameTestSuites#functions}),开跑前登记进测试环境、测试实例两个注册表
+ *       (模组加载器在读数据包的注册表时做同一件事,见 {@link #register});</li>
  *   <li><b>推进</b>:不开 {@code SharedConstants.IS_RUNNING_IN_IDE}(开了会把测试用的参数类型塞进内置注册表,有 op 的客户端进服就断),
  *       所以 {@code MinecraftServer} 不推 {@link GameTestTicker},在每刻末自己推;</li>
  *   <li><b>结构模板</b>:原版只在 IDE 旗标下从 SNBT 目录读模板,这里把目录里每个用例要的模板读出来,放进结构管理器的缓存;</li>
@@ -90,7 +95,7 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
-        GameTestRegistry.register(GameTestSuites.class);
+        GameTestSuites.functions();
         getServer().getPluginManager().registerEvents(this, this);
     }
 
@@ -149,15 +154,15 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
     private void start() {
         server = ((CraftServer) getServer()).getServer();
         ServerLevel level = server.overworld();
-        List<TestFunction> functions = GameTestRegistry.getAllTestFunctions().stream().filter(f -> !f.manualOnly())
-                .map(this::capped).toList();
+        List<TestFunction> functions = GameTestSuites.functions().stream().map(this::capped).toList();
         if (functions.isEmpty()) {
             throw new IllegalStateException("没有登记任何用例,选中的套件是 \"" + System.getProperty(GameTestSuites.SELECTION) + "\"");
         }
         settle(level);
         loadTemplates(level, functions);
-        Collection<GameTestBatch> batches = GameTestBatchFactory.fromTestFunction(functions, level);
-        GameTestRunner runner = GameTestRunner.Builder.fromBatches(batches, level)
+        List<GameTestInfo> tests = register(level, functions).stream()
+                .map(test -> new GameTestInfo(test, Rotation.NONE, level, RetryOptions.noRetries())).toList();
+        GameTestRunner runner = GameTestRunner.Builder.fromInfo(tests, level)
                 .newStructureSpawner(new StructureGridSpawner(ORIGIN, GameTestRunner.DEFAULT_TESTS_PER_ROW, false))
                 .build();
         infos = runner.getTestInfos();
@@ -178,18 +183,40 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
         }
         capped.put(f.testName(), f.maxTicks());
         return new TestFunction(f.batchName(), f.testName(), f.structureName(), f.rotation(), MAX_TICKS, f.setupTicks(),
-                f.required(), f.manualOnly(), f.maxAttempts(), f.requiredSuccesses(), f.skyAccess(), f.function());
+                f.required(), f.skyAccess(), f.function());
     }
 
-    /** GameTestServer 的固定游戏规则与天气。 */
+    /** 出生点放在场地起点(与 {@code GameTestServer.startTests} 同)。世界规则与天气由每一批的测试环境定({@code NumenTestEnvironment})。 */
     private void settle(ServerLevel level) {
-        GameRules rules = level.getGameRules();
-        rules.getRule(GameRules.RULE_DOMOBSPAWNING).set(false, level);
-        rules.getRule(GameRules.RULE_WEATHER_CYCLE).set(false, level);
-        rules.getRule(GameRules.RULE_RANDOMTICKING).set(0, level);
-        rules.getRule(GameRules.RULE_DOFIRETICK).set(false, level);
         level.setDefaultSpawnPos(ORIGIN, 0.0F);
-        level.setWeatherParameters(20000000, 20000000, false, false);
+    }
+
+    /**
+     * 用例登记进测试环境、测试实例两个注册表:原版放场地时按测试实例的注册名回注册表取结构({@code TestInstanceBlockEntity}),
+     * 用例必须在表里。模组加载器在读数据包的注册表时经 Mixin 登记;Paper 没有 Mixin,插件起来时注册表已冻结,
+     * 这里解冻、经同一个 {@link GameTestRegistration} 登记、再冻上。
+     */
+    private List<Holder.Reference<GameTestInstance>> register(ServerLevel level, List<TestFunction> functions) {
+        MappedRegistry<TestEnvironmentDefinition> environments =
+                (MappedRegistry<TestEnvironmentDefinition>) level.registryAccess().lookupOrThrow(Registries.TEST_ENVIRONMENT);
+        MappedRegistry<GameTestInstance> instances =
+                (MappedRegistry<GameTestInstance>) level.registryAccess().lookupOrThrow(Registries.TEST_INSTANCE);
+        unfreeze(environments);
+        unfreeze(instances);
+        List<Holder.Reference<GameTestInstance>> registered = GameTestRegistration.register(environments, instances, functions);
+        environments.freeze();
+        instances.freeze();
+        return registered;
+    }
+
+    private static void unfreeze(MappedRegistry<?> registry) {
+        try {
+            Field frozen = MappedRegistry.class.getDeclaredField("frozen");
+            frozen.setAccessible(true);
+            frozen.setBoolean(registry, false);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("解冻不了注册表 " + registry.key(), e);
+        }
     }
 
     /**
@@ -225,12 +252,12 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
         if (tracker != null) {
             for (GameTestInfo info : infos) {
                 Map<String, Object> test = new LinkedHashMap<>();
-                test.put("name", info.getTestName());
-                test.put("batch", info.getTestFunction().batchName());
+                test.put("name", NumenTestInstance.name(info));
+                test.put("batch", ((NumenTestInstance) info.getTest()).function().batchName());
                 test.put("required", info.isRequired());
                 test.put("passed", info.hasSucceeded());
-                if (capped.containsKey(info.getTestName())) {
-                    test.put("cappedFromTicks", capped.get(info.getTestName()));
+                if (capped.containsKey(NumenTestInstance.name(info))) {
+                    test.put("cappedFromTicks", capped.get(NumenTestInstance.name(info)));
                 }
                 if (info.hasFailed()) {
                     test.put("error", String.valueOf(info.getError()));

@@ -1,14 +1,14 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 import static com.dwinovo.numen.pathing.gametest.UpDownGameTests.pool;
 
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
-import net.minecraft.gametest.framework.GameTestAssertException;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
@@ -57,7 +57,7 @@ public class FluidGameTests {
         TestBody body = t.body(3, 1, 5);
         t.go(body, Goals.at(t.at(25, 1, 5)), RouteSpec.defaults()).within(590).arrives().then(r -> {
             if (r.report.journal().blockages() > 0) {
-                throw new GameTestAssertException("游过去的路上走不通过:" + r.report.journal().replans());
+                throw Checks.failure("游过去的路上走不通过:" + r.report.journal().replans());
             }
         });
     }
@@ -83,7 +83,7 @@ public class FluidGameTests {
         t.go(body, Goals.at(t.at(14, 1, 5)), RouteSpec.defaults()).within(120)
                 .during(r -> {
                     if (r.ticks > 5 && !r.navigation.progressing()) {
-                        throw new GameTestAssertException("在水坑边停住了(第 " + r.ticks + " 刻)");
+                        throw Checks.failure("在水坑边停住了(第 " + r.ticks + " 刻)");
                     }
                 })
                 .arrives();
@@ -104,7 +104,7 @@ public class FluidGameTests {
                 .passive((before, now) -> before.is(Blocks.WATER) && now.is(Blocks.FROSTED_ICE))
                 .during(r -> {
                     if (r.body.isInWater()) {
-                        throw new GameTestAssertException("下了水");
+                        throw Checks.failure("下了水");
                     }
                 })
                 .arrives();

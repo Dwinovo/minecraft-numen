@@ -1,12 +1,13 @@
 package com.dwinovo.numen.gametest;
 
 import net.minecraft.world.entity.EntitySpawnReason;
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
@@ -42,8 +43,8 @@ public class SleepGameTests {
         ToolRun sleep = lua(companion, "numen.use.sleep()");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(sleep.done(), "use sleep has not replied");
-            helper.assertTrue(sleep.succeeded() && companion.isSleeping(),
+            Checks.assertTrue(helper, sleep.done(), "use sleep has not replied");
+            Checks.assertTrue(helper, sleep.succeeded() && companion.isSleeping(),
                     "she is not asleep: " + sleep.outcome());
             companion.stopSleeping();
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -64,7 +65,7 @@ public class SleepGameTests {
         placeBed(helper, new BlockPos(5, 2, 5));
         var zombie = net.minecraft.world.entity.EntityType.ZOMBIE.create(helper.getLevel(), EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(9, 2, 5));
-        zombie.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        zombie.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         zombie.setNoAi(true);
         helper.getLevel().addFreshEntity(zombie);
         NumenPlayer companion = spawnAt(helper, "gametest_wary", new BlockPos(4, 2, 5), false);
@@ -72,11 +73,11 @@ public class SleepGameTests {
         ToolRun sleep = lua(companion, "numen.use.sleep()");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(sleep.done(), "use sleep has not replied");
-            helper.assertTrue(!sleep.succeeded() && !companion.isSleeping()
+            Checks.assertTrue(helper, sleep.done(), "use sleep has not replied");
+            Checks.assertTrue(helper, !sleep.succeeded() && !companion.isSleeping()
                             && sleep.outcome().contains("monsters nearby") && sleep.outcome().contains("(bed at "),
                     "the reply does not say monsters are nearby, with the bed: " + sleep.outcome());
-            helper.assertTrue(companion.blockPosition().equals(start), "she walked off after the refusal");
+            Checks.assertTrue(helper, companion.blockPosition().equals(start), "she walked off after the refusal");
             zombie.discard();
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -90,9 +91,9 @@ public class SleepGameTests {
 
         Steps steps = steps(helper);
         steps = call(helper, steps, companion, "numen.use.sleep()");
-        steps = steps.thenWaitUntil(() -> helper.assertTrue(companion.isSleeping(), "she is not asleep"));
+        steps = steps.thenWaitUntil(() -> Checks.assertTrue(helper, companion.isSleeping(), "she is not asleep"));
         steps = call(helper, steps, companion, "numen.use.wake()");
-        steps.thenWaitUntil(() -> helper.assertTrue(!companion.isSleeping(), "she is still asleep"))
+        steps.thenWaitUntil(() -> Checks.assertTrue(helper, !companion.isSleeping(), "she is still asleep"))
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();
     }
 }

@@ -1,6 +1,7 @@
 package com.dwinovo.numen.pathing.gametest;
 
 import net.minecraft.world.entity.EntitySpawnReason;
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
 import com.dwinovo.numen.pathing.api.Outcome;
@@ -9,9 +10,8 @@ import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
-import net.minecraft.gametest.framework.GameTestAssertException;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
@@ -44,7 +44,7 @@ public class TerminationGameTests {
         BlockPos at = t.at(x, y, z);
         shulker.setNoAi(true);
         shulker.setInvulnerable(true);
-        shulker.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
+        shulker.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
         t.level.addFreshEntity(shulker);
     }
 
@@ -63,15 +63,15 @@ public class TerminationGameTests {
         t.go(body, Goals.at(t.at(17, 1, 5)), RouteSpec.defaults()).within(437)
                 .fails(Outcome.Blocked.class, blocked -> {
                     if (blocked.blockage().hitch() == null) {
-                        throw new GameTestAssertException("该是执行里卡住,却是前提不成立:" + blocked.blockage());
+                        throw Checks.failure("该是执行里卡住,却是前提不成立:" + blocked.blockage());
                     }
                 })
                 .then(r -> {
                     if (r.report.journal().replans(Journal.Replan.TIMEOUT) < 1) {
-                        throw new GameTestAssertException("没有被看护判成卡住:" + r.report.journal().replans());
+                        throw Checks.failure("没有被看护判成卡住:" + r.report.journal().replans());
                     }
                     if (r.report.journal().blockages() < 1) {
-                        throw new GameTestAssertException("卡住的这一步没有记为不通:" + r.report.journal().blockages());
+                        throw Checks.failure("卡住的这一步没有记为不通:" + r.report.journal().blockages());
                     }
                 });
     }
@@ -95,13 +95,13 @@ public class TerminationGameTests {
                 .fails(Outcome.class, outcome -> {
                     if (!(outcome instanceof Outcome.Blocked) && !(outcome instanceof Outcome.OutOfBudget)
                             && !(outcome instanceof Outcome.NoRoute)) {
-                        throw new GameTestAssertException("该照实说过不去,却是 " + outcome);
+                        throw Checks.failure("该照实说过不去,却是 " + outcome);
                     }
                 })
                 .then(r -> {
                     int stuck = r.report.journal().replans(Journal.Replan.TIMEOUT);
                     if (stuck < 1 || stuck > 12 + 2) {
-                        throw new GameTestAssertException("卡住的次数 " + stuck + ",墙上只有十二格");
+                        throw Checks.failure("卡住的次数 " + stuck + ",墙上只有十二格");
                     }
                 });
     }
@@ -123,7 +123,7 @@ public class TerminationGameTests {
         t.go(body, Goals.at(t.at(24, 5, 5)), CHANGES).within(340)
                 .fails(Outcome.NoMaterials.class, n -> {
                     if (n.needed() <= 0) {
-                        throw new GameTestAssertException("该说还缺几块,却是 " + n.needed());
+                        throw Checks.failure("该说还缺几块,却是 " + n.needed());
                     }
                 });
     }

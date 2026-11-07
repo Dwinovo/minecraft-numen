@@ -1,14 +1,15 @@
 package com.dwinovo.numen.gametest;
 
 import net.minecraft.world.entity.EntitySpawnReason;
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.util.List;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
@@ -55,11 +56,11 @@ public class PerceptionGameTests {
         succeedWhen(helper, () -> {
             JsonObject n = json(atNear);
             JsonObject f = json(atFar);
-            helper.assertTrue(n.get("name").getAsString().equals("minecraft:stone") && n.get("in_reach").getAsBoolean(),
+            Checks.assertTrue(helper, n.get("name").getAsString().equals("minecraft:stone") && n.get("in_reach").getAsBoolean(),
                     "the stone beside her is not reported as stone within reach: " + atNear.reply());
-            helper.assertTrue(!f.get("in_reach").getAsBoolean(),
+            Checks.assertTrue(helper, !f.get("in_reach").getAsBoolean(),
                     "the stone across the site is reported within reach: " + atFar.reply());
-            helper.assertTrue(atNear.reply().equals(viaCommand.reply()),
+            Checks.assertTrue(helper, atNear.reply().equals(viaCommand.reply()),
                     "scan_block and scan block read differently: " + atNear.reply() + " / " + viaCommand.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -73,14 +74,14 @@ public class PerceptionGameTests {
         ToolRun storage = lua(companion, "numen.scan.container({x = " + chest.getX() + ", y = " + chest.getY() + ", z = " + chest.getZ() + "})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(storage.succeeded(), "reading the chest failed: " + storage.reply());
+            Checks.assertTrue(helper, storage.succeeded(), "reading the chest failed: " + storage.reply());
             String reply = storage.reply();
-            helper.assertTrue(reply.contains("(sides: all,down,up,north,south,west,east)"),
+            Checks.assertTrue(helper, reply.contains("(sides: all,down,up,north,south,west,east)"),
                     "the chest is not one storage exposed on every side: " + reply);
-            helper.assertTrue(!reply.contains("items #"), "the chest is listed more than once: " + reply);
-            helper.assertTrue(reply.contains("diamond") && reply.contains("5"),
+            Checks.assertTrue(helper, !reply.contains("items #"), "the chest is listed more than once: " + reply);
+            Checks.assertTrue(helper, reply.contains("diamond") && reply.contains("5"),
                     "the chest's diamonds are not in the reply: " + reply);
-            helper.assertTrue(companion.containerMenu == companion.inventoryMenu, "reading the chest opened it");
+            Checks.assertTrue(helper, companion.containerMenu == companion.inventoryMenu, "reading the chest opened it");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -101,17 +102,17 @@ public class PerceptionGameTests {
         java.util.concurrent.atomic.AtomicReference<ToolRun> viaCommand = new java.util.concurrent.atomic.AtomicReference<>();
         // 图以她脚下那一格为中心,落地之前那一格还没定
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(companion.onGround(), "she has not landed"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, companion.onGround(), "she has not landed"))
                 .thenExecute(() -> {
                     map.set(lua(companion, "numen.scan.map()"));
                     viaCommand.set(lua(companion, "numen.scan.map()"));
                 })
                 .thenWaitUntil(() -> {
                     String m = rows(map.get());
-                    helper.assertTrue(cell(m, 2, 0) == '#', "the wall two east is not #: \n" + m);
-                    helper.assertTrue(cell(m, 0, -2) == '^', "the step two north is not ^: \n" + m);
-                    helper.assertTrue(cell(m, -2, 0) == '~', "the water two west is not ~: \n" + m);
-                    helper.assertTrue(m.equals(rows(viaCommand.get())),
+                    Checks.assertTrue(helper, cell(m, 2, 0) == '#', "the wall two east is not #: \n" + m);
+                    Checks.assertTrue(helper, cell(m, 0, -2) == '^', "the step two north is not ^: \n" + m);
+                    Checks.assertTrue(helper, cell(m, -2, 0) == '~', "the water two west is not ~: \n" + m);
+                    Checks.assertTrue(helper, m.equals(rows(viaCommand.get())),
                             "two numen.scan.map calls draw differently: \n" + m + "\n" + viaCommand.get().reply());
                 })
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
@@ -123,7 +124,7 @@ public class PerceptionGameTests {
     public static void scan_nearby_entities_lists_a_pig_and_filters_by_kind(GameTestHelper helper) {
         Pig pig = EntityType.PIG.create(helper.getLevel(), EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(8, 2, 3));
-        pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        pig.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pig.setNoAi(true);
         helper.getLevel().addFreshEntity(pig);
         NumenPlayer companion = spawnAt(helper, "gametest_watcher", new BlockPos(3, 2, 3), false);
@@ -132,11 +133,11 @@ public class PerceptionGameTests {
         ToolRun viaCommand = lua(companion, "numen.scan.entities(\"all\", {radius = 12})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(listsEntity(all, pig) && all.reply().contains("pig"),
+            Checks.assertTrue(helper, listsEntity(all, pig) && all.reply().contains("pig"),
                     "the pig is not listed with its id: " + all.reply());
-            helper.assertTrue(!listsEntity(hostile, pig),
+            Checks.assertTrue(helper, !listsEntity(hostile, pig),
                     "the pig is listed as hostile: " + hostile.reply());
-            helper.assertTrue(all.reply().equals(viaCommand.reply()),
+            Checks.assertTrue(helper, all.reply().equals(viaCommand.reply()),
                     "scan_entities and scan entities list differently: " + all.reply() + " / "
                             + viaCommand.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -169,27 +170,27 @@ public class PerceptionGameTests {
         hers.tame(companion);
         var owners = InteractGameTests.wolfAt(helper, new BlockPos(3, 2, 6));
         owners.setTame(true, true);
-        owners.setOwnerUUID(companion.getOwnerUuid());
+        owners.setOwnerReference(new net.minecraft.world.entity.EntityReference<>(companion.getOwnerUuid()));
         var strangers = InteractGameTests.wolfAt(helper, new BlockPos(6, 2, 6));
         java.util.UUID stranger = java.util.UUID.randomUUID();
         strangers.setTame(true, true);
-        strangers.setOwnerUUID(stranger);
+        strangers.setOwnerReference(new net.minecraft.world.entity.EntityReference<>(stranger));
         var wild = InteractGameTests.wolfAt(helper, new BlockPos(1, 2, 1));
         ToolRun scan = lua(companion, "numen.scan.entities(\"passive\", {radius = 8})");
 
         succeedWhen(helper, () -> {
             var rows = java.util.stream.Stream.of(hers, owners, strangers, wild).map(w -> rowOf(scan, w)).toList();
-            helper.assertTrue(rows.stream().allMatch(java.util.Objects::nonNull),
+            Checks.assertTrue(helper, rows.stream().allMatch(java.util.Objects::nonNull),
                     "not every wolf is listed: " + scan.reply());
-            helper.assertTrue(rows.get(0).has("owner") && rows.get(0).get("owner").getAsString().equals("you"),
+            Checks.assertTrue(helper, rows.get(0).has("owner") && rows.get(0).get("owner").getAsString().equals("you"),
                     "her own wolf is not marked as hers: " + rows.get(0));
-            helper.assertTrue(rows.get(1).has("owner")
+            Checks.assertTrue(helper, rows.get(1).has("owner")
                             && rows.get(1).get("owner").getAsString().equals("your owner"),
                     "her owner's wolf is not marked as his: " + rows.get(1));
-            helper.assertTrue(rows.get(2).has("owner")
+            Checks.assertTrue(helper, rows.get(2).has("owner")
                             && rows.get(2).get("owner").getAsString().equals("player@" + com.dwinovo.numen.api.sdk.EntityLabel.code(stranger)),
                     "a stranger's wolf does not name its owner: " + rows.get(2));
-            helper.assertTrue(!rows.get(3).has("owner"), "a wild wolf is marked as someone's: " + rows.get(3));
+            Checks.assertTrue(helper, !rows.get(3).has("owner"), "a wild wolf is marked as someone's: " + rows.get(3));
             java.util.stream.Stream.of(hers, owners, strangers, wild).forEach(net.minecraft.world.entity.Entity::discard);
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -209,16 +210,16 @@ public class PerceptionGameTests {
 
         succeedWhen(helper, () -> {
             JsonObject s = json(status);
-            helper.assertTrue(s.get("hands").toString().contains("minecraft:iron_sword"),
+            Checks.assertTrue(helper, s.get("hands").toString().contains("minecraft:iron_sword"),
                     "the sword in her hand is not reported: " + status.reply());
-            helper.assertTrue(s.getAsJsonObject("backpack_slots").get("used").getAsInt() == 2,
+            Checks.assertTrue(helper, s.getAsJsonObject("backpack_slots").get("used").getAsInt() == 2,
                     "the backpack does not count two used slots: " + status.reply());
-            helper.assertTrue(s.get("hp").getAsFloat() == companion.getHealth(), "hp is not her health");
-            helper.assertTrue(s.get("body_state").getAsString().startsWith("<worn>head: empty; chest: empty; legs: empty; feet: empty"),
+            Checks.assertTrue(helper, s.get("hp").getAsFloat() == companion.getHealth(), "hp is not her health");
+            Checks.assertTrue(helper, s.get("body_state").getAsString().startsWith("<worn>head: empty; chest: empty; legs: empty; feet: empty"),
                     "body_state does not open with the worn slots: " + status.reply());
-            helper.assertTrue(!s.getAsJsonObject("hands").has("head"), "the hands report armor beside <worn>: "
+            Checks.assertTrue(helper, !s.getAsJsonObject("hands").has("head"), "the hands report armor beside <worn>: "
                     + status.reply());
-            helper.assertTrue(status.reply().equals(viaCommand.reply()),
+            Checks.assertTrue(helper, status.reply().equals(viaCommand.reply()),
                     "status_self and status self read differently: " + status.reply() + " / "
                             + viaCommand.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -233,7 +234,7 @@ public class PerceptionGameTests {
 
         succeedWhen(helper, () -> {
             JsonObject w = json(info);
-            helper.assertTrue(w.get("dimension").getAsString().equals("minecraft:overworld")
+            Checks.assertTrue(helper, w.get("dimension").getAsString().equals("minecraft:overworld")
                             && w.get("is_bright_outside").getAsBoolean()
                             && w.get("weather").getAsString().equals("clear"),
                     "the world info is not overworld, day and clear: " + info.reply());
@@ -252,13 +253,13 @@ public class PerceptionGameTests {
         ToolRun viaCommand = lua(companion, "numen.status.owner()");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(!json(absent).get("online").getAsBoolean(),
+            Checks.assertTrue(helper, !json(absent).get("online").getAsBoolean(),
                     "an absent owner is reported online: " + absent.reply());
             JsonObject p = json(present);
-            helper.assertTrue(p.get("online").getAsBoolean() && p.get("name").getAsString().equals("gametest_guardian")
+            Checks.assertTrue(helper, p.get("online").getAsBoolean() && p.get("name").getAsString().equals("gametest_guardian")
                             && p.has("distance"),
                     "the present owner is not reported with name and distance: " + present.reply());
-            helper.assertTrue(present.reply().equals(viaCommand.reply()),
+            Checks.assertTrue(helper, present.reply().equals(viaCommand.reply()),
                     "status_owner and status owner read differently: " + present.reply() + " / "
                             + viaCommand.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), alone);
@@ -272,8 +273,8 @@ public class PerceptionGameTests {
      * 不是程序交回的值,所以动词的结果要读结局里的 {@code returned}。
      */
     private static JsonObject returned(GameTestHelper helper, ToolRun run) {
-        helper.assertTrue(run.receipt() != null, "the program has not ended");
-        helper.assertTrue(run.ranToTheEnd(), "the program did not run to the end: " + run.receipt());
+        Checks.assertTrue(helper, run.receipt() != null, "the program has not ended");
+        Checks.assertTrue(helper, run.ranToTheEnd(), "the program did not run to the end: " + run.receipt());
         return run.data().getAsJsonObject("returned");
     }
 
@@ -300,12 +301,12 @@ public class PerceptionGameTests {
             java.util.Set<String> categories = new java.util.HashSet<>();
             for (var one : returned(helper, recipe).getAsJsonArray("recipes")) {
                 var r = one.getAsJsonObject();
-                helper.assertTrue(r.get("id").getAsString().contains(":")
+                Checks.assertTrue(helper, r.get("id").getAsString().contains(":")
                                 && r.get("item").getAsString().equals("minecraft:iron_ingot"),
                         "a recipe has no id or names another item: " + r);
                 categories.add(r.get("category").getAsString());
             }
-            helper.assertTrue(categories.contains("minecraft:smelting") && categories.contains("minecraft:crafting"),
+            Checks.assertTrue(helper, categories.contains("minecraft:smelting") && categories.contains("minecraft:crafting"),
                     "the recipes' categories are not both there: " + categories);
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -330,17 +331,17 @@ public class PerceptionGameTests {
 
         // 团的中心是她脚下那一格,落地之前那一格还没定
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(companion.onGround(), "she has not landed"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, companion.onGround(), "she has not landed"))
                 .thenExecute(() -> viaTool.set(lua(companion, "numen.scan.blocks(\"minecraft:gold_block\", \"#minecraft:logs\", {radius = " + 8 + "})")))
-                .thenWaitUntil(() -> helper.assertTrue(viaTool.get().reply() != null, "scan_blocks has not answered"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, viaTool.get().reply() != null, "scan_blocks has not answered"))
                 .thenExecute(() -> viaCommand.set(lua(companion, "numen.scan.blocks(\"minecraft:gold_block\", \"#minecraft:logs\", {radius = 8})")))
                 .thenWaitUntil(() -> {
                     String tool = viaTool.get().reply();
                     String line = viaCommand.get().reply();
-                    helper.assertTrue(line != null, "scan blocks has not answered");
-                    helper.assertTrue(clusterHolding(clustersIn(tool), gold) != null && clusterHolding(clustersIn(tool), log) != null,
+                    Checks.assertTrue(helper, line != null, "scan blocks has not answered");
+                    Checks.assertTrue(helper, clusterHolding(clustersIn(tool), gold) != null && clusterHolding(clustersIn(tool), log) != null,
                             "the gold block and the log are not both found: " + tool);
-                    helper.assertTrue(tool.equals(line),
+                    Checks.assertTrue(helper, tool.equals(line),
                             "scan_blocks and scan blocks find differently: " + tool + " / " + line);
                 })
                 .thenExecute(() -> {
@@ -392,9 +393,9 @@ public class PerceptionGameTests {
         ToolRun onAir = lua(companion, "numen.scan.container({x = " + air.getX() + ", y = " + air.getY() + ", z = " + air.getZ() + "})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(onStone.succeeded() && List.of().equals(onStone.field("storage")),
+            Checks.assertTrue(helper, onStone.succeeded() && List.of().equals(onStone.field("storage")),
                     "stone was not reported as holding nothing: " + onStone.reply());
-            helper.assertTrue(!onAir.succeeded() && onAir.reply().contains("is air"),
+            Checks.assertTrue(helper, !onAir.succeeded() && onAir.reply().contains("is air"),
                     "air was not reported as nothing to read: " + onAir.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -418,9 +419,9 @@ public class PerceptionGameTests {
             }
         }
         var cow = net.minecraft.world.entity.EntityType.COW.create(level, EntitySpawnReason.STRUCTURE);
-        helper.assertTrue(cow != null, "the cow did not spawn");
+        Checks.assertTrue(helper, cow != null, "the cow did not spawn");
         BlockPos pen = helper.absolutePos(new BlockPos(11, 2, 6));
-        cow.moveTo(pen.getX() + 0.5, pen.getY(), pen.getZ() + 0.5, 0.0f, 0.0f);
+        cow.snapTo(pen.getX() + 0.5, pen.getY(), pen.getZ() + 0.5, 0.0f, 0.0f);
         cow.setNoAi(true);
         level.addFreshEntity(cow);
         NumenPlayer companion = spawnAt(helper, "gametest_lookout", new BlockPos(3, 2, 7), false);
@@ -428,20 +429,20 @@ public class PerceptionGameTests {
                 + xyz(hidden) + "), cow = numen.scan.sight(" + ref(cow) + ")}");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(seen.receipt() != null, "numen.scan.sight has not answered");
-            helper.assertTrue(seen.ranToTheEnd(), "numen.scan.sight failed: " + seen.receipt());
+            Checks.assertTrue(helper, seen.receipt() != null, "numen.scan.sight has not answered");
+            Checks.assertTrue(helper, seen.ranToTheEnd(), "numen.scan.sight failed: " + seen.receipt());
             var got = seen.data().getAsJsonObject("returned");
-            helper.assertTrue(got.getAsJsonObject("open").get("visible").getAsBoolean()
+            Checks.assertTrue(helper, got.getAsJsonObject("open").get("visible").getAsBoolean()
                             && !got.getAsJsonObject("open").has("blocked_by"),
                     "the gold block right in front of her is not seen: " + got);
             for (String behind : List.of("hidden", "cow")) {
                 var one = got.getAsJsonObject(behind);
-                helper.assertTrue(!one.get("visible").getAsBoolean() && one.has("blocked_by")
+                Checks.assertTrue(helper, !one.get("visible").getAsBoolean() && one.has("blocked_by")
                                 && "minecraft:stone".equals(one.getAsJsonObject("blocked_by").get("name").getAsString())
                                 && one.getAsJsonObject("blocked_by").getAsJsonObject("pos").get("x").getAsInt() == wallX,
                         "the " + behind + " behind the wall is not reported as hidden by it: " + got);
             }
-            helper.assertTrue(level.getBlockState(hidden).is(Blocks.GOLD_BLOCK)
+            Checks.assertTrue(helper, level.getBlockState(hidden).is(Blocks.GOLD_BLOCK)
                     && level.getBlockState(helper.absolutePos(new BlockPos(8, 2, 3))).is(Blocks.STONE), "looking changed the world");
             CompanionFactory.despawn(level.getServer(), companion);
             cow.discard();
@@ -457,7 +458,7 @@ public class PerceptionGameTests {
         succeedWhen(helper, () -> {
             JsonObject whole = returned(helper, info);
             JsonObject facts = whole.getAsJsonObject("facts");
-            helper.assertTrue(facts.get("item").getAsString().equals("minecraft:golden_apple")
+            Checks.assertTrue(helper, facts.get("item").getAsString().equals("minecraft:golden_apple")
                             && facts.get("max_stack").getAsInt() == 64
                             && facts.getAsJsonObject("food").get("nutrition").getAsInt() == 4
                             && !facts.has("places"),
@@ -467,7 +468,7 @@ public class PerceptionGameTests {
                 answered |= source.getAsJsonObject().get("source").getAsString().equals("numen")
                         && source.getAsJsonObject().get("status").getAsString().equals("answered");
             }
-            helper.assertTrue(answered, "the vanilla source is not named as answering: " + whole);
+            Checks.assertTrue(helper, answered, "the vanilla source is not named as answering: " + whole);
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -504,10 +505,10 @@ public class PerceptionGameTests {
 
         succeedWhen(helper, () -> {
             var res = result.get();
-            helper.assertTrue(res != null, "the search never came back while every tick was already spent");
-            helper.assertTrue(res.matches().stream().anyMatch(h -> h.pos().equals(sponge)),
+            Checks.assertTrue(helper, res != null, "the search never came back while every tick was already spent");
+            Checks.assertTrue(helper, res.matches().stream().anyMatch(h -> h.pos().equals(sponge)),
                     "the sponge on the site was not found");
-            helper.assertTrue(res.sectionCapHit() || !res.stoppedEarly() && !res.collectCapHit(),
+            Checks.assertTrue(helper, res.sectionCapHit() || !res.stoppedEarly() && !res.collectCapHit(),
                     "the search came back without a conclusion about its coverage");
             level.removeBlock(sponge, false);
             CompanionFactory.despawn(level.getServer(), companion);
@@ -517,7 +518,7 @@ public class PerceptionGameTests {
     /**
      * 热索引的正确性不押在方块变更挂点上(有的平台没有等价的通用事件):方块被不经挂点的办法改走,
      * 下一次搜索也不会把已经不是目标的格交出来——取用索引条目时按这一格此刻的方块现读现核。
-     * 这里直接改 section 里的方块,绕开 {@code ServerLevel.onBlockStateChange}。
+     * 这里直接改 section 里的方块,绕开 {@code ServerLevel.updatePOIOnBlockStateChange}。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void a_block_search_never_returns_a_cell_that_stopped_being_the_target(GameTestHelper helper) {
@@ -537,8 +538,8 @@ public class PerceptionGameTests {
 
         succeedWhen(helper, () -> {
             var before = first.get();
-            helper.assertTrue(before != null, "the first search has not come back");
-            helper.assertTrue(before.matches().stream().anyMatch(h -> h.pos().equals(gone)),
+            Checks.assertTrue(helper, before != null, "the first search has not come back");
+            Checks.assertTrue(helper, before.matches().stream().anyMatch(h -> h.pos().equals(gone)),
                     "the first search did not see the sponge, so the index never held it");
             if (bypassed.compareAndSet(false, true)) {
                 var chunk = level.getChunkAt(gone);
@@ -548,10 +549,10 @@ public class PerceptionGameTests {
                         com.dwinovo.numen.scan.BlockSearch.MAX_COLLECT, targets, second::set);
             }
             var after = second.get();
-            helper.assertTrue(after != null, "the second search has not come back");
-            helper.assertTrue(after.matches().stream().noneMatch(h -> h.pos().equals(gone)),
+            Checks.assertTrue(helper, after != null, "the second search has not come back");
+            Checks.assertTrue(helper, after.matches().stream().noneMatch(h -> h.pos().equals(gone)),
                     "the search returned a cell that is no longer the target");
-            helper.assertTrue(after.matches().stream().anyMatch(h -> h.pos().equals(kept)),
+            Checks.assertTrue(helper, after.matches().stream().anyMatch(h -> h.pos().equals(kept)),
                     "the search lost the sponge that is still there");
             com.dwinovo.numen.scan.BlockSearch.release(level, targets);
             level.removeBlock(kept, false);

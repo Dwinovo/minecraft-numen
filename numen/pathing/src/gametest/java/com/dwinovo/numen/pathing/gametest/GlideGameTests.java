@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 import static com.dwinovo.numen.pathing.gametest.Trial.SKY;
 
@@ -10,9 +11,8 @@ import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
-import net.minecraft.gametest.framework.GameTestAssertException;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -69,21 +69,21 @@ public class GlideGameTests {
         t.glide(body, Goals.at(target), RouteSpec.defaults()).within(500)
                 .then(r -> {
                     if (landedFrom(t, r, target) > DESCENT + GLIDE_ERROR) {
-                        throw new GameTestAssertException("落点离目标 " + landedFrom(t, r, target) + " 格,超过 " + DESCENT + " + " + GLIDE_ERROR);
+                        throw Checks.failure("落点离目标 " + landedFrom(t, r, target) + " 格,超过 " + DESCENT + " + " + GLIDE_ERROR);
                     }
                     var glides = r.report.ledger().glides();
                     if (glides.size() != 1) {
-                        throw new GameTestAssertException("账上该有一段滑翔,实际 " + glides);
+                        throw Checks.failure("账上该有一段滑翔,实际 " + glides);
                     }
                     var glide = glides.get(0);
                     if (glide.blocks() < 20 || glide.rockets() < 1 || glide.emergency() || glide.airborne() || glide.damage() > 0) {
-                        throw new GameTestAssertException("滑翔的账不对:" + glide);
+                        throw Checks.failure("滑翔的账不对:" + glide);
                     }
                     if (glide.wearAfter() <= glide.wearBefore() && r.ticks > 40) {
-                        throw new GameTestAssertException("飞了这么久鞘翅耐久没动:" + glide);
+                        throw Checks.failure("飞了这么久鞘翅耐久没动:" + glide);
                     }
                     if (r.body.isFallFlying() || r.body.getAbilities().flying) {
-                        throw new GameTestAssertException("收场了还在飞");
+                        throw Checks.failure("收场了还在飞");
                     }
                 })
                 .arrives();
@@ -99,7 +99,7 @@ public class GlideGameTests {
                 .then(r -> {
                     if (r.report.ledger().glides().size() != 1 || r.report.ledger().glides().get(0).blocks() < 20
                             || landedFrom(t, r, target) > DESCENT + GLIDE_ERROR) {
-                        throw new GameTestAssertException("范围目标也该飞,落在目标 16 格附近:" + r.report.ledger().glides());
+                        throw Checks.failure("范围目标也该飞,落在目标 16 格附近:" + r.report.ledger().glides());
                     }
                 })
                 .arrives();
@@ -115,7 +115,7 @@ public class GlideGameTests {
                 .then(r -> {
                     if (r.report.ledger().glides().size() != 1 || r.report.ledger().glides().get(0).blocks() < 20
                             || landedFrom(t, r, cell) > DESCENT + GLIDE_ERROR) {
-                        throw new GameTestAssertException("列目标也该飞,落在目标 16 格附近:" + r.report.ledger().glides());
+                        throw Checks.failure("列目标也该飞,落在目标 16 格附近:" + r.report.ledger().glides());
                     }
                 })
                 .arrives();
@@ -129,17 +129,17 @@ public class GlideGameTests {
         var goal = Goals.at(t.at(120, 1, MID));
         Lack lack = t.navigator(body).admit(Travel.GLIDE, goal).lack();
         if (lack == null || lack.why() != Lack.Why.TOO_FEW_ROCKETS || lack.have() != 1 || lack.need() != 5) {
-            throw new GameTestAssertException("受理时该说烟花不够(有 1 支,要 5 支):" + lack);
+            throw Checks.failure("受理时该说烟花不够(有 1 支,要 5 支):" + lack);
         }
         t.glide(body, goal, RouteSpec.defaults()).within(100)
                 .fails(Outcome.Grounded.class, g -> {
                     if (g.lack().why() != Lack.Why.TOO_FEW_ROCKETS) {
-                        throw new GameTestAssertException("结局该是烟花不够:" + g.lack());
+                        throw Checks.failure("结局该是烟花不够:" + g.lack());
                     }
                 })
                 .then(r -> {
                     if (!r.report.ledger().glides().isEmpty() || r.body.isFallFlying()) {
-                        throw new GameTestAssertException("烟花不够不该飞:" + r.report.ledger().glides());
+                        throw Checks.failure("烟花不够不该飞:" + r.report.ledger().glides());
                     }
                 });
     }
@@ -153,12 +153,12 @@ public class GlideGameTests {
         var goal = Goals.at(t.at(120, 1, MID));
         Lack lack = t.navigator(body).admit(Travel.GLIDE, goal).lack();
         if (lack == null || lack.why() != Lack.Why.NO_WINGS) {
-            throw new GameTestAssertException("受理时该说没有可用的鞘翅:" + lack);
+            throw Checks.failure("受理时该说没有可用的鞘翅:" + lack);
         }
         t.glide(body, goal, RouteSpec.defaults()).within(100)
                 .fails(Outcome.Grounded.class, g -> {
                     if (g.lack().why() != Lack.Why.NO_WINGS) {
-                        throw new GameTestAssertException("结局该是没有可用的鞘翅:" + g.lack());
+                        throw Checks.failure("结局该是没有可用的鞘翅:" + g.lack());
                     }
                 });
     }
@@ -176,7 +176,7 @@ public class GlideGameTests {
                     var glides = r.report.ledger().glides();
                     if (glides.size() != 1 || glides.get(0).emergency() || glides.get(0).damage() > 0
                             || glides.get(0).takeoff().getY() < t.origin.getY() + 10) {
-                        throw new GameTestAssertException("该有一段从石柱顶走出去的、没掉血的滑翔:" + glides);
+                        throw Checks.failure("该有一段从石柱顶走出去的、没掉血的滑翔:" + glides);
                     }
                 })
                 .arrives();
@@ -194,7 +194,7 @@ public class GlideGameTests {
                     var glides = r.report.ledger().glides();
                     if (glides.size() != 1 || glides.get(0).rockets() != 0 || glides.get(0).blocks() < 40 || glides.get(0).damage() > 0
                             || glides.get(0).emergency()) {
-                        throw new GameTestAssertException("该有一段没放烟花、没掉血的滑翔:" + glides);
+                        throw Checks.failure("该有一段没放烟花、没掉血的滑翔:" + glides);
                     }
                 })
                 .arrives();
@@ -212,7 +212,7 @@ public class GlideGameTests {
         t.go(body, Goals.level(t.origin.getY() + 8), natural).within(500)
                 .during(r -> {
                     if (r.body.isFallFlying()) {
-                        throw new GameTestAssertException("垫柱时误展开了鞘翅,身体在 " + t.rel(r.body.blockPosition()));
+                        throw Checks.failure("垫柱时误展开了鞘翅,身体在 " + t.rel(r.body.blockPosition()));
                     }
                 })
                 .arrives();
@@ -230,7 +230,7 @@ public class GlideGameTests {
         t.go(body, Goals.at(t.at(14, 5, 5)), parkour).within(300)
                 .during(r -> {
                     if (r.body.isFallFlying()) {
-                        throw new GameTestAssertException("跳沟时误展开了鞘翅,身体在 " + t.rel(r.body.blockPosition()));
+                        throw Checks.failure("跳沟时误展开了鞘翅,身体在 " + t.rel(r.body.blockPosition()));
                     }
                 })
                 .arrives();

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.task.build.BuildCompanionTask;
 import com.dwinovo.numen.task.build.BuildTaskRecord;
 import com.dwinovo.numen.api.entity.CompanionFactory;
@@ -10,8 +11,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
@@ -82,8 +83,8 @@ public class BuildGameTests {
                 List.of(new BuildTaskRecord.Target(Blocks.CRAFTING_TABLE, Items.CRAFTING_TABLE,
                         lower, "crafting_table")), true));
         succeedWhen(helper, () -> {
-            helper.assertTrue(level.getBlockState(lower).is(Blocks.CRAFTING_TABLE), "工作台没放上");
-            helper.assertTrue(!level.getBlockState(lower.above()).is(Blocks.TALL_GRASS),
+            Checks.assertTrue(helper, level.getBlockState(lower).is(Blocks.CRAFTING_TABLE), "工作台没放上");
+            Checks.assertTrue(helper, !level.getBlockState(lower.above()).is(Blocks.TALL_GRASS),
                     "孤儿草还悬在工作台头顶: " + level.getBlockState(lower.above()));
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -124,12 +125,12 @@ public class BuildGameTests {
         BlockPos east = helper.absolutePos(new BlockPos(8, 2, 8));
         succeedWhen(helper, () -> {
             BlockState m = level.getBlockState(mid);
-            helper.assertTrue(m.is(Blocks.OAK_FENCE), "中间那格不是栅栏");
+            Checks.assertTrue(helper, m.is(Blocks.OAK_FENCE), "中间那格不是栅栏");
             for (BlockPos nb : new BlockPos[]{west, east}) {
                 var d = net.minecraft.core.Direction.getNearest(
                         nb.getX() - mid.getX(), 0, nb.getZ() - mid.getZ(), net.minecraft.core.Direction.NORTH);
                 var prop = fenceArm(d);
-                helper.assertTrue(m.getValue(prop), "中间栅栏没向 " + d + " 伸臂: " + m);
+                Checks.assertTrue(helper, m.getValue(prop), "中间栅栏没向 " + d + " 伸臂: " + m);
             }
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -153,13 +154,13 @@ public class BuildGameTests {
         succeedWhen(helper, () -> {
             BlockState built = level.getBlockState(newPos);
             BlockState old = level.getBlockState(oldPos);
-            helper.assertTrue(built.is(Blocks.OAK_FENCE), "新栅栏没立起来");
+            Checks.assertTrue(helper, built.is(Blocks.OAK_FENCE), "新栅栏没立起来");
             var toOld = net.minecraft.core.Direction.getNearest(
                     oldPos.getX() - newPos.getX(), 0, oldPos.getZ() - newPos.getZ(), net.minecraft.core.Direction.NORTH);
-            helper.assertTrue(built.getValue(
+            Checks.assertTrue(helper, built.getValue(
                     fenceArm(toOld)),
                     "新栅栏没伸手贴旧邻居: " + built);
-            helper.assertTrue(old.getValue(
+            Checks.assertTrue(helper, old.getValue(
                     fenceArm(toOld.getOpposite())),
                     "旧栅栏没伸回来: " + old);
             CompanionFactory.despawn(level.getServer(), companion);
@@ -214,7 +215,7 @@ public class BuildGameTests {
                 new Row(com.dwinovo.numen.task.build.ReplaceMode.REPLACE_EMPTY, solid, torch, true,
                         "and everything else gives way too"))) {
             boolean got = row.mode().allows(row.current(), row.desired());
-            helper.assertTrue(got == row.want(), row.mode() + ": " + row.why()
+            Checks.assertTrue(helper, got == row.want(), row.mode() + ": " + row.why()
                     + " — expected " + row.want() + ", got " + got);
         }
         helper.succeed();
@@ -223,7 +224,7 @@ public class BuildGameTests {
     /** 当场回的那一行必须成功,否则把回执原样报出来。 */
     private static void requireOk(ToolRun run) {
         if (!run.succeeded()) {
-            throw new net.minecraft.gametest.framework.GameTestAssertException("not accepted: " + run.reply());
+            throw com.dwinovo.numen.api.gametest.Checks.failure("not accepted: " + run.reply());
         }
     }
 
@@ -259,18 +260,18 @@ public class BuildGameTests {
         });
         ToolRun[] again = {null};
         succeedWhen(helper, () -> {
-            helper.assertTrue(shovedInto[0] != null, "she was never pushed in - the case did not run");
-            helper.assertTrue(build.run().done(), "the first pass has not finished");
+            Checks.assertTrue(helper, shovedInto[0] != null, "she was never pushed in - the case did not run");
+            Checks.assertTrue(helper, build.run().done(), "the first pass has not finished");
             if (again[0] == null) {
                 // 第一遍收场了,那格没放;模型看回执再放一遍
                 again[0] = lua(build.companion(), "numen.build.place("
                         + cobbleBox(5, 1, 5).apply(helper.absolutePos(new BlockPos(8, 2, 8))) + ")");
-                helper.fail("the first pass is over; going over what is left once more");
+                Checks.fail(helper, "the first pass is over; going over what is left once more");
             }
-            helper.assertTrue(again[0].done(), "the second pass has not finished");
-            helper.assertTrue(again[0].ranToTheEnd(), "numen.build.place failed: " + again[0].receipt());
+            Checks.assertTrue(helper, again[0].done(), "the second pass has not finished");
+            Checks.assertTrue(helper, again[0].ranToTheEnd(), "numen.build.place failed: " + again[0].receipt());
             for (BlockPos cell : build.cells()) {
-                helper.assertTrue(level.getBlockState(cell).is(Blocks.COBBLESTONE),
+                Checks.assertTrue(helper, level.getBlockState(cell).is(Blocks.COBBLESTONE),
                         "structure incomplete at " + cell.toShortString());
             }
             CompanionFactory.despawn(level.getServer(), build.companion());
@@ -297,27 +298,27 @@ public class BuildGameTests {
         steps(helper)
                 .thenExecute(() -> runs[0] = lua(companion, "numen.build.place(numen.shape.line({" + xyz(dirt.get(0)) + ", "
                         + xyz(dirt.get(2)) + "}, \"air\"))"))
-                .thenWaitUntil(() -> helper.assertTrue(runs[0].done(), "the build has not replied"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, runs[0].done(), "the build has not replied"))
                 .thenExecute(() -> {
-                    helper.assertTrue(runs[0].refused() && runs[0].outcome().contains("3 cell(s) hold another block that "
+                    Checks.assertTrue(helper, runs[0].refused() && runs[0].outcome().contains("3 cell(s) hold another block that "
                                     + "must be dug out first") && runs[0].outcome().contains("numen.work.dig("),
                             "the build did not refuse and point at numen.work.dig: " + runs[0].outcome());
-                    helper.assertTrue(dirt.stream().allMatch(p -> level.getBlockState(p).is(Blocks.DIRT)),
+                    Checks.assertTrue(helper, dirt.stream().allMatch(p -> level.getBlockState(p).is(Blocks.DIRT)),
                             "a refused build touched the dirt");
                     sentAt[0] = helper.getTick();
                     runs[1] = lua(companion, "numen.work.dig(" + xyz(dirt.get(0)) + ", " + xyz(dirt.get(1)) + ", "
                             + xyz(dirt.get(2)) + ")\nnumen.work.collect()");
                 })
-                .thenWaitUntil(() -> helper.assertTrue(runs[1].receipt() != null, "the dig has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, runs[1].receipt() != null, "the dig has not finished"))
                 .thenExecute(() -> {
                     long took = helper.getTick() - sentAt[0];
-                    helper.assertTrue(runs[1].ranToTheEnd(), "the dig did not clear the three cells: " + runs[1].receipt());
+                    Checks.assertTrue(helper, runs[1].ranToTheEnd(), "the dig did not clear the three cells: " + runs[1].receipt());
                     for (BlockPos pos : dirt) {
-                        helper.assertTrue(level.getBlockState(pos).isAir(), "dirt still stands at " + pos.toShortString());
+                        Checks.assertTrue(helper, level.getBlockState(pos).isAir(), "dirt still stands at " + pos.toShortString());
                     }
-                    helper.assertTrue(companion.getInventory().countItem(Items.DIRT) == 3,
+                    Checks.assertTrue(helper, companion.getInventory().countItem(Items.DIRT) == 3,
                             "the dug dirt did not end up in her pack: " + companion.getInventory().countItem(Items.DIRT));
-                    helper.assertTrue(took >= 3 * 15, "three blocks of dirt went in " + took + " ticks — not dug by hand");
+                    Checks.assertTrue(helper, took >= 3 * 15, "three blocks of dirt went in " + took + " ticks — not dug by hand");
                     CompanionFactory.despawn(level.getServer(), companion);
                 })
                 .thenSucceed();
@@ -347,25 +348,25 @@ public class BuildGameTests {
         steps(helper)
                 .thenExecute(() -> runs[0] = lua(companion, "numen.build.place(numen.shape.line({" + xyz(toStone.get(0)) + ", "
                         + xyz(toStone.get(2)) + "}, \"stone\"))"))
-                .thenWaitUntil(() -> helper.assertTrue(runs[0].done(), "the stone line has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, runs[0].done(), "the stone line has not finished"))
                 .thenExecute(() -> runs[1] = lua(companion, "numen.build.place(numen.shape.line({" + xyz(toAir.get(0)) + ", "
                         + xyz(toAir.get(2)) + "}, \"air\"))"))
-                .thenWaitUntil(() -> helper.assertTrue(runs[1].done(), "the air line has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, runs[1].done(), "the air line has not finished"))
                 .thenExecute(() -> {
-                    helper.assertTrue(runs[0].succeeded() && runs[0].outcome().contains("3 replacing what stood there"),
+                    Checks.assertTrue(helper, runs[0].succeeded() && runs[0].outcome().contains("3 replacing what stood there"),
                             "the stone line did not replace the dirt: " + runs[0].outcome());
-                    helper.assertTrue(runs[1].succeeded() && runs[1].outcome().contains("cleared 3"),
+                    Checks.assertTrue(helper, runs[1].succeeded() && runs[1].outcome().contains("cleared 3"),
                             "the air line did not clear the dirt: " + runs[1].outcome());
                     for (BlockPos pos : toStone) {
-                        helper.assertTrue(level.getBlockState(pos).is(Blocks.STONE), "no stone at " + pos.toShortString());
+                        Checks.assertTrue(helper, level.getBlockState(pos).is(Blocks.STONE), "no stone at " + pos.toShortString());
                     }
                     for (BlockPos pos : toAir) {
-                        helper.assertTrue(level.getBlockState(pos).isAir(), "dirt still stands at " + pos.toShortString());
+                        Checks.assertTrue(helper, level.getBlockState(pos).isAir(), "dirt still stands at " + pos.toShortString());
                     }
                     long drops = level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
                             new net.minecraft.world.phys.AABB(helper.absolutePos(new BlockPos(9, 2, 8))).inflate(6)).size();
-                    helper.assertTrue(drops == 0, drops + " drop(s) lie around after a creative build");
-                    helper.assertTrue(companion.getInventory().isEmpty(),
+                    Checks.assertTrue(helper, drops == 0, drops + " drop(s) lie around after a creative build");
+                    Checks.assertTrue(helper, companion.getInventory().isEmpty(),
                             "a free-material build touched her empty inventory");
                     CompanionFactory.despawn(level.getServer(), companion);
                 })
@@ -389,17 +390,17 @@ public class BuildGameTests {
         ToolRun build = lua(companion, place);
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(build.done(), "the build has not finished");
-            helper.assertTrue(build.succeeded(), "a partly built design is not a failure: " + build.outcome());
+            Checks.assertTrue(helper, build.done(), "the build has not finished");
+            Checks.assertTrue(helper, build.succeeded(), "a partly built design is not a failure: " + build.outcome());
             var group = build.result(BuildCompanionTask.Placed.class).unplaced();
-            helper.assertTrue(group.size() == 1 && group.get(0).kind().equals("did_not_stay") && group.get(0).cells() == 2,
+            Checks.assertTrue(helper, group.size() == 1 && group.get(0).kind().equals("did_not_stay") && group.get(0).cells() == 2,
                     "the two flowers are not one group of did_not_stay: " + group);
             String says = group.get(0).says();
-            helper.assertTrue(says.contains("poppy at " + first.getX() + "," + first.getY() + "," + first.getZ())
+            Checks.assertTrue(helper, says.contains("poppy at " + first.getX() + "," + first.getY() + "," + first.getZ())
                             && says.contains("poppy at " + second.getX() + "," + second.getY() + "," + second.getZ())
                             && says.contains("down ") && says.contains("is stone"),
                     "the sentence does not name both flowers, where they are, and the stone under them: " + says);
-            helper.assertTrue(level.getBlockState(o).is(Blocks.STONE), "the stone under them was not built");
+            Checks.assertTrue(helper, level.getBlockState(o).is(Blocks.STONE), "the stone under them was not built");
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
@@ -419,19 +420,19 @@ public class BuildGameTests {
         ToolRun build = lua(companion, place);
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(build.done(), "the build has not finished");
-            helper.assertTrue(build.succeeded(), "liquid cells must not fail the whole design: " + build.outcome());
+            Checks.assertTrue(helper, build.done(), "the build has not finished");
+            Checks.assertTrue(helper, build.succeeded(), "liquid cells must not fail the whole design: " + build.outcome());
             var groups = build.result(BuildCompanionTask.Placed.class).unplaced();
-            helper.assertTrue(groups.size() == 1 && groups.get(0).kind().equals("liquid") && groups.get(0).cells() == 3,
+            Checks.assertTrue(helper, groups.size() == 1 && groups.get(0).kind().equals("liquid") && groups.get(0).cells() == 3,
                     "the two water cells and the dry stairs are one liquid group: " + groups);
             String says = groups.get(0).says();
-            helper.assertTrue(says.contains("2 cell(s): the design wants water or lava there")
+            Checks.assertTrue(helper, says.contains("2 cell(s): the design wants water or lava there")
                             && says.contains("1 cell(s): the block was placed without the water it holds"),
                     "the sentence counts each kind: " + says);
-            helper.assertTrue(groups.get(0).hint().orElse("").contains("numen.use.block"), "the hint names the bucket");
-            helper.assertTrue(level.getBlockState(o).is(Blocks.STONE) && level.getBlockState(o.east()).is(Blocks.STONE)
+            Checks.assertTrue(helper, groups.get(0).hint().orElse("").contains("numen.use.block"), "the hint names the bucket");
+            Checks.assertTrue(helper, level.getBlockState(o).is(Blocks.STONE) && level.getBlockState(o.east()).is(Blocks.STONE)
                             && level.getBlockState(o.east(2)).is(Blocks.OAK_STAIRS), "the rest of the design stands");
-            helper.assertTrue(level.getBlockState(o.south()).isAir() && level.getBlockState(o.south().east()).isAir()
+            Checks.assertTrue(helper, level.getBlockState(o.south()).isAir() && level.getBlockState(o.south().east()).isAir()
                             && level.getFluidState(o.east(2)).isEmpty(), "no water appeared");
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -451,19 +452,19 @@ public class BuildGameTests {
         }
         String drained = "numen.shape.drain(" + xyz(o.east()) + ", 2)";
         ToolRun diff = lua(companion, "return numen.build.diff(" + drained + ")");
-        helper.assertTrue(diff.ranToTheEnd(), "diff failed: " + diff.receipt());
+        Checks.assertTrue(helper, diff.ranToTheEnd(), "diff failed: " + diff.receipt());
         var got = diff.data().getAsJsonObject("returned");
-        helper.assertTrue(got.get("liquid").getAsInt() == 3 && got.get("left").getAsInt() == 0 && got.get("skipped").getAsInt() == 0
+        Checks.assertTrue(helper, got.get("liquid").getAsInt() == 3 && got.get("left").getAsInt() == 0 && got.get("skipped").getAsInt() == 0
                         && (got.get("materials").toString().equals("[]") || got.get("materials").toString().equals("{}")),
                 "diff lists the water on its own: " + got);
         ToolRun build = lua(companion, "numen.build.place(" + drained + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(build.done() && build.succeeded(), "draining must not fail the call: " + build.outcome());
+            Checks.assertTrue(helper, build.done() && build.succeeded(), "draining must not fail the call: " + build.outcome());
             var groups = build.result(BuildCompanionTask.Placed.class).unplaced();
-            helper.assertTrue(groups.size() == 1 && groups.get(0).kind().equals("liquid") && groups.get(0).cells() == 3,
+            Checks.assertTrue(helper, groups.size() == 1 && groups.get(0).kind().equals("liquid") && groups.get(0).cells() == 3,
                     "the three water cells are one liquid group: " + groups);
-            helper.assertTrue(level.getBlockState(o).is(Blocks.WATER) && level.getBlockState(o.east(2)).is(Blocks.WATER),
+            Checks.assertTrue(helper, level.getBlockState(o).is(Blocks.WATER) && level.getBlockState(o.east(2)).is(Blocks.WATER),
                     "she does not drain by hand: the water is still there");
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -499,21 +500,21 @@ public class BuildGameTests {
         });
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(companion.onGround(), "she has not landed on the pillar"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, companion.onGround(), "she has not landed on the pillar"))
                 .thenExecute(() -> left.set(lua(companion, "return numen.build.diff(" + cells + ")")))
-                .thenWaitUntil(() -> helper.assertTrue(left.get().receipt() != null, "numen.build.diff has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, left.get().receipt() != null, "numen.build.diff has not finished"))
                 .thenExecute(() -> {
                     var got = left.get().data().getAsJsonObject("returned");
-                    helper.assertTrue(got.get("left").getAsInt() == 2 && got.get("reach").getAsInt() == 0
+                    Checks.assertTrue(helper, got.get("left").getAsInt() == 2 && got.get("reach").getAsInt() == 0
                                     && got.get("unheld").getAsInt() == 1
                                     && got.get("next").equals(posJson(support)),
                             "numen.build.diff does not hold the carpet back until the stone under it is in: " + got);
                     at.set(lua(companion, "numen.build.place(" + cells + ")"));
                 })
-                .thenWaitUntil(() -> helper.assertTrue(at.get().done(), "numen.build.place has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, at.get().done(), "numen.build.place has not finished"))
                 .thenExecute(() -> {
                     ToolRun build = at.get();
-                    helper.assertTrue(build.succeeded() && stoneAt[0] >= 0 && carpetAt[0] >= 0 && stoneAt[0] <= carpetAt[0],
+                    Checks.assertTrue(helper, build.succeeded() && stoneAt[0] >= 0 && carpetAt[0] >= 0 && stoneAt[0] <= carpetAt[0],
                             "numen.build.place did not walk to the stone and put it in before the carpet (stone at "
                                     + stoneAt[0] + ", carpet at " + carpetAt[0] + "): " + build.outcome());
                     CompanionFactory.despawn(level.getServer(), companion);
@@ -541,9 +542,9 @@ public class BuildGameTests {
 
         steps(helper)
                 .thenExecute(() -> second.set(lua(companion, "numen.build.place(" + cells + ")")))
-                .thenWaitUntil(() -> helper.assertTrue(second.get().receipt() != null, "the placement has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, second.get().receipt() != null, "the placement has not finished"))
                 .thenExecute(() -> {
-                    helper.assertTrue(second.get().succeeded() && level.getBlockState(stone).is(Blocks.STONE),
+                    Checks.assertTrue(helper, second.get().succeeded() && level.getBlockState(stone).is(Blocks.STONE),
                             "a pass that placed the stone was failed for the petals it knocked out: " + second.get().reply());
                     CompanionFactory.despawn(level.getServer(), companion);
                 })
@@ -571,18 +572,18 @@ public class BuildGameTests {
                     from[0] = companion.position();
                     place[0] = lua(companion, "numen.build.place({{name = \"crafting_table\", pos = " + xyz(at) + "}})");
                 })
-                .thenWaitUntil(() -> helper.assertTrue(place[0].done(), "the build place has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, place[0].done(), "the build place has not finished"))
                 .thenExecute(() -> {
                     long took = helper.getTick() - sentAt[0];
-                    helper.assertTrue(place[0].task() != null && place[0].task().getToolName().equals("numen.build.place"),
+                    Checks.assertTrue(helper, place[0].task() != null && place[0].task().getToolName().equals("numen.build.place"),
                             "the placement is not named after the command: " + place[0].reply());
-                    helper.assertTrue(place[0].succeeded(), "place failed: " + place[0].outcome());
-                    helper.assertTrue(level.getBlockState(at).is(Blocks.CRAFTING_TABLE), "no crafting table at the cell");
-                    helper.assertTrue(companion.getInventory().countItem(Items.CRAFTING_TABLE) == 0,
+                    Checks.assertTrue(helper, place[0].succeeded(), "place failed: " + place[0].outcome());
+                    Checks.assertTrue(helper, level.getBlockState(at).is(Blocks.CRAFTING_TABLE), "no crafting table at the cell");
+                    Checks.assertTrue(helper, companion.getInventory().countItem(Items.CRAFTING_TABLE) == 0,
                             "the crafting table was not taken from her inventory");
-                    helper.assertTrue(took <= 20, "a one-cell build place took " + took + " ticks");
+                    Checks.assertTrue(helper, took <= 20, "a one-cell build place took " + took + " ticks");
                     double moved = Math.hypot(companion.getX() - from[0].x, companion.getZ() - from[0].z);
-                    helper.assertTrue(moved < 0.5, "she walked " + moved + " blocks for a one-cell build place");
+                    Checks.assertTrue(helper, moved < 0.5, "she walked " + moved + " blocks for a one-cell build place");
                     CompanionFactory.despawn(level.getServer(), companion);
                 })
                 .thenSucceed();
@@ -597,8 +598,8 @@ public class BuildGameTests {
         ToolRun build = lua(companion, "numen.build.place({{name = \"stone\", pos = " + xyz(at) + "}})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(build.done() && build.task() == null, "a building that already stands was dispatched");
-            helper.assertTrue(build.succeeded() && Long.valueOf(0).equals(build.field("requested"))
+            Checks.assertTrue(helper, build.done() && build.task() == null, "a building that already stands was dispatched");
+            Checks.assertTrue(helper, build.succeeded() && Long.valueOf(0).equals(build.field("requested"))
                             && Long.valueOf(0).equals(build.field("left")) && Long.valueOf(0).equals(build.field("placed")),
                     "the reply does not say nothing is left to build: " + build.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -621,27 +622,27 @@ public class BuildGameTests {
         BlockPos[] stood = new BlockPos[1];
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(left.receipt() != null, "numen.build.diff has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, left.receipt() != null, "numen.build.diff has not finished"))
                 .thenExecute(() -> {
-                    helper.assertTrue(left.ranToTheEnd(), "numen.build.diff failed: " + left.receipt());
+                    Checks.assertTrue(helper, left.ranToTheEnd(), "numen.build.diff failed: " + left.receipt());
                     String r = left.receipt();
                     var got = left.data().getAsJsonObject("returned");
-                    helper.assertTrue(got.get("left").getAsInt() == 9 && got.get("reach").getAsInt() == 0
+                    Checks.assertTrue(helper, got.get("left").getAsInt() == 9 && got.get("reach").getAsInt() == 0
                                     && got.get("far").getAsInt() == 9 && got.get("next").isJsonObject(),
                             "numen.build.diff does not say nine left, none within reach, nine far and where next: " + r);
                     stood[0] = companion.blockPosition();
-                    helper.assertTrue(stood[0].equals(helper.absolutePos(new BlockPos(1, 2, 1))), "the diff moved her");
+                    Checks.assertTrue(helper, stood[0].equals(helper.absolutePos(new BlockPos(1, 2, 1))), "the diff moved her");
                     at.set(lua(companion, "numen.build.place(" + cells + ")"));
                 })
-                .thenWaitUntil(() -> helper.assertTrue(at.get().done(), "numen.build.place has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, at.get().done(), "numen.build.place has not finished"))
                 .thenExecute(() -> {
                     ToolRun build = at.get();
-                    helper.assertTrue(build.succeeded(), "place from afar failed: " + build.outcome());
-                    helper.assertTrue(BlockPos.betweenClosedStream(o, o.offset(2, 0, 2))
+                    Checks.assertTrue(helper, build.succeeded(), "place from afar failed: " + build.outcome());
+                    Checks.assertTrue(helper, BlockPos.betweenClosedStream(o, o.offset(2, 0, 2))
                                     .allMatch(p -> level.getBlockState(p).is(Blocks.COBBLESTONE))
                                     && companion.getInventory().countItem(Items.COBBLESTONE) == 0,
                             "the nine cells were not all placed, or the cobblestone does not match: " + build.outcome());
-                    helper.assertTrue(!companion.blockPosition().equals(stood[0]), "she placed them without walking up");
+                    Checks.assertTrue(helper, !companion.blockPosition().equals(stood[0]), "she placed them without walking up");
                     CompanionFactory.despawn(level.getServer(), companion);
                 })
                 .thenSucceed();
@@ -667,27 +668,27 @@ public class BuildGameTests {
                 + xyz(door) + "}}))");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(build.done(), "build has not finished");
-            helper.assertTrue(build.succeeded(), "build failed: " + build.outcome());
+            Checks.assertTrue(helper, build.done(), "build has not finished");
+            Checks.assertTrue(helper, build.succeeded(), "build failed: " + build.outcome());
             for (int x = min.getX(); x <= max.getX(); x++) {
                 for (int z = min.getZ(); z <= max.getZ(); z++) {
                     boolean ring = x == min.getX() || x == max.getX() || z == min.getZ() || z == max.getZ();
                     for (int y = min.getY(); y <= max.getY(); y++) {
                         BlockPos p = new BlockPos(x, y, z);
                         if (p.getX() == door.getX() && p.getZ() == door.getZ()) {
-                            helper.assertTrue(level.getBlockState(p).is(Blocks.OAK_DOOR),
+                            Checks.assertTrue(helper, level.getBlockState(p).is(Blocks.OAK_DOOR),
                                     "the door is not at " + p.toShortString());
                         } else if (ring) {
-                            helper.assertTrue(level.getBlockState(p).is(Blocks.COBBLESTONE),
+                            Checks.assertTrue(helper, level.getBlockState(p).is(Blocks.COBBLESTONE),
                                     "the wall is missing at " + p.toShortString());
                         } else {
-                            helper.assertTrue(level.getBlockState(p).isAir(), "the inside is not clear at "
+                            Checks.assertTrue(helper, level.getBlockState(p).isAir(), "the inside is not clear at "
                                     + p.toShortString());
                         }
                     }
                 }
             }
-            helper.assertTrue(companion.getInventory().countItem(Items.COBBLESTONE) == 32 - 14
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.COBBLESTONE) == 32 - 14
                             && companion.getInventory().countItem(Items.OAK_DOOR) == 0,
                     "the materials spent do not match the cells built");
             CompanionFactory.despawn(level.getServer(), companion);
@@ -707,17 +708,17 @@ public class BuildGameTests {
                 + "):set(\"cobblestone\"))");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(build.done() && build.succeeded(), "a partly paid build is not a failure: " + build.outcome());
+            Checks.assertTrue(helper, build.done() && build.succeeded(), "a partly paid build is not a failure: " + build.outcome());
             var result = build.result(BuildCompanionTask.Placed.class);
-            helper.assertTrue(BlockPos.betweenClosedStream(o, o.offset(2, 0, 2))
+            Checks.assertTrue(helper, BlockPos.betweenClosedStream(o, o.offset(2, 0, 2))
                             .filter(p -> level.getBlockState(p).is(Blocks.COBBLESTONE)).count() == 3
                             && companion.getInventory().countItem(Items.COBBLESTONE) == 0,
                     "she should have placed exactly the three cells her stock paid for: " + build.outcome());
-            helper.assertTrue(result.unplaced().size() == 1 && result.unplaced().get(0).kind().equals("short_of_material")
+            Checks.assertTrue(helper, result.unplaced().size() == 1 && result.unplaced().get(0).kind().equals("short_of_material")
                             && result.unplaced().get(0).cells() == 6
                             && result.unplaced().get(0).says().contains("cobblestone"),
                     "the six she could not pay for are not reported as short of cobblestone: " + result.unplaced());
-            helper.assertTrue(result.stillShort().isPresent() && result.stillShort().get().contains("cobblestone"),
+            Checks.assertTrue(helper, result.stillShort().isPresent() && result.stillShort().get().contains("cobblestone"),
                     "the receipt does not say what is still short: " + result.stillShort());
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -745,7 +746,7 @@ public class BuildGameTests {
 
         long[] startTick = {level.getGameTime()};
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(rec.placed() >= 2,
+                .thenWaitUntil(() -> Checks.assertTrue(helper, rec.placed() >= 2,
                         "she should have laid a couple of stones by now, placed=" + rec.placed()))
                 .thenExecute(() -> {
                     var inv = companion.getInventory();
@@ -756,16 +757,16 @@ public class BuildGameTests {
                     }
                     startTick[0] = level.getGameTime();
                 })
-                .thenWaitUntil(() -> helper.assertTrue(
+                .thenWaitUntil(() -> Checks.assertTrue(helper, 
                         rec.getState() == com.dwinovo.numen.api.task.TaskState.SUCCESS,
                         "the task should have come back with its receipt by now, state=" + rec.getState()))
                 .thenExecute(() -> {
                     long spent = level.getGameTime() - startTick[0];
-                    helper.assertTrue(spent <= 120,
+                    Checks.assertTrue(helper, spent <= 120,
                             "running out should be reported at once, but it took " + spent
                                     + " ticks after the stock was gone — she was wandering");
                     var receipt = (BuildCompanionTask.Placed) rec.getResult().value();
-                    helper.assertTrue(receipt.unplaced().stream().anyMatch(g -> g.kind().equals("short_of_material"))
+                    Checks.assertTrue(helper, receipt.unplaced().stream().anyMatch(g -> g.kind().equals("short_of_material"))
                                     && receipt.stillShort().isPresent(),
                             "the reason must be materials and must say what to gather, got: "
                                     + receipt.unplaced() + " / " + receipt.stillShort());
@@ -794,19 +795,19 @@ public class BuildGameTests {
         AtomicReference<ToolRun> run = new AtomicReference<>(lua(companion, "numen.build.place(" + stone + ")"));
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(run.get().done() && run.get().succeeded(),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, run.get().done() && run.get().succeeded(),
                         "the first build did not finish: " + run.get().outcome()))
                 .thenExecute(() -> {
                     var placer = com.dwinovo.numen.api.permission.PlacedBlocks.of(level).placerAt(o, level.getBlockState(o));
-                    helper.assertTrue(placer != null && placer.id().equals(companion.getUUID()),
+                    Checks.assertTrue(helper, placer != null && placer.id().equals(companion.getUUID()),
                             "the stone she built is not recorded as hers: " + placer);
                     run.set(lua(companion, "numen.work.dig(" + xyz(o) + ")\nnumen.build.place(" + glass + ")"));
                 })
-                .thenWaitUntil(() -> helper.assertTrue(run.get().done(), "the swap has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, run.get().done(), "the swap has not finished"))
                 .thenExecute(() -> {
-                    helper.assertTrue(run.get().ranToTheEnd() && level.getBlockState(o).is(Blocks.GLASS),
+                    Checks.assertTrue(helper, run.get().ranToTheEnd() && level.getBlockState(o).is(Blocks.GLASS),
                             "her stone was not swapped for glass: " + run.get().receipt());
-                    helper.assertTrue(!asked[0], "swapping a block she placed asked the owner");
+                    Checks.assertTrue(helper, !asked[0], "swapping a block she placed asked the owner");
                     CompanionFactory.despawn(level.getServer(), companion);
                     leave(owner);
                 })
@@ -827,7 +828,7 @@ public class BuildGameTests {
         level.setBlockAndUpdate(stair, Blocks.OAK_STAIRS.defaultBlockState()
                 .setValue(net.minecraft.world.level.block.StairBlock.FACING, net.minecraft.core.Direction.NORTH));
         var shape = level.getBlockState(stair).getCollisionShape(level, stair).toAabbs();
-        helper.assertTrue(shape.stream().anyMatch(b -> b.contains(0.5, 0.75, 0.25))
+        Checks.assertTrue(helper, shape.stream().anyMatch(b -> b.contains(0.5, 0.75, 0.25))
                         && shape.stream().noneMatch(b -> b.contains(0.5, 0.75, 0.75)),
                 "a north-facing stair does not have its tall back to the north: " + shape);
 
@@ -835,24 +836,24 @@ public class BuildGameTests {
         BlockState northLadder = Blocks.LADDER.defaultBlockState()
                 .setValue(net.minecraft.world.level.block.LadderBlock.FACING, net.minecraft.core.Direction.NORTH);
         level.setBlockAndUpdate(ladder.south(), stone);
-        helper.assertTrue(northLadder.canSurvive(level, ladder), "ladder[facing=north] does not hang on the block south");
+        Checks.assertTrue(helper, northLadder.canSurvive(level, ladder), "ladder[facing=north] does not hang on the block south");
         level.setBlockAndUpdate(ladder.south(), Blocks.AIR.defaultBlockState());
         level.setBlockAndUpdate(ladder.north(), stone);
-        helper.assertFalse(northLadder.canSurvive(level, ladder), "ladder[facing=north] hangs on the block north");
+        Checks.assertFalse(helper, northLadder.canSurvive(level, ladder), "ladder[facing=north] hangs on the block north");
 
         BlockPos lantern = helper.absolutePos(new BlockPos(10, 2, 10));
         BlockState hanging = Blocks.LANTERN.defaultBlockState()
                 .setValue(net.minecraft.world.level.block.LanternBlock.HANGING, true);
-        helper.assertFalse(hanging.canSurvive(level, lantern), "a hanging lantern holds with nothing above");
+        Checks.assertFalse(helper, hanging.canSurvive(level, lantern), "a hanging lantern holds with nothing above");
         level.setBlockAndUpdate(lantern.above(), stone);
-        helper.assertTrue(hanging.canSurvive(level, lantern), "a hanging lantern does not hang from the block above");
+        Checks.assertTrue(helper, hanging.canSurvive(level, lantern), "a hanging lantern does not hang from the block above");
 
         BlockPos foot = helper.absolutePos(new BlockPos(2, 2, 10));
         BlockState bed = Blocks.RED_BED.defaultBlockState()
                 .setValue(net.minecraft.world.level.block.BedBlock.FACING, net.minecraft.core.Direction.EAST);
         level.setBlockAndUpdate(foot, bed);
         bed.getBlock().setPlacedBy(level, foot, bed, null, new ItemStack(Items.RED_BED));
-        helper.assertTrue(level.getBlockState(foot.east()).is(Blocks.RED_BED) && level.getBlockState(foot.east())
+        Checks.assertTrue(helper, level.getBlockState(foot.east()).is(Blocks.RED_BED) && level.getBlockState(foot.east())
                         .getValue(net.minecraft.world.level.block.BedBlock.PART)
                         == net.minecraft.world.level.block.state.properties.BedPart.HEAD,
                 "the head of red_bed[facing=east] is not one cell east of its foot");
@@ -877,16 +878,16 @@ public class BuildGameTests {
         int[] atStop = new int[1];
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(placed.getAsInt() >= 3, "she has not laid three cells yet"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, placed.getAsInt() >= 3, "she has not laid three cells yet"))
                 .thenExecute(() -> com.dwinovo.numen.api.task.CompanionTickDispatcher.cancelFor(companion))
-                .thenWaitUntil(() -> helper.assertTrue(build.done() && build.outcome().startsWith("the owner pressed Stop"),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, build.done() && build.outcome().startsWith("the owner pressed Stop"),
                         "the build did not end as stopped by the owner: " + build.outcome()))
                 .thenExecute(() -> atStop[0] = placed.getAsInt())
                 .thenIdle(20)
                 .thenWaitUntil(() -> {
-                    helper.assertTrue(placed.getAsInt() == atStop[0] && atStop[0] < 25,
+                    Checks.assertTrue(helper, placed.getAsInt() == atStop[0] && atStop[0] < 25,
                             "cells kept appearing after the stop: " + atStop[0] + " then " + placed.getAsInt());
-                    helper.assertTrue(companion.getInventory().countItem(Items.COBBLESTONE) == 64 - atStop[0],
+                    Checks.assertTrue(helper, companion.getInventory().countItem(Items.COBBLESTONE) == 64 - atStop[0],
                             "the cobblestone spent does not match the " + atStop[0] + " cells laid");
                 })
                 .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
@@ -908,10 +909,10 @@ public class BuildGameTests {
                 + "}}, " + xyz(at) + "):rotate(180))");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(build.done() && build.succeeded(), "build failed: " + build.outcome());
-            helper.assertTrue(level.getBlockState(at).is(Blocks.STONE_BRICKS), "the cell turned about moved");
+            Checks.assertTrue(helper, build.done() && build.succeeded(), "build failed: " + build.outcome());
+            Checks.assertTrue(helper, level.getBlockState(at).is(Blocks.STONE_BRICKS), "the cell turned about moved");
             var stair = level.getBlockState(at.offset(-1, 0, 0));
-            helper.assertTrue(stair.is(Blocks.STONE_BRICK_STAIRS)
+            Checks.assertTrue(helper, stair.is(Blocks.STONE_BRICK_STAIRS)
                             && stair.getValue(net.minecraft.world.level.block.StairBlock.FACING)
                             == net.minecraft.core.Direction.WEST,
                     "turning half round must turn the stair to face west, got " + stair);
@@ -941,7 +942,7 @@ public class BuildGameTests {
                 'R', "rail[shape=east_west]");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(build.done() && build.succeeded(), "build failed: " + build.outcome());
+            Checks.assertTrue(helper, build.done() && build.succeeded(), "build failed: " + build.outcome());
             for (int i = 0; i < row.length(); i++) {
                 if (row.charAt(i) == '.') {
                     continue;
@@ -949,11 +950,11 @@ public class BuildGameTests {
                 BlockState expected = com.dwinovo.numen.build.BuildStates.resolve(written.get(row.charAt(i))).state()
                         .rotate(net.minecraft.world.level.block.Rotation.CLOCKWISE_90);
                 BlockPos at = o.offset(0, 0, i);
-                helper.assertTrue(level.getBlockState(at) == expected,
+                Checks.assertTrue(helper, level.getBlockState(at) == expected,
                         "cell " + i + " (" + row.charAt(i) + ") is " + level.getBlockState(at) + ", vanilla turns it into "
                                 + expected);
             }
-            helper.assertTrue(level.getBlockState(o.offset(1, 0, 0)).isAir() && level.getBlockState(o.offset(0, 0, 1)).isAir(),
+            Checks.assertTrue(helper, level.getBlockState(o.offset(1, 0, 0)).isAir() && level.getBlockState(o.offset(0, 0, 1)).isAir(),
                     "the row stayed where it was drawn or filled the gaps");
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -976,18 +977,18 @@ public class BuildGameTests {
         // 只在"她报完工"那一刻判一次。用 succeedWhen 每刻重试的话,量到的是"最终有没有
         // 连上"——收尾补水、摆设生成、旁边的动静都可能事后把线碰连,断言迟早会过。
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(build.done(), "build has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, build.done(), "build has not finished"))
                 .thenExecute(() -> {
-                    helper.assertTrue(build.succeeded(), "build failed: " + build.outcome());
+                    Checks.assertTrue(helper, build.succeeded(), "build failed: " + build.outcome());
                     var wire = level.getBlockState(o.offset(2, 0, 0));
-                    helper.assertTrue(wire.is(Blocks.REDSTONE_WIRE), "the wire is not there: " + wire);
+                    Checks.assertTrue(helper, wire.is(Blocks.REDSTONE_WIRE), "the wire is not there: " + wire);
                     var east = wire.getValue(net.minecraft.world.level.block.RedStoneWireBlock.EAST);
                     var west = wire.getValue(net.minecraft.world.level.block.RedStoneWireBlock.WEST);
-                    helper.assertTrue(
+                    Checks.assertTrue(helper, 
                             east == net.minecraft.world.level.block.state.properties.RedstoneSide.SIDE
                                     && west == net.minecraft.world.level.block.state.properties.RedstoneSide.SIDE,
                             "the wire stayed a dot: east=" + east + " west=" + west);
-                    helper.assertTrue(level.getBlockState(o.offset(5, 0, 0))
+                    Checks.assertTrue(helper, level.getBlockState(o.offset(5, 0, 0))
                                     .getValue(net.minecraft.world.level.block.RedstoneLampBlock.LIT),
                             "the lamp did not light: the built circuit is dead");
                     CompanionFactory.despawn(level.getServer(), companion);
@@ -1054,24 +1055,24 @@ public class BuildGameTests {
         ToolRun[] run = {null};
         steps(helper)
                 .thenExecute(() -> run[0] = lua(companion, "numen.build.place({" + String.join(", ", cells) + "})"))
-                .thenWaitUntil(() -> helper.assertTrue(run[0].done(), "numen.build.place has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, run[0].done(), "numen.build.place has not finished"))
                 .thenExecute(() -> {
-                    helper.assertTrue(run[0].succeeded(), "numen.build.place failed: " + run[0].outcome());
+                    Checks.assertTrue(helper, run[0].succeeded(), "numen.build.place failed: " + run[0].outcome());
                     for (int i = 0; i < cases.size(); i++) {
                         BlockPos at = helper.absolutePos(cases.get(i).cell());
                         BlockState got = level.getBlockState(at);
                         var want = wanted.get(i);
-                        helper.assertTrue(got.is(want.blockState().getBlock()),
+                        Checks.assertTrue(helper, got.is(want.blockState().getBlock()),
                                 cases.get(i).spec() + " came out as " + got + " at " + cases.get(i).cell().toShortString());
-                        want.properties().forEach((property, value) -> helper.assertTrue(
+                        want.properties().forEach((property, value) -> Checks.assertTrue(helper, 
                                 got.getValue((net.minecraft.world.level.block.state.properties.Property) property)
                                         .equals(value),
                                 "wanted " + property.getName() + "=" + value + " but got " + got));
-                        helper.assertTrue(companion.getInventory().countItem(items.get(i)) == 0,
+                        Checks.assertTrue(helper, companion.getInventory().countItem(items.get(i)) == 0,
                                 "the " + items.get(i) + " was not taken from her pack");
                     }
                     var result = run[0].result(BuildCompanionTask.Placed.class);
-                    helper.assertTrue(result.placed() == cases.size() && result.setDirectly() == written,
+                    Checks.assertTrue(helper, result.placed() == cases.size() && result.setDirectly() == written,
                             "expected " + cases.size() + " placed, " + written + " written straight in, got "
                                     + result.placed() + " and " + result.setDirectly());
                     more.run();
@@ -1138,12 +1139,12 @@ public class BuildGameTests {
                         var wire = level.getBlockState(helper.absolutePos(new BlockPos(x, 2, 6)));
                         var east = wire.getValue(net.minecraft.world.level.block.RedStoneWireBlock.EAST);
                         var west = wire.getValue(net.minecraft.world.level.block.RedStoneWireBlock.WEST);
-                        helper.assertTrue(x == 9 || east == side, "the wire at x=" + x + " is not joined to the east: " + wire);
-                        helper.assertTrue(x == 6 || west == side, "the wire at x=" + x + " is not joined to the west: " + wire);
+                        Checks.assertTrue(helper, x == 9 || east == side, "the wire at x=" + x + " is not joined to the east: " + wire);
+                        Checks.assertTrue(helper, x == 6 || west == side, "the wire at x=" + x + " is not joined to the west: " + wire);
                         var pane = level.getBlockState(helper.absolutePos(new BlockPos(x, 2, 10)));
-                        helper.assertTrue(x == 9 || pane.getValue(net.minecraft.world.level.block.IronBarsBlock.EAST),
+                        Checks.assertTrue(helper, x == 9 || pane.getValue(net.minecraft.world.level.block.IronBarsBlock.EAST),
                                 "the pane at x=" + x + " is not joined to the east: " + pane);
-                        helper.assertTrue(x == 6 || pane.getValue(net.minecraft.world.level.block.IronBarsBlock.WEST),
+                        Checks.assertTrue(helper, x == 6 || pane.getValue(net.minecraft.world.level.block.IronBarsBlock.WEST),
                                 "the pane at x=" + x + " is not joined to the west: " + pane);
                     }
                 });
@@ -1164,22 +1165,22 @@ public class BuildGameTests {
         steps(helper)
                 .thenExecute(() -> run[0] = lua(companion, "numen.build.place({{name = \"torch\", pos = " + xyz(air)
                         + "}, {name = \"wall_torch[facing=south]\", pos = " + xyz(wall) + "}})"))
-                .thenWaitUntil(() -> helper.assertTrue(run[0].done(), "numen.build.place has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, run[0].done(), "numen.build.place has not finished"))
                 .thenExecute(() -> {
-                    helper.assertTrue(run[0].succeeded(), "a partial build is not a failure: " + run[0].outcome());
+                    Checks.assertTrue(helper, run[0].succeeded(), "a partial build is not a failure: " + run[0].outcome());
                     var result = run[0].result(BuildCompanionTask.Placed.class);
-                    helper.assertTrue(result.completed() == 0 && result.left() == 2 && result.placed() == 2,
+                    Checks.assertTrue(helper, result.completed() == 0 && result.left() == 2 && result.placed() == 2,
                             "the receipt does not say two were placed and none stayed: " + run[0].outcome());
-                    helper.assertTrue(result.unplaced().size() == 1
+                    Checks.assertTrue(helper, result.unplaced().size() == 1
                                     && result.unplaced().get(0).kind().equals("did_not_stay")
                                     && result.unplaced().get(0).cells() == 2,
                             "the cells that did not stay are not one group of two: " + result.unplaced());
                     String says = result.unplaced().get(0).says();
-                    helper.assertTrue(says.contains("torch at " + air.getX() + "," + air.getY() + "," + air.getZ())
+                    Checks.assertTrue(helper, says.contains("torch at " + air.getX() + "," + air.getY() + "," + air.getZ())
                                     && says.contains("wall_torch at " + wall.getX() + "," + wall.getY() + "," + wall.getZ())
                                     && says.contains("nothing holds it") && says.contains("down "),
                             "the sentence does not name the blocks, where, and what is around them: " + says);
-                    helper.assertTrue(!level.getBlockState(air).is(Blocks.TORCH) && !level.getBlockState(wall).is(Blocks.WALL_TORCH),
+                    Checks.assertTrue(helper, !level.getBlockState(air).is(Blocks.TORCH) && !level.getBlockState(wall).is(Blocks.WALL_TORCH),
                             "a torch with nothing to hold it stayed in the world");
                     CompanionFactory.despawn(level.getServer(), companion);
                 })
@@ -1199,21 +1200,21 @@ public class BuildGameTests {
         steps(helper)
                 .thenExecute(() -> run[0] = lua(companion, "numen.build.place({{name = \"stone\", pos = " + xyz(free)
                         + "}, {name = \"stone\", pos = " + xyz(dirt) + "}})"))
-                .thenWaitUntil(() -> helper.assertTrue(run[0].done(), "numen.build.place has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, run[0].done(), "numen.build.place has not finished"))
                 .thenExecute(() -> {
-                    helper.assertTrue(run[0].succeeded(), "a partial build is not a failure: " + run[0].outcome());
+                    Checks.assertTrue(helper, run[0].succeeded(), "a partial build is not a failure: " + run[0].outcome());
                     var result = run[0].result(BuildCompanionTask.Placed.class);
-                    helper.assertTrue(level.getBlockState(free).is(Blocks.STONE) && result.completed() == 1,
+                    Checks.assertTrue(helper, level.getBlockState(free).is(Blocks.STONE) && result.completed() == 1,
                             "the free cell was not placed: " + run[0].outcome());
-                    helper.assertTrue(result.unplaced().size() == 1
+                    Checks.assertTrue(helper, result.unplaced().size() == 1
                                     && result.unplaced().get(0).kind().equals("dig_first")
                                     && result.unplaced().get(0).first().equals(List.of(dirt)),
                             "the dirt cell is not the one group of dig_first: " + result.unplaced());
                     var group = result.unplaced().get(0);
-                    helper.assertTrue(group.says().contains("dirt") && group.says().contains(
+                    Checks.assertTrue(helper, group.says().contains("dirt") && group.says().contains(
                                     dirt.getX() + "," + dirt.getY() + "," + dirt.getZ()),
                             "the sentence does not name the dirt and where it is: " + group.says());
-                    helper.assertTrue(group.hint().isPresent() && group.hint().get().contains("numen.work.dig("),
+                    Checks.assertTrue(helper, group.hint().isPresent() && group.hint().get().contains("numen.work.dig("),
                             "no dig hint: " + group.hint());
                     CompanionFactory.despawn(level.getServer(), companion);
                 })
@@ -1241,13 +1242,13 @@ public class BuildGameTests {
         ToolRun run = lua(companion, "numen.build.place({{name = \"stone\", pos = " + xyz(cell) + "}})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(run.done(), "numen.build.place has not finished");
-            helper.assertTrue(run.succeeded(), "numen.build.place failed: " + run.outcome());
+            Checks.assertTrue(helper, run.done(), "numen.build.place has not finished");
+            Checks.assertTrue(helper, run.succeeded(), "numen.build.place failed: " + run.outcome());
             var result = run.result(BuildCompanionTask.Placed.class);
-            helper.assertTrue(level.getBlockState(cell).is(Blocks.STONE), "the cell was not placed: " + run.outcome());
-            helper.assertTrue(!result.walkPlacedAt().isEmpty(), "no cell laid on the way is listed: " + result);
+            Checks.assertTrue(helper, level.getBlockState(cell).is(Blocks.STONE), "the cell was not placed: " + run.outcome());
+            Checks.assertTrue(helper, !result.walkPlacedAt().isEmpty(), "no cell laid on the way is listed: " + result);
             for (BlockPos laid : result.walkPlacedAt()) {
-                helper.assertTrue(level.getBlockState(laid).is(Blocks.DIRT) && !laid.equals(cell),
+                Checks.assertTrue(helper, level.getBlockState(laid).is(Blocks.DIRT) && !laid.equals(cell),
                         "walk_placed_at names " + laid.toShortString() + ", which is not a pillar block of hers");
             }
             CompanionFactory.despawn(level.getServer(), companion);
@@ -1276,14 +1277,14 @@ public class BuildGameTests {
         ToolRun[] run = {null};
         steps(helper)
                 .thenExecute(() -> run[0] = lua(companion, "numen.build.place(" + cells + ")"))
-                .thenWaitUntil(() -> helper.assertTrue(run[0].done(), "numen.build.place has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, run[0].done(), "numen.build.place has not finished"))
                 .thenExecute(() -> {
-                    helper.assertTrue(run[0].succeeded(), "numen.build.place failed: " + run[0].outcome());
+                    Checks.assertTrue(helper, run[0].succeeded(), "numen.build.place failed: " + run[0].outcome());
                     for (BlockPos cell : wall) {
-                        helper.assertTrue(level.getBlockState(cell).is(Blocks.STONE_BRICKS),
+                        Checks.assertTrue(helper, level.getBlockState(cell).is(Blocks.STONE_BRICKS),
                                 "the wall she had just placed has a gap at " + cell.toShortString() + ": " + run[0].outcome());
                     }
-                    helper.assertTrue(level.getBlockState(beyond).is(Blocks.STONE),
+                    Checks.assertTrue(helper, level.getBlockState(beyond).is(Blocks.STONE),
                             "the cell beyond the wall was not placed: " + run[0].outcome());
                     CompanionFactory.despawn(level.getServer(), companion);
                 })
@@ -1305,16 +1306,16 @@ public class BuildGameTests {
         steps(helper)
                 .thenExecute(() -> run[0] = lua(companion, "numen.build.place({{name = \"stone\", pos = " + xyz(stone)
                         + "}, {name = \"potted_poppy\", pos = " + xyz(pot) + "}})"))
-                .thenWaitUntil(() -> helper.assertTrue(run[0].done(), "numen.build.place has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, run[0].done(), "numen.build.place has not finished"))
                 .thenExecute(() -> {
-                    helper.assertTrue(run[0].succeeded(), "one cell no item can place failed the whole call: " + run[0].outcome());
-                    helper.assertTrue(level.getBlockState(stone).is(Blocks.STONE), "the other cell was not placed");
+                    Checks.assertTrue(helper, run[0].succeeded(), "one cell no item can place failed the whole call: " + run[0].outcome());
+                    Checks.assertTrue(helper, level.getBlockState(stone).is(Blocks.STONE), "the other cell was not placed");
                     var groups = run[0].result(BuildCompanionTask.Placed.class).unplaced();
-                    helper.assertTrue(groups.size() == 1 && groups.get(0).kind().equals("no_item")
+                    Checks.assertTrue(helper, groups.size() == 1 && groups.get(0).kind().equals("no_item")
                                     && groups.get(0).first().equals(List.of(pot)),
                             "the potted plant is not the one no_item group: " + groups);
                     String says = groups.get(0).says();
-                    helper.assertTrue(says.contains("potted_poppy") && says.contains("flower_pot") && says.contains("poppy")
+                    Checks.assertTrue(helper, says.contains("potted_poppy") && says.contains("flower_pot") && says.contains("poppy")
                                     && says.contains(pot.getX() + "," + pot.getY() + "," + pot.getZ()),
                             "the sentence does not say which block, where, and what it is made of: " + says);
                     CompanionFactory.despawn(level.getServer(), companion);
@@ -1338,18 +1339,18 @@ public class BuildGameTests {
         ToolRun[] runs = {null, null};
         steps(helper)
                 .thenExecute(() -> runs[0] = lua(companion, "return numen.build.diff(" + cells + ")"))
-                .thenWaitUntil(() -> helper.assertTrue(runs[0].receipt() != null, "numen.build.diff has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, runs[0].receipt() != null, "numen.build.diff has not finished"))
                 .thenExecute(() -> {
                     var got = runs[0].data().getAsJsonObject("returned");
-                    helper.assertTrue(got.get("reach").getAsInt() == 1 && got.get("far").getAsInt() == 1,
+                    Checks.assertTrue(helper, got.get("reach").getAsInt() == 1 && got.get("far").getAsInt() == 1,
                             "diff does not count only the cell a hand can click as within reach: " + got);
                     runs[1] = lua(companion, "numen.build.place(" + cells + ")");
                 })
-                .thenWaitUntil(() -> helper.assertTrue(runs[1].done(), "numen.build.place has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, runs[1].done(), "numen.build.place has not finished"))
                 .thenExecute(() -> {
-                    helper.assertTrue(runs[1].succeeded(), "numen.build.place failed: " + runs[1].outcome());
+                    Checks.assertTrue(helper, runs[1].succeeded(), "numen.build.place failed: " + runs[1].outcome());
                     var result = runs[1].result(BuildCompanionTask.Placed.class);
-                    helper.assertTrue(level.getBlockState(near).is(Blocks.STONE) && level.getBlockState(edge).is(Blocks.STONE)
+                    Checks.assertTrue(helper, level.getBlockState(near).is(Blocks.STONE) && level.getBlockState(edge).is(Blocks.STONE)
                                     && result.setDirectly() == 0,
                             "both cells should go in by hand, none written straight in: " + runs[1].outcome());
                     CompanionFactory.despawn(level.getServer(), companion);

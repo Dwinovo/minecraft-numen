@@ -6,14 +6,19 @@
   "mixins": [
     "ChunkTickShuffleMixin",
     "EntityRandomMixin",
+    "GameTestBatchOrderMixin",
     "GameTestBatchStartMixin",
     "GameTestHelperOriginMixin",
+    "GameTestRegistrationMixin",
+    "GameTestSelectionMixin",
     "GameTestServerOriginMixin",
     "GameTestServerTickMixin",
     "GameTestServerWorldMixin",
     "GameTestTickOrderMixin",
     "StructureChunksMixin",
-    "StructureClearMixin"
+    "StructureBoundaryMixin",
+    "StructureClearMixin",
+    "StructureSiteClearMixin"
   ],
   "injectors": {
     "defaultRequire": 1

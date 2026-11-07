@@ -1,15 +1,15 @@
 package com.dwinovo.numen.pathing.gametest;
 
 import net.minecraft.world.entity.EntitySpawnReason;
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
-import net.minecraft.gametest.framework.GameTestAssertException;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
@@ -51,7 +51,7 @@ public class DynamicGameTests {
                         r.body.hurtMarked = true;
                     } else if (!Double.isNaN(pushedAt[0]) && x > pushedAt[0] + 10 && x < 29
                             && Math.floor(relZ(t, r)) != 5) {
-                        throw new GameTestAssertException("被推开之后十格还没回到原来那一排:z = " + relZ(t, r));
+                        throw Checks.failure("被推开之后十格还没回到原来那一排:z = " + relZ(t, r));
                     }
                 })
                 .arrives();
@@ -66,7 +66,7 @@ public class DynamicGameTests {
         Pig pig = EntityType.PIG.create(t.level, EntitySpawnReason.STRUCTURE);
         pig.setNoAi(true);
         BlockPos from = t.at(12, 1, 20);
-        pig.moveTo(from.getX() + 0.5, from.getY(), from.getZ() + 0.5, 0, 0);
+        pig.snapTo(from.getX() + 0.5, from.getY(), from.getZ() + 0.5, 0, 0);
         t.level.addFreshEntity(pig);
         TestBody body = t.body(4, 1, 5);
         BlockPos[] aim = {from};
@@ -74,7 +74,7 @@ public class DynamicGameTests {
         t.go(body, Goals.within(Goals.at(from), 0, 2.5), RouteSpec.defaults()).within(566)
                 .during(r -> {
                     if (r.ticks % 5 == 0 && pig.getX() - t.origin.getX() < 34) {
-                        pig.moveTo(pig.getX() + 1, pig.getY(), pig.getZ(), 0, 0);
+                        pig.snapTo(pig.getX() + 1, pig.getY(), pig.getZ(), 0, 0);
                     }
                     BlockPos now = pig.blockPosition();
                     if (now.distSqr(aim[0]) >= 4) {
@@ -86,10 +86,10 @@ public class DynamicGameTests {
                 .arrives().then(r -> {
                     pig.discard();
                     if (retargets[0] < 3) {
-                        throw new GameTestAssertException("目标只换了 " + retargets[0] + " 次,场景没起作用");
+                        throw Checks.failure("目标只换了 " + retargets[0] + " 次,场景没起作用");
                     }
                     if (r.body.blockPosition().distSqr(aim[0]) > 2.5 * 2.5) {
-                        throw new GameTestAssertException("没停在最后那个目标附近:" + t.rel(r.body.blockPosition())
+                        throw Checks.failure("没停在最后那个目标附近:" + t.rel(r.body.blockPosition())
                                 + " 目标 " + t.rel(aim[0]));
                     }
                 });

@@ -1,6 +1,7 @@
 package com.dwinovo.numen.pathing.gametest;
 
 import net.minecraft.world.entity.EntitySpawnReason;
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.entity.Mouse;
 import static com.dwinovo.numen.pathing.gametest.Scenes.dug;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
@@ -23,9 +24,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
-import net.minecraft.gametest.framework.GameTestAssertException;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
@@ -65,13 +65,13 @@ public class DigGameTests {
     /** 每一格从开挖到碎用的刻数与原版一致(差一刻以内),与规划定价用的 {@link DigTime} 也一致。 */
     private static void vanillaTimed(DigWatch watch, TestBody body) {
         if (watch.broken().isEmpty()) {
-            throw new GameTestAssertException("一格也没挖碎");
+            throw Checks.failure("一格也没挖碎");
         }
         for (DigWatch.Dig d : watch.broken()) {
             var snapshot = Snapshots.of(body);
             int priced = DigTime.ticks(snapshot.mining(), snapshot.creative(), d.tool, d.state, d.eyeInWater, d.grounded);
             if (Math.abs(d.ticks() - d.vanillaTicks()) > 1 || Math.abs(priced - d.vanillaTicks()) > 1) {
-                throw new GameTestAssertException("耗时对不上:" + d + " 定价 " + priced + " 全部 " + watch.broken());
+                throw Checks.failure("耗时对不上:" + d + " 定价 " + priced + " 全部 " + watch.broken());
             }
         }
     }
@@ -93,20 +93,20 @@ public class DigGameTests {
             List<DigWatch.Dig> broken = new ArrayList<>(watch.broken());
             broken.sort(java.util.Comparator.comparingLong(d -> d.startedAt));
             if (broken.size() < 2) {
-                throw new GameTestAssertException("应当连着挖两格:" + broken);
+                throw Checks.failure("应当连着挖两格:" + broken);
             }
             int cooldown = DigTime.cooldown(false, false);
             for (int i = 1; i < broken.size(); i++) {
                 long idle = broken.get(i).startedAt - broken.get(i - 1).brokeAt;
                 if (idle <= cooldown) {
-                    throw new GameTestAssertException("上一格碎了 " + idle + " 刻就开挖下一格,没缓够 " + cooldown + " 刻:" + broken);
+                    throw Checks.failure("上一格碎了 " + idle + " 刻就开挖下一格,没缓够 " + cooldown + " 刻:" + broken);
                 }
             }
             vanillaTimed(watch, body);
             watch.eachStartedOnce();
             // 挖掉的正是墙上身体高的那两格泥土
             if (dug(r).size() != 2 || dug(r).stream().anyMatch(d -> d.pos().getX() - t.origin.getX() != 8 || !d.before().is(Blocks.DIRT))) {
-                throw new GameTestAssertException("应当挖开墙上身体高的两格:" + dug(r));
+                throw Checks.failure("应当挖开墙上身体高的两格:" + dug(r));
             }
         });
     }
@@ -129,7 +129,7 @@ public class DigGameTests {
         t.go(body, Goals.at(t.at(12, 1, 8)), NATURAL).within(410).arrives().then(r -> {
             for (DigWatch.Dig d : watch.broken()) {
                 if (d.above.getBlock() instanceof net.minecraft.world.level.block.FallingBlock) {
-                    throw new GameTestAssertException("挖的格正上方压着会掉的方块:" + d + " 上面 " + d.above);
+                    throw Checks.failure("挖的格正上方压着会掉的方块:" + d + " 上面 " + d.above);
                 }
             }
         });
@@ -150,11 +150,11 @@ public class DigGameTests {
         watch.install();
         t.go(body, Goals.at(t.at(12, 1, 13)), NATURAL).within(557).arrives().then(r -> {
             if (watch.broken().isEmpty()) {
-                throw new GameTestAssertException("一格也没挖");
+                throw Checks.failure("一格也没挖");
             }
             for (DigWatch.Dig d : watch.broken()) {
                 if (d.touched(state -> !state.getFluidState().isEmpty())) {
-                    throw new GameTestAssertException("挖了挨着液体的格:" + d);
+                    throw Checks.failure("挖了挨着液体的格:" + d);
                 }
             }
         });
@@ -181,7 +181,7 @@ public class DigGameTests {
         NavRequest request = NavRequest.to(Goals.at(t.at(11, 3, 5)), NATURAL);
         t.plan(body, PlanQuery.of(request.goal(), request.spec()), plan -> {
             if (plan.route() == null) {
-                throw new GameTestAssertException("没规划出路:" + plan.outcome());
+                throw Checks.failure("没规划出路:" + plan.outcome());
             }
             Route route = plan.route();
             List<Edit.Dig> planned = new ArrayList<>();
@@ -191,15 +191,15 @@ public class DigGameTests {
                 }
             }
             if (planned.isEmpty()) {
-                throw new GameTestAssertException("规划的路不挖岸边:" + route);
+                throw Checks.failure("规划的路不挖岸边:" + route);
             }
             t.go(body, request.following(route)).within(467).arrives().then(r -> {
                 vanillaTimed(watch, body);
                 for (Edit.Dig p : planned) {
                     DigWatch.Dig d = watch.broken().stream().filter(b -> b.pos.equals(p.pos())).findFirst()
-                            .orElseThrow(() -> new GameTestAssertException("规划要挖的 " + t.rel(p.pos()) + " 没挖"));
+                            .orElseThrow(() -> Checks.failure("规划要挖的 " + t.rel(p.pos()) + " 没挖"));
                     if (d.eyeInWater != p.eyeInWater() || d.grounded != p.grounded()) {
-                        throw new GameTestAssertException("定价的前提与挖的那一刻不一样:规划 " + p + ",实际 " + d);
+                        throw Checks.failure("定价的前提与挖的那一刻不一样:规划 " + p + ",实际 " + d);
                     }
                 }
             });
@@ -218,12 +218,12 @@ public class DigGameTests {
         body.getInventory().setItem(20, new ItemStack(Items.IRON_PICKAXE));
         t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(347).arrives().then(r -> {
             if (dug(r).isEmpty()) {
-                throw new GameTestAssertException("绕路去了,铁镐没算进价钱");
+                throw Checks.failure("绕路去了,铁镐没算进价钱");
             }
             boolean held = r.report.actions().stream().anyMatch(a -> a instanceof BodyAction.Held h
                     && h.item() == Items.IRON_PICKAXE && h.from() == 20);
             if (!held) {
-                throw new GameTestAssertException("铁镐没从背包深处拿到手上:" + r.report.actions());
+                throw Checks.failure("铁镐没从背包深处拿到手上:" + r.report.actions());
             }
         });
     }
@@ -240,10 +240,10 @@ public class DigGameTests {
         body.getInventory().setItem(3, new ItemStack(Items.IRON_PICKAXE));
         t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(389).arrives().then(r -> {
             if (dug(r).isEmpty()) {
-                throw new GameTestAssertException("一格也没挖");
+                throw Checks.failure("一格也没挖");
             }
             if (!r.report.actions().isEmpty()) {
-                throw new GameTestAssertException("空手挖不该有身体动作:" + r.report.actions());
+                throw Checks.failure("空手挖不该有身体动作:" + r.report.actions());
             }
         });
     }
@@ -287,7 +287,7 @@ public class DigGameTests {
                     vanillaTimed(watch, body);
                     watch.eachStartedOnce();
                     if (body.getInventory().getItem(0).getDamageValue() >= 1000) {
-                        throw new GameTestAssertException("镐子没被修过,场景没起作用");
+                        throw Checks.failure("镐子没被修过,场景没起作用");
                     }
                 });
     }
@@ -303,7 +303,7 @@ public class DigGameTests {
         watch.install();
         t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(500).arrives().then(r -> {
             if (watch.broken().size() != 8) {
-                throw new GameTestAssertException("应当挖开八格:" + watch.broken());
+                throw Checks.failure("应当挖开八格:" + watch.broken());
             }
             watch.eachStartedOnce();
         });
@@ -331,19 +331,19 @@ public class DigGameTests {
                         mob[0] = EntityType.CHICKEN.create(t.level, EntitySpawnReason.STRUCTURE);
                         mob[0].setNoAi(true);
                         mob[0].setNoGravity(true);
-                        mob[0].moveTo(on.x, on.y - mob[0].getBbHeight() / 2, on.z, 0, 0);
+                        mob[0].snapTo(on.x, on.y - mob[0].getBbHeight() / 2, on.z, 0, 0);
                         t.level.addFreshEntity(mob[0]);
                         shownAt[0] = r.ticks;
                     } else if (mob[0] != null && !mob[0].isRemoved() && r.ticks - shownAt[0] >= 30) {
                         if (mob[0].getHealth() < mob[0].getMaxHealth() || mob[0].getLastHurtByMob() != null) {
-                            throw new GameTestAssertException("挡在准星上的鸡受了伤:" + mob[0].getLastDamageSource());
+                            throw Checks.failure("挡在准星上的鸡受了伤:" + mob[0].getLastDamageSource());
                         }
                         mob[0].discard();
                     }
                 })
                 .arrives().then(r -> {
                     if (mob[0] == null || !mob[0].isRemoved()) {
-                        throw new GameTestAssertException("鸡没挡上,场景没起作用");
+                        throw Checks.failure("鸡没挡上,场景没起作用");
                     }
                 });
     }
@@ -364,7 +364,7 @@ public class DigGameTests {
         t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(215)
                 .fails(Outcome.Denied.class, o -> {
                     if (!(o.reason() instanceof Mouse.Refusal.Server) || o.cell().getX() - t.origin.getX() != 8) {
-                        throw new GameTestAssertException("应当以服务端不让挖收场、点出墙上那一格:" + o);
+                        throw Checks.failure("应当以服务端不让挖收场、点出墙上那一格:" + o);
                     }
                 })
                 .then(Scenes::unaltered);
@@ -382,7 +382,7 @@ public class DigGameTests {
                 .within(227).arrives().then(r -> {
                     double distance = Math.sqrt(new AABB(target).distanceToSqr(r.body.getEyePosition()));
                     if (distance <= 4.5 || distance >= 5) {
-                        throw new GameTestAssertException("应当停在四格半到五格之间:" + distance);
+                        throw Checks.failure("应当停在四格半到五格之间:" + distance);
                     }
                 }));
     }
@@ -406,11 +406,11 @@ public class DigGameTests {
                 body.setXRot(pitch * 0.0125F);
                 Vec3 point = body.look().point(ore);
                 if (point == null) {
-                    throw new GameTestAssertException("朝着 " + before + " 度时找不到瞄点");
+                    throw Checks.failure("朝着 " + before + " 度时找不到瞄点");
                 }
                 body.look().at(point);
                 if (body.mouse().on(ore) == null) {
-                    throw new GameTestAssertException("朝着 " + before + " 度转过去,准星没落在要挖的那一格:" + body.mouse().pick());
+                    throw Checks.failure("朝着 " + before + " 度转过去,准星没落在要挖的那一格:" + body.mouse().pick());
                 }
             }
         }

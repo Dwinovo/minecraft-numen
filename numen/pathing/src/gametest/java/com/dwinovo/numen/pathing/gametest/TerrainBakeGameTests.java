@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.gametest.TerrainWorld;
 import com.mojang.logging.LogUtils;
 import java.io.IOException;
@@ -11,7 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.TicketType;
@@ -44,7 +45,7 @@ public class TerrainBakeGameTests {
         String out = System.getProperty("numen.terrain.bake.out");
         String[] region = System.getProperty("numen.terrain.bake.region", "0,0").split(",");
         if (out == null) {
-            helper.fail("没给 -PbakeTerrain");
+            Checks.fail(helper, "没给 -PbakeTerrain");
             return;
         }
         int rx = Integer.parseInt(region[0].trim());
@@ -52,7 +53,7 @@ public class TerrainBakeGameTests {
         boolean nether = "nether".equals(System.getProperty("numen.terrain.bake.dimension", "terrain"));
         ServerLevel level = helper.getLevel().getServer().getLevel(nether ? TerrainWorld.NETHER : TerrainWorld.DIMENSION);
         ChunkPos center = new ChunkPos(rx * REGION + REGION / 2 - 1, rz * REGION + REGION / 2 - 1);
-        level.getChunkSource().addRegionTicket(TicketType.FORCED, center, TICKET_DISTANCE, center);
+        level.getChunkSource().addTicketWithRadius(TicketType.FORCED, center, TICKET_DISTANCE);
         LOG.info("[terrain-bake] 种子 {},区域 r.{}.{},开始生成", level.getSeed(), rx, rz);
         helper.onEachTick(() -> {
             if (!generated(level, center)) {

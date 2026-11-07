@@ -1,11 +1,12 @@
 package com.dwinovo.numen.gametest;
 
 import net.minecraft.world.entity.EntitySpawnReason;
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
@@ -43,9 +44,9 @@ public class InteractGameTests {
         ToolRun scoop = lua(companion, "numen.use.block(" + xyz(water) + ", {item = \"minecraft:bucket\"})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(companion.getInventory().countItem(Items.WATER_BUCKET) == 1,
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.WATER_BUCKET) == 1,
                     "the bucket did not scoop the aimed water — tool reply: " + scoop.outcome());
-            helper.assertTrue(!level.getBlockState(water).getFluidState().isSource(),
+            Checks.assertTrue(helper, !level.getBlockState(water).getFluidState().isSource(),
                     "the aimed water source is still there");
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -76,11 +77,11 @@ public class InteractGameTests {
         ToolRun place = lua(companion, "numen.use.block(" + xyz(aim) + ", {item = \"minecraft:oak_boat\"})");
 
         succeedWhen(helper, () -> {
-            var boats = level.getEntitiesOfClass(net.minecraft.world.entity.vehicle.Boat.class,
+            var boats = level.getEntitiesOfClass(net.minecraft.world.entity.vehicle.AbstractBoat.class,
                     new net.minecraft.world.phys.AABB(
                             helper.absolutePos(new BlockPos(6, 1, 6)).getCenter(),
                             helper.absolutePos(new BlockPos(10, 4, 10)).getCenter()));
-            helper.assertTrue(!boats.isEmpty(),
+            Checks.assertTrue(helper, !boats.isEmpty(),
                     "no boat appeared on the aimed water — tool reply: " + place.outcome());
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -91,15 +92,15 @@ public class InteractGameTests {
     public static void interact_entity_left_click_hits_a_pig(GameTestHelper helper) {
         net.minecraft.world.entity.animal.Pig pig = net.minecraft.world.entity.EntityType.PIG.create(helper.getLevel(), EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(10, 2, 11));
-        pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        pig.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pig.setNoAi(true);
         helper.getLevel().addFreshEntity(pig);
         NumenPlayer companion = spawnAt(helper, "gametest_poker_entity", new BlockPos(8, 2, 11), false);
         ToolRun hit = lua(companion, "numen.use.hit(" + ref(pig) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(hit.done(), "use entity has not finished");
-            helper.assertTrue(hit.succeeded() && pig.getHealth() < pig.getMaxHealth()
+            Checks.assertTrue(helper, hit.done(), "use entity has not finished");
+            Checks.assertTrue(helper, hit.succeeded() && pig.getHealth() < pig.getMaxHealth()
                             && pig.getLastHurtByMob() == companion,
                     "the pig was not hit by her: " + hit.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -115,8 +116,8 @@ public class InteractGameTests {
         ToolRun toss = lua(companion, "numen.use.item({item = \"minecraft:snowball\"})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(toss.done(), "use item has not finished");
-            helper.assertTrue(toss.succeeded() && companion.getInventory().countItem(Items.SNOWBALL) == 3,
+            Checks.assertTrue(helper, toss.done(), "use item has not finished");
+            Checks.assertTrue(helper, toss.succeeded() && companion.getInventory().countItem(Items.SNOWBALL) == 3,
                     "the snowball was not thrown: " + toss.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -133,8 +134,8 @@ public class InteractGameTests {
         ToolRun press = lua(companion, "numen.use.item()");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(press.done(), "use item has not finished");
-            helper.assertTrue(press.succeeded() && companion.containerMenu instanceof net.minecraft.world.inventory.ChestMenu
+            Checks.assertTrue(helper, press.done(), "use item has not finished");
+            Checks.assertTrue(helper, press.succeeded() && companion.containerMenu instanceof net.minecraft.world.inventory.ChestMenu
                             && press.reply().contains("\"menu\"") && press.reply().contains("minecraft:diamond"),
                     "use item did not hand back the chest window: " + press.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -146,7 +147,7 @@ public class InteractGameTests {
     public static void the_mouse_asks_the_permission_layer_before_hitting_an_entity(GameTestHelper helper) {
         net.minecraft.world.entity.animal.Cow cow = net.minecraft.world.entity.EntityType.COW.create(helper.getLevel(), EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(8, 2, 8));
-        cow.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        cow.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         cow.setNoAi(true);
         helper.getLevel().addFreshEntity(cow);
         NumenPlayer companion = spawnAt(helper, "gametest_swinger", new BlockPos(6, 2, 8), false);
@@ -156,14 +157,14 @@ public class InteractGameTests {
                 .thenExecute(() -> companion.look().at(cow.getEyePosition()))
                 .thenExecute(() -> {
                     var blow = companion.mouse().attack();
-                    helper.assertTrue(blow instanceof com.dwinovo.numen.api.entity.Mouse.Blow.Refused
+                    Checks.assertTrue(helper, blow instanceof com.dwinovo.numen.api.entity.Mouse.Blow.Refused
                                     && cow.getHealth() == cow.getMaxHealth(),
                             "the mouse hit the cow in observe mode: " + blow);
                     com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
                 })
                 .thenExecute(() -> {
                     var blow = companion.mouse().attack();
-                    helper.assertTrue(blow instanceof com.dwinovo.numen.api.entity.Mouse.Blow.Landed
+                    Checks.assertTrue(helper, blow instanceof com.dwinovo.numen.api.entity.Mouse.Blow.Landed
                                     && cow.getHealth() < cow.getMaxHealth(),
                             "the allowed hit did not land: " + blow);
                     CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -180,11 +181,11 @@ public class InteractGameTests {
         ToolRun click = lua(companion, "numen.use.hit(" + xyz(stone) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(click.done(), "use hit has not finished");
-            helper.assertTrue(click.succeeded() && click.outcome().startsWith("left-clicked"),
+            Checks.assertTrue(helper, click.done(), "use hit has not finished");
+            Checks.assertTrue(helper, click.succeeded() && click.outcome().startsWith("left-clicked"),
                     "she did not walk up and hit it: " + click.outcome());
-            helper.assertTrue(companion.canInteractWithBlock(stone, 0.0), "she hit it from out of reach");
-            helper.assertTrue(helper.getLevel().getBlockState(stone).is(Blocks.STONE), "one hit broke the stone");
+            Checks.assertTrue(helper, companion.canInteractWithBlock(stone, 0.0), "she hit it from out of reach");
+            Checks.assertTrue(helper, helper.getLevel().getBlockState(stone).is(Blocks.STONE), "one hit broke the stone");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -194,7 +195,7 @@ public class InteractGameTests {
     public static void interact_entity_on_a_named_animal_needs_the_owner(GameTestHelper helper) {
         net.minecraft.world.entity.animal.Pig pig = net.minecraft.world.entity.EntityType.PIG.create(helper.getLevel(), EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(8, 2, 8));
-        pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        pig.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pig.setNoAi(true);
         pig.setCustomName(net.minecraft.network.chat.Component.literal("Wilbur"));
         helper.getLevel().addFreshEntity(pig);
@@ -202,10 +203,10 @@ public class InteractGameTests {
         ToolRun hit = lua(companion, "numen.use.hit(" + ref(pig) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(hit.done(), "use entity has not finished");
-            helper.assertTrue(!hit.succeeded() && hit.outcome().contains("owner"),
+            Checks.assertTrue(helper, hit.done(), "use entity has not finished");
+            Checks.assertTrue(helper, !hit.succeeded() && hit.outcome().contains("owner"),
                     "the refusal does not come from asking the owner: " + hit.outcome());
-            helper.assertTrue(pig.getHealth() == pig.getMaxHealth(), "the named pig was hit");
+            Checks.assertTrue(helper, pig.getHealth() == pig.getMaxHealth(), "the named pig was hit");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -217,7 +218,7 @@ public class InteractGameTests {
     public static void interact_entity_milks_a_cow(GameTestHelper helper) {
         var cow = net.minecraft.world.entity.EntityType.COW.create(helper.getLevel(), EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(10, 2, 7));
-        cow.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        cow.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         cow.setNoAi(true);
         helper.getLevel().addFreshEntity(cow);
         NumenPlayer companion = spawnAt(helper, "gametest_milkmaid", new BlockPos(8, 2, 7), false);
@@ -225,11 +226,11 @@ public class InteractGameTests {
         ToolRun milk = lua(companion, "numen.use.entity(" + ref(cow) + ", {item = \"minecraft:bucket\"})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(milk.done(), "use entity has not finished");
-            helper.assertTrue(milk.succeeded() && companion.getInventory().countItem(Items.MILK_BUCKET) == 1
+            Checks.assertTrue(helper, milk.done(), "use entity has not finished");
+            Checks.assertTrue(helper, milk.succeeded() && companion.getInventory().countItem(Items.MILK_BUCKET) == 1
                             && companion.getInventory().countItem(Items.BUCKET) == 0,
                     "the bucket was not filled with milk: " + milk.outcome());
-            helper.assertTrue(milk.outcome().contains("-1 minecraft:bucket") && milk.outcome().contains("+1 minecraft:milk_bucket"),
+            Checks.assertTrue(helper, milk.outcome().contains("-1 minecraft:bucket") && milk.outcome().contains("+1 minecraft:milk_bucket"),
                     "the reply does not say the bucket became milk: " + milk.outcome());
             cow.discard();
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -253,10 +254,10 @@ public class InteractGameTests {
 
         steps(helper)
                 .thenExecute(() -> click.set(click(helper, companion, "right", new BlockPos(6, 2, 4))))
-                .thenWaitUntil(() -> helper.assertTrue(click.get().done() && open.getAsBoolean(),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, click.get().done() && open.getAsBoolean(),
                         "the door did not open: " + click.get().outcome()))
                 .thenExecute(() -> click.set(click(helper, companion, "right", new BlockPos(6, 2, 4))))
-                .thenWaitUntil(() -> helper.assertTrue(click.get().done() && !open.getAsBoolean(),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, click.get().done() && !open.getAsBoolean(),
                         "the door did not close again: " + click.get().outcome()))
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
                 .thenSucceed();
@@ -265,10 +266,10 @@ public class InteractGameTests {
     // ---- numen.use.entity 对宠物:她自己的不问,别人的问;--sneak;对她说的话 ----
 
     /** 一只不动的狼,放在 {@code rel} 那一格。 */
-    static net.minecraft.world.entity.animal.Wolf wolfAt(GameTestHelper helper, BlockPos rel) {
+    static net.minecraft.world.entity.animal.wolf.Wolf wolfAt(GameTestHelper helper, BlockPos rel) {
         var wolf = net.minecraft.world.entity.EntityType.WOLF.create(helper.getLevel(), EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(rel);
-        wolf.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        wolf.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         wolf.setNoAi(true);
         helper.getLevel().addFreshEntity(wolf);
         return wolf;
@@ -283,8 +284,8 @@ public class InteractGameTests {
         ToolRun sit = lua(companion, "numen.use.entity(" + ref(wolf) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(sit.done(), "use entity has not finished");
-            helper.assertTrue(sit.succeeded() && wolf.isOrderedToSit(),
+            Checks.assertTrue(helper, sit.done(), "use entity has not finished");
+            Checks.assertTrue(helper, sit.succeeded() && wolf.isOrderedToSit(),
                     "her own wolf was not told to sit: " + sit.outcome());
             wolf.discard();
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -296,15 +297,15 @@ public class InteractGameTests {
     public static void use_entity_on_someone_elses_wolf_is_forbidden_outright(GameTestHelper helper) {
         var wolf = wolfAt(helper, new BlockPos(10, 2, 2));
         wolf.setTame(true, true);
-        wolf.setOwnerUUID(java.util.UUID.randomUUID());
+        wolf.setOwnerReference(new net.minecraft.world.entity.EntityReference<>(java.util.UUID.randomUUID()));
         NumenPlayer companion = spawnAt(helper, "gametest_wolfpetter", new BlockPos(8, 2, 2), false);
         ToolRun pet = lua(companion, "numen.use.entity(" + ref(wolf) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(pet.done(), "use entity has not finished");
-            helper.assertTrue(!pet.succeeded() && pet.outcome().contains("hard rule use_entity(other)"),
+            Checks.assertTrue(helper, pet.done(), "use entity has not finished");
+            Checks.assertTrue(helper, !pet.succeeded() && pet.outcome().contains("hard rule use_entity(other)"),
                     "the refusal does not come from the hard rule: " + pet.outcome());
-            helper.assertTrue(!wolf.isOrderedToSit(), "someone else's wolf was told to sit");
+            Checks.assertTrue(helper, !wolf.isOrderedToSit(), "someone else's wolf was told to sit");
             wolf.discard();
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -326,27 +327,27 @@ public class InteractGameTests {
 
         steps(helper)
                 .thenExecute(() -> run.set(lua(companion, click + "})")))
-                .thenWaitUntil(() -> helper.assertTrue(run.get().done()
+                .thenWaitUntil(() -> Checks.assertTrue(helper, run.get().done()
                                 && companion.containerMenu instanceof net.minecraft.world.inventory.ChestMenu,
                         "standing, the right click did not open the chest: " + run.get().outcome()))
                 .thenExecute(() -> run.set(lua(companion, "numen.gui.close()")))
-                .thenWaitUntil(() -> helper.assertTrue(run.get().done()
+                .thenWaitUntil(() -> Checks.assertTrue(helper, run.get().done()
                                 && companion.containerMenu == companion.inventoryMenu,
                         "the chest did not close: " + run.get().outcome()))
                 .thenExecute(() -> run.set(lua(companion, click + ", sneak = true})")))
                 .thenWaitUntil(() -> {
-                    helper.assertTrue(run.get().done(), "the sneaking click has not finished");
-                    helper.assertTrue(run.get().succeeded() && run.get().outcome().contains("while sneaking"),
+                    Checks.assertTrue(helper, run.get().done(), "the sneaking click has not finished");
+                    Checks.assertTrue(helper, run.get().succeeded() && run.get().outcome().contains("while sneaking"),
                             "the receipt does not say she clicked sneaking: " + run.get().outcome());
-                    helper.assertTrue(companion.containerMenu == companion.inventoryMenu,
+                    Checks.assertTrue(helper, companion.containerMenu == companion.inventoryMenu,
                             "sneaking, the right click still opened the chest");
                     boolean placed = false;
                     for (net.minecraft.core.Direction side : net.minecraft.core.Direction.values()) {
                         placed |= level.getBlockState(chest.relative(side)).is(Blocks.COBBLESTONE);
                     }
-                    helper.assertTrue(placed && companion.getInventory().countItem(Items.COBBLESTONE) == 3,
+                    Checks.assertTrue(helper, placed && companion.getInventory().countItem(Items.COBBLESTONE) == 3,
                             "no cobblestone went onto the chest: " + run.get().outcome());
-                    helper.assertTrue(!companion.controls().held(com.dwinovo.numen.api.entity.Controls.Key.SNEAK),
+                    Checks.assertTrue(helper, !companion.controls().held(com.dwinovo.numen.api.entity.Controls.Key.SNEAK),
                             "she still holds sneak after the click");
                 })
                 .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
@@ -373,15 +374,15 @@ public class InteractGameTests {
                 .getString();
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(lie.done(), "use block has not finished");
+            Checks.assertTrue(helper, lie.done(), "use block has not finished");
             java.util.List<String> told = GameTestKit.events(companion).stream()
                     .filter(e -> com.dwinovo.numen.api.agent.inbox.EventTypes.SERVER_MESSAGE.equals(e.type()))
                     .map(com.dwinovo.numen.api.agent.inbox.EventQueue.Entry::text)
                     .toList();
-            helper.assertTrue(told.stream().anyMatch(t -> t.contains("where=\"action_bar\"")
+            Checks.assertTrue(helper, told.stream().anyMatch(t -> t.contains("where=\"action_bar\"")
                             && t.contains(onlyAtNight)),
                     "what the bed told her is not an event: " + told + " — tool reply: " + lie.outcome());
-            helper.assertTrue(!companion.isSleeping(), "she fell asleep at noon");
+            Checks.assertTrue(helper, !companion.isSleeping(), "she fell asleep at noon");
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
@@ -397,19 +398,19 @@ public class InteractGameTests {
         level.setBlockAndUpdate(dirt, Blocks.DIRT.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_bare_press", new BlockPos(3, 2, 8), true);
         var inventory = companion.getInventory();
-        inventory.selected = 0;
+        inventory.setSelectedSlot(0);
         inventory.setItem(0, new ItemStack(Items.STICK));
         inventory.setItem(5, new ItemStack(Items.IRON_SHOVEL));
         ToolRun press = lua(companion, "numen.use.hit(" + xyz(dirt) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(press.done(), "use hit has not finished");
-            helper.assertTrue(press.succeeded() && level.getBlockState(dirt).isAir(),
+            Checks.assertTrue(helper, press.done(), "use hit has not finished");
+            Checks.assertTrue(helper, press.succeeded() && level.getBlockState(dirt).isAir(),
                     "the dirt was not broken: " + press.outcome());
-            helper.assertTrue(inventory.selected == 0 && companion.getMainHandItem().is(Items.STICK)
+            Checks.assertTrue(helper, inventory.getSelectedSlot() == 0 && companion.getMainHandItem().is(Items.STICK)
                             && inventory.getItem(5).is(Items.IRON_SHOVEL),
                     "she swapped tools for a bare key press: holding " + companion.getMainHandItem());
-            helper.assertTrue(press.outcome().contains("left-clicked " + words(dirt).replace(' ', ',')),
+            Checks.assertTrue(helper, press.outcome().contains("left-clicked " + words(dirt).replace(' ', ',')),
                     "the reply does not say what was clicked: " + press.outcome());
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -430,11 +431,11 @@ public class InteractGameTests {
         ToolRun press = lua(companion, "numen.use.hit(" + xyz(stone) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(press.done(), "use hit has not finished");
-            helper.assertTrue(press.succeeded() && level.getBlockState(dirt).isAir()
+            Checks.assertTrue(helper, press.done(), "use hit has not finished");
+            Checks.assertTrue(helper, press.succeeded() && level.getBlockState(dirt).isAir()
                             && level.getBlockState(stone).is(Blocks.STONE),
                     "the press did not land on the dirt in front: " + press.outcome());
-            helper.assertTrue(press.outcome().contains("dirt at " + dirt.getX() + "," + dirt.getY() + ","
+            Checks.assertTrue(helper, press.outcome().contains("dirt at " + dirt.getX() + "," + dirt.getY() + ","
                             + dirt.getZ() + " — the crosshair landed there, not on " + stone.getX() + ","
                             + stone.getY() + "," + stone.getZ()),
                     "the reply does not say the crosshair landed elsewhere: " + press.outcome());
@@ -451,8 +452,8 @@ public class InteractGameTests {
         ToolRun place = lua(companion, "numen.use.block(" + xyz(floor) + ", {item = \"minecraft:cobblestone\"})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(place.done(), "use block has not finished");
-            helper.assertTrue(place.succeeded() && helper.getLevel().getBlockState(floor.above()).is(Blocks.COBBLESTONE)
+            Checks.assertTrue(helper, place.done(), "use block has not finished");
+            Checks.assertTrue(helper, place.succeeded() && helper.getLevel().getBlockState(floor.above()).is(Blocks.COBBLESTONE)
                             && companion.getInventory().countItem(Items.COBBLESTONE) == 3,
                     "the cobblestone was not placed on the floor: " + place.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -476,16 +477,16 @@ public class InteractGameTests {
                 "numen.use.sign(" + xyz(sign) + ", {\"Hello\", \"World\"})");
         steps = steps.thenWaitUntil(() -> {
             var text = (net.minecraft.world.level.block.entity.SignBlockEntity) helper.getLevel().getBlockEntity(sign);
-            helper.assertTrue(text != null && com.dwinovo.numen.tools.Signs.lines(text.getFrontText())
+            Checks.assertTrue(helper, text != null && com.dwinovo.numen.tools.Signs.lines(text.getFrontText())
                             .equals(java.util.List.of("Hello", "World", "", "")), "the front of the sign is not written");
         });
         steps = call(helper, steps, companion,
                 "numen.use.sign(" + xyz(sign) + ", {\"Behind\"}, {back = true})");
         steps.thenWaitUntil(() -> {
             var text = (net.minecraft.world.level.block.entity.SignBlockEntity) helper.getLevel().getBlockEntity(sign);
-            helper.assertTrue(com.dwinovo.numen.tools.Signs.lines(text.getBackText())
+            Checks.assertTrue(helper, com.dwinovo.numen.tools.Signs.lines(text.getBackText())
                             .equals(java.util.List.of("Behind", "", "", "")), "the back of the sign is not written");
-            helper.assertTrue(com.dwinovo.numen.tools.Signs.lines(text.getFrontText()).get(0).equals("Hello"),
+            Checks.assertTrue(helper, com.dwinovo.numen.tools.Signs.lines(text.getFrontText()).get(0).equals("Hello"),
                     "writing the back changed the front");
         }).thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();
     }
@@ -502,9 +503,9 @@ public class InteractGameTests {
         ToolRun write = lua(companion, "numen.use.sign(" + xyz(sign) + ", {\"Vandalised\"})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(write.done() && !write.succeeded() && write.outcome().contains("waxed"),
+            Checks.assertTrue(helper, write.done() && !write.succeeded() && write.outcome().contains("waxed"),
                     "the refusal does not say the sign is waxed: " + write.outcome());
-            helper.assertTrue(com.dwinovo.numen.tools.Signs.lines(entity.getFrontText()).get(0).equals("Keep"),
+            Checks.assertTrue(helper, com.dwinovo.numen.tools.Signs.lines(entity.getFrontText()).get(0).equals("Keep"),
                     "the waxed sign's text changed");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -515,7 +516,7 @@ public class InteractGameTests {
     public static void use_entity_at_a_part_dresses_and_undresses_an_armor_stand(GameTestHelper helper) {
         var stand = net.minecraft.world.entity.EntityType.ARMOR_STAND.create(helper.getLevel(), EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(8, 2, 4));
-        stand.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        stand.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         helper.getLevel().addFreshEntity(stand);
         NumenPlayer companion = spawnAt(helper, "gametest_dresser", new BlockPos(6, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_HELMET));
@@ -524,16 +525,16 @@ public class InteractGameTests {
         Steps steps = steps(helper);
         steps = call(helper, steps, companion, "numen.use.entity(" + ref(stand) + ", {item = \"minecraft:iron_helmet\", at = \"head\"})");
         steps = call(helper, steps, companion, "numen.use.entity(" + ref(stand) + ", {item = \"minecraft:iron_leggings\", at = \"legs\"})");
-        steps = steps.thenWaitUntil(() -> helper.assertTrue(
+        steps = steps.thenWaitUntil(() -> Checks.assertTrue(helper, 
                 stand.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).is(Items.IRON_HELMET)
                         && stand.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.LEGS).is(Items.IRON_LEGGINGS),
                 "the stand is not wearing the helmet and the leggings"));
         steps = call(helper, steps, companion, "numen.use.entity(" + ref(stand) + ", {at = \"legs\"})");
         steps.thenWaitUntil(() -> {
-            helper.assertTrue(stand.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.LEGS).isEmpty()
+            Checks.assertTrue(helper, stand.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.LEGS).isEmpty()
                             && stand.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).is(Items.IRON_HELMET),
                     "the leggings are still on the stand, or the helmet came off too");
-            helper.assertTrue(companion.getMainHandItem().is(Items.IRON_LEGGINGS), "the leggings are not in her hand");
+            Checks.assertTrue(helper, companion.getMainHandItem().is(Items.IRON_LEGGINGS), "the leggings are not in her hand");
         }).thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();
     }
 
@@ -545,9 +546,9 @@ public class InteractGameTests {
         drop(helper, companion, new BlockPos(8, 60, 8));
 
         Steps steps = steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(!companion.onGround(), "she has not left the ground"));
+                .thenWaitUntil(() -> Checks.assertTrue(helper, !companion.onGround(), "she has not left the ground"));
         steps = call(helper, steps, companion, "numen.use.glide()");
-        steps.thenWaitUntil(() -> helper.assertTrue(companion.isFallFlying(), "she is not gliding"))
+        steps.thenWaitUntil(() -> Checks.assertTrue(helper, companion.isFallFlying(), "she is not gliding"))
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();
     }
 }

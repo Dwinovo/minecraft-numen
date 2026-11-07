@@ -1,6 +1,7 @@
 package com.dwinovo.numen.gametest;
 
 import net.minecraft.world.entity.EntitySpawnReason;
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.agent.loop.Program;
@@ -28,10 +29,10 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import net.minecraft.gametest.framework.BeforeBatch;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
 import net.minecraft.world.Difficulty;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerLevel;
@@ -94,13 +95,13 @@ public class ScriptGameTests {
         Round round = round(helper, her, script);
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(round.hasSettled(), "the script has not finished");
+            Checks.assertTrue(helper, round.hasSettled(), "the script has not finished");
             String msg = message(round, script);
-            helper.assertTrue(receipt(round, script).get("success").getAsBoolean(), "the script failed: " + msg);
-            helper.assertTrue(level.getBlockState(first).isAir() && level.getBlockState(second).isAir(),
+            Checks.assertTrue(helper, receipt(round, script).get("success").getAsBoolean(), "the script failed: " + msg);
+            Checks.assertTrue(helper, level.getBlockState(first).isAir() && level.getBlockState(second).isAir(),
                     "not both cells were cleared: " + msg);
-            helper.assertTrue(msg.startsWith("ok · 2 calls"), msg);
-            helper.assertTrue(msg.matches("(?s).*\nstderr:\nline 1 numen\\.build\\.place: .*\nline 2 numen\\.build\\.place: .*"),
+            Checks.assertTrue(helper, msg.startsWith("ok · 2 calls"), msg);
+            Checks.assertTrue(helper, msg.matches("(?s).*\nstderr:\nline 1 numen\\.build\\.place: .*\nline 2 numen\\.build\\.place: .*"),
                     "a line did not wait for its task to finish and report its account: " + msg);
             CompanionFactory.despawn(level.getServer(), her);
         });
@@ -121,24 +122,24 @@ public class ScriptGameTests {
         Round round = round(helper, her, script);
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(CompanionTickDispatcher.currentTaskFor(her.getUUID()) != null,
+                .thenWaitUntil(() -> Checks.assertTrue(helper, CompanionTickDispatcher.currentTaskFor(her.getUUID()) != null,
                         "the walk has not started"))
                 .thenExecute(() -> {
-                    helper.assertTrue(round.result(script) == null, "the script ended before the walk did");
+                    Checks.assertTrue(helper, round.result(script) == null, "the script ended before the walk did");
                     round.ownerStops();
                 })
-                .thenWaitUntil(() -> helper.assertTrue(CompanionTickDispatcher.currentTaskFor(her.getUUID()) == null,
+                .thenWaitUntil(() -> Checks.assertTrue(helper, CompanionTickDispatcher.currentTaskFor(her.getUUID()) == null,
                         "her body is still busy after the stop"))
-                .thenWaitUntil(() -> helper.assertTrue(round.programReceipt() != null,
+                .thenWaitUntil(() -> Checks.assertTrue(helper, round.programReceipt() != null,
                         "the program has not handed in its receipt"))
                 .thenExecute(() -> {
                     // 切断时客户端放弃了这一批(模型从历史里的切断点知道);服务端上的程序当场停下,它的回执写明停在哪
-                    helper.assertTrue(round.result(script) == null, "the cut-off turn was handed a result");
+                    Checks.assertTrue(helper, round.result(script) == null, "the cut-off turn was handed a result");
                     String msg = JsonParser.parseString(round.programReceipt()).getAsJsonObject().get("message")
                             .getAsString();
-                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(numen\\.move\\.walk\\) after 1 call: "
+                    Checks.assertTrue(helper, msg.matches("(?s)The script stopped at line 1 \\(numen\\.move\\.walk\\) after 1 call: "
                             + "this turn was cut off; t\\d+ was stopped too\\. Nothing after that ran\\..*"), msg);
-                    helper.assertTrue(level.getBlockState(kept).is(Blocks.STONE), "the line after the stop ran");
+                    Checks.assertTrue(helper, level.getBlockState(kept).is(Blocks.STONE), "the line after the stop ran");
                     CompanionFactory.despawn(level.getServer(), her);
                 })
                 .thenSucceed();
@@ -157,16 +158,16 @@ public class ScriptGameTests {
         Round round = round(helper, her, script);
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(CompanionTickDispatcher.currentTaskFor(her.getUUID()) != null,
+                .thenWaitUntil(() -> Checks.assertTrue(helper, CompanionTickDispatcher.currentTaskFor(her.getUUID()) != null,
                         "the walk has not started"))
                 .thenExecute(() -> round.ownerSays("wait, come back"))
-                .thenWaitUntil(() -> helper.assertTrue(round.hasSettled(), "the script did not stop when the owner spoke"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, round.hasSettled(), "the script did not stop when the owner spoke"))
                 .thenExecute(() -> {
                     String msg = message(round, script);
-                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(numen\\.move\\.walk\\) after 1 call: "
+                    Checks.assertTrue(helper, msg.matches("(?s)The script stopped at line 1 \\(numen\\.move\\.walk\\) after 1 call: "
                             + "your owner spoke; t\\d+ keeps running\\..*"), msg);
                     TaskRecord<?> now = CompanionTickDispatcher.currentTaskFor(her.getUUID());
-                    helper.assertTrue(now != null && now.getToolName().equals("numen.move.walk"),
+                    Checks.assertTrue(helper, now != null && now.getToolName().equals("numen.move.walk"),
                             "the walk is no longer running: " + now);
                     CompanionFactory.despawn(level.getServer(), her);
                 })
@@ -199,16 +200,16 @@ public class ScriptGameTests {
         steps(helper)
                 .thenExecute(() -> round[0] = round(helper, her, run))
                 .thenWaitUntil(() -> {
-                    helper.assertTrue(round[0].hasSettled(), "numen.work.mine has not finished");
+                    Checks.assertTrue(helper, round[0].hasSettled(), "numen.work.mine has not finished");
                     String msg = message(round[0], run);
-                    helper.assertTrue(msg.startsWith("ok · "), msg);
-                    helper.assertTrue(round[0].data().get("returned").getAsInt()
+                    Checks.assertTrue(helper, msg.startsWith("ok · "), msg);
+                    Checks.assertTrue(helper, round[0].data().get("returned").getAsInt()
                             >= ores.size(), "numen.work.mine did not return the cells it dug: " + msg);
                     for (BlockPos ore : ores) {
-                        helper.assertTrue(!level.getBlockState(ore).is(Blocks.IRON_ORE),
+                        Checks.assertTrue(helper, !level.getBlockState(ore).is(Blocks.IRON_ORE),
                                 "ore left at " + ore + ": " + msg);
                     }
-                    helper.assertTrue(her.getInventory().countItem(Items.RAW_IRON) == ores.size(),
+                    Checks.assertTrue(helper, her.getInventory().countItem(Items.RAW_IRON) == ores.size(),
                             "she carries " + her.getInventory().countItem(Items.RAW_IRON) + " raw iron of "
                                     + ores.size() + ": " + msg);
                 })
@@ -241,7 +242,7 @@ public class ScriptGameTests {
     public static void a_factory_module_is_changed_deleted_and_reset(GameTestHelper helper) {
         NumenPlayer her = spawnAt(helper, "gametest_lua_copier", new BlockPos(2, 2, 2), false);
         ToolRun shown = lua(her, "return numen.module.show(\"" + COPIED + "\")");
-        helper.assertTrue(shown.receipt() != null && shown.receipt().contains("function M.version()"),
+        Checks.assertTrue(helper, shown.receipt() != null && shown.receipt().contains("function M.version()"),
                 "the factory module does not read as itself: " + shown.receipt());
         ToolRun changed = lua(her, """
                 local code = numen.module.show("gt.copied").code
@@ -249,28 +250,28 @@ public class ScriptGameTests {
                 numen.module.save(mine, {name = "gt.copied"})
                 return gt.copied.gt_marker() + gt.copied.version()
                 """);
-        helper.assertTrue(changed.ranToTheEnd() && changed.receipt().contains("returned: 8"),
+        Checks.assertTrue(helper, changed.ranToTheEnd() && changed.receipt().contains("returned: 8"),
                 "her change was not used: " + changed.receipt());
         JsonObject listed = module(lua(her, "numen.module.list()"), COPIED);
-        helper.assertTrue(listed != null && listed.get("summary").getAsString().startsWith("Test fixture")
+        Checks.assertTrue(helper, listed != null && listed.get("summary").getAsString().startsWith("Test fixture")
                 && listed.get("whose").getAsString().equals("built in, changed"), "the list: " + listed);
-        helper.assertTrue(lua(her, "return numen.module.show(\"" + COPIED + "\", {factory = true}).code").receipt()
+        Checks.assertTrue(helper, lua(her, "return numen.module.show(\"" + COPIED + "\", {factory = true}).code").receipt()
                         .contains("function M.version()") && !lua(her, "return numen.module.show(\"" + COPIED
                         + "\", {factory = true}).code").receipt().contains("gt_marker"), "the factory text is gone");
         ToolRun deleted = lua(her, "numen.module.delete(\"" + COPIED + "\")");
-        helper.assertTrue(deleted.succeeded(), deleted.reply());
+        Checks.assertTrue(helper, deleted.succeeded(), deleted.reply());
         ToolRun unused = lua(her, "return gt.copied.version()");
-        helper.assertTrue(!unused.ranToTheEnd() && unused.receipt().contains("no_function"),
+        Checks.assertTrue(helper, !unused.ranToTheEnd() && unused.receipt().contains("no_function"),
                 "a deleted module is still used: " + unused.receipt());
         JsonObject gone = module(lua(her, "numen.module.list()"), COPIED);
-        helper.assertTrue(gone != null && gone.get("whose").getAsString().equals("built in, deleted; "
+        Checks.assertTrue(helper, gone != null && gone.get("whose").getAsString().equals("built in, deleted; "
                 + "numen.module.reset(\"" + COPIED + "\") brings it back"), "the list does not say it was deleted: " + gone);
         ToolRun reset = lua(her, "numen.module.reset(\"" + COPIED + "\")");
-        helper.assertTrue(reset.succeeded(), reset.reply());
+        Checks.assertTrue(helper, reset.succeeded(), reset.reply());
         ToolRun back = lua(her, "return gt.copied.version(), type(gt.copied.gt_marker)");
-        helper.assertTrue(back.ranToTheEnd() && back.receipt().contains("returned: 1"),
+        Checks.assertTrue(helper, back.ranToTheEnd() && back.receipt().contains("returned: 1"),
                 "reset did not bring the factory text back: " + back.receipt());
-        helper.assertTrue(!lua(her, "return gt.copied.gt_marker()").ranToTheEnd(), "her function outlived the reset");
+        Checks.assertTrue(helper, !lua(her, "return gt.copied.gt_marker()").ranToTheEnd(), "her function outlived the reset");
         CompanionFactory.despawn(helper.getLevel().getServer(), her);
         helper.succeed();
     }
@@ -287,26 +288,26 @@ public class ScriptGameTests {
         BlockPos cell = helper.absolutePos(new BlockPos(4, 2, 2));
         level.setBlockAndUpdate(cell, Blocks.STONE.defaultBlockState());
         java.nio.file.Path dir = com.dwinovo.numen.api.script.Modules.of(her.getUUID()).dir();
-        helper.assertTrue(dir.toString().contains("numen-gametest-lib-"),
+        Checks.assertTrue(helper, dir.toString().contains("numen-gametest-lib-"),
                 "GameTest reads modules from " + dir + ", not from its own empty directory");
 
         ToolRun flat = lua(her, "numen.module.save(\"-- Flat.\\nreturn {}\", {name = \"gt_flat\"})");
-        helper.assertTrue(!flat.succeeded() && flat.reply().contains("my.gt_flat"),
+        Checks.assertTrue(helper, !flat.succeeded() && flat.reply().contains("my.gt_flat"),
                 "a module of her own was kept outside my: " + flat.reply());
         ToolRun broken = lua(her, "numen.module.save(\"-- Never compiles.\\nlocal x = = 1\", {name = \"my.gt_broken\"})");
-        helper.assertTrue(!broken.succeeded() && broken.reply().contains("my.gt_broken:2:"),
+        Checks.assertTrue(helper, !broken.succeeded() && broken.reply().contains("my.gt_broken:2:"),
                 "a module that does not compile was kept: " + broken.reply());
         ToolRun redefines = lua(her, "numen.module.save(\"-- Takes numen.build.place.\\nlocal M = {}\\nfunction numen.build.place() end\\n"
                 + "return M\", {name = \"my.gt_thief\"})");
-        helper.assertTrue(!redefines.succeeded() && redefines.reply().contains("numen.build.place is an API function"),
+        Checks.assertTrue(helper, !redefines.succeeded() && redefines.reply().contains("numen.build.place is an API function"),
                 "a module that redefines an API function was kept: " + redefines.reply());
 
         ToolRun saved = lua(her, "numen.module.save(\"-- Clearing cells.\\nlocal M = {}\\n---Clear one cell.\\n"
                 + "function M.cell(p)\\n  numen.build.place({{name = 'air', pos = p}})\\nend\\nreturn M\", {name = \"my.gt_clear\"})");
-        helper.assertTrue(saved.succeeded() && "my.gt_clear".equals(saved.field("name")) && "new".equals(saved.field("how")),
+        Checks.assertTrue(helper, saved.succeeded() && "my.gt_clear".equals(saved.field("name")) && "new".equals(saved.field("how")),
                 saved.reply());
         ToolRun shown = lua(her, "numen.module.show(\"my.gt_clear\")");
-        helper.assertTrue(shown.succeeded() && "yours".equals(shown.field("whose"))
+        Checks.assertTrue(helper, shown.succeeded() && "yours".equals(shown.field("whose"))
                 && String.valueOf(shown.field("code")).contains("function M.cell(p)")
                 && Long.valueOf(0).equals(shown.field("runs")), shown.reply());
 
@@ -316,24 +317,24 @@ public class ScriptGameTests {
         Round[] second = new Round[1];
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(first.hasSettled(), "the first program has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, first.hasSettled(), "the first program has not finished"))
                 .thenExecute(() -> {
                     String msg = message(first, run);
-                    helper.assertTrue(msg.startsWith("ok · ") && msg.contains("\nline 1 numen.build.place: "), msg);
-                    helper.assertTrue(level.getBlockState(cell).isAir(), "the module did not clear the cell");
+                    Checks.assertTrue(helper, msg.startsWith("ok · ") && msg.contains("\nline 1 numen.build.place: "), msg);
+                    Checks.assertTrue(helper, level.getBlockState(cell).isAir(), "the module did not clear the cell");
                     level.setBlockAndUpdate(cell, Blocks.STONE.defaultBlockState());
                 })
                 .thenExecute(() -> second[0] = round(helper, her, programCall("my.gt_clear.cell(" + at + ")")))
-                .thenWaitUntil(() -> helper.assertTrue(second[0].hasSettled() && level.getBlockState(cell).isAir(),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, second[0].hasSettled() && level.getBlockState(cell).isAir(),
                         "the second program did not clear the cell and end"))
                 .thenWaitUntil(() -> {
                     ToolRun list = lua(her, "numen.module.list()");
                     JsonObject mine = module(list, "my.gt_clear");
-                    helper.assertTrue(mine != null && mine.get("summary").getAsString().equals("Clearing cells.")
+                    Checks.assertTrue(helper, mine != null && mine.get("summary").getAsString().equals("Clearing cells.")
                                     && mine.get("whose").getAsString().equals("yours") && mine.get("runs").getAsInt() == 2
                                     && mine.get("finished").getAsInt() == 2, "the record does not add up: " + mine);
                     JsonObject work = module(list, "numen.work");
-                    helper.assertTrue(work != null && work.get("whose").getAsString().equals("built in"), list.reply());
+                    Checks.assertTrue(helper, work != null && work.get("whose").getAsString().equals("built in"), list.reply());
                 })
                 .thenExecute(() -> {
                     // 主人拿编辑器改了文件:/reload 之后,下一段程序就用新的
@@ -347,18 +348,18 @@ public class ScriptGameTests {
                     }
                     Modules.of(her.getUUID()).reload();
                     ToolRun edited = lua(her, "return my.gt_clear.version()");
-                    helper.assertTrue(edited.ranToTheEnd() && edited.receipt().contains("returned: 2"),
+                    Checks.assertTrue(helper, edited.ranToTheEnd() && edited.receipt().contains("returned: 2"),
                             "the edited file was not used: " + edited.receipt());
                     ToolRun untouched = lua(her, "return my.gt_clear.version() + 1");
-                    helper.assertTrue(untouched.ranToTheEnd(), "a broken module nobody uses broke a program: "
+                    Checks.assertTrue(helper, untouched.ranToTheEnd(), "a broken module nobody uses broke a program: "
                             + untouched.receipt());
                     ToolRun rotten = lua(her, "return my.gt_rotten.x");
-                    helper.assertTrue(!rotten.ranToTheEnd() && rotten.receipt().contains("module my.gt_rotten does not "
+                    Checks.assertTrue(helper, !rotten.ranToTheEnd() && rotten.receipt().contains("module my.gt_rotten does not "
                             + "compile"), rotten.receipt());
-                    helper.assertTrue(lua(her, "numen.module.delete(\"my.gt_rotten\")").succeeded(), "the rotten one stays");
+                    Checks.assertTrue(helper, lua(her, "numen.module.delete(\"my.gt_rotten\")").succeeded(), "the rotten one stays");
                     ToolRun deleted = lua(her, "numen.module.delete(\"my.gt_clear\")");
-                    helper.assertTrue(deleted.succeeded(), deleted.reply());
-                    helper.assertTrue(!lua(her, "numen.module.show(\"my.gt_clear\")").succeeded(),
+                    Checks.assertTrue(helper, deleted.succeeded(), deleted.reply());
+                    Checks.assertTrue(helper, !lua(her, "numen.module.show(\"my.gt_clear\")").succeeded(),
                             "the deleted module is still there");
                     CompanionFactory.despawn(level.getServer(), her);
                 })
@@ -383,13 +384,13 @@ public class ScriptGameTests {
                 return {logs = #logs, oak = oak, oak_states = #numen.shape.pattern("##*oak_logs")[1].blocks,
                         count = #tall, lowest = tall[1].y, highest = tall[#tall].y}
                 """);
-        helper.assertTrue(run.ranToTheEnd(), "the shape program failed: " + run.receipt());
+        Checks.assertTrue(helper, run.ranToTheEnd(), "the shape program failed: " + run.receipt());
         var got = run.data().getAsJsonObject("returned");
-        helper.assertTrue(got.get("logs").getAsInt() >= 20 && got.get("oak").getAsBoolean(),
+        Checks.assertTrue(helper, got.get("logs").getAsInt() >= 20 && got.get("oak").getAsBoolean(),
                 "##logs is every log of the tag, in its default state: " + got);
-        helper.assertTrue(got.get("oak_states").getAsInt() == 12, "##*oak_logs is 4 blocks of 3 axes: " + got);
+        Checks.assertTrue(helper, got.get("oak_states").getAsInt() == 12, "##*oak_logs is 4 blocks of 3 axes: " + got);
         int height = level.getMaxY() + 1 - level.getMinY();
-        helper.assertTrue(got.get("count").getAsInt() == 4 * height && got.get("lowest").getAsInt() == level.getMinY()
+        Checks.assertTrue(helper, got.get("count").getAsInt() == 4 * height && got.get("lowest").getAsInt() == level.getMinY()
                         && got.get("highest").getAsInt() == level.getMaxY(),
                 "expand_vert reaches from the lowest to the highest block: " + got);
         CompanionFactory.despawn(level.getServer(), her);
@@ -402,9 +403,9 @@ public class ScriptGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer her = spawnAt(helper, "gametest_lua_herder", new BlockPos(2, 2, 2), false);
         var cow = net.minecraft.world.entity.EntityType.COW.create(level, EntitySpawnReason.STRUCTURE);
-        helper.assertTrue(cow != null, "the cow did not spawn");
+        Checks.assertTrue(helper, cow != null, "the cow did not spawn");
         BlockPos at = helper.absolutePos(new BlockPos(12, 2, 12));
-        cow.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        cow.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         cow.setNoAi(true);
         level.addFreshEntity(cow);
         LlmToolCall script = programCall("""
@@ -415,12 +416,12 @@ public class ScriptGameTests {
         Round round = round(helper, her, script);
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(round.hasSettled(), "the script has not finished");
+            Checks.assertTrue(helper, round.hasSettled(), "the script has not finished");
             JsonObject receipt = receipt(round, script);
-            helper.assertTrue(receipt.get("success").getAsBoolean()
+            Checks.assertTrue(helper, receipt.get("success").getAsBoolean()
                             && round.data().get("returned").getAsString().equals(com.dwinovo.numen.api.sdk.EntityLabel.of(cow)),
                     "the walk to the cow failed: " + receipt);
-            helper.assertTrue(her.distanceTo(cow) <= 4, "she did not get to the cow: " + her.distanceTo(cow));
+            Checks.assertTrue(helper, her.distanceTo(cow) <= 4, "she did not get to the cow: " + her.distanceTo(cow));
             cow.discard();
             CompanionFactory.despawn(level.getServer(), her);
         });
@@ -498,15 +499,15 @@ public class ScriptGameTests {
                             ClientEndpoint.handle(call, answer -> ClientCallResultPayload.handle(answer, owner));
                         }
                     }
-                    helper.assertTrue(result.get() != null, "the receipt has not come back");
+                    Checks.assertTrue(helper, result.get() != null, "the receipt has not come back");
                 })
                 .thenExecute(() -> {
                     String receipt = result.get().receipt();
                     JsonObject data = JsonParser.parseString(receipt).getAsJsonObject();
-                    helper.assertTrue(data.get("success").getAsBoolean()
+                    Checks.assertTrue(helper, data.get("success").getAsBoolean()
                                     && data.get("message").getAsString().endsWith("\nreturned: gametest_wire:hello from the client"),
                             "the program did not run with its client function answered over the wire: " + receipt);
-                    helper.assertTrue(result.get().calls().size() == 2,
+                    Checks.assertTrue(helper, result.get().calls().size() == 2,
                             "the calls' outcomes did not come back: " + receipt);
                     leave(owner);
                     CompanionFactory.despawn(helper.getLevel().getServer(), her);
@@ -572,12 +573,12 @@ public class ScriptGameTests {
                             ClientEndpoint.handle(call, answer -> ClientCallResultPayload.handle(answer, owner));
                         }
                     }
-                    helper.assertTrue(result.get() != null, "the receipt has not come back");
+                    Checks.assertTrue(helper, result.get() != null, "the receipt has not come back");
                 })
                 .thenExecute(() -> {
                     String said = JsonParser.parseString(result.get().receipt()).getAsJsonObject().get("message")
                             .getAsString();
-                    helper.assertTrue(said.contains("returned: numen=answered,gtk=answered,gtm=missing(no_function: ")
+                    Checks.assertTrue(helper, said.contains("returned: numen=answered,gtk=answered,gtm=missing(no_function: ")
                                     && said.contains("gametest_machine_mod")
                                     && said.endsWith("|numen+gtk:minecraft:crafting_table|gtk:Press"),
                             "the sources were not merged and reported: " + said);
@@ -610,24 +611,24 @@ public class ScriptGameTests {
 
         steps(helper)
                 .thenExecute(() -> {
-                    helper.assertFalse(com.dwinovo.numen.api.sdk.ApiDocs.index(Modules.of(her.getUUID())).contains("gtcm.pad"),
+                    Checks.assertFalse(helper, com.dwinovo.numen.api.sdk.ApiDocs.index(Modules.of(her.getUUID())).contains("gtcm.pad"),
                             "the index lists a client-only mod the owner's client did not report");
                     ServerPrograms.run(her, her.getUUID(), owner.getUUID(), new ServerPrograms.Request(
                             "padless-" + UUID.randomUUID(), "return pcall(gtcm.pad.read)", Modules.of(her.getUUID()), true),
                             NetworkTransport.INSTANCE, CallObserver.NONE, refused::set);
                 })
-                .thenWaitUntil(() -> helper.assertTrue(refused.get() != null, "the refusal has not come back"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, refused.get() != null, "the refusal has not come back"))
                 .thenExecute(() -> {
                     String receipt = refused.get().receipt();
-                    helper.assertTrue(receipt.contains("no_function") && receipt.contains("needs the gametest_pad_mod mod"),
+                    Checks.assertTrue(helper, receipt.contains("no_function") && receipt.contains("needs the gametest_pad_mod mod"),
                             "the missing mod was not named: " + receipt);
-                    helper.assertTrue(received(owner).stream().noneMatch(p -> p instanceof ClientCallPayload),
+                    Checks.assertTrue(helper, received(owner).stream().noneMatch(p -> p instanceof ClientCallPayload),
                             "a call for a mod the client lacks was sent to it");
                     // 主人的客户端报了它(版本在先,能力在后,到齐才算报到)
                     com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL,
                             java.util.Set.of("gtcm"));
                     received(owner);
-                    helper.assertTrue(com.dwinovo.numen.api.sdk.ApiDocs.index(Modules.of(her.getUUID())).contains("gtcm.pad"),
+                    Checks.assertTrue(helper, com.dwinovo.numen.api.sdk.ApiDocs.index(Modules.of(her.getUUID())).contains("gtcm.pad"),
                             "the index does not list a client-only mod the owner's client reported");
                     ServerPrograms.run(her, her.getUUID(), owner.getUUID(), new ServerPrograms.Request(
                             "padded-" + UUID.randomUUID(), "return gtcm.pad.read()", Modules.of(her.getUUID()), true),
@@ -640,10 +641,10 @@ public class ScriptGameTests {
                             ClientEndpoint.handle(call, answer -> ClientCallResultPayload.handle(answer, owner));
                         }
                     }
-                    helper.assertTrue(answered.get() != null, "the receipt has not come back");
+                    Checks.assertTrue(helper, answered.get() != null, "the receipt has not come back");
                 })
                 .thenExecute(() -> {
-                    helper.assertTrue(sent[0] && answered.get().receipt().contains("returned: the pad"),
+                    Checks.assertTrue(helper, sent[0] && answered.get().receipt().contains("returned: the pad"),
                             "the call did not reach the owner's client: " + answered.get().receipt());
                     leave(owner);
                     com.dwinovo.numen.api.entity.CompanionRegistry.get(helper.getLevel().getServer()).remove(her.getUUID());
@@ -686,12 +687,12 @@ public class ScriptGameTests {
                                     owner));
                         }
                     }
-                    helper.assertTrue(result.get() != null, "the receipt has not come back");
+                    Checks.assertTrue(helper, result.get() != null, "the receipt has not come back");
                 })
                 .thenExecute(() -> {
                     String receipt = result.get().receipt();
-                    helper.assertTrue(fragments[0] > 1, "the request did not come down as fragments: " + fragments[0]);
-                    helper.assertTrue(receipt.contains("returned: " + text.length()),
+                    Checks.assertTrue(helper, fragments[0] > 1, "the request did not come down as fragments: " + fragments[0]);
+                    Checks.assertTrue(helper, receipt.contains("returned: " + text.length()),
                             "the program did not run to the end with the whole text: " + receipt);
                     leave(owner);
                     CompanionFactory.despawn(helper.getLevel().getServer(), her);

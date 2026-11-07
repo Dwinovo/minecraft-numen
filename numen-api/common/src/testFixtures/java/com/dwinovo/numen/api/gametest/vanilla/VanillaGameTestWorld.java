@@ -24,6 +24,11 @@ public final class VanillaGameTestWorld implements GameTestWorld {
     }
 
     @Override
+    public void setRule(ServerLevel level, GameRules.IntegerValue rule, int value) {
+        rule.set(value, level.getServer());
+    }
+
+    @Override
     public String text(Component message) {
         return message.getString();
     }

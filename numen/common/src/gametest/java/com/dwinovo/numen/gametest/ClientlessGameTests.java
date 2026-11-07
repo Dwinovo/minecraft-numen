@@ -1,9 +1,10 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.brain.Replies;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
-import net.minecraft.gametest.framework.BeforeBatch;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.block.Blocks;
@@ -23,7 +24,7 @@ import com.dwinovo.numen.api.gametest.OwnerLine;
 import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.payload.ClientUiActionPayload;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.ChatType;
 import net.minecraft.network.chat.Component;
@@ -71,12 +72,12 @@ public class ClientlessGameTests {
 
         Companions.syncRosterToOwner(server, plain);
         NumenNetwork.sendToPlayer(plain, new ClientUiActionPayload(ClientUiActionPayload.Action.DEBUG_TEXT_ON));
-        helper.assertTrue(GameTestKit.received(plain).isEmpty(),
+        Checks.assertTrue(helper, GameTestKit.received(plain).isEmpty(),
                 "our packets were sent to a connection that has no channel for them");
 
         List<Component> heard = new ArrayList<>();
         run(plain, "numen settings", heard);
-        helper.assertTrue(heard.size() == 1 && isKey(heard.get(0), Keys.COMMAND_NEEDS_CLIENT),
+        Checks.assertTrue(helper, heard.size() == 1 && isKey(heard.get(0), Keys.COMMAND_NEEDS_CLIENT),
                 "a command that acts on his client did not say he has none: " + heard);
 
         GameTestKit.leave(plain);
@@ -98,11 +99,11 @@ public class ClientlessGameTests {
             player.getServer().getCommands().performPrefixedCommand(player.createCommandSourceStack(), "numen settings");
         }
 
-        helper.assertTrue(GameTestKit.said(chinese).stream().anyMatch(s -> s.text().getString().contains("要装了 Numen 客户端")),
+        Checks.assertTrue(helper, GameTestKit.said(chinese).stream().anyMatch(s -> s.text().getString().contains("要装了 Numen 客户端")),
                 "the Chinese client was not told in Chinese");
         for (ServerPlayer player : List.of(english, elsewhere)) {
             List<OwnerLine.Said> said = GameTestKit.said(player);
-            helper.assertTrue(said.stream().anyMatch(s -> s.text().getString().contains("This needs the Numen client")),
+            Checks.assertTrue(helper, said.stream().anyMatch(s -> s.text().getString().contains("This needs the Numen client")),
                     "a client with no matching language was not told in English: " + said);
         }
         players.forEach(GameTestKit::leave);
@@ -134,10 +135,10 @@ public class ClientlessGameTests {
         List<OwnerLine.Said> heard = new ArrayList<>();
         succeedWhen(helper, () -> {
             heard.addAll(GameTestKit.said(owner));
-            helper.assertTrue(her.conversation().stream().anyMatch(m -> m instanceof
+            Checks.assertTrue(helper, her.conversation().stream().anyMatch(m -> m instanceof
                             com.dwinovo.numen.api.agent.llm.ConvoState.Msg.User u && u.content().contains("你好")),
                     "the whisper is not in her log: " + her.conversation());
-            helper.assertTrue(heard.stream().anyMatch(said -> said.text().getContents() instanceof TranslatableContents t
+            Checks.assertTrue(helper, heard.stream().anyMatch(said -> said.text().getContents() instanceof TranslatableContents t
                             && t.getKey().equals("commands.message.display.incoming")
                             && said.text().getString().contains("在呢") && !said.overlay()),
                     "her answer did not come back as a whisper: " + heard);
@@ -158,11 +159,11 @@ public class ClientlessGameTests {
 
         whisper(stranger, her.companion, "借把镐子");
 
-        helper.assertTrue(her.loop.inbox().entries().stream().anyMatch(e -> e.type().equals(EventTypes.TALK)
+        Checks.assertTrue(helper, her.loop.inbox().entries().stream().anyMatch(e -> e.type().equals(EventTypes.TALK)
                         && e.text().contains("gametest_passerby → gt_overhearer") && e.text().contains("借把镐子")),
                 "the stranger's whisper is not in her inbox, marked with who said it: " + her.loop.inbox().entries());
         helper.runAfterDelay(20, () -> {
-            helper.assertTrue(her.mind.asked.isEmpty(), "a stranger's whisper woke her");
+            Checks.assertTrue(helper, her.mind.asked.isEmpty(), "a stranger's whisper woke her");
             her.close();
             GameTestKit.leave(owner);
             GameTestKit.leave(stranger);
@@ -175,9 +176,8 @@ public class ClientlessGameTests {
     /** 消息里依次出现的、点下去会敲的命令。 */
     private static List<String> clickCommands(Component message) {
         List<String> out = new ArrayList<>();
-        if (message.getStyle().getClickEvent() instanceof net.minecraft.network.chat.ClickEvent click
-                && click.getAction() == net.minecraft.network.chat.ClickEvent.Action.RUN_COMMAND) {
-            out.add(click.getValue());
+        if (message.getStyle().getClickEvent() instanceof net.minecraft.network.chat.ClickEvent.RunCommand run) {
+            out.add(run.command());
         }
         message.getSiblings().forEach(sibling -> out.addAll(clickCommands(sibling)));
         return out;
@@ -204,15 +204,15 @@ public class ClientlessGameTests {
 
         List<OwnerLine.Said> asked = GameTestKit.said(owner);
         long id = ticket.request().id();
-        helper.assertTrue(asked.size() == 1 && asked.get(0).text().getString().contains("gametest_asker"),
+        Checks.assertTrue(helper, asked.size() == 1 && asked.get(0).text().getString().contains("gametest_asker"),
                 "the request did not reach him as one chat message: " + asked);
-        helper.assertTrue(clickCommands(asked.get(0).text()).equals(List.of("/numen consent allow " + id,
+        Checks.assertTrue(helper, clickCommands(asked.get(0).text()).equals(List.of("/numen consent allow " + id,
                         "/numen consent remember " + id, "/numen consent deny " + id)),
                 "the buttons are not allow, always allow and deny: " + clickCommands(asked.get(0).text()));
 
         owner.getServer().getCommands().performPrefixedCommand(owner.createCommandSourceStack(),
                 clickCommands(asked.get(0).text()).get(0).substring(1));
-        helper.assertTrue(ticket.poll() != null && ticket.poll().decision() == ConsentAnswer.Decision.ALLOW_ONCE,
+        Checks.assertTrue(helper, ticket.poll() != null && ticket.poll().decision() == ConsentAnswer.Decision.ALLOW_ONCE,
                 "pressing [allow] did not answer the request: " + ticket.poll());
 
         // 下一张没等到答复就撤了:他在聊天栏里读到是谁的请求、为什么撤
@@ -221,7 +221,7 @@ public class ClientlessGameTests {
         GameTestKit.said(owner);
         ConsentDesk.of(companion).release(scope, ConsentDesk.Withdrawal.TASK_ENDED);
         List<OwnerLine.Said> withdrawn = GameTestKit.said(owner);
-        helper.assertTrue(withdrawn.size() == 1 && withdrawn.get(0).text().getString().contains("gametest_asker")
+        Checks.assertTrue(helper, withdrawn.size() == 1 && withdrawn.get(0).text().getString().contains("gametest_asker")
                         && withdrawn.get(0).text().getString().contains("went away"),
                 "the withdrawal did not say whose request went away: " + withdrawn);
 
@@ -256,9 +256,9 @@ public class ClientlessGameTests {
         succeedWhen(helper, () -> {
             GameTestKit.said(plain).stream().filter(OwnerLine.Said::overlay).forEach(bar::add);
             GameTestKit.said(installed).stream().filter(OwnerLine.Said::overlay).forEach(installedBar::add);
-            helper.assertTrue(bar.stream().anyMatch(b -> b.text().getString().equals("gametest_worker: 执行")),
+            Checks.assertTrue(helper, bar.stream().anyMatch(b -> b.text().getString().equals("gametest_worker: 执行")),
                     "what she is doing is not on his action bar in his language: " + bar);
-            helper.assertTrue(installedBar.isEmpty(), "an owner with our client got an action bar: " + installedBar);
+            Checks.assertTrue(helper, installedBar.isEmpty(), "an owner with our client got an action bar: " + installedBar);
             worker.close();
             other.close();
             GameTestKit.leave(plain);

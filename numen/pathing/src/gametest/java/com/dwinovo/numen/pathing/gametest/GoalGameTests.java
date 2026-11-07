@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
 import java.util.List;
@@ -15,9 +16,8 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.inventory.FurnaceMenu;
 import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
-import net.minecraft.gametest.framework.GameTestAssertException;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
@@ -40,7 +40,7 @@ public class GoalGameTests {
 
     private static void at(Trial t, Trial.Run r, int x, int y, int z) {
         if (!feet(t, r).equals(new BlockPos(x, y, z))) {
-            throw new GameTestAssertException("应当停在 (" + x + "," + y + "," + z + "),却在 " + t.rel(r.body.blockPosition()));
+            throw Checks.failure("应当停在 (" + x + "," + y + "," + z + "),却在 " + t.rel(r.body.blockPosition()));
         }
     }
 
@@ -55,14 +55,14 @@ public class GoalGameTests {
                 .passing()).within(300).arrives().then(r -> {
                     at(t, r, 14, 1, 5);
                     if (r.body.getDeltaMovement().horizontalDistance() < 0.05) {
-                        throw new GameTestAssertException("路过却停住了:" + r.body.getDeltaMovement());
+                        throw Checks.failure("路过却停住了:" + r.body.getDeltaMovement());
                     }
                 });
         TestBody stopping = t.body(2, 1, 20);
         t.go(stopping, Goals.at(t.at(14, 1, 20)), RouteSpec.defaults()).within(300).arrives().then(r -> {
             at(t, r, 14, 1, 20);
             if (r.body.getDeltaMovement().horizontalDistance() >= 0.05) {
-                throw new GameTestAssertException("停在那一格却还在走:" + r.body.getDeltaMovement());
+                throw Checks.failure("停在那一格却还在走:" + r.body.getDeltaMovement());
             }
         });
     }
@@ -76,7 +76,7 @@ public class GoalGameTests {
                 return seen;
             }
         }
-        throw new GameTestAssertException("从停下的地方看不清它:" + r.body.position());
+        throw Checks.failure("从停下的地方看不清它:" + r.body.position());
     }
 
     /**
@@ -95,18 +95,18 @@ public class GoalGameTests {
         TestBody body = t.body(10, 1, 2);
         Goals.Use use = Goals.use(t.level, Snapshots.of(body).stats(), furnace);
         if (!use.open().equals(List.of(Direction.SOUTH))) {
-            throw new GameTestAssertException("只该有南面敞开:" + use.open());
+            throw Checks.failure("只该有南面敞开:" + use.open());
         }
         t.go(body, use, RouteSpec.defaults()).within(305).arrives().then(r -> {
             if (feet(t, r).getZ() != 5) {
-                throw new GameTestAssertException("应当站在南边那条矿道里:" + t.rel(r.body.blockPosition()));
+                throw Checks.failure("应当站在南边那条矿道里:" + t.rel(r.body.blockPosition()));
             }
             Sight.Trace seen = sees(r, furnace);
             r.body.look().at(seen.point());
             BlockHitResult hit = r.body.mouse().on(furnace);
             if (hit == null || !r.body.gameMode.useItemOn(r.body, t.level, ItemStack.EMPTY, InteractionHand.MAIN_HAND,
                     hit).consumesAction() || !(r.body.containerMenu instanceof FurnaceMenu)) {
-                throw new GameTestAssertException("打不开熔炉:" + hit + " " + r.body.containerMenu);
+                throw Checks.failure("打不开熔炉:" + hit + " " + r.body.containerMenu);
             }
             r.body.closeContainer();
         });
@@ -128,7 +128,7 @@ public class GoalGameTests {
         var v = r.body.getDeltaMovement();
         if (!r.body.onGround() || Math.abs(feetY - level) > 1.0E-3 || Math.abs(v.y) > 0.1
                 || Math.sqrt(v.x * v.x + v.z * v.z) > 0.1) {
-            throw new GameTestAssertException("还没站稳就报到了:脚高 " + feetY + " 着地 " + r.body.onGround() + " 速度 " + v);
+            throw Checks.failure("还没站稳就报到了:脚高 " + feetY + " 着地 " + r.body.onGround() + " 速度 " + v);
         }
     }
 
@@ -144,7 +144,7 @@ public class GoalGameTests {
         t.go(body, Goals.at(t.at(8, 4, 5)), RouteSpec.defaults()).within(284).arrives().then(r -> {
             at(t, r, 8, 4, 5);
             if (!r.body.onClimbable()) {
-                throw new GameTestAssertException("应当挂在梯子上");
+                throw Checks.failure("应当挂在梯子上");
             }
         });
     }
@@ -157,7 +157,7 @@ public class GoalGameTests {
         TestBody body = t.body(4, 1, 5);
         t.go(body, Goals.at(t.at(10, 0, 5)), RouteSpec.defaults()).within(293).arrives().then(r -> {
             if (!r.body.isInWater()) {
-                throw new GameTestAssertException("应当在水里:" + t.rel(r.body.blockPosition()));
+                throw Checks.failure("应当在水里:" + t.rel(r.body.blockPosition()));
             }
         });
     }

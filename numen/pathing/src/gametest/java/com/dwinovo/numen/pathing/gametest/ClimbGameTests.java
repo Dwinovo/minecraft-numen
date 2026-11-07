@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.pathing.gametest.Scenes.stair;
 import static com.dwinovo.numen.pathing.gametest.Scenes.trapdoor;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
@@ -9,9 +10,8 @@ import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.Direction;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
-import net.minecraft.gametest.framework.GameTestAssertException;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
@@ -48,7 +48,7 @@ public class ClimbGameTests {
         t.go(body, Goals.at(t.at(10, 6, 5)), RouteSpec.defaults())
                 .during(r -> {
                     if (r.ticks > 5 && !r.navigation.progressing()) {
-                        throw new GameTestAssertException("爬梯子途中不在推进了(第 " + r.ticks + " 刻)");
+                        throw Checks.failure("爬梯子途中不在推进了(第 " + r.ticks + " 刻)");
                     }
                 })
                 .arrives();
@@ -93,7 +93,7 @@ public class ClimbGameTests {
         TestBody body = t.body(8, 1, 5);
         t.go(body, Goals.at(t.at(6, 6, 8)), RouteSpec.defaults()).arrives().then(r -> {
             if (r.report.ledger().entries().stream().noneMatch(e -> e instanceof EditLedger.Toggled)) {
-                throw new GameTestAssertException("没推开活板门:" + r.report.ledger().entries());
+                throw Checks.failure("没推开活板门:" + r.report.ledger().entries());
             }
         });
     }
@@ -135,7 +135,7 @@ public class ClimbGameTests {
     /** 身体停在脚手架这一格顶上的板上:脚正好是这一格的底,踩在地上。 */
     private static void restsOnTheCell(Trial.Run r, Trial t, int y) {
         if (!r.body.onGround() || Math.abs(r.body.getY() - t.at(8, y, 5).getY()) > 0.01) {
-            throw new GameTestAssertException("该稳稳停在脚手架第 " + y + " 格的板上,却在 " + r.body.position() + " 地上=" + r.body.onGround());
+            throw Checks.failure("该稳稳停在脚手架第 " + y + " 格的板上,却在 " + r.body.position() + " 地上=" + r.body.onGround());
         }
     }
 
@@ -172,7 +172,7 @@ public class ClimbGameTests {
         t.go(body, Goals.at(t.at(11, 5, 5)), RouteSpec.defaults().edit().changes(true).consent(false).build())
                 .within(590).arrives().then(r -> {
                     if (r.report.ledger().entries().stream().noneMatch(e -> e instanceof EditLedger.Dug)) {
-                        throw new GameTestAssertException("没挖就出去了?" + r.report.ledger().entries());
+                        throw Checks.failure("没挖就出去了?" + r.report.ledger().entries());
                     }
                 });
     }

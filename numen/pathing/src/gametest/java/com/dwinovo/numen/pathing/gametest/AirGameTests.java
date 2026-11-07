@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
 import java.util.function.IntFunction;
@@ -9,9 +10,8 @@ import com.dwinovo.numen.pathing.world.Kinematics;
 import com.dwinovo.numen.pathing.world.Kinematics.Keys;
 import com.dwinovo.numen.pathing.world.Kinematics.Motion;
 
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
-import net.minecraft.gametest.framework.GameTestAssertException;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -58,12 +58,12 @@ public class AirGameTests {
                 case 2 -> body.controls().press(Key.JUMP);
                 case 3 -> {
                     if (!body.getAbilities().flying) {
-                        throw new GameTestAssertException("连按两下跳没有起飞");
+                        throw Checks.failure("连按两下跳没有起飞");
                     }
                 }
                 case 12 -> {
                     if (body.getY() < groundY + 2) {
-                        throw new GameTestAssertException("飞着按住跳,十来刻该升到两格以上,脚在 " + (body.getY() - groundY));
+                        throw Checks.failure("飞着按住跳,十来刻该升到两格以上,脚在 " + (body.getY() - groundY));
                     }
                     body.controls().release(Key.JUMP);
                     body.controls().press(Key.SNEAK);
@@ -72,7 +72,7 @@ public class AirGameTests {
                     if (k > 12 && body.onGround()) {
                         body.controls().releaseAll();
                         if (body.getAbilities().flying) {
-                            throw new GameTestAssertException("落了地还在飞");
+                            throw Checks.failure("落了地还在飞");
                         }
                         body.leave();
                         helper.succeed();
@@ -98,7 +98,7 @@ public class AirGameTests {
                 body.controls().release(Key.JUMP);
             } else if (k == 32) {
                 if (body.getAbilities().flying) {
-                    throw new GameTestAssertException("隔了三十刻的两下跳也飞起来了");
+                    throw Checks.failure("隔了三十刻的两下跳也飞起来了");
                 }
             } else if (k == 100) {
                 body.leave();
@@ -121,7 +121,7 @@ public class AirGameTests {
                 body.controls().release(Key.JUMP);
             } else if (k == 6) {
                 if (body.getAbilities().flying) {
-                    throw new GameTestAssertException("生存模式的身体飞起来了");
+                    throw Checks.failure("生存模式的身体飞起来了");
                 }
                 body.leave();
                 helper.succeed();
@@ -159,7 +159,7 @@ public class AirGameTests {
                 double velocity = predicted.velocity().distanceTo(body.getDeltaMovement());
                 worst = Math.max(worst, Math.max(position, velocity));
                 if (position > LIMIT || velocity > LIMIT) {
-                    throw new GameTestAssertException("第 " + tick + " 刻与步进器对不上:预测 " + predicted + ",真身体 "
+                    throw Checks.failure("第 " + tick + " 刻与步进器对不上:预测 " + predicted + ",真身体 "
                             + new Motion(body.position(), body.getDeltaMovement()) + ",位置差 " + position + ",速度差 " + velocity);
                 }
             }
@@ -221,7 +221,7 @@ public class AirGameTests {
                 body.controls().release(Key.JUMP);
             } else if (i == 5) {
                 if (!body.getAbilities().flying) {
-                    throw new GameTestAssertException("没有飞起来");
+                    throw Checks.failure("没有飞起来");
                 }
                 rehearsal[0] = new Rehearsal(body, script, false, 40, () -> {
                     body.leave();
@@ -260,7 +260,7 @@ public class AirGameTests {
                 body.controls().release(Key.JUMP);
             } else if (i == 3) {
                 if (!body.isFallFlying()) {
-                    throw new GameTestAssertException("空中按跳没有展开鞘翅");
+                    throw Checks.failure("空中按跳没有展开鞘翅");
                 }
                 rehearsal[0] = new Rehearsal(body, script, true, 24, () -> {
                     body.leave();
@@ -291,7 +291,7 @@ public class AirGameTests {
                 body.controls().release(Key.JUMP);
             } else if (i == 3) {
                 if (!body.isFallFlying()) {
-                    throw new GameTestAssertException("空中按跳没有展开鞘翅");
+                    throw Checks.failure("空中按跳没有展开鞘翅");
                 }
                 body.setYRot(-45);
                 body.setXRot(0);

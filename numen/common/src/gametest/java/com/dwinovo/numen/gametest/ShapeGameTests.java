@@ -1,13 +1,14 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import net.minecraft.gametest.framework.BeforeBatch;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
 import net.minecraft.world.Difficulty;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
@@ -66,7 +67,7 @@ public class ShapeGameTests {
             }
         }
         ToolRun run = lua(her, "return numen.shape.cuboid(" + xyz(o) + ", " + xyz(o.offset(2, 0, 2)) + "):replace(\"dirt\", \"gravel\")");
-        helper.assertTrue(run.ranToTheEnd(), "replace failed: " + run.receipt());
+        Checks.assertTrue(helper, run.ranToTheEnd(), "replace failed: " + run.receipt());
         Set<String> expected = new HashSet<>();
         for (int dx = 0; dx < 3; dx++) {
             for (int dz = 0; dz < 3; dz++) {
@@ -75,8 +76,8 @@ public class ShapeGameTests {
                 }
             }
         }
-        helper.assertTrue(positions(list(run)).equals(expected), "only the five dirt cells: " + list(run));
-        helper.assertTrue(list(run).asList().stream().allMatch(c -> c.getAsJsonObject().get("name").getAsString().equals("gravel")),
+        Checks.assertTrue(helper, positions(list(run)).equals(expected), "only the five dirt cells: " + list(run));
+        Checks.assertTrue(helper, list(run).asList().stream().allMatch(c -> c.getAsJsonObject().get("name").getAsString().equals("gravel")),
                 "each takes the pattern's block: " + list(run));
         CompanionFactory.despawn(level.getServer(), her);
         helper.succeed();
@@ -92,13 +93,13 @@ public class ShapeGameTests {
             block(level, p.immutable(), Blocks.OAK_PLANKS.defaultBlockState());
         }
         ToolRun run = lua(her, "return numen.shape.cuboid(" + xyz(o.offset(-1, -1, -1)) + ", " + xyz(o.offset(5, 5, 5)) + "):hollow()");
-        helper.assertTrue(run.ranToTheEnd(), "hollow failed: " + run.receipt());
+        Checks.assertTrue(helper, run.ranToTheEnd(), "hollow failed: " + run.receipt());
         Set<String> inside = new HashSet<>();
         for (BlockPos p : BlockPos.betweenClosed(o.offset(1, 1, 1), o.offset(3, 3, 3))) {
             inside.add(key(p));
         }
-        helper.assertTrue(positions(list(run)).equals(inside), "the 3 x 3 x 3 inside a one-thick shell: " + list(run));
-        helper.assertTrue(list(run).asList().stream().allMatch(c -> c.getAsJsonObject().get("name").getAsString().equals("air")),
+        Checks.assertTrue(helper, positions(list(run)).equals(inside), "the 3 x 3 x 3 inside a one-thick shell: " + list(run));
+        Checks.assertTrue(helper, list(run).asList().stream().allMatch(c -> c.getAsJsonObject().get("name").getAsString().equals("air")),
                 "emptied with air: " + list(run));
         CompanionFactory.despawn(level.getServer(), her);
         helper.succeed();
@@ -133,7 +134,7 @@ public class ShapeGameTests {
                 + ")):rotate(90):paste(" + xyz(to) + "))");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(build.done() && build.succeeded(), "build failed: " + build.outcome());
+            Checks.assertTrue(helper, build.done() && build.succeeded(), "build failed: " + build.outcome());
             for (int i = 0; i < original.length; i++) {
                 if (original[i].isAir()) {
                     continue;
@@ -144,7 +145,7 @@ public class ShapeGameTests {
                 int dz = from.getZ() - standing.getZ();
                 BlockPos at = to.offset(-dz, dy, dx);
                 BlockState expected = original[i].rotate(Rotation.CLOCKWISE_90);
-                helper.assertTrue(level.getBlockState(at) == expected, "cell " + i + " at " + at.toShortString() + " is "
+                Checks.assertTrue(helper, level.getBlockState(at) == expected, "cell " + i + " at " + at.toShortString() + " is "
                         + level.getBlockState(at) + ", the original turned is " + expected);
             }
             CompanionFactory.despawn(level.getServer(), her);
@@ -159,9 +160,9 @@ public class ShapeGameTests {
         BlockPos o = helper.absolutePos(new BlockPos(6, 2, 6));
         block(level, o, Blocks.STONE.defaultBlockState());
         ToolRun run = lua(her, "return numen.shape.snow(" + xyz(o.offset(0, 1, 0)) + ", 1, {height = 2})");
-        helper.assertTrue(run.ranToTheEnd(), "snow failed: " + run.receipt());
-        helper.assertTrue(positions(list(run)).contains(key(o.above())), "snow on the stone: " + list(run));
-        helper.assertTrue(list(run).asList().stream().allMatch(c -> c.getAsJsonObject().get("name").getAsString().equals("minecraft:snow")),
+        Checks.assertTrue(helper, run.ranToTheEnd(), "snow failed: " + run.receipt());
+        Checks.assertTrue(helper, positions(list(run)).contains(key(o.above())), "snow on the stone: " + list(run));
+        Checks.assertTrue(helper, list(run).asList().stream().allMatch(c -> c.getAsJsonObject().get("name").getAsString().equals("minecraft:snow")),
                 "a layer of snow each: " + list(run));
         CompanionFactory.despawn(level.getServer(), her);
         helper.succeed();
@@ -175,9 +176,9 @@ public class ShapeGameTests {
         BlockPos near = helper.absolutePos(new BlockPos(5, 2, 5));
         ToolRun run = lua(her, "local ok, err = pcall(numen.shape.read, {" + xyz(near) + ", {x = 100000, y = 64, z = 100000}})\n"
                 + "return {ok = ok, kind = err.kind, message = err.message}");
-        helper.assertTrue(run.ranToTheEnd(), "the program itself failed: " + run.receipt());
+        Checks.assertTrue(helper, run.ranToTheEnd(), "the program itself failed: " + run.receipt());
         JsonObject got = run.data().getAsJsonObject("returned");
-        helper.assertTrue(!got.get("ok").getAsBoolean() && got.get("kind").getAsString().equals("not_found")
+        Checks.assertTrue(helper, !got.get("ok").getAsBoolean() && got.get("kind").getAsString().equals("not_found")
                         && got.get("message").getAsString().contains("not loaded")
                         && got.get("message").getAsString().contains("x 100000 to 100015, z 100000 to 100015"),
                 "the call fails and names the chunk: " + got);

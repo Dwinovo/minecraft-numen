@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -31,7 +32,6 @@ import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.BodyStats;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.state.BlockState;
@@ -154,7 +154,7 @@ final class Matrix {
                 cell.abort();
             }
             report();
-            throw new GameTestAssertException("矩阵没在 " + timeout + " 刻内跑完:还剩 " + queue.size() + " 个场景没开始");
+            throw Checks.failure("矩阵没在 " + timeout + " 刻内跑完:还剩 " + queue.size() + " 个场景没开始");
         }
     }
 
@@ -165,7 +165,7 @@ final class Matrix {
             for (int i = 0; i < Math.min(40, failures.size()); i++) {
                 sb.append("\n  ").append(failures.get(i));
             }
-            throw new GameTestAssertException(sb.toString());
+            throw Checks.failure(sb.toString());
         }
         helper.succeed();
     }
@@ -437,7 +437,7 @@ final class Matrix {
                     Thread.sleep(1);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    throw new GameTestAssertException("等搜索的结论时被打断");
+                    throw Checks.failure("等搜索的结论时被打断");
                 }
                 status = navigation.tick();
             }

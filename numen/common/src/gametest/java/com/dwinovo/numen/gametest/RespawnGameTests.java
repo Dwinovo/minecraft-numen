@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.agent.loop.Hold;
 import com.dwinovo.numen.api.brain.CompanionLoops;
@@ -11,8 +12,8 @@ import java.util.List;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -58,27 +59,27 @@ public class RespawnGameTests {
         succeedWhen(helper, () -> {
             heard.addAll(said(watcher));
             NumenPlayer now = NumenPlayer.findByUuid(server, uuid);
-            helper.assertTrue(now != null && now.isAlive(), "she has not respawned");
-            helper.assertTrue(server.getPlayerList().getPlayers().stream().filter(p -> p.getUUID().equals(uuid)).count() == 1,
+            Checks.assertTrue(helper, now != null && now.isAlive(), "she has not respawned");
+            Checks.assertTrue(helper, server.getPlayerList().getPlayers().stream().filter(p -> p.getUUID().equals(uuid)).count() == 1,
                     "she is in the player list more than once");
-            helper.assertTrue(owner.equals(now.getOwnerUuid()), "the respawned body lost its owner");
-            helper.assertTrue(CompanionLoops.get(uuid).orElseThrow().status().hold() != Hold.DEAD,
+            Checks.assertTrue(helper, owner.equals(now.getOwnerUuid()), "the respawned body lost its owner");
+            Checks.assertTrue(helper, CompanionLoops.get(uuid).orElseThrow().status().hold() != Hold.DEAD,
                     "her brain is still frozen as dead");
 
             BlockPos spawn = level.getSharedSpawnPos();
-            helper.assertTrue(now.level().dimension() == Level.OVERWORLD
+            Checks.assertTrue(helper, now.level().dimension() == Level.OVERWORLD
                             && Math.abs(now.getX() - spawn.getX()) <= 11 && Math.abs(now.getZ() - spawn.getZ()) <= 11,
                     "she did not land at the world spawn " + spawn + ": " + now.blockPosition());
 
-            helper.assertTrue(heard.stream().anyMatch(s -> s.text().getString().contains(name)),
+            Checks.assertTrue(helper, heard.stream().anyMatch(s -> s.text().getString().contains(name)),
                     "nobody heard how she died: " + heard);
-            helper.assertTrue(heard.stream().noneMatch(s -> s.text().getString().contains("joined the game")),
+            Checks.assertTrue(helper, heard.stream().noneMatch(s -> s.text().getString().contains("joined the game")),
                     "the server announced her joining: " + heard);
 
             var events = events(now);
-            helper.assertTrue(events.stream().anyMatch(e -> e.type().equals(EventTypes.DEATH)),
+            Checks.assertTrue(helper, events.stream().anyMatch(e -> e.type().equals(EventTypes.DEATH)),
                     "she was not told she died: " + events);
-            helper.assertTrue(events.stream().anyMatch(e -> e.type().equals(EventTypes.RESPAWNED)
+            Checks.assertTrue(helper, events.stream().anyMatch(e -> e.type().equals(EventTypes.RESPAWNED)
                             && e.text().contains("世界出生点")),
                     "she was not told she landed at the world spawn: " + events);
             leave(watcher);
@@ -102,7 +103,7 @@ public class RespawnGameTests {
         NumenPlayer died = spawnAt(helper, "gametest_sleeper", new BlockPos(9, 2, 9), false);
         UUID uuid = died.getUUID();
         ServerPlayer owner = presentVanillaPlayer(helper, died, "gt_bedowner", "en_us");
-        died.setRespawnPosition(level.dimension(), bed, 0.0f, false, false);
+        died.setRespawnPosition(new net.minecraft.server.level.ServerPlayer.RespawnConfig(level.dimension(), bed, 0.0f, false), false);
 
         died.kill(level);
 
@@ -110,17 +111,17 @@ public class RespawnGameTests {
         steps(helper)
                 .thenWaitUntil(() -> {
                     NumenPlayer now = NumenPlayer.findByUuid(server, uuid);
-                    helper.assertTrue(now != null && now.isAlive(), "she has not respawned");
-                    helper.assertTrue(now.blockPosition().distSqr(bed) <= 3 * 3,
+                    Checks.assertTrue(helper, now != null && now.isAlive(), "she has not respawned");
+                    Checks.assertTrue(helper, now.blockPosition().distSqr(bed) <= 3 * 3,
                             "she did not land beside her bed " + bed + ": " + now.blockPosition());
-                    helper.assertTrue(owner.getUUID().equals(now.getOwnerUuid()), "the respawned body lost its owner");
+                    Checks.assertTrue(helper, owner.getUUID().equals(now.getOwnerUuid()), "the respawned body lost its owner");
                     var told = events(now).stream().filter(e -> e.type().equals(EventTypes.RESPAWNED)).toList();
-                    helper.assertTrue(told.size() == 1 && told.get(0).text().contains("重生点")
+                    Checks.assertTrue(helper, told.size() == 1 && told.get(0).text().contains("重生点")
                                     && told.get(0).text().contains("主人在你") && told.get(0).text().contains("格处"),
                             "she was not told where she landed and where her owner is: " + told);
                 })
                 .thenExecute(() -> lua(NumenPlayer.findByUuid(server, uuid), "numen.move.walk(" + xyz(goal) + ")"))
-                .thenWaitUntil(() -> helper.assertTrue(
+                .thenWaitUntil(() -> Checks.assertTrue(helper, 
                         NumenPlayer.findByUuid(server, uuid).blockPosition().distSqr(goal) <= 2 * 2,
                         "she has not walked on after respawning"))
                 .thenExecute(() -> {

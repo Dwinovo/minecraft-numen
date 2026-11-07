@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.gametest.GameTestKit.*;
 
 import com.dwinovo.numen.nav.Trip;
@@ -9,7 +10,7 @@ import com.dwinovo.numen.pathing.plan.Breath;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.FluidTags;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
@@ -61,13 +62,13 @@ public class SwimGameTests {
         helper.onEachTick(() -> lowest[0] = Math.min(lowest[0], companion.getHealth()));
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "numen.move.walk has not finished");
-            helper.assertTrue(walk.succeeded() && companion.blockPosition().equals(there),
+            Checks.assertTrue(helper, walk.done(), "numen.move.walk has not finished");
+            Checks.assertTrue(helper, walk.succeeded() && companion.blockPosition().equals(there),
                     "she did not get through the channel: " + walk.outcome());
-            helper.assertTrue(walk.outcome().contains("I went under water once:")
+            Checks.assertTrue(helper, walk.outcome().contains("I went under water once:")
                             && walk.outcome().contains("without a breath") && walk.outcome().contains("air down to"),
                     "the reply does not tell the one dive: " + walk.outcome());
-            helper.assertTrue(lowest[0] >= companion.getMaxHealth(), "she got hurt: lowest health " + lowest[0]);
+            Checks.assertTrue(helper, lowest[0] >= companion.getMaxHealth(), "she got hurt: lowest health " + lowest[0]);
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
@@ -111,17 +112,17 @@ public class SwimGameTests {
         });
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walled[0], "she never reached the air pocket under water");
-            helper.assertTrue(walk.done(), "numen.move.walk has not finished");
-            helper.assertTrue(plannedAir[0] >= Breath.RESERVE,
+            Checks.assertTrue(helper, walled[0], "she never reached the air pocket under water");
+            Checks.assertTrue(helper, walk.done(), "numen.move.walk has not finished");
+            Checks.assertTrue(helper, plannedAir[0] >= Breath.RESERVE,
                     "the navigation still called the dive planned with only " + plannedAir[0] + " air left");
-            helper.assertTrue(lowest[0] >= companion.getMaxHealth(), "she drowned a little: lowest health " + lowest[0]);
+            Checks.assertTrue(helper, lowest[0] >= companion.getMaxHealth(), "she drowned a little: lowest health " + lowest[0]);
             var told = GameTestKit.events(companion).stream()
                     .filter(e -> e.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.REFLEX))
                     .map(e -> e.text()).toList();
-            helper.assertTrue(told.stream().anyMatch(t -> t.contains("reflex=\"breath\"") && t.contains("to swim up for a breath")),
+            Checks.assertTrue(helper, told.stream().anyMatch(t -> t.contains("reflex=\"breath\"") && t.contains("to swim up for a breath")),
                     "no breath reflex event: " + told);
-            helper.assertTrue(!walk.succeeded() && walk.outcome().contains("I went under water"),
+            Checks.assertTrue(helper, !walk.succeeded() && walk.outcome().contains("I went under water"),
                     "the reply does not tell the failed walk and the dive: " + walk.outcome());
             CompanionFactory.despawn(level.getServer(), companion);
         });

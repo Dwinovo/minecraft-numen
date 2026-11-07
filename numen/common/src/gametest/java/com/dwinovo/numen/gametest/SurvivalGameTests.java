@@ -1,13 +1,14 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.gametest.Bodies;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import java.util.List;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
@@ -53,8 +54,8 @@ public class SurvivalGameTests {
                 .thenExecuteAfter(SPAWN_INVULNERABLE_TICKS,
                         () -> drop(helper, companion, new BlockPos(4, DROP_HEIGHT, 4)))
                 .thenWaitUntil(() -> {
-                    helper.assertTrue(companion.onGround(), "companion is still in the air");
-                    helper.assertTrue(companion.getHealth() < full,
+                    Checks.assertTrue(helper, companion.onGround(), "companion is still in the air");
+                    Checks.assertTrue(helper, companion.getHealth() < full,
                             "the fall did no damage (health " + companion.getHealth() + ")");
                 })
                 .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
@@ -76,7 +77,7 @@ public class SurvivalGameTests {
         Vec3 start = companion.position();
         steps(helper)
                 .thenIdle(120)
-                .thenExecute(() -> helper.assertTrue(companion.position().distanceToSqr(start) < 1.0E-4,
+                .thenExecute(() -> Checks.assertTrue(helper, companion.position().distanceToSqr(start) < 1.0E-4,
                         "an idle companion wandered: " + start + " -> " + companion.position()))
                 .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
                 .thenSucceed();
@@ -100,20 +101,20 @@ public class SurvivalGameTests {
                 .thenExecuteAfter(SPAWN_INVULNERABLE_TICKS,
                         () -> drop(helper, companion, new BlockPos(11, DROP_HEIGHT, 11)))
                 .thenWaitUntil(() -> {
-                    helper.assertTrue(companion.onGround(), "companion is still in the air");
-                    helper.assertTrue(companion.getHealth() == full,
+                    Checks.assertTrue(helper, companion.onGround(), "companion is still in the air");
+                    Checks.assertTrue(helper, companion.getHealth() == full,
                             "the water bucket did not break the fall (health "
                                     + companion.getHealth() + ")");
-                    helper.assertTrue(carries(companion, Items.WATER_BUCKET),
+                    Checks.assertTrue(helper, carries(companion, Items.WATER_BUCKET),
                             "the water was placed but never picked back up");
                 })
                 .thenWaitUntil(() -> {
                     var reflexes = GameTestKit.events(companion).stream()
                             .filter(e -> e.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.REFLEX))
                             .toList();
-                    helper.assertTrue(!reflexes.isEmpty(), "no reflex event was kept for the offline owner: "
+                    Checks.assertTrue(helper, !reflexes.isEmpty(), "no reflex event was kept for the offline owner: "
                             + GameTestKit.events(companion));
-                    helper.assertTrue(reflexes.get(0).text().startsWith("<event kind=\"reflex\"")
+                    Checks.assertTrue(helper, reflexes.get(0).text().startsWith("<event kind=\"reflex\"")
                                     && reflexes.get(0).text().contains("reflex=\"mlg\""),
                             "the reflex event does not name its instinct: " + reflexes.get(0).text());
                 })
@@ -146,11 +147,11 @@ public class SurvivalGameTests {
     public static void a_dimension_change_is_acknowledged(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         ServerLevel nether = level.getServer().getLevel(net.minecraft.world.level.Level.NETHER);
-        helper.assertTrue(nether != null, "this server has no nether to travel to");
+        Checks.assertTrue(helper, nether != null, "this server has no nether to travel to");
         NumenPlayer companion = plainCompanion(helper, new BlockPos(6, 2, 6));
         companion.setPortalCooldown();
         int cooldown = companion.getPortalCooldown();
-        helper.assertTrue(cooldown > 0, "portal cooldown did not start");
+        Checks.assertTrue(helper, cooldown > 0, "portal cooldown did not start");
         // 落点的区块先阻塞着生成完(见 GameTestKit#generateChunks):冷却只在她走刻时减,她走不走刻要等落脚的区块起来,
         // 区块按墙钟生成,只按刻数等的话负载一高剩下的时限就不够
         generateChunks(nether, new BlockPos(0, 70, 0), 2);
@@ -160,17 +161,17 @@ public class SurvivalGameTests {
                         new net.minecraft.world.level.portal.TeleportTransition(
                                 nether, new Vec3(0.5, 70.0, 0.5), Vec3.ZERO, 0.0f, 0.0f,
                                 net.minecraft.world.level.portal.TeleportTransition.DO_NOTHING)))
-                .thenWaitUntil(() -> helper.assertTrue(nether.isPositionEntityTicking(companion.blockPosition()),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, nether.isPositionEntityTicking(companion.blockPosition()),
                         "the chunk she arrived in is not entity-ticking yet"))
                 .thenIdle(25)
                 .thenWaitUntil(() -> {
-                    helper.assertTrue(!companion.isChangingDimension(),
+                    Checks.assertTrue(helper, !companion.isChangingDimension(),
                             "she is still 'changing dimension' long after arriving — the portal cooldown "
                                     + "will never tick down and she cannot be hurt");
-                    helper.assertTrue(companion.getPortalCooldown() < cooldown,
+                    Checks.assertTrue(helper, companion.getPortalCooldown() < cooldown,
                             "the portal cooldown is stuck at " + companion.getPortalCooldown()
                                     + "; she can never use a portal again");
-                    helper.assertTrue(!companion.isInvulnerableTo(companion.serverLevel(), level.damageSources().generic()),
+                    Checks.assertTrue(helper, !companion.isInvulnerableTo(companion.serverLevel(), level.damageSources().generic()),
                             "she is still invulnerable after the dimension change");
                 })
                 .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
@@ -187,7 +188,7 @@ public class SurvivalGameTests {
     @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_survival")
     public static void a_body_alone_in_a_dimension_keeps_ticking_and_moving(GameTestHelper helper) {
         ServerLevel nether = helper.getLevel().getServer().getLevel(net.minecraft.world.level.Level.NETHER);
-        helper.assertTrue(nether != null, "this server has no nether to travel to");
+        Checks.assertTrue(helper, nether != null, "this server has no nether to travel to");
         BlockPos arena = helper.absolutePos(BlockPos.ZERO);
         // 场地坐标取模再放大:各份的落点互相隔开三百格以上,又总在世界边界之内
         BlockPos floor = new BlockPos(20000 + Math.floorMod(arena.getX(), 8192) * 16, 100, 20000 + Math.floorMod(arena.getZ(), 8192) * 16);
@@ -208,21 +209,21 @@ public class SurvivalGameTests {
         ToolRun[] walk = new ToolRun[1];
         steps(helper)
                 // 落脚的区块是新生成的,要等它们起来她才开始走刻;起来之后的 300 刻不许再停
-                .thenWaitUntil(() -> helper.assertTrue(nether.isPositionEntityTicking(companion.blockPosition()),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, nether.isPositionEntityTicking(companion.blockPosition()),
                         "the chunk she stands in is not entity-ticking yet"))
                 .thenExecute(() -> {
                     ticksAtStart[0] = companion.tickCount;
                     start[0] = companion.position();
                 })
                 .thenIdle(300)
-                .thenExecute(() -> helper.assertTrue(companion.tickCount - ticksAtStart[0] >= 295,
+                .thenExecute(() -> Checks.assertTrue(helper, companion.tickCount - ticksAtStart[0] >= 295,
                         "alone in her dimension she stopped ticking: " + (companion.tickCount - ticksAtStart[0])
                                 + " ticks in 300"))
                 .thenExecute(() -> walk[0] = lua(companion, "return numen.move.walk(" + xyz(
                         new BlockPos(floor.getX() + 5, floor.getY() + 1, floor.getZ())) + ")"))
                 .thenWaitUntil(() -> {
-                    helper.assertTrue(walk[0].done() && walk[0].succeeded(), "her own walk did not finish: " + walk[0].outcome());
-                    helper.assertTrue(companion.position().distanceToSqr(start[0]) > 9.0,
+                    Checks.assertTrue(helper, walk[0].done() && walk[0].succeeded(), "her own walk did not finish: " + walk[0].outcome());
+                    Checks.assertTrue(helper, companion.position().distanceToSqr(start[0]) > 9.0,
                             "she did not move: " + start[0] + " -> " + companion.position());
                 })
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))

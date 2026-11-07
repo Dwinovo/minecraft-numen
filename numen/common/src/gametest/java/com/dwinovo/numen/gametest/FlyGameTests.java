@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.gametest.GameTestKit.*;
 
 import com.dwinovo.numen.api.entity.CompanionFactory;
@@ -8,8 +9,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
@@ -64,10 +65,10 @@ public class FlyGameTests {
         ToolRun fly = lua(her, "return numen.move.fly(" + xyz(hover) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(fly.done() && fly.succeeded(), "the fly did not come back as a success: " + fly.outcome());
-            helper.assertTrue(her.getAbilities().flying && !her.onGround() && !her.isFallFlying(), "she should hover");
-            helper.assertTrue(her.blockPosition().equals(hover), "she should hover in the cell: " + her.blockPosition());
-            helper.assertTrue(returned(fly).get("flying").getAsBoolean() && returned(fly).getAsJsonArray("glided").size() == 0, "the account should say she is still flying: " + returned(fly));
+            Checks.assertTrue(helper, fly.done() && fly.succeeded(), "the fly did not come back as a success: " + fly.outcome());
+            Checks.assertTrue(helper, her.getAbilities().flying && !her.onGround() && !her.isFallFlying(), "she should hover");
+            Checks.assertTrue(helper, her.blockPosition().equals(hover), "she should hover in the cell: " + her.blockPosition());
+            Checks.assertTrue(helper, returned(fly).get("flying").getAsBoolean() && returned(fly).getAsJsonArray("glided").size() == 0, "the account should say she is still flying: " + returned(fly));
             CompanionFactory.despawn(level.getServer(), her);
         });
     }
@@ -85,11 +86,11 @@ public class FlyGameTests {
         ToolRun walk = lua(her, "return numen.move.walk(" + xyz(target) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "the walk has not finished");
-            helper.assertTrue(walk.succeeded() && her.blockPosition().distSqr(target) <= 2, "she did not walk there: " + walk.outcome());
-            helper.assertTrue(walk.outcome().contains("came down to the ground first"), "the account should say she came down first: " + walk.outcome());
-            helper.assertTrue(!her.getAbilities().flying && her.onGround(), "she should end on the ground");
-            helper.assertTrue(returned(walk).get("flown").getAsDouble() == 0, "walking is not flying: " + returned(walk));
+            Checks.assertTrue(helper, walk.done(), "the walk has not finished");
+            Checks.assertTrue(helper, walk.succeeded() && her.blockPosition().distSqr(target) <= 2, "she did not walk there: " + walk.outcome());
+            Checks.assertTrue(helper, walk.outcome().contains("came down to the ground first"), "the account should say she came down first: " + walk.outcome());
+            Checks.assertTrue(helper, !her.getAbilities().flying && her.onGround(), "she should end on the ground");
+            Checks.assertTrue(helper, returned(walk).get("flown").getAsDouble() == 0, "walking is not flying: " + returned(walk));
             CompanionFactory.despawn(level.getServer(), her);
         });
     }

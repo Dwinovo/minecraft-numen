@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.pathing.gametest.Scenes.slab;
 import static com.dwinovo.numen.pathing.gametest.Scenes.stair;
 import static com.dwinovo.numen.pathing.gametest.Scenes.trapdoor;
@@ -10,9 +11,8 @@ import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.Direction;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
-import net.minecraft.gametest.framework.GameTestAssertException;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
@@ -56,7 +56,7 @@ public class BlockGameTests {
         t.go(body, Goals.at(t.at(12, 1, 5)), RouteSpec.defaults()).arrives().then(r -> {
             boolean toggled = r.report.ledger().entries().stream().anyMatch(e -> e instanceof EditLedger.Toggled);
             if (!toggled) {
-                throw new GameTestAssertException("没开门就过去了?" + r.report.ledger().entries());
+                throw Checks.failure("没开门就过去了?" + r.report.ledger().entries());
             }
         });
     }
@@ -82,12 +82,12 @@ public class BlockGameTests {
                 .during(r -> {
                     net.minecraft.core.BlockPos p = r.body.blockPosition().subtract(t.origin);
                     if (p.getZ() == 5 && p.getX() >= 8 && p.getX() <= 10) {
-                        throw new GameTestAssertException("进了顶上是倒扣楼梯的那条");
+                        throw Checks.failure("进了顶上是倒扣楼梯的那条");
                     }
                 })
                 .within(338).arrives().then(r -> {
                     if (!r.report.ledger().entries().isEmpty()) {
-                        throw new GameTestAssertException("动了活板门:" + r.report.ledger().entries());
+                        throw Checks.failure("动了活板门:" + r.report.ledger().entries());
                     }
                 });
     }
@@ -112,7 +112,7 @@ public class BlockGameTests {
         TestBody body = t.body(4, 1, 5);
         t.go(body, Goals.at(t.at(9, 1, 5)), RouteSpec.defaults()).arrives().then(r -> {
             if (r.highestRise < 0.3) {
-                throw new GameTestAssertException("没起跳就过了薄板:往上的速度最大 " + r.highestRise);
+                throw Checks.failure("没起跳就过了薄板:往上的速度最大 " + r.highestRise);
             }
         });
     }
@@ -135,7 +135,7 @@ public class BlockGameTests {
                 .during(r -> {
                     double feet = r.body.getY() - t.origin.getY();
                     if (over[0] && r.body.getDeltaMovement().y > 0.3) {
-                        throw new GameTestAssertException("已经到了落点的高度,却又起跳了:脚高 " + feet);
+                        throw Checks.failure("已经到了落点的高度,却又起跳了:脚高 " + feet);
                     }
                     over[0] |= r.body.onGround() && feet > 1.49;
                 })
@@ -154,7 +154,7 @@ public class BlockGameTests {
         TestBody body = t.body(4, 2, 5);
         t.go(body, Goals.at(t.at(5, 1, 5)), RouteSpec.defaults()).within(60).arrives().then(r -> {
             if (Math.abs(r.body.getY() - t.at(5, 1, 5).getY()) > 0.01) {
-                throw new GameTestAssertException("该落在地上,却踩在板上:脚高 " + r.body.getY());
+                throw Checks.failure("该落在地上,却踩在板上:脚高 " + r.body.getY());
             }
         });
     }

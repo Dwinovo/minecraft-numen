@@ -1,11 +1,12 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.brain.Conversations;
 import com.dwinovo.numen.api.brain.Replies;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.gametest.OwnerLine;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.LastSeenMessages;
@@ -57,24 +58,24 @@ public class ConversationCommandGameTests {
         List<Component> heard = new ArrayList<>();
 
         run(pair.owner(), "numen group invite gametest_ga gametest_gb", heard);
-        helper.assertTrue(rooms.list().size() == 1 && rooms.list().get(0).members()
+        Checks.assertTrue(helper, rooms.list().size() == 1 && rooms.list().get(0).members()
                         .equals(List.of(pair.a().companion.getUUID(), pair.b().companion.getUUID())),
                 "inviting her into a conversation did not make the group: " + rooms.list() + " " + heard);
         Conversation group = rooms.list().get(0);
 
         run(pair.owner(), "numen group rename " + group.id() + " 茶话会", heard);
-        helper.assertTrue("茶话会".equals(rooms.get(group.id()).name()), "the group was not renamed: " + rooms.list());
+        Checks.assertTrue(helper, "茶话会".equals(rooms.get(group.id()).name()), "the group was not renamed: " + rooms.list());
 
         run(pair.owner(), "numen group remove \"茶话会\" gametest_gb", heard);
-        helper.assertTrue(rooms.get(group.id()).members().equals(List.of(pair.a().companion.getUUID())),
+        Checks.assertTrue(helper, rooms.get(group.id()).members().equals(List.of(pair.a().companion.getUUID())),
                 "removing her did not take her out: " + rooms.list());
 
         run(pair.owner(), "numen group dissolve \"茶话会\"", heard);
-        helper.assertTrue(rooms.get(group.id()) == null, "the group was not dissolved: " + rooms.list());
+        Checks.assertTrue(helper, rooms.get(group.id()) == null, "the group was not dissolved: " + rooms.list());
 
         heard.clear();
         run(pair.owner(), "numen group dissolve \"没有这个会话\"", heard);
-        helper.assertTrue(heard.size() == 1 && isKey(heard.get(0), Keys.COMMAND_GROUP_NO_CONVERSATION),
+        Checks.assertTrue(helper, heard.size() == 1 && isKey(heard.get(0), Keys.COMMAND_GROUP_NO_CONVERSATION),
                 "a name that is no conversation was not said so: " + heard);
         pair.close();
         helper.succeed();
@@ -82,7 +83,7 @@ public class ConversationCommandGameTests {
 
     private static void typeInChatBar(ServerPlayer player, String line) {
         player.connection.handleChat(new ServerboundChatPacket(line, Instant.now(), 0L, null,
-                new LastSeenMessages.Update(0, new BitSet())));
+                new LastSeenMessages.Update(0, new BitSet(), (byte) 0)));
     }
 
     /**
@@ -104,33 +105,33 @@ public class ConversationCommandGameTests {
 
         run(pair.owner(), "numen chat \"茶话会\"", heard);
         var set = GameTestKit.completions(pair.owner());
-        helper.assertTrue(set.size() == 1 && set.get(0).entries().equals(List.of("@gametest_ca", "@gametest_cb")),
+        Checks.assertTrue(helper, set.size() == 1 && set.get(0).entries().equals(List.of("@gametest_ca", "@gametest_cb")),
                 "the @ completions are not the members' names: " + set);
         typeInChatBar(pair.owner(), "@gametest_ca 过来一下");
 
         List<OwnerLine.Said> seen = new ArrayList<>();
         helper.runAfterDelay(20, () -> {
             seen.addAll(GameTestKit.said(pair.owner()));
-            helper.assertTrue(pair.a().mind.asked.size() == 1, "the one called did not wake");
-            helper.assertTrue(pair.b().mind.asked.isEmpty(), "the one who only overheard woke up");
-            helper.assertTrue(GameTestKit.publicChat(bystander).isEmpty(), "the routed line was broadcast to the room");
-            helper.assertTrue(seen.stream().anyMatch(l ->
+            Checks.assertTrue(helper, pair.a().mind.asked.size() == 1, "the one called did not wake");
+            Checks.assertTrue(helper, pair.b().mind.asked.isEmpty(), "the one who only overheard woke up");
+            Checks.assertTrue(helper, GameTestKit.publicChat(bystander).isEmpty(), "the routed line was broadcast to the room");
+            Checks.assertTrue(helper, seen.stream().anyMatch(l ->
                             l.text().getString().equals("[茶话会] <gametest_chatter> @gametest_ca 过来一下")),
                     "the line was not echoed to him under the conversation's name: " + seen);
-            helper.assertTrue(seen.stream().anyMatch(l -> l.text().getString().equals("[茶话会] <gametest_ca> 来了")),
+            Checks.assertTrue(helper, seen.stream().anyMatch(l -> l.text().getString().equals("[茶话会] <gametest_ca> 来了")),
                     "her answer did not come back under the conversation's name: " + seen);
 
             run(pair.owner(), "numen group remove \"茶话会\" gametest_cb", heard);
             var changed = GameTestKit.completions(pair.owner());
-            helper.assertTrue(changed.size() == 1 && changed.get(0).entries().equals(List.of("@gametest_ca")),
+            Checks.assertTrue(helper, changed.size() == 1 && changed.get(0).entries().equals(List.of("@gametest_ca")),
                     "the completions did not follow the members: " + changed);
 
             run(pair.owner(), "numen chat", heard);
-            helper.assertTrue(GameTestKit.completions(pair.owner()).get(0).entries().isEmpty(),
+            Checks.assertTrue(helper, GameTestKit.completions(pair.owner()).get(0).entries().isEmpty(),
                     "leaving the conversation left its completions behind");
             typeInChatBar(pair.owner(), "大家好");
             helper.runAfterDelay(20, () -> {
-                helper.assertTrue(GameTestKit.publicChat(bystander).contains("大家好"),
+                Checks.assertTrue(helper, GameTestKit.publicChat(bystander).contains("大家好"),
                         "after leaving, his line did not go to public chat");
                 pair.close();
                 GameTestKit.leave(bystander);
@@ -149,12 +150,12 @@ public class ConversationCommandGameTests {
 
         run(pair.owner(), "numen chat gametest_sb @gametest_sb 你在吗", heard);
 
-        helper.assertTrue(com.dwinovo.numen.api.brain.ChatRoutes.routeOf(pair.owner().getUUID()) == null,
+        Checks.assertTrue(helper, com.dwinovo.numen.api.brain.ChatRoutes.routeOf(pair.owner().getUUID()) == null,
                 "a one-off line routed his chat bar");
         helper.runAfterDelay(20, () -> {
-            helper.assertTrue(pair.b().mind.asked.size() == 1 && pair.a().mind.asked.isEmpty(),
+            Checks.assertTrue(helper, pair.b().mind.asked.size() == 1 && pair.a().mind.asked.isEmpty(),
                     "the line did not reach exactly the one it named");
-            helper.assertTrue(rooms.list().isEmpty(), "a one-off line made a saved conversation");
+            Checks.assertTrue(helper, rooms.list().isEmpty(), "a one-off line made a saved conversation");
             pair.close();
             helper.succeed();
         });

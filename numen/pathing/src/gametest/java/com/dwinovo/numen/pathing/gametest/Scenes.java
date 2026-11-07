@@ -1,10 +1,10 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import java.util.List;
 import java.util.ArrayList;
 import net.minecraft.core.Direction;
-import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
@@ -49,7 +49,7 @@ final class Scenes {
     /** 一路没起跳:迈步上坎是瞬间抬上去的,起跳会留下 0.3 以上往上的速度。 */
     static void noJump(Trial.Run r) {
         if (r.highestRise > 0.3) {
-            throw new GameTestAssertException("路上起跳了:往上的速度到过 " + r.highestRise);
+            throw Checks.failure("路上起跳了:往上的速度到过 " + r.highestRise);
         }
     }
 
@@ -64,7 +64,7 @@ final class Scenes {
             if (Float.isNaN(takeoff[0])) {
                 takeoff[0] = r.body.getYRot();
             } else if (Math.abs(net.minecraft.util.Mth.wrapDegrees(r.body.getYRot() - takeoff[0])) > 90) {
-                throw new GameTestAssertException("空中回了身:离地时 yaw " + takeoff[0] + ",此刻 " + r.body.getYRot());
+                throw Checks.failure("空中回了身:离地时 yaw " + takeoff[0] + ",此刻 " + r.body.getYRot());
             }
         };
     }
@@ -94,7 +94,7 @@ final class Scenes {
     /** 实际账里没有挖、没有放(开关门不算)。 */
     static void unaltered(Trial.Run r) {
         if (!dug(r).isEmpty() || !placed(r).isEmpty()) {
-            throw new GameTestAssertException("改了地形:" + r.report.ledger().entries());
+            throw Checks.failure("改了地形:" + r.report.ledger().entries());
         }
     }
 }

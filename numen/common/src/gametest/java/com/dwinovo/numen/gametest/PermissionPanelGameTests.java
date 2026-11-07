@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.brain.Presence;
 import com.dwinovo.numen.api.brain.Replies;
@@ -13,8 +14,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerLevel;
@@ -93,13 +94,13 @@ public class PermissionPanelGameTests {
 
         Replies.library(owner, Libraries.PERMISSION, "put", "{\"table\":\"deny\",\"rule\":\"brek(owner)\"}", 7);
         LibraryPayload refused = lastTable(received(owner));
-        helper.assertTrue(refused != null && refused.request() == 7 && !refused.problem().isEmpty() && refused.entries().contains("\"code\":\"verb\"")
+        Checks.assertTrue(helper, refused != null && refused.request() == 7 && !refused.problem().isEmpty() && refused.entries().contains("\"code\":\"verb\"")
                         && store.rows(Verdict.Kind.DENY).isEmpty(),
                 "a mistyped rule was not refused with its code: " + refused);
 
         Replies.library(owner, Libraries.PERMISSION, "put", "{\"table\":\"deny\",\"rule\":\"" + rule + "\"}");
         LibraryPayload added = lastTable(received(owner));
-        helper.assertTrue(added != null && added.problem().isEmpty() && ruleRow(added, "owner", rule) != null
+        Checks.assertTrue(helper, added != null && added.problem().isEmpty() && ruleRow(added, "owner", rule) != null
                         && "owner".equals(ruleRow(added, "owner", rule).get("source").getAsString()),
                 "the answer does not carry the new row: " + added);
 
@@ -111,19 +112,19 @@ public class PermissionPanelGameTests {
         });
         helper.onEachTick(() -> {
             if (step[0] == 1 && calls[0].done()) {
-                helper.assertTrue(!calls[0].succeeded() && calls[0].outcome().contains("denied by rule " + rule)
+                Checks.assertTrue(helper, !calls[0].succeeded() && calls[0].outcome().contains("denied by rule " + rule)
                                 && level.getBlockState(helper.absolutePos(stoneRel)).is(Blocks.STONE),
                         "the panel's deny row did not hold: " + calls[0].outcome());
                 Replies.library(owner, Libraries.PERMISSION, "delete", "{\"table\":\"deny\",\"rule\":\"" + rule + "\"}");
-                helper.assertTrue(store.rows(Verdict.Kind.DENY).isEmpty(), "the row was not deleted");
+                Checks.assertTrue(helper, store.rows(Verdict.Kind.DENY).isEmpty(), "the row was not deleted");
                 calls[1] = click(helper, companion, "left", stoneRel);
                 step[0] = 2;
             }
         });
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(step[0] == 2 && calls[1].done(), "the clicks have not finished");
-            helper.assertTrue(calls[1].succeeded() && level.getBlockState(helper.absolutePos(stoneRel)).isAir(),
+            Checks.assertTrue(helper, step[0] == 2 && calls[1].done(), "the clicks have not finished");
+            Checks.assertTrue(helper, calls[1].succeeded() && level.getBlockState(helper.absolutePos(stoneRel)).isAir(),
                     "the stone could not be dug after the row was deleted: " + calls[1].outcome());
             finish(owner, companion);
         });
@@ -140,11 +141,11 @@ public class PermissionPanelGameTests {
 
         succeedWhen(helper, () -> {
             got.addAll(received(owner));
-            helper.assertTrue(deny.done() && deny.succeeded(), "the deny has not been written: " + deny.outcome());
+            Checks.assertTrue(helper, deny.done() && deny.succeeded(), "the deny has not been written: " + deny.outcome());
             LibraryPayload pushed = lastTable(got);
-            helper.assertTrue(pushed != null && pushed.request() == 0, "nothing was pushed to the owner's panel");
+            Checks.assertTrue(helper, pushed != null && pushed.request() == 0, "nothing was pushed to the owner's panel");
             JsonObject row = ruleRow(pushed, "owner", "break(owner & minecraft:chest)");
-            helper.assertTrue(row != null && "her".equals(row.get("source").getAsString())
+            Checks.assertTrue(helper, row != null && "her".equals(row.get("source").getAsString())
                             && "leave the chests".equals(row.get("note").getAsString()),
                     "the pushed table does not mark the row as hers with her reason: " + pushed.entries());
             finish(owner, companion);

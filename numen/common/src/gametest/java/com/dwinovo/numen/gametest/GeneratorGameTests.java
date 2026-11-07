@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.build.BuildStates;
@@ -8,7 +9,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -164,22 +165,22 @@ public class GeneratorGameTests {
             Snapshot before = snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8));
             ToolRun run = GameTestKit.shapeSeed(seed,
                     () -> lua(her, "return numen.shape.feature(" + xyz(dirt.above()) + ", \"minecraft:oak\")"));
-            helper.assertTrue(run.ranToTheEnd(), "feature failed: " + run.receipt());
+            Checks.assertTrue(helper, run.ranToTheEnd(), "feature failed: " + run.receipt());
             JsonArray tree = returned(run).getAsJsonArray("cells");
             long logs = tree.asList().stream().filter(c -> c.getAsJsonObject().get("name").getAsString().startsWith("minecraft:oak_log")).count();
             long leaves = tree.asList().stream().filter(c -> c.getAsJsonObject().get("name").getAsString().startsWith("minecraft:oak_leaves")).count();
-            helper.assertTrue(logs >= 4 && leaves >= 10, "a tree: " + logs + " logs and " + leaves + " leaves of " + tree.size() + " cells");
-            helper.assertTrue(tree.asList().stream().anyMatch(c -> pos(c.getAsJsonObject()).equals(dirt.above())
+            Checks.assertTrue(helper, logs >= 4 && leaves >= 10, "a tree: " + logs + " logs and " + leaves + " leaves of " + tree.size() + " cells");
+            Checks.assertTrue(helper, tree.asList().stream().anyMatch(c -> pos(c.getAsJsonObject()).equals(dirt.above())
                     && c.getAsJsonObject().get("name").getAsString().startsWith("minecraft:oak_log")), "the trunk stands on the cell above the dirt");
-            helper.assertTrue(snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8)).equals(before),
+            Checks.assertTrue(helper, snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8)).equals(before),
                     "the real world changed under the recorded one");
-            helper.assertTrue(returned(run).getAsJsonArray("lost").isEmpty(), "a tree adds nothing Cells cannot hold: " + returned(run));
+            Checks.assertTrue(helper, returned(run).getAsJsonArray("lost").isEmpty(), "a tree adds nothing Cells cannot hold: " + returned(run));
             cells.set(tree);
             build.set(lua(her, "numen.build.place(" + literal(tree) + ")"));
         }).thenWaitUntil(() -> {
-            helper.assertTrue(build.get().done() && build.get().succeeded(), "place failed: " + build.get().outcome());
+            Checks.assertTrue(helper, build.get().done() && build.get().succeeded(), "place failed: " + build.get().outcome());
             String wrong = problem(level, cells.get());
-            helper.assertTrue(wrong == null, "after place " + wrong);
+            Checks.assertTrue(helper, wrong == null, "after place " + wrong);
             CompanionFactory.despawn(level.getServer(), her);
         }).thenSucceed();
     }
@@ -218,7 +219,7 @@ public class GeneratorGameTests {
         awaitLit(level, floor);
         Snapshot before = snapshot(level, min, max);
         ToolRun run = lua(her, "return numen.shape.structure(" + xyz(at) + ", \"minecraft:swamp_hut\")");
-        helper.assertTrue(run.ranToTheEnd(), "structure failed: " + run.receipt());
+        Checks.assertTrue(helper, run.ranToTheEnd(), "structure failed: " + run.receipt());
         JsonArray cells = returned(run).getAsJsonArray("cells");
         int lowest = Integer.MAX_VALUE;
         int highest = Integer.MIN_VALUE;
@@ -232,19 +233,19 @@ public class GeneratorGameTests {
                 column.append(y).append(' ');
             }
         }
-        helper.assertTrue(cells.size() >= 30 && lowest <= origin.getY() + 3, "a hut on the floor: " + cells.size() + " cells from y "
+        Checks.assertTrue(helper, cells.size() >= 30 && lowest <= origin.getY() + 3, "a hut on the floor: " + cells.size() + " cells from y "
                 + lowest + " to " + highest + ", floor at " + (origin.getY() + 1) + ", blocks in its column at y " + column);
-        helper.assertTrue(noLiquid(cells), "the hut holds no liquid");
-        helper.assertTrue(snapshot(level, min, max).equals(before), "the real world changed under the recorded one");
+        Checks.assertTrue(helper, noLiquid(cells), "the hut holds no liquid");
+        Checks.assertTrue(helper, snapshot(level, min, max).equals(before), "the real world changed under the recorded one");
         JsonArray lost = returned(run).getAsJsonArray("lost");
         boolean witch = lost.asList().stream().anyMatch(l -> l.getAsJsonObject().get("kind").getAsString().equals("entity")
                 && l.getAsJsonObject().get("name").getAsString().equals("minecraft:witch"));
-        helper.assertTrue(witch, "the witch it spawned is reported, not spawned: " + lost);
+        Checks.assertTrue(helper, witch, "the witch it spawned is reported, not spawned: " + lost);
         ToolRun build = lua(her, "numen.build.place(" + literal(cells) + ")");
         succeedWhen(helper, () -> {
-            helper.assertTrue(build.done() && build.succeeded(), "place failed: " + build.outcome());
+            Checks.assertTrue(helper, build.done() && build.succeeded(), "place failed: " + build.outcome());
             String wrong = problem(level, cells);
-            helper.assertTrue(wrong == null, "after place " + wrong);
+            Checks.assertTrue(helper, wrong == null, "after place " + wrong);
             CompanionFactory.despawn(level.getServer(), her);
         });
     }
@@ -267,19 +268,19 @@ public class GeneratorGameTests {
             Snapshot before = snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8));
             ToolRun run = GameTestKit.shapeSeed(seed, () -> lua(her, "return numen.shape.cuboid(" + xyz(dirt.offset(0, -1, 0))
                     + ", " + xyz(dirt.offset(0, 4, 0)) + "):forest(\"minecraft:oak_checked\", 100)"));
-            helper.assertTrue(run.ranToTheEnd(), "forest failed: " + run.receipt());
+            Checks.assertTrue(helper, run.ranToTheEnd(), "forest failed: " + run.receipt());
             JsonArray forest = returned(run).getAsJsonArray("cells");
-            helper.assertTrue(forest.asList().stream().anyMatch(c -> pos(c.getAsJsonObject()).equals(dirt.above())
+            Checks.assertTrue(helper, forest.asList().stream().anyMatch(c -> pos(c.getAsJsonObject()).equals(dirt.above())
                     && c.getAsJsonObject().get("name").getAsString().startsWith("minecraft:oak_log")),
                     "a tree on the dirt: " + forest.size() + " cells");
-            helper.assertTrue(snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8)).equals(before),
+            Checks.assertTrue(helper, snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8)).equals(before),
                     "the real world changed under the recorded one");
             cells.set(forest);
             build.set(lua(her, "numen.build.place(" + literal(forest) + ")"));
         }).thenWaitUntil(() -> {
-            helper.assertTrue(build.get().done() && build.get().succeeded(), "place failed: " + build.get().outcome());
+            Checks.assertTrue(helper, build.get().done() && build.get().succeeded(), "place failed: " + build.get().outcome());
             String wrong = problem(level, cells.get());
-            helper.assertTrue(wrong == null, "after place " + wrong);
+            Checks.assertTrue(helper, wrong == null, "after place " + wrong);
             CompanionFactory.despawn(level.getServer(), her);
         }).thenSucceed();
     }
@@ -291,9 +292,9 @@ public class GeneratorGameTests {
         NumenPlayer her = spawnAt(helper, "gametest_far_tree", new BlockPos(2, 2, 2), false);
         ToolRun run = lua(her, "local ok, err = pcall(numen.shape.feature, {x = 100000, y = 64, z = 100000}, \"minecraft:oak\")\n"
                 + "return {ok = ok, kind = err.kind, message = err.message}");
-        helper.assertTrue(run.ranToTheEnd(), "the program itself failed: " + run.receipt());
+        Checks.assertTrue(helper, run.ranToTheEnd(), "the program itself failed: " + run.receipt());
         JsonObject got = returned(run);
-        helper.assertTrue(!got.get("ok").getAsBoolean() && got.get("kind").getAsString().equals("not_found")
+        Checks.assertTrue(helper, !got.get("ok").getAsBoolean() && got.get("kind").getAsString().equals("not_found")
                         && got.get("message").getAsString().contains("not loaded")
                         && got.get("message").getAsString().contains("x 100000 to 100015, z 100000 to 100015"),
                 "the call fails and names the chunk: " + got);
@@ -327,22 +328,22 @@ public class GeneratorGameTests {
                 + "blocks = size.blocks, width = size.size.x, height = size.size.y, distance = size.distance, "
                 + "out = numen.shape.extinguish(" + xyz(fire) + ", 3), eroded = numen.shape.erode(" + xyz(lone) + ", 2), "
                 + "raised_name = raised[1].name, raised_y = raised[1].pos.y}");
-        helper.assertTrue(run.ranToTheEnd(), "the program failed: " + run.receipt());
+        Checks.assertTrue(helper, run.ranToTheEnd(), "the program failed: " + run.receipt());
         JsonObject got = returned(run);
-        helper.assertTrue(got.get("count").getAsInt() == 3 && got.get("first").getAsString().equals("minecraft:stone")
+        Checks.assertTrue(helper, got.get("count").getAsInt() == 3 && got.get("first").getAsString().equals("minecraft:stone")
                         && got.get("first_count").getAsInt() == 3 && got.get("second").getAsString().equals("minecraft:dirt"),
                 "count and distribution: " + got);
-        helper.assertTrue(got.get("blocks").getAsInt() == 5 && got.get("width").getAsInt() == 5 && got.get("height").getAsInt() == 1
+        Checks.assertTrue(helper, got.get("blocks").getAsInt() == 5 && got.get("width").getAsInt() == 5 && got.get("height").getAsInt() == 1
                 && Math.abs(got.get("distance").getAsDouble() - 4) < 1e-9, "size: " + got);
         JsonArray out = got.getAsJsonArray("out");
-        helper.assertTrue(out.size() == 1 && pos(out.get(0).getAsJsonObject()).equals(fire)
+        Checks.assertTrue(helper, out.size() == 1 && pos(out.get(0).getAsJsonObject()).equals(fire)
                 && out.get(0).getAsJsonObject().get("name").getAsString().equals("air"), "the fire goes out: " + out);
         JsonArray eroded = got.getAsJsonArray("eroded");
-        helper.assertTrue(eroded.asList().stream().anyMatch(c -> pos(c.getAsJsonObject()).equals(lone)
+        Checks.assertTrue(helper, eroded.asList().stream().anyMatch(c -> pos(c.getAsJsonObject()).equals(lone)
                 && c.getAsJsonObject().get("name").getAsString().equals("minecraft:air")), "the lone block wears away: " + eroded);
-        helper.assertTrue(got.get("raised_name").getAsString().equals("minecraft:stone") && got.get("raised_y").getAsInt() == pillar.above().getY(),
+        Checks.assertTrue(helper, got.get("raised_name").getAsString().equals("minecraft:stone") && got.get("raised_y").getAsInt() == pillar.above().getY(),
                 "the cell over the pillar takes the block under it: " + got);
-        helper.assertTrue(level.getBlockState(fire).is(Blocks.FIRE) && level.getBlockState(lone).is(Blocks.STONE), "reading changed the world");
+        Checks.assertTrue(helper, level.getBlockState(fire).is(Blocks.FIRE) && level.getBlockState(lone).is(Blocks.STONE), "reading changed the world");
         CompanionFactory.despawn(level.getServer(), her);
         helper.succeed();
     }

@@ -2,6 +2,7 @@ package com.dwinovo.numen.gametest;
 
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntitySpawnReason;
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.gametest.Bodies;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
@@ -10,8 +11,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
@@ -64,7 +65,7 @@ public class MovementGameTests {
         TaskRecord<?> record = lua(companion, "numen.move.walk(" + xyz(target) + ")").task();
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
+            Checks.assertTrue(helper, companion.blockPosition().distSqr(target) <= 2 * 2,
                     "companion has not reached the goto target");
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -104,7 +105,7 @@ public class MovementGameTests {
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 13));
         TaskRecord<?> record = lua(companion, "numen.move.walk(" + xyz(target) + ")").task();
         succeedWhen(helper, () -> {
-            helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
+            Checks.assertTrue(helper, companion.blockPosition().distSqr(target) <= 2 * 2,
                     "companion has not escaped through the door");
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -127,7 +128,7 @@ public class MovementGameTests {
         // 船放在水面高度(rel y1 的水,面在 +0.9),别沉进水里被浮力弹上天
         BlockPos boatAt = helper.absolutePos(new BlockPos(6, 2, 8));
         var boat = EntityType.OAK_BOAT.create(level, EntitySpawnReason.STRUCTURE);
-        boat.moveTo(boatAt.getX() + 0.5, boatAt.getY() - 1 + 0.9, boatAt.getZ() + 0.5, 0, 0);
+        boat.snapTo(boatAt.getX() + 0.5, boatAt.getY() - 1 + 0.9, boatAt.getZ() + 0.5, 0, 0);
         level.addFreshEntity(boat);
 
         NumenPlayer companion = spawnAt(helper, "gametest_pilot", new BlockPos(3, 2, 8), false);
@@ -140,12 +141,12 @@ public class MovementGameTests {
         });
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
+            Checks.assertTrue(helper, companion.blockPosition().distSqr(target) <= 2 * 2,
                     "companion has not crossed the water to the target");
-            helper.assertTrue(!companion.isPassenger(), "companion is still in the boat");
+            Checks.assertTrue(helper, !companion.isPassenger(), "companion is still in the boat");
             // 结构可旋转,方向断言必须与坐标系无关:船开过就是离目标近了一大截
             double now = boat.position().distanceTo(Vec3.atCenterOf(target));
-            helper.assertTrue(now < boatStartDist - 3.0,
+            Checks.assertTrue(helper, now < boatStartDist - 3.0,
                     "the boat never drove toward the target (start " + boatStartDist
                             + ", now " + now + ")");
             CompanionFactory.despawn(level.getServer(), companion);
@@ -168,7 +169,7 @@ public class MovementGameTests {
         }
         BlockPos boatAt = helper.absolutePos(new BlockPos(7, 2, 7));
         var boat = EntityType.OAK_BOAT.create(level, EntitySpawnReason.STRUCTURE);
-        boat.moveTo(boatAt.getX() + 0.5, boatAt.getY() - 1, boatAt.getZ() + 0.5, 0, 0);
+        boat.snapTo(boatAt.getX() + 0.5, boatAt.getY() - 1, boatAt.getZ() + 0.5, 0, 0);
         level.addFreshEntity(boat);
         BlockPos stone = helper.absolutePos(new BlockPos(7, 2, 5));
         level.setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
@@ -183,7 +184,7 @@ public class MovementGameTests {
         });
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(level.getBlockState(stone).isAir(),
+            Checks.assertTrue(helper, level.getBlockState(stone).isAir(),
                     "the follow-up dig never ran — the self-click press hung the sync slot");
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -212,9 +213,9 @@ public class MovementGameTests {
         ToolRun follow = lua(companion, "numen.move.follow(" + ref(stand) + ", {distance = 3})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(follow.done() && !follow.succeeded() && follow.task() == null,
+            Checks.assertTrue(helper, follow.done() && !follow.succeeded() && follow.task() == null,
                     "follow should be refused at once, got: " + follow.outcome());
-            helper.assertTrue(follow.outcome().contains("can't keep up") && follow.outcome().contains("blocks"),
+            Checks.assertTrue(helper, follow.outcome().contains("can't keep up") && follow.outcome().contains("blocks"),
                     "the reason must say she has no blocks to build with: " + follow.outcome());
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -238,15 +239,15 @@ public class MovementGameTests {
         registry.put(uuid, registry.find(uuid).doing("numen.work.dig", "numen.work.dig({name = \"minecraft:iron_ore\", "
                 + "pos = " + xyz(gone) + "}, {count = 1})"));
         NumenPlayer second = com.dwinovo.numen.api.gametest.Bodies.respawn(server, uuid);
-        helper.assertTrue(second != null, "the body was not rebuilt");
+        Checks.assertTrue(helper, second != null, "the body was not rebuilt");
         StringBuilder told = new StringBuilder();
         succeedWhen(helper, () -> {
-            helper.assertTrue(registry.find(uuid).taskName().isBlank(), "the task that cannot be replayed is still on record");
+            Checks.assertTrue(helper, registry.find(uuid).taskName().isBlank(), "the task that cannot be replayed is still on record");
             for (var entry : com.dwinovo.numen.api.brain.CompanionLoops.get(uuid).orElseThrow().inbox()
                     .takeEntries(System.currentTimeMillis(), 0L)) {
                 told.append(entry.text());
             }
-            helper.assertTrue(told.toString().contains("task_finished")
+            Checks.assertTrue(helper, told.toString().contains("task_finished")
                             && told.toString().contains("could not be resumed after the restart"),
                     "she was not told the task could not be restored: " + told);
             com.dwinovo.numen.api.entity.Companions.dismiss(server, second);
@@ -297,7 +298,7 @@ public class MovementGameTests {
         ToolRun[] clear = new ToolRun[1];
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(walk.done() && walk.succeeded(),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, walk.done() && walk.succeeded(),
                         "she did not get onto the tower: " + walk.outcome()))
                 .thenExecute(() -> {
                     var placed = com.dwinovo.numen.api.permission.PlacedBlocks.of(level);
@@ -305,23 +306,23 @@ public class MovementGameTests {
                                     helper.absolutePos(new BlockPos(15, 6, 15)))
                             .filter(p -> level.getBlockState(p).is(Blocks.DIRT))
                             .forEach(p -> pillar.add(p.immutable()));
-                    helper.assertTrue(!pillar.isEmpty(), "no dirt of hers stands anywhere");
+                    Checks.assertTrue(helper, !pillar.isEmpty(), "no dirt of hers stands anywhere");
                     var gate = com.dwinovo.numen.api.permission.Permission.gateFor(companion);
                     for (BlockPos cell : pillar) {
                         // 搜索视图里这一格是空气:问一句裁决,不该把记录问没了
                         gate.judge(com.dwinovo.numen.api.permission.Action.breakBlock(cell, Blocks.DIRT.defaultBlockState()),
                                 net.minecraft.world.level.EmptyBlockGetter.INSTANCE);
                         var placer = placed.placerAt(cell, level.getBlockState(cell));
-                        helper.assertTrue(placer != null && placer.id().equals(companion.getUUID()),
+                        Checks.assertTrue(helper, placer != null && placer.id().equals(companion.getUUID()),
                                 "the dirt she pillared with at " + cell.toShortString() + " is not recorded as hers: " + placer);
                     }
                     clear[0] = lua(companion, "numen.work.dig(" + xyz(pillar.get(0)) + ")");
                 })
-                .thenWaitUntil(() -> helper.assertTrue(clear[0].done(), "taking the pillar down has not finished"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, clear[0].done(), "taking the pillar down has not finished"))
                 .thenExecute(() -> {
-                    helper.assertTrue(clear[0].ranToTheEnd() && level.getBlockState(pillar.get(0)).isAir(),
+                    Checks.assertTrue(helper, clear[0].ranToTheEnd() && level.getBlockState(pillar.get(0)).isAir(),
                             "her pillar block is still there: " + clear[0].receipt());
-                    helper.assertTrue(!asked[0], "she asked the owner about her own pillar");
+                    Checks.assertTrue(helper, !asked[0], "she asked the owner about her own pillar");
                     CompanionFactory.despawn(level.getServer(), companion);
                     leave(owner);
                 })
@@ -342,9 +343,9 @@ public class MovementGameTests {
         var gate = com.dwinovo.numen.api.permission.Permission.gateFor(companion);
         var action = com.dwinovo.numen.api.permission.Action.breakBlock(cell, Blocks.DIRT.defaultBlockState());
         gate.judge(action, net.minecraft.world.level.EmptyBlockGetter.INSTANCE);
-        helper.assertTrue(placed.isBuilt(cell.asLong()), "a snapshot's air cleared the record");
+        Checks.assertTrue(helper, placed.isBuilt(cell.asLong()), "a snapshot's air cleared the record");
         gate.judge(action, level);
-        helper.assertTrue(!placed.isBuilt(cell.asLong()), "the live world's air left the record standing");
+        Checks.assertTrue(helper, !placed.isBuilt(cell.asLong()), "the live world's air left the record standing");
         CompanionFactory.despawn(level.getServer(), companion);
         helper.succeed();
     }
@@ -357,8 +358,8 @@ public class MovementGameTests {
         ToolRun walk = lua(companion, "numen.move.walk(" + xyz(top) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "the walk has not finished");
-            helper.assertTrue(!walk.succeeded() && walk.outcome().contains("blocks this walk may spend"),
+            Checks.assertTrue(helper, walk.done(), "the walk has not finished");
+            Checks.assertTrue(helper, !walk.succeeded() && walk.outcome().contains("blocks this walk may spend"),
                     "the failure does not say she has nothing to pillar with: " + walk.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -387,10 +388,10 @@ public class MovementGameTests {
         helper.onEachTick(() -> burned[0] |= companion.isOnFire() || companion.getHealth() < companion.getMaxHealth());
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "goto has not finished");
-            helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(target) <= 2,
+            Checks.assertTrue(helper, walk.done(), "goto has not finished");
+            Checks.assertTrue(helper, walk.succeeded() && companion.blockPosition().distSqr(target) <= 2,
                     "she did not get past the lava: " + walk.outcome());
-            helper.assertTrue(!burned[0], "she was burned on the way");
+            Checks.assertTrue(helper, !burned[0], "she was burned on the way");
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
@@ -408,10 +409,10 @@ public class MovementGameTests {
 
         steps(helper)
                 .thenIdle(20)
-                .thenExecute(() -> owner.moveTo(far.getX() + 0.5, far.getY(), far.getZ() + 0.5))
-                .thenWaitUntil(() -> helper.assertTrue(companion.distanceTo(owner) <= 4.5,
+                .thenExecute(() -> owner.snapTo(far.getX() + 0.5, far.getY(), far.getZ() + 0.5))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, companion.distanceTo(owner) <= 4.5,
                         "she did not catch up with the owner: " + companion.distanceTo(owner)))
-                .thenExecute(() -> helper.assertTrue(!follow.ended(),
+                .thenExecute(() -> Checks.assertTrue(helper, !follow.ended(),
                         "follow ended before its time was up: " + follow.outcome()))
                 .thenExecute(() -> {
                     CompanionFactory.despawn(level.getServer(), companion);
@@ -426,17 +427,17 @@ public class MovementGameTests {
         ServerLevel level = helper.getLevel();
         var pig = net.minecraft.world.entity.EntityType.PIG.create(level, EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(11, 2, 11));
-        pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        pig.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pig.setNoAi(true);
         level.addFreshEntity(pig);
         NumenPlayer companion = spawnAt(helper, "gametest_swinefollower", new BlockPos(3, 2, 3), false);
         ToolRun follow = lua(companion, "numen.move.follow(" + ref(pig) + ")");
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(companion.distanceTo(pig) <= 4.5,
+                .thenWaitUntil(() -> Checks.assertTrue(helper, companion.distanceTo(pig) <= 4.5,
                         "she did not catch up with the pig: " + companion.distanceTo(pig)))
                 .thenExecute(pig::discard)
-                .thenWaitUntil(() -> helper.assertTrue(follow.ended() && !follow.succeeded()
+                .thenWaitUntil(() -> Checks.assertTrue(helper, follow.ended() && !follow.succeeded()
                                 && follow.outcome().contains("is gone"),
                         "follow did not end when the pig was gone: " + follow.outcome()))
                 .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
@@ -453,7 +454,7 @@ public class MovementGameTests {
         var server = level.getServer();
         var pig = net.minecraft.world.entity.EntityType.PIG.create(level, EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(11, 2, 11));
-        pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        pig.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pig.setNoAi(true);
         level.addFreshEntity(pig);
         BlockPos spawn = helper.absolutePos(new BlockPos(3, 2, 3));
@@ -466,21 +467,21 @@ public class MovementGameTests {
 
         // 猪在远处:受理之前先规划走过去的路,受理之后才落盘
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(follow.reply() != null, "follow has not replied"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, follow.reply() != null, "follow has not replied"))
                 .thenExecute(() -> {
-                    helper.assertTrue(follow.task() != null, "follow was not accepted: " + follow.reply());
+                    Checks.assertTrue(helper, follow.task() != null, "follow was not accepted: " + follow.reply());
                     var recorded = registry.find(uuid);
-                    helper.assertTrue(recorded.taskLua().equals("numen.move.follow(" + ref(pig)
+                    Checks.assertTrue(helper, recorded.taskLua().equals("numen.move.follow(" + ref(pig)
                                     + ", {distance = 3})"),
                             "the replayed line does not name the pig by its id: " + recorded.taskLua());
                     com.dwinovo.numen.api.entity.Companions.dormant(server, first);
                     registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), recorded.taskLua()));
                     second[0] = com.dwinovo.numen.api.gametest.Bodies.respawn(server, uuid);
-                    helper.assertTrue(second[0] != null, "the body was not rebuilt");
+                    Checks.assertTrue(helper, second[0] != null, "the body was not rebuilt");
                 })
                 .thenWaitUntil(() -> {
                     TaskRecord<?> now = com.dwinovo.numen.api.task.CompanionTickDispatcher.currentTaskFor(uuid);
-                    helper.assertTrue(now instanceof com.dwinovo.numen.task.move.FollowTaskRecord f
+                    Checks.assertTrue(helper, now instanceof com.dwinovo.numen.task.move.FollowTaskRecord f
                                     && pig.getUUID().equals(f.target),
                             "the replayed follow is not after the same pig: " + now);
                 })

@@ -1,10 +1,11 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
@@ -35,14 +36,14 @@ public class FishGameTests {
         ToolRun fish = lua(companion, "numen.work.fish()");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(fish.done(), "work fish has not finished");
-            helper.assertTrue(fish.succeeded(), "fishing failed: " + fish.outcome());
+            Checks.assertTrue(helper, fish.done(), "work fish has not finished");
+            Checks.assertTrue(helper, fish.succeeded(), "fishing failed: " + fish.outcome());
             var inv = companion.getInventory();
             // 背包里比开钓时多了东西:她只带了一根竿,钓上来的可能也是一根竿(原版杂物表里有,权重 2),所以按件数比,不按"竿以外的东西"
-            boolean caught = inv.items.stream().mapToInt(ItemStack::getCount).sum() >= 2;
-            boolean worn = inv.items.stream().anyMatch(s -> s.is(Items.FISHING_ROD) && s.getDamageValue() > 0);
-            helper.assertTrue(caught && worn, "nothing was reeled in, or the rod took no wear: " + fish.outcome());
-            helper.assertTrue(fish.outcome().startsWith("reeled in minecraft:"),
+            boolean caught = inv.getNonEquipmentItems().stream().mapToInt(ItemStack::getCount).sum() >= 2;
+            boolean worn = inv.getNonEquipmentItems().stream().anyMatch(s -> s.is(Items.FISHING_ROD) && s.getDamageValue() > 0);
+            Checks.assertTrue(helper, caught && worn, "nothing was reeled in, or the rod took no wear: " + fish.outcome());
+            Checks.assertTrue(helper, fish.outcome().startsWith("reeled in minecraft:"),
                     "the result does not name the catch: " + fish.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -70,12 +71,12 @@ public class FishGameTests {
         java.util.concurrent.atomic.AtomicReference<ToolRun> stop = new java.util.concurrent.atomic.AtomicReference<>();
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(companion.fishing != null, "she has not cast yet"))
+                .thenWaitUntil(() -> Checks.assertTrue(helper, companion.fishing != null, "she has not cast yet"))
                 .thenExecute(() -> stop.set(lua(companion, "numen.task.stop()")))
-                .thenWaitUntil(() -> helper.assertTrue(stop.get().succeeded() && fish.done()
+                .thenWaitUntil(() -> Checks.assertTrue(helper, stop.get().succeeded() && fish.done()
                                 && fish.task().getState() == com.dwinovo.numen.api.task.TaskState.CANCELLED,
                         "fishing was not stopped: " + stop.get().reply() + " / " + fish.outcome()))
-                .thenWaitUntil(() -> helper.assertTrue(companion.fishing == null
+                .thenWaitUntil(() -> Checks.assertTrue(helper, companion.fishing == null
                                 && helper.getLevel().getEntitiesOfClass(net.minecraft.world.entity.projectile.FishingHook.class,
                                         new net.minecraft.world.phys.AABB(companion.blockPosition()).inflate(16)).isEmpty(),
                         "the bobber is still out after the stop"))

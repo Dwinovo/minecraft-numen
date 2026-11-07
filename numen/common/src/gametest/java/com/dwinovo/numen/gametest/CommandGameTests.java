@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.permission.Verb;
 import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.Constants;
@@ -40,8 +41,8 @@ import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.synchronization.ArgumentTypeInfos;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -191,39 +192,39 @@ public class CommandGameTests {
         var registry = com.dwinovo.numen.api.entity.CompanionRegistry.get(server);
         var loop = com.dwinovo.numen.api.brain.CompanionLoops.get(id).orElseThrow();
         loop.submitPrompt("在吗");   // 没绑模型档案:她停在"端点不可用",被请出去又回来要重新露出这个停牌
-        helper.assertTrue(loop.status().hold() == com.dwinovo.numen.api.agent.loop.Hold.BLOCKED,
+        Checks.assertTrue(helper, loop.status().hold() == com.dwinovo.numen.api.agent.loop.Hold.BLOCKED,
                 "her loop is not blocked on the unbound model: " + loop.status().hold());
 
         // /kick 只在专用服务器上注册,测试服务器里没有;它做的事就是这一句
         her.connection.disconnect(Component.literal("cheating at cards"));
 
-        helper.assertTrue(NumenPlayer.findByUuid(server, id) == null, "her body is still in the world");
+        Checks.assertTrue(helper, NumenPlayer.findByUuid(server, id) == null, "her body is still in the world");
         // 面板收到的就是这样译出来的:被请出去又回来,停牌的变化也要能编成要发给客户端的 JSON
         var encoded = new java.util.ArrayList<com.google.gson.JsonElement>();
         var panel = new com.dwinovo.numen.api.brain.FeedEncoder(loop, events -> events.forEach(e -> encoded.add(e.toJson())));
-        helper.assertTrue(loop.status().hold() == com.dwinovo.numen.api.agent.loop.Hold.DEAD,
+        Checks.assertTrue(helper, loop.status().hold() == com.dwinovo.numen.api.agent.loop.Hold.DEAD,
                 "her loop was not held: " + loop.status().hold());
-        helper.assertTrue(loop.inbox().entries().stream().anyMatch(entry ->
+        Checks.assertTrue(helper, loop.inbox().entries().stream().anyMatch(entry ->
                         entry.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.REMOVED)
                                 && entry.text().contains("cheating at cards")),
                 "her inbox has no removal fact: " + loop.inbox().entries());
-        helper.assertTrue(registry.find(id) != null && registry.find(id).removed(), "the roster does not record it");
-        helper.assertTrue(GameTestKit.said(owner).stream().anyMatch(line ->
+        Checks.assertTrue(helper, registry.find(id) != null && registry.find(id).removed(), "the roster does not record it");
+        Checks.assertTrue(helper, GameTestKit.said(owner).stream().anyMatch(line ->
                         line.text().getString().contains("Kickable") && line.text().getString().contains("cheating at cards")),
                 "her owner was not told");
-        helper.assertTrue(com.dwinovo.numen.api.network.OwnedBody.of(server, owner.getUUID(), id, reason -> { }) == null,
+        Checks.assertTrue(helper, com.dwinovo.numen.api.network.OwnedBody.of(server, owner.getUUID(), id, reason -> { }) == null,
                 "a packet pulled her back without a summon");
         CompanionFactory.despawn(server, her);   // 已经被请出去的身体再移一次:什么也不做(Paper 上再移会抛"已经退役")
 
         NumenPlayer back = com.dwinovo.numen.api.gametest.Bodies.summon(server, owner.getUUID(), "Kickable", level,
                 net.minecraft.world.phys.Vec3.atBottomCenterOf(at));
-        helper.assertTrue(back.getUUID().equals(id) && NumenPlayer.findByUuid(server, id) != null,
+        Checks.assertTrue(helper, back.getUUID().equals(id) && NumenPlayer.findByUuid(server, id) != null,
                 "the summon did not bring the same companion back");
-        helper.assertTrue(!registry.find(id).removed(), "the roster still says she is out");
-        helper.assertTrue(loop.status().hold() != com.dwinovo.numen.api.agent.loop.Hold.DEAD,
+        Checks.assertTrue(helper, !registry.find(id).removed(), "the roster still says she is out");
+        Checks.assertTrue(helper, loop.status().hold() != com.dwinovo.numen.api.agent.loop.Hold.DEAD,
                 "her loop is still held for the missing body");
         panel.flush();   // 回来后的停牌变化若编不出来,这里抛出
-        helper.assertTrue(!encoded.isEmpty(), "the panel got nothing after she came back");
+        Checks.assertTrue(helper, !encoded.isEmpty(), "the panel got nothing after she came back");
         CompanionFactory.despawn(server, back);
         com.dwinovo.numen.api.brain.CompanionLoops.dismissed(server, id);
         registry.remove(id);
@@ -254,9 +255,9 @@ public class CommandGameTests {
         var heard = loop.inbox().entries().stream()
                 .filter(entry -> entry.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.SERVER_MESSAGE))
                 .map(entry -> entry.text()).toList();
-        helper.assertTrue(heard.stream().noneMatch(text -> text.contains("said-before-arriving")),
+        Checks.assertTrue(helper, heard.stream().noneMatch(text -> text.contains("said-before-arriving")),
                 "she heard what was said before she arrived: " + heard);
-        helper.assertTrue(heard.stream().anyMatch(text -> text.contains("said-after-arriving")),
+        Checks.assertTrue(helper, heard.stream().anyMatch(text -> text.contains("said-after-arriving")),
                 "she did not hear what was said after she arrived: " + heard);
         CompanionFactory.despawn(server, her);
         com.dwinovo.numen.api.brain.CompanionLoops.dismissed(server, id);
@@ -292,20 +293,20 @@ public class CommandGameTests {
         companion.getServer().getPlayerList().getOps().add(new ServerOpListEntry(companion.getGameProfile(), 4, false));
         ToolRun borrowed = lua(companion, "numen.mc.run(\"give @s minecraft:diamond\")");
         String help = said(lua(companion, "numen.mc.run(\"help\")"));
-        helper.assertTrue(borrowed.refused() && borrowed.outcome().contains("the server does not let you use /give"),
+        Checks.assertTrue(helper, borrowed.refused() && borrowed.outcome().contains("the server does not let you use /give"),
                 "her own op level ran an op command for a non-op owner: " + borrowed.reply());
-        helper.assertTrue(!help.contains("/give "), "her help lists /give on her own op level: " + help);
-        helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 0, "got a diamond on her own op");
+        Checks.assertTrue(helper, !help.contains("/give "), "her help lists /give on her own op level: " + help);
+        Checks.assertTrue(helper, companion.getInventory().countItem(Items.DIAMOND) == 0, "got a diamond on her own op");
         grantOp(owner);
         ToolRun online = lua(companion, "numen.mc.run(\"give @s minecraft:diamond\")");
-        helper.assertTrue(online.done() && online.succeeded(), "an op owner's companion could not give: " + online.outcome());
+        Checks.assertTrue(helper, online.done() && online.succeeded(), "an op owner's companion could not give: " + online.outcome());
         leave(owner);
         ToolRun offline = lua(companion, "numen.mc.run(\"give @s minecraft:diamond\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(offline.done() && offline.succeeded(),
+            Checks.assertTrue(helper, offline.done() && offline.succeeded(),
                     "the op level was lost with the owner offline: " + offline.outcome());
-            helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 2, "not both gives landed");
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.DIAMOND) == 2, "not both gives landed");
             cleanUp(helper, companion, null);
             companion.getServer().getPlayerList().getOps().remove(owner.getGameProfile());
         });
@@ -327,15 +328,15 @@ public class CommandGameTests {
         ToolRun typo = lua(companion, "numen.mc.run(\"give @s minecraft:not_an_item\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(give.done(), "give has not finished");
-            helper.assertTrue(give.succeeded(), "give failed: " + give.outcome());
-            helper.assertTrue(give.task() == null, "a game command occupied the task slot: " + give.task());
-            helper.assertTrue(said(give).contains("Gave 2 [Diamond] to gametest_mc_op")
+            Checks.assertTrue(helper, give.done(), "give has not finished");
+            Checks.assertTrue(helper, give.succeeded(), "give failed: " + give.outcome());
+            Checks.assertTrue(helper, give.task() == null, "a game command occupied the task slot: " + give.task());
+            Checks.assertTrue(helper, said(give).contains("Gave 2 [Diamond] to gametest_mc_op")
                             && "/give @s minecraft:diamond 2".equals(give.field("command")),
                     "the value does not carry the server's echo: " + give.reply());
-            helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 2, "no diamonds in the inventory");
-            helper.assertTrue(!asked[0], "an allowed command still asked the owner");
-            helper.assertTrue(typo.refused()
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.DIAMOND) == 2, "no diamonds in the inventory");
+            Checks.assertTrue(helper, !asked[0], "an allowed command still asked the owner");
+            Checks.assertTrue(helper, typo.refused()
                             && typo.outcome().contains("usage: numen.mc.run(\"give <targets> <item> [<count>]\")"),
                     "a bad argument does not come back with the usage: " + typo.outcome());
             cleanUp(helper, companion, owner);
@@ -360,25 +361,25 @@ public class CommandGameTests {
         succeedWhen(helper, () -> {
             if (waited[0] < 10) {
                 ConsentRequest pending = ConsentDesk.of(companion).pending();
-                helper.assertTrue(pending != null, "setblock did not ask: " + run.outcome());
+                Checks.assertTrue(helper, pending != null, "setblock did not ask: " + run.outcome());
                 ConsentItem item = pending.items().get(0);
-                helper.assertTrue(item.kind() == Verb.COMMAND
+                Checks.assertTrue(helper, item.kind() == Verb.COMMAND
                                 && item.name().getString().equals("/" + line) && item.icon() == null,
                         "the card does not show the command: " + item);
-                helper.assertTrue("command(setblock)".equals(item.remember().toString()),
+                Checks.assertTrue(helper, "command(setblock)".equals(item.remember().toString()),
                         "remembering would not store the root: " + item.remember());
-                helper.assertTrue(level.getBlockState(helper.absolutePos(target)).isAir(),
+                Checks.assertTrue(helper, level.getBlockState(helper.absolutePos(target)).isAir(),
                         "the block was set before the owner answered");
-                helper.assertTrue(!run.done(), "the call settled without an answer");
+                Checks.assertTrue(helper, !run.done(), "the call settled without an answer");
                 if (++waited[0] == 10) {
                     ConsentDesk.of(companion).answer(pending.id(), ConsentAnswer.Decision.ALLOW_ONCE, "");
                 }
-                helper.fail("still waiting on purpose");
+                Checks.fail(helper, "still waiting on purpose");
             }
-            helper.assertTrue(run.done() && run.succeeded(), "setblock did not finish: " + run.outcome());
-            helper.assertTrue(level.getBlockState(helper.absolutePos(target)).is(Blocks.STONE), "no stone was set");
-            helper.assertTrue(said(run).contains("Changed the block"), "the value lacks the echo: " + run.reply());
-            helper.assertTrue(run.outcome().contains("the owner allowed")
+            Checks.assertTrue(helper, run.done() && run.succeeded(), "setblock did not finish: " + run.outcome());
+            Checks.assertTrue(helper, level.getBlockState(helper.absolutePos(target)).is(Blocks.STONE), "no stone was set");
+            Checks.assertTrue(helper, said(run).contains("Changed the block"), "the value lacks the echo: " + run.reply());
+            Checks.assertTrue(helper, run.outcome().contains("the owner allowed")
                             && run.receipt().contains("the owner allowed"),
                     "the receipt does not tell what the owner allowed: " + run.receipt());
             cleanUp(helper, companion, owner);
@@ -399,12 +400,12 @@ public class CommandGameTests {
         ToolRun run = lua(companion, "numen.mc.run(\"" + setblock(helper, target) + "\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(run.done(), "setblock has not settled");
-            helper.assertTrue(!run.succeeded() && "denied".equals(run.kind())
+            Checks.assertTrue(helper, run.done(), "setblock has not settled");
+            Checks.assertTrue(helper, !run.succeeded() && "denied".equals(run.kind())
                             && run.outcome().contains("denied by rule command(setblock)"),
                     "the refusal does not quote the rule: " + run.outcome());
-            helper.assertTrue(!asked[0], "a denied command raised a consent card");
-            helper.assertTrue(level.getBlockState(helper.absolutePos(target)).isAir(), "a denied setblock ran");
+            Checks.assertTrue(helper, !asked[0], "a denied command raised a consent card");
+            Checks.assertTrue(helper, level.getBlockState(helper.absolutePos(target)).isAir(), "a denied setblock ran");
             cleanUp(helper, companion, owner);
         });
     }
@@ -429,24 +430,24 @@ public class CommandGameTests {
                 .withEntity(helper.makeMockPlayer(GameType.SURVIVAL)).withPermission(4);
 
         Set<String> verbs = usable(numen, player);
-        helper.assertTrue(verbs.containsAll(List.of("player", "settings", "reset", "permission", "consent", "drive"))
+        Checks.assertTrue(helper, verbs.containsAll(List.of("player", "settings", "reset", "permission", "consent", "drive"))
                         && List.of("task", "api", "mc", "move", "work").stream().noneMatch(verbs::contains),
                 "a player's /numen is not the admin verbs, or carries her API: " + verbs);
-        helper.assertTrue(!numen.canUse(companion.createCommandSourceStack()), "she can use /numen");
+        Checks.assertTrue(helper, !numen.canUse(companion.createCommandSourceStack()), "she can use /numen");
         Set<Class<?>> types = new HashSet<>();
         argumentTypes(root, player, types);
-        helper.assertTrue(types.stream().allMatch(ArgumentTypeInfos::isClassRecognized),
+        Checks.assertTrue(helper, types.stream().allMatch(ArgumentTypeInfos::isClassRecognized),
                 "the MC tree carries an argument type the registry does not know: " + types);
         server.getCommands().sendCommands(companion);
 
         ToolRun summon = lua(companion, "numen.mc.run(\"numen player summon gametest_mc_twin\")");
         ToolRun drive = lua(companion, "numen.mc.run(\"numen drive gametest_mc_viewer numen.task.status()\")");
         for (ToolRun refused : List.of(summon, drive)) {
-            helper.assertTrue(refused.refused() && refused.outcome().contains("the server does not let you use /numen"),
+            Checks.assertTrue(helper, refused.refused() && refused.outcome().contains("the server does not let you use /numen"),
                     "a player's verb was not refused: " + refused.reply());
         }
-        helper.assertTrue(ConsentDesk.of(companion).pending() == null, "asked the owner about a player's verb");
-        helper.assertTrue(server.getPlayerList().getPlayerByName("gametest_mc_twin") == null,
+        Checks.assertTrue(helper, ConsentDesk.of(companion).pending() == null, "asked the owner about a player's verb");
+        Checks.assertTrue(helper, server.getPlayerList().getPlayerByName("gametest_mc_twin") == null,
                 "she summoned a companion");
         cleanUp(helper, companion, owner);
         helper.succeed();
@@ -504,10 +505,10 @@ public class CommandGameTests {
         ToolRun wrapped = lua(companion, "gt." + TWIN + ".mark()");
         ToolRun herself = lua(companion, "numen.mc.run(\"" + TWIN + " mark gt_mc_marked alpha\")");
 
-        helper.assertTrue(wrapped.succeeded() && "alpha,beta | marked gt_mc_marked alpha".equals(wrapped.value()),
+        Checks.assertTrue(helper, wrapped.succeeded() && "alpha,beta | marked gt_mc_marked alpha".equals(wrapped.value()),
                 "the wrapper did not run on her with the server's authority: " + wrapped.reply());
-        helper.assertTrue(herself.refused(), "she ran the admin command with her own authority: " + herself.reply());
-        helper.assertTrue(ConsentDesk.of(companion).pending() == null, "the wrapper asked the owner");
+        Checks.assertTrue(helper, herself.refused(), "she ran the admin command with her own authority: " + herself.reply());
+        Checks.assertTrue(helper, ConsentDesk.of(companion).pending() == null, "the wrapper asked the owner");
         cleanUp(helper, companion, owner);
         helper.succeed();
     }
@@ -531,20 +532,20 @@ public class CommandGameTests {
             sequence = sequence
                     .thenExecute(() -> server.getCommands().performPrefixedCommand(console,
                             "/numen drive gt_mc_driven " + programs.get(n)))
-                    .thenWaitUntil(() -> helper.assertTrue(heard.size() > n, "drive has not answered " + programs.get(n)));
+                    .thenWaitUntil(() -> Checks.assertTrue(helper, heard.size() > n, "drive has not answered " + programs.get(n)));
         }
         sequence.thenExecute(() -> {
             String name = companion.getName().getString();
-            helper.assertTrue(heard.size() == programs.size(), "drive did not answer every program: " + heard);
+            Checks.assertTrue(helper, heard.size() == programs.size(), "drive did not answer every program: " + heard);
             for (int i : new int[]{0, 2}) {
-                helper.assertTrue(heard.get(i).startsWith(name + ": ok · 1 call"),
+                Checks.assertTrue(helper, heard.get(i).startsWith(name + ": ok · 1 call"),
                         "drive did not run " + programs.get(i) + " to the end: " + heard.get(i));
             }
-            helper.assertTrue(heard.get(1).startsWith(name + ": The script stopped at line 1")
+            Checks.assertTrue(helper, heard.get(1).startsWith(name + ": The script stopped at line 1")
                             && heard.get(1).contains("there is no API function numen.task.stauts")
                             && heard.get(1).contains("numen.task.status"),
                     "drive did not say which function it could not find: " + heard.get(1));
-            helper.assertTrue(heard.get(3).startsWith(name + ": The script stopped at line 1")
+            Checks.assertTrue(helper, heard.get(3).startsWith(name + ": The script stopped at line 1")
                             && heard.get(3).contains("bad_argument") && heard.get(3).contains("/gvie"),
                     "drive did not say which command it could not read: " + heard.get(3));
             CompanionFactory.despawn(server, companion);
@@ -572,12 +573,12 @@ public class CommandGameTests {
         Constants.LOG.info("[numen-mc] give @s minecraft:dimond -> {}", itemSaid);
         Constants.LOG.info("[numen-mc] gt.gt_long.lingre(40) -> {}", actionSaid);
 
-        helper.assertTrue(item.refused()
+        Checks.assertTrue(helper, item.refused()
                         && itemSaid.contains("minecraft:dimond") && itemSaid.contains("<--[HERE]")
                         && itemSaid.contains("\nusage: numen.mc.run(\"give <targets> <item> [<count>]\")")
                         && itemSaid.endsWith("\nhint: Did you mean: minecraft:diamond?"),
                 "the item typo does not end with the nearest item: " + itemSaid);
-        helper.assertTrue(!action.succeeded() && action.task() == null
+        Checks.assertTrue(helper, !action.succeeded() && action.task() == null
                         && actionSaid.contains("stopped at line 1")
                         && actionSaid.contains("there is no API function gt.gt_long.lingre")
                         && actionSaid.contains("did you mean gt.gt_long.linger?"),

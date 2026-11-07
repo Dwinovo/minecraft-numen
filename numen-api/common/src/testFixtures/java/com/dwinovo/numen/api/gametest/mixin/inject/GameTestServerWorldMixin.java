@@ -5,12 +5,10 @@ import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
-import java.util.Collection;
-import net.minecraft.core.BlockPos;
+import java.util.Optional;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestServer;
-import net.minecraft.gametest.framework.TestFunction;
 import net.minecraft.server.packs.repository.PackRepository;
 import net.minecraft.server.WorldLoader;
 import net.minecraft.world.level.dimension.LevelStem;
@@ -43,7 +41,7 @@ public abstract class GameTestServerWorldMixin {
     /** 建世界之前:清世界目录。 */
     @Inject(method = "create", at = @At("HEAD"))
     private static void numen$freshWorld(Thread thread, LevelStorageSource.LevelStorageAccess access, PackRepository packs,
-            Collection<TestFunction> tests, BlockPos spawn, CallbackInfoReturnable<GameTestServer> cir) {
+            Optional<String> testSelection, boolean verify, CallbackInfoReturnable<GameTestServer> cir) {
         TerrainWorld.prepare(access.getLevelPath(LevelResource.ROOT));
     }
 

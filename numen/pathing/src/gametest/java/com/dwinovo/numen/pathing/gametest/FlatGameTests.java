@@ -7,8 +7,8 @@ import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
@@ -57,7 +57,7 @@ public class FlatGameTests {
         Trial t = new Trial(helper).floor();
         t.fill(5, 1, 5, 5, 2, 5, Blocks.STONE);
         TestBody body = t.body(5, 3, 5);
-        body.moveTo(body.getX() + 0.75, body.getY(), body.getZ(), 0, 0);
+        body.snapTo(body.getX() + 0.75, body.getY(), body.getZ(), 0, 0);
         t.go(body, Goals.at(t.at(10, 1, 5)), RouteSpec.defaults()).arrives();
     }
 

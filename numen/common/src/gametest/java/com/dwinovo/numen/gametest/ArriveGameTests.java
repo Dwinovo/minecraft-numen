@@ -1,10 +1,11 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.level.block.Block;
@@ -66,16 +67,16 @@ public class ArriveGameTests {
         ToolRun[] press = {null};
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(dig[0].done(), "work dig has not finished");
-            helper.assertTrue(dig[0].succeeded(), "work dig failed: " + dig[0].outcome());
-            helper.assertTrue(helper.getLevel().getBlockState(grass).isAir()
+            Checks.assertTrue(helper, dig[0].done(), "work dig has not finished");
+            Checks.assertTrue(helper, dig[0].succeeded(), "work dig failed: " + dig[0].outcome());
+            Checks.assertTrue(helper, helper.getLevel().getBlockState(grass).isAir()
                             && helper.getLevel().getBlockState(grass.above()).isAir(),
                     "the grass is still there after work dig: " + dig[0].outcome());
             if (press[0] == null) {
                 press[0] = lua(companion, "numen.use.block(" + xyz(chest) + ")");
             }
-            helper.assertTrue(press[0].done(), "use block has not finished");
-            helper.assertTrue(press[0].succeeded() && companion.containerMenu instanceof ChestMenu,
+            Checks.assertTrue(helper, press[0].done(), "use block has not finished");
+            Checks.assertTrue(helper, press[0].succeeded() && companion.containerMenu instanceof ChestMenu,
                     "the chest was not opened after the grass was dug: " + press[0].outcome());
             companion.closeContainer();
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -95,15 +96,15 @@ public class ArriveGameTests {
         ToolRun[] press = {press0};
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(press[0].done(), "use block has not finished");
+            Checks.assertTrue(helper, press[0].done(), "use block has not finished");
             String said = press[0].outcome();
-            helper.assertTrue(press[0].succeeded() && said.contains("right-clicked tall_grass at")
+            Checks.assertTrue(helper, press[0].succeeded() && said.contains("right-clicked tall_grass at")
                             && said.contains("the crosshair landed there, not on " + chest.getX() + "," + chest.getY()
                                     + "," + chest.getZ())
                             && said.contains("`numen.work.dig({") && said.contains("click it from another side"),
                     "the reply does not say the click landed on the grass and what to do next: " + said);
-            helper.assertTrue(!(companion.containerMenu instanceof ChestMenu), "the chest opened through the grass");
-            helper.assertTrue(helper.getLevel().getBlockState(grass.above()).is(Blocks.TALL_GRASS),
+            Checks.assertTrue(helper, !(companion.containerMenu instanceof ChestMenu), "the chest opened through the grass");
+            Checks.assertTrue(helper, helper.getLevel().getBlockState(grass.above()).is(Blocks.TALL_GRASS),
                     "the grass was cleared by a right click");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -121,11 +122,11 @@ public class ArriveGameTests {
         ToolRun run = lua(companion, "numen.build.place({{name = \"cobblestone\", pos = " + xyz(cell) + "}})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(run.receipt() != null, "the program has not finished");
-            helper.assertTrue(run.ranToTheEnd(), "placing failed: " + run.receipt());
-            helper.assertTrue(helper.getLevel().getBlockState(cell).is(Blocks.COBBLESTONE),
+            Checks.assertTrue(helper, run.receipt() != null, "the program has not finished");
+            Checks.assertTrue(helper, run.ranToTheEnd(), "placing failed: " + run.receipt());
+            Checks.assertTrue(helper, helper.getLevel().getBlockState(cell).is(Blocks.COBBLESTONE),
                     "the cell in the air was not filled");
-            helper.assertTrue(!companion.blockPosition().equals(cell) && !companion.blockPosition().above().equals(cell),
+            Checks.assertTrue(helper, !companion.blockPosition().equals(cell) && !companion.blockPosition().above().equals(cell),
                     "she stood in the cell she was to fill");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });

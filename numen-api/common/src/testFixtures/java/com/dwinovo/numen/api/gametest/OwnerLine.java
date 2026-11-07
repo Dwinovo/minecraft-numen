@@ -64,6 +64,15 @@ public final class OwnerLine extends Connection {
         }
     }
 
+    /**
+     * 这位主人没走过配置阶段却在玩家列表里:NeoForge 每刻的配置同步只放过内存连接和 {@code ServerPlayer} 的子类,
+     * 不报内存连接它就会抛。它本来就是进程内的一条连接。
+     */
+    @Override
+    public boolean isMemoryConnection() {
+        return true;
+    }
+
     @Override
     public SocketAddress getRemoteAddress() {
         return LOOPBACK;

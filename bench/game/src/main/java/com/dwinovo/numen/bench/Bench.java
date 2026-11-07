@@ -1,6 +1,6 @@
 package com.dwinovo.numen.bench;
 
-import net.minecraft.gametest.framework.TestFunction;
+import com.dwinovo.numen.api.gametest.TestFunction;
 import net.minecraft.world.level.block.Rotation;
 
 import java.util.Collection;

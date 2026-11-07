@@ -2,8 +2,8 @@ package com.dwinovo.numen.scenario;
 
 import com.dwinovo.numen.api.gametest.GameTestSuite;
 import com.dwinovo.numen.bench.Bench;
-import net.minecraft.gametest.framework.GameTestGenerator;
-import net.minecraft.gametest.framework.TestFunction;
+import com.dwinovo.numen.api.gametest.GameTestGenerator;
+import com.dwinovo.numen.api.gametest.TestFunction;
 
 import java.util.Collection;
 import java.util.List;

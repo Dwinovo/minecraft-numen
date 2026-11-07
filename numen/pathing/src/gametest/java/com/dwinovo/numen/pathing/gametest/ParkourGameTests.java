@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.pathing.gametest.Scenes.slab;
 import static com.dwinovo.numen.pathing.gametest.Scenes.stair;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
@@ -8,9 +9,8 @@ import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.Direction;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
-import net.minecraft.gametest.framework.GameTestAssertException;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
@@ -64,7 +64,7 @@ public class ParkourGameTests {
                 })
                 .arrives().then(r -> {
                     if (!sprinted[0]) {
-                        throw new GameTestAssertException("三格的沟不是疾跑着跳过去的");
+                        throw Checks.failure("三格的沟不是疾跑着跳过去的");
                     }
                 });
     }

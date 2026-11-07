@@ -1,6 +1,7 @@
 package com.dwinovo.numen.gametest;
 
 import net.minecraft.world.entity.EntitySpawnReason;
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.gametest.Bodies;
 import com.dwinovo.numen.combat.Menace;
 import com.dwinovo.numen.combat.Swing;
@@ -9,8 +10,8 @@ import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.task.TaskRecord;
 import java.util.List;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
@@ -51,19 +52,19 @@ public class CombatGameTests {
 
         int[] insideBand = {0};
         succeedWhen(helper, () -> {
-            helper.assertTrue(companion.isAlive(), "companion died to a single zombie");
+            Checks.assertTrue(helper, companion.isAlive(), "companion died to a single zombie");
             double d = companion.distanceTo(zombie);
             if (d >= inner && d <= outer) {
                 insideBand[0]++;
             }
             // 砍掉血就说明外沿确实在够得着的范围内 —— 站在打不到的地方是这条最先抓的病。
-            helper.assertTrue(zombie.getHealth() < startHealth || !zombie.isAlive()
+            Checks.assertTrue(helper, zombie.getHealth() < startHealth || !zombie.isAlive()
                             || insideBand[0] < 200,
                     "companion never landed a hit: distance " + String.format("%.2f", d)
                             + " band [" + String.format("%.2f", inner) + ", "
                             + String.format("%.2f", outer) + "]");
             // 倒下、而且最后伤它的是她:被收走或被别的东西弄死的僵尸也"不在了",那不算她打赢
-            helper.assertTrue(zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion,
+            Checks.assertTrue(helper, zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion,
                     "zombie still up, or it did not fall to her");
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -79,22 +80,22 @@ public class CombatGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = armedCompanion(helper, new BlockPos(2, 2, 2));
         var slime = EntityType.SLIME.create(level, EntitySpawnReason.STRUCTURE);
-        helper.assertTrue(slime != null, "slime did not spawn");
+        Checks.assertTrue(helper, slime != null, "slime did not spawn");
         slime.setSize(14, true);
         BlockPos at = helper.absolutePos(new BlockPos(11, 2, 11));
-        slime.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        slime.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         slime.setNoAi(true);
         level.addFreshEntity(slime);
-        helper.assertTrue(Menace.rawDangerRadius(slime, companion) >= Swing.reachTo(
+        Checks.assertTrue(helper, Menace.rawDangerRadius(slime, companion) >= Swing.reachTo(
                         companion.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE), slime.getBbWidth()),
                 "this slime does not outreach her, the scene tests nothing");
         float startHealth = slime.getHealth();
         TaskRecord<?> record = lua(companion, "numen.fight.attack(" + ref(slime) + ")").task();
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(record.getResult() == null || !record.getResult().message().contains("internal error"),
+            Checks.assertTrue(helper, record.getResult() == null || !record.getResult().message().contains("internal error"),
                     "the attack broke down: " + record.getResult());
-            helper.assertTrue(slime.getHealth() < startHealth && slime.getLastHurtByMob() == companion,
+            Checks.assertTrue(helper, slime.getHealth() < startHealth && slime.getLastHurtByMob() == companion,
                     "she never walked in to hit the slime");
             slime.discard();
             CompanionFactory.despawn(level.getServer(), companion);
@@ -111,17 +112,17 @@ public class CombatGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = armedCompanion(helper, new BlockPos(5, 2, 8));
         Zombie zombie = EntityType.ZOMBIE.create(level, EntitySpawnReason.STRUCTURE);
-        helper.assertTrue(zombie != null, "zombie did not spawn");
+        Checks.assertTrue(helper, zombie != null, "zombie did not spawn");
         BlockPos at = helper.absolutePos(new BlockPos(8, 2, 8));
-        zombie.moveTo(at.getX() + 0.95, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        zombie.snapTo(at.getX() + 0.95, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         zombie.setNoAi(true);
         level.addFreshEntity(zombie);
         float startHealth = zombie.getHealth();
         ToolRun attack = lua(companion, "numen.fight.attack(" + ref(zombie) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(attack.task() != null, "the attack was not accepted: " + attack.reply());
-            helper.assertTrue(zombie.getHealth() < startHealth && zombie.getLastHurtByMob() == companion,
+            Checks.assertTrue(helper, attack.task() != null, "the attack was not accepted: " + attack.reply());
+            Checks.assertTrue(helper, zombie.getHealth() < startHealth && zombie.getLastHurtByMob() == companion,
                     "she stood " + String.format("%.2f", companion.distanceTo(zombie))
                             + " away and never hit the zombie: " + attack.task().getResult());
             zombie.discard();
@@ -138,9 +139,9 @@ public class CombatGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = armedCompanion(helper, new BlockPos(2, 2, 8));
         Zombie zombie = EntityType.ZOMBIE.create(level, EntitySpawnReason.STRUCTURE);
-        helper.assertTrue(zombie != null, "zombie did not spawn");
+        Checks.assertTrue(helper, zombie != null, "zombie did not spawn");
         BlockPos at = helper.absolutePos(new BlockPos(12, 2, 8));
-        zombie.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        zombie.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         zombie.setNoAi(true);
         level.addFreshEntity(zombie);
         float startHealth = zombie.getHealth();
@@ -150,8 +151,8 @@ public class CombatGameTests {
         ToolRun attack = lua(companion, "numen.fight.attack(" + ref(zombie) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(attack.task() != null, "the attack was not accepted: " + attack.reply());
-            helper.assertTrue(zombie.getHealth() < startHealth && zombie.getLastHurtByMob() == companion,
+            Checks.assertTrue(helper, attack.task() != null, "the attack was not accepted: " + attack.reply());
+            Checks.assertTrue(helper, zombie.getHealth() < startHealth && zombie.getLastHurtByMob() == companion,
                     "she is still " + String.format("%.2f", companion.distanceTo(zombie))
                             + " away and never hit the jittering zombie: " + attack.task().getResult());
             zombie.discard();
@@ -184,29 +185,29 @@ public class CombatGameTests {
                 new net.minecraft.world.phys.Vec3(cx * 16 + 13.5, y, z + 0.5));
         companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_SWORD));
         Zombie zombie = EntityType.ZOMBIE.create(level, EntitySpawnReason.STRUCTURE);
-        helper.assertTrue(zombie != null, "zombie did not spawn");
+        Checks.assertTrue(helper, zombie != null, "zombie did not spawn");
         ToolRun[] attack = new ToolRun[1];
 
         // 等她带起来的区块把两块都立起来、跑上实体刻,放下僵尸;世界里找得到它了再下命令
         steps(helper)
                 .thenWaitUntil(() -> {
-                    helper.assertTrue(level.isPositionEntityTicking(companion.blockPosition()),
+                    Checks.assertTrue(helper, level.isPositionEntityTicking(companion.blockPosition()),
                             "her own chunk is not entity-ticking yet");
-                    helper.assertTrue(level.isPositionEntityTicking(new BlockPos(cx * 16 + 16, y, z)),
+                    Checks.assertTrue(helper, level.isPositionEntityTicking(new BlockPos(cx * 16 + 16, y, z)),
                             "the chunk across the border is not entity-ticking yet");
                 })
                 .thenExecute(() -> {
-                    zombie.moveTo(cx * 16 + 16.5, y, z + 0.5, 0.0f, 0.0f);
+                    zombie.snapTo(cx * 16 + 16.5, y, z + 0.5, 0.0f, 0.0f);
                     zombie.setNoAi(true);
                     level.addFreshEntity(zombie);
                 })
-                .thenWaitUntil(() -> helper.assertTrue(level.getEntity(zombie.getId()) == zombie,
+                .thenWaitUntil(() -> Checks.assertTrue(helper, level.getEntity(zombie.getId()) == zombie,
                         "the zombie never showed up in the world; she is at " + companion.blockPosition()
                                 + " in chunk " + companion.chunkPosition()))
                 .thenExecute(() -> attack[0] = lua(companion, "numen.fight.attack(" + ref(zombie) + ")"))
                 .thenWaitUntil(() -> {
-                    helper.assertTrue(attack[0].task() != null, "the attack was not accepted: " + attack[0].reply());
-                    helper.assertTrue(zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion,
+                    Checks.assertTrue(helper, attack[0].task() != null, "the attack was not accepted: " + attack[0].reply());
+                    Checks.assertTrue(helper, zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion,
                             "the zombie across the chunk border is still up (health " + zombie.getHealth()
                                     + ", hurt time " + zombie.hurtTime + "): " + attack[0].task().getResult());
                 })
@@ -226,15 +227,15 @@ public class CombatGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = armedCompanion(helper, new BlockPos(2, 2, 2));
         var pig = EntityType.PIG.create(level, EntitySpawnReason.STRUCTURE);
-        helper.assertTrue(pig != null, "pig did not spawn");
+        Checks.assertTrue(helper, pig != null, "pig did not spawn");
         BlockPos at = helper.absolutePos(new BlockPos(13, 2, 13));
-        pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        pig.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pig.setNoAi(true);   // 站着别跑,这条测的是她走不走过去,不是追逐
         level.addFreshEntity(pig);
         TaskRecord<?> record = lua(companion, "numen.fight.attack(" + ref(pig) + ")").task();
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(pig.isDeadOrDying() && pig.getLastHurtByMob() == companion,
+            Checks.assertTrue(helper, pig.isDeadOrDying() && pig.getLastHurtByMob() == companion,
                     "the pig is still alive — she never walked over to hit it");
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -249,9 +250,9 @@ public class CombatGameTests {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
         var pig = EntityType.PIG.create(level, EntitySpawnReason.STRUCTURE);
-        helper.assertTrue(pig != null, "pig did not spawn");
+        Checks.assertTrue(helper, pig != null, "pig did not spawn");
         BlockPos at = helper.absolutePos(new BlockPos(13, 2, 13));
-        pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        pig.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pig.setNoAi(true);
         level.addFreshEntity(pig);
         BlockPos spawn = helper.absolutePos(new BlockPos(2, 2, 2));
@@ -263,10 +264,10 @@ public class CombatGameTests {
         String recorded = com.dwinovo.numen.api.entity.CompanionRegistry.get(server).find(companion.getUUID()).taskLua();
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(nobody.done() && !nobody.succeeded() && nobody.outcome().contains("999998"),
+            Checks.assertTrue(helper, nobody.done() && !nobody.succeeded() && nobody.outcome().contains("999998"),
                     "naming only missing entities did not fail on the spot: " + nobody.reply());
-            helper.assertTrue(attack.task() != null, "the attack was not accepted: " + attack.reply());
-            helper.assertTrue(recorded.equals("numen.fight.attack(" + ref(pig) + ")"),
+            Checks.assertTrue(helper, attack.task() != null, "the attack was not accepted: " + attack.reply());
+            Checks.assertTrue(helper, recorded.equals("numen.fight.attack(" + ref(pig) + ")"),
                     "the replay recipe does not name exactly the pig by its id: " + recorded);
             com.dwinovo.numen.api.entity.Companions.dismiss(server, companion);
             pig.discard();
@@ -279,19 +280,19 @@ public class CombatGameTests {
         ServerLevel level = helper.getLevel();
         var first = EntityType.PIG.create(level, EntitySpawnReason.STRUCTURE);
         var second = EntityType.COW.create(level, EntitySpawnReason.STRUCTURE);
-        helper.assertTrue(first != null && second != null, "the mobs did not spawn");
+        Checks.assertTrue(helper, first != null && second != null, "the mobs did not spawn");
         second.setUUID(new java.util.UUID(first.getUUID().getMostSignificantBits() ^ 1L,
                 first.getUUID().getLeastSignificantBits()));
         BlockPos at = helper.absolutePos(new BlockPos(13, 2, 13));
-        first.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
-        second.moveTo(at.getX() - 2.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        first.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        second.snapTo(at.getX() - 2.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         level.addFreshEntity(first);
         level.addFreshEntity(second);
         NumenPlayer companion = spawnAt(helper, "gametest_same_code", new BlockPos(3, 2, 3), false);
         ToolRun attack = lua(companion, "numen.fight.attack(" + ref(first) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(attack.done() && !attack.succeeded() && attack.task() == null
+            Checks.assertTrue(helper, attack.done() && !attack.succeeded() && attack.task() == null
                             && attack.outcome().contains("names 2 entities")
                             && attack.outcome().contains(com.dwinovo.numen.api.sdk.EntityLabel.of(first))
                             && attack.outcome().contains(com.dwinovo.numen.api.sdk.EntityLabel.of(second)),
@@ -314,13 +315,13 @@ public class CombatGameTests {
         ToolRun clear = lua(companion, "return numen.fight.clear(7)");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(clear.receipt() != null, "numen.fight.clear has not finished");
-            helper.assertTrue(clear.ranToTheEnd() && clear.receipt().contains("\\nreturned: 2"),
+            Checks.assertTrue(helper, clear.receipt() != null, "numen.fight.clear has not finished");
+            Checks.assertTrue(helper, clear.ranToTheEnd() && clear.receipt().contains("\\nreturned: 2"),
                     "numen.fight.clear did not end after two fights: " + clear.receipt());
-            helper.assertTrue(clear.tasks("numen.fight.attack").size() == 2,
+            Checks.assertTrue(helper, clear.tasks("numen.fight.attack").size() == 2,
                     "not one numen.fight.attack per zombie: " + clear.receipt());
             for (Zombie zombie : zombies) {
-                helper.assertTrue(zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion,
+                Checks.assertTrue(helper, zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion,
                         "a zombie is still up, or it did not fall to her");
             }
             CompanionFactory.despawn(level.getServer(), companion);
@@ -357,10 +358,10 @@ public class CombatGameTests {
         companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_SWORD));
         companion.getFoodData().setFoodLevel(20);
         Zombie zombie = EntityType.ZOMBIE.create(level, EntitySpawnReason.STRUCTURE);
-        helper.assertTrue(zombie != null, "zombie did not spawn");
+        Checks.assertTrue(helper, zombie != null, "zombie did not spawn");
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(level.isPositionEntityTicking(companion.blockPosition()),
+                .thenWaitUntil(() -> Checks.assertTrue(helper, level.isPositionEntityTicking(companion.blockPosition()),
                         "the chunk she stands in is not entity-ticking yet"))
                 .thenIdle(40)
                 .thenExecute(() -> {
@@ -371,7 +372,7 @@ public class CombatGameTests {
                     companion.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.KNOCKBACK_RESISTANCE)
                             .setBaseValue(1.0);
                     zombie.getRandom().setSeed(ENTITY_SEED);
-                    zombie.moveTo(x0 + 0.5, y, z0 + 2.5, 0.0f, 0.0f);
+                    zombie.snapTo(x0 + 0.5, y, z0 + 2.5, 0.0f, 0.0f);
                     zombie.setTarget(companion);
                     level.addFreshEntity(zombie);
                 })
@@ -380,10 +381,10 @@ public class CombatGameTests {
                             .filter(e -> e.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.REFLEX)
                                     && e.text().contains("reflex=\"flee\""))
                             .toList();
-                    helper.assertTrue(!flee.isEmpty() && flee.get(0).text().contains("no way out"),
+                    Checks.assertTrue(helper, !flee.isEmpty() && flee.get(0).text().contains("no way out"),
                             "the flee instinct did not report that there was nowhere to run: "
                                     + GameTestKit.events(companion));
-                    helper.assertTrue(zombie.getLastHurtByMob() == companion,
+                    Checks.assertTrue(helper, zombie.getLastHurtByMob() == companion,
                             "cornered, she did not fight back (zombie health " + zombie.getHealth() + ")");
                 })
                 .thenExecute(() -> {
@@ -415,12 +416,12 @@ public class CombatGameTests {
         boolean[] hit = {false};
         long ready = level.getGameTime() + SPAWN_PROTECTION_TICKS;
         succeedWhen(helper, () -> {
-            helper.assertTrue(level.getGameTime() >= ready, "she is still under spawn protection");
+            Checks.assertTrue(helper, level.getGameTime() >= ready, "she is still under spawn protection");
             if (!hit[0]) {
                 hit[0] = true;
                 attacker.attack(companion);
             }
-            helper.assertTrue(companion.getX() - start.x > 0.3,
+            Checks.assertTrue(helper, companion.getX() - start.x > 0.3,
                     "the hit did not move her: dx=" + (companion.getX() - start.x));
             leave(attacker);
             CompanionFactory.despawn(level.getServer(), companion);
@@ -437,12 +438,12 @@ public class CombatGameTests {
         boolean[] hit = {false};
         long ready = level.getGameTime() + SPAWN_PROTECTION_TICKS;
         succeedWhen(helper, () -> {
-            helper.assertTrue(level.getGameTime() >= ready, "she is still under spawn protection");
+            Checks.assertTrue(helper, level.getGameTime() >= ready, "she is still under spawn protection");
             if (!hit[0]) {
                 hit[0] = true;
                 zombie.doHurtTarget(level, companion);
             }
-            helper.assertTrue(companion.getX() - start.x > 0.3,
+            Checks.assertTrue(helper, companion.getX() - start.x > 0.3,
                     "the hit did not move her: dx=" + (companion.getX() - start.x));
             zombie.discard();
             CompanionFactory.despawn(level.getServer(), companion);
@@ -469,14 +470,14 @@ public class CombatGameTests {
         Zombie idle = still(helper, new BlockPos(8, 2, 13));
         var wolf = EntityType.WOLF.create(level, EntitySpawnReason.STRUCTURE);
         BlockPos wolfAt = helper.absolutePos(new BlockPos(6, 2, 8));
-        wolf.moveTo(wolfAt.getX() + 0.5, wolfAt.getY(), wolfAt.getZ() + 0.5, 0.0f, 0.0f);
+        wolf.snapTo(wolfAt.getX() + 0.5, wolfAt.getY(), wolfAt.getZ() + 0.5, 0.0f, 0.0f);
         wolf.setNoAi(true);
         wolf.tame(companion);
         level.addFreshEntity(wolf);
         for (int i = 0; i < 5; i++) {
             var cow = EntityType.COW.create(level, EntitySpawnReason.STRUCTURE);
             BlockPos at = helper.absolutePos(new BlockPos(2 + i, 2, 2));
-            cow.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+            cow.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
             cow.setNoAi(true);
             level.addFreshEntity(cow);
         }
@@ -492,16 +493,16 @@ public class CombatGameTests {
             String wolfId = com.dwinovo.numen.api.sdk.EntityLabel.of(wolf);
             String hunterId = com.dwinovo.numen.api.sdk.EntityLabel.of(hunter);
             String idleId = com.dwinovo.numen.api.sdk.EntityLabel.of(idle);
-            helper.assertTrue(nearby.startsWith("<nearby radius=\"16\">"), "no nearby block: " + nearby);
-            helper.assertTrue(nearby.contains(hunterId + " 20/20 HP, 3 blocks east, targeting you"),
+            Checks.assertTrue(helper, nearby.startsWith("<nearby radius=\"16\">"), "no nearby block: " + nearby);
+            Checks.assertTrue(helper, nearby.contains(hunterId + " 20/20 HP, 3 blocks east, targeting you"),
                     "the mob after her is not listed as such: " + nearby);
             String wolfLine = nearby.lines().filter(line -> line.startsWith(wolfId)).findFirst().orElse("");
-            helper.assertTrue(wolfLine.endsWith(" HP, 2 blocks west"), "her wolf is not listed plain: " + nearby);
-            helper.assertTrue(nearby.contains(idleId + " 20/20 HP, 5 blocks south\n"),
+            Checks.assertTrue(helper, wolfLine.endsWith(" HP, 2 blocks west"), "her wolf is not listed plain: " + nearby);
+            Checks.assertTrue(helper, nearby.contains(idleId + " 20/20 HP, 5 blocks south\n"),
                     "the idle hostile is not listed plain: " + nearby);
-            helper.assertTrue(nearby.indexOf(wolfId) < nearby.indexOf(hunterId) && nearby.indexOf(hunterId) < nearby.indexOf(idleId),
+            Checks.assertTrue(helper, nearby.indexOf(wolfId) < nearby.indexOf(hunterId) && nearby.indexOf(hunterId) < nearby.indexOf(idleId),
                     "related first, then hostile, each nearest first: " + nearby);
-            helper.assertTrue(nearby.contains("cow×5") && nearby.contains("item×2") && !nearby.contains("cow@"),
+            Checks.assertTrue(helper, nearby.contains("cow×5") && nearby.contains("item×2") && !nearby.contains("cow@"),
                     "the rest is not counted by kind: " + nearby);
             hunter.discard();
             idle.discard();
@@ -513,9 +514,9 @@ public class CombatGameTests {
     /** 一只不动不还手的僵尸。 */
     private static Zombie still(GameTestHelper helper, BlockPos rel) {
         Zombie zombie = EntityType.ZOMBIE.create(helper.getLevel(), EntitySpawnReason.STRUCTURE);
-        helper.assertTrue(zombie != null, "zombie did not spawn");
+        Checks.assertTrue(helper, zombie != null, "zombie did not spawn");
         BlockPos at = helper.absolutePos(rel);
-        zombie.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        zombie.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         zombie.setNoAi(true);
         helper.getLevel().addFreshEntity(zombie);
         return zombie;
@@ -524,10 +525,10 @@ public class CombatGameTests {
     private static Zombie spawnZombie(GameTestHelper helper, BlockPos rel, NumenPlayer target) {
         ServerLevel level = helper.getLevel();
         Zombie zombie = EntityType.ZOMBIE.create(level, EntitySpawnReason.STRUCTURE);
-        helper.assertTrue(zombie != null, "zombie did not spawn");
+        Checks.assertTrue(helper, zombie != null, "zombie did not spawn");
         BlockPos at = helper.absolutePos(rel);
         zombie.getRandom().setSeed(ENTITY_SEED);
-        zombie.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        zombie.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         zombie.setTarget(target);
         level.addFreshEntity(zombie);
         return zombie;
@@ -549,13 +550,13 @@ public class CombatGameTests {
 
         steps(helper)
                 .thenIdle(5)
-                .thenExecute(() -> helper.assertTrue(eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.TARGETED)
+                .thenExecute(() -> Checks.assertTrue(helper, eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.TARGETED)
                         .isEmpty(), "announced before anything targeted her"))
                 .thenExecute(() -> zombie.setTarget(companion))
                 .thenIdle(10)
                 .thenExecute(() -> {
                     var told = eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.TARGETED);
-                    helper.assertTrue(told.size() == 1 && told.get(0).urgent()
+                    Checks.assertTrue(helper, told.size() == 1 && told.get(0).urgent()
                                     && told.get(0).text().contains("mob=\"" + id + "\"")
                                     && told.get(0).text().contains("distance=\"3\"")
                                     && told.get(0).text().contains("bearing=\"east\"")
@@ -567,7 +568,7 @@ public class CombatGameTests {
                 .thenExecute(() -> zombie.setTarget(companion))
                 .thenIdle(10)
                 .thenExecute(() -> {
-                    helper.assertTrue(eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.TARGETED).size() == 1,
+                    Checks.assertTrue(helper, eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.TARGETED).size() == 1,
                             "it was announced again for the jitter: " + events(companion));
                     zombie.discard();
                     CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -591,7 +592,7 @@ public class CombatGameTests {
                 .thenIdle(40)
                 .thenExecute(() -> {
                     var gone = eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.GONE);
-                    helper.assertTrue(gone.size() == 1 && !gone.get(0).urgent()
+                    Checks.assertTrue(helper, gone.size() == 1 && !gone.get(0).urgent()
                                     && gone.get(0).text().contains("mob=\"" + id + "\"")
                                     && gone.get(0).text().contains("reason=\"killed\"")
                                     && gone.get(0).text().contains("by=\"you\""),
@@ -618,14 +619,14 @@ public class CombatGameTests {
                 })
                 .thenIdle(10)
                 .thenExecute(() -> {
-                    helper.assertTrue(eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.GONE).isEmpty(),
+                    Checks.assertTrue(helper, eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.GONE).isEmpty(),
                             "walking out of the radius was announced as gone: " + events(companion));
                     zombie.discard();
                 })
                 .thenIdle(5)
                 .thenExecute(() -> {
                     var gone = eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.GONE);
-                    helper.assertTrue(gone.size() == 1 && gone.get(0).text().contains("reason=\"vanished\""),
+                    Checks.assertTrue(helper, gone.size() == 1 && gone.get(0).text().contains("reason=\"vanished\""),
                             "no vanished event: " + gone);
                     CompanionFactory.despawn(helper.getLevel().getServer(), companion);
                 })
@@ -645,7 +646,7 @@ public class CombatGameTests {
                 .thenIdle(5)
                 .thenExecute(() -> {
                     var hurt = eventsOf(companion, com.dwinovo.numen.api.agent.inbox.EventTypes.COMPANION_HURT);
-                    helper.assertTrue(hurt.size() == 1 && hurt.get(0).urgent()
+                    Checks.assertTrue(helper, hurt.size() == 1 && hurt.get(0).urgent()
                                     && hurt.get(0).text().contains("by=\"" + id + "\"")
                                     && hurt.get(0).text().contains("bearing=\"north\"")
                                     && hurt.get(0).text().contains(id + " hit you for 3"),
@@ -679,7 +680,7 @@ public class CombatGameTests {
         lua(companion, "numen.fight.attack(" + ref(zombie) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion,
+            Checks.assertTrue(helper, zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion,
                     "the zombie is still up — her bow never brought it down");
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -767,19 +768,19 @@ public class CombatGameTests {
         NumenPlayer companion = shooter(helper, new BlockPos(2, 2, 8),
                 new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BLAZE_ROD));
         Zombie zombie = still(helper, new BlockPos(11, 2, 8));
-        helper.assertTrue(com.dwinovo.numen.combat.Loadout.forTarget(companion, zombie).ranged() == null,
+        Checks.assertTrue(helper, com.dwinovo.numen.combat.Loadout.forTarget(companion, zombie).ranged() == null,
                 "she found a ranged weapon in a blaze rod before any plugin provided one");
         TestGun gun = new TestGun();
         com.dwinovo.numen.api.NumenPlugins.register("gt_gun", numen -> numen.rangedWeapon(gun));
         // 插件给的武器全服的同伴都看得见:不论这条成败都撤掉
         com.dwinovo.numen.api.gametest.TestCleanup.whenFinished(helper,
                 () -> com.dwinovo.numen.api.NumenPlugins.roster().withdraw("gt_gun"));
-        helper.assertTrue(com.dwinovo.numen.combat.Loadout.forTarget(companion, zombie).ranged() != null,
+        Checks.assertTrue(helper, com.dwinovo.numen.combat.Loadout.forTarget(companion, zombie).ranged() != null,
                 "she did not pick the plugin's weapon once it was provided");
         lua(companion, "numen.fight.attack(" + ref(zombie) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion && gun.shots.get() >= 1,
+            Checks.assertTrue(helper, zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion && gun.shots.get() >= 1,
                     "the plugin's weapon did not bring the zombie down (shots " + gun.shots.get() + ")");
             CompanionFactory.despawn(level.getServer(), companion);
         });

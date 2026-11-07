@@ -9,37 +9,37 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.AfterBatch;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
-import net.minecraft.gametest.framework.GameTestGenerator;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.gametest.framework.GameTestRegistry;
 import net.minecraft.gametest.framework.GlobalTestReporter;
 import net.minecraft.gametest.framework.LogTestReporter;
 import net.minecraft.gametest.framework.StructureUtils;
-import net.minecraft.gametest.framework.TestFunction;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import org.slf4j.Logger;
 
 /**
- * 选中的 {@link GameTestSuite} 的用例,经一个原版的 {@code @GameTestGenerator} 交给 GameTest 框架。加载器只要把这个类登记给
- * 原版的 GameTest 框架(见各加载器的开发期源码集),用例本身不挂任何加载器的注解。
+ * 选中的 {@link GameTestSuite} 的用例,读成 {@link TestFunction};{@link GameTestRegistration} 把它们登记成原版的测试实例,
+ * 批次登记成测试环境。用例本身只挂这个包里的注解({@link GameTest}、{@link BeforeBatch}、{@link AfterBatch}、
+ * {@link GameTestGenerator}),不挂任何加载器的注解。
  *
  * <h2>跑哪些</h2>
  * 运行配置明确给出:系统属性 {@value #SELECTION} 是逗号分隔的套件名,没给或是空白就一个套件都不登记。套件按名字找,每个模块在自己的
  * gametest 资源里放一个名字唯一的 {@code META-INF/numen/gametest/套件名},内容是套件类({@link GameTestSuite} 的实现)的全名——
  * 名字各不相同,几个模块的输出合在一个模组里也都看得见。B 依赖 A 时,跑 B 的运行配置不选 A 的套件。选中了、找不到资源的套件名
- * (多半是手误)会在日志里说一次。
+ * (多半是手误)会在日志里说一次。加载器自己的用例(只有加载器的类看得见的事)经 {@link #loaderTests} 交进来,不属于任何套件,
+ * 每次都跑。
  *
  * <h2>用例的名字</h2>
  * 测试名 {@code 套件名.小写类名.小写方法名};结构模板写了 {@code template} 就是 {@code 套件名:模板}(已带冒号的原样),没写就是
@@ -69,11 +69,24 @@ public final class GameTestSuites {
     private static final String REGISTRY = "META-INF/numen/gametest/";
 
     private static final Logger LOG = LogUtils.getLogger();
-    /** 已经登记给原版的批前批后方法。 */
-    private static final java.util.Set<Method> HOOKS = new java.util.HashSet<>();
 
-    /** 公开的无参构造:原版调生成器方法前先实例化声明它的类,各加载器登记入口也要实例化它。 */
-    public GameTestSuites() {}
+    /** 加载器自己的用例类(见 {@link #loaderTests})。 */
+    private static final List<Class<?>> LOADER_TESTS = new ArrayList<>();
+    /** 这一次运行的用例,第一次要时读出来。 */
+    private static List<TestFunction> functions;
+    /** 批次名 → 批前、批后的方法,按登记先后。 */
+    private static final Map<String, List<Method>> BEFORE = new LinkedHashMap<>();
+    private static final Map<String, List<Method>> AFTER = new LinkedHashMap<>();
+
+    private GameTestSuites() {}
+
+    /** 加载器在服务器起来之前交进来的、只有它的类看得见的用例类:不属于任何套件,每次都跑,名字不带套件前缀。 */
+    public static synchronized void loaderTests(Class<?> type) {
+        if (functions != null) {
+            throw new IllegalStateException("用例已经读过了,加载器的用例要在服务器起来之前交");
+        }
+        LOADER_TESTS.add(type);
+    }
 
     /** 套件 {@code suite}(或它的慢批)这一次被明确选中了;夹具在类加载时用它判断要不要登记只给这个套件用的东西。 */
     public static boolean selected(String suite) {
@@ -86,13 +99,19 @@ public final class GameTestSuites {
                 : Arrays.stream(property.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList();
     }
 
-    @GameTestGenerator
-    public static Collection<TestFunction> all() {
+    /**
+     * 这一次运行的全部用例:第一次调用时读出选中的套件,并装好整次运行共用的东西(测试库、模板目录、每刻等后台、开批对齐、收场汇报)。
+     * 原版在加载数据包的注册表时要它们({@link GameTestRegistration}),那时服务器还没开始走刻。
+     */
+    public static synchronized List<TestFunction> functions() {
+        if (functions != null) {
+            return functions;
+        }
         TestLibraries.install();
         // 模板在登记之后才加载,目录赶在这之前指好
         String structures = System.getProperty(STRUCTURES);
         if (structures != null) {
-            StructureUtils.testStructuresDir = structures;
+            StructureUtils.testStructuresDir = Path.of(structures);
         }
         List<TestFunction> out = new ArrayList<>();
         List<Supplier<String>> background = new ArrayList<>();
@@ -120,7 +139,22 @@ public final class GameTestSuites {
         BackgroundSettle.install(background);
         BatchStart.install();
         GlobalTestReporter.replaceWith(new TestTicks(new LogTestReporter()));
-        return spread(out);
+        List<TestFunction> all = spread(out);
+        for (Class<?> type : LOADER_TESTS) {
+            collect(null, type, all);
+        }
+        functions = List.copyOf(all);
+        return functions;
+    }
+
+    /** 批次 {@code batch} 开跑前的准备(测试环境的 {@code setup} 调)。 */
+    static void beforeBatch(String batch, ServerLevel level) {
+        BEFORE.getOrDefault(batch, List.of()).forEach(method -> invoke(method, level));
+    }
+
+    /** 批次 {@code batch} 收场后的善后(测试环境的 {@code teardown} 调)。 */
+    static void afterBatch(String batch, ServerLevel level) {
+        AFTER.getOrDefault(batch, List.of()).forEach(method -> invoke(method, level));
     }
 
     /**
@@ -170,7 +204,7 @@ public final class GameTestSuites {
             f.function().accept(helper);
         };
         return new TestFunction(f.batchName(), name, f.structureName(), f.rotation(), f.maxTicks(), f.setupTicks(),
-                f.required(), f.manualOnly(), f.maxAttempts(), f.requiredSuccesses(), f.skyAccess(), body);
+                f.required(), f.skyAccess(), body);
     }
 
     /** 名字对应的套件:资源 {@code META-INF/numen/gametest/名字} 里写着套件类的全名;没有这个资源是 null。 */
@@ -187,6 +221,7 @@ public final class GameTestSuites {
         }
     }
 
+    /** {@code suite} 为 null 是加载器自己的用例:名字不带套件前缀,结构模板要写全命名空间。 */
     private static void collect(String suite, Class<?> type, List<TestFunction> out) {
         // 用例类的静态块登记夹具(只给用例用的命令组、任务),要赶在服务器起来之前,所以此刻就初始化
         try {
@@ -204,10 +239,23 @@ public final class GameTestSuites {
             if (method.isAnnotationPresent(GameTestGenerator.class)) {
                 out.addAll(generated(method));
             }
-            // 日常批与慢批共用一份用例类,批前批后的方法只登记一次(原版一个批只许一个)
-            if ((method.isAnnotationPresent(BeforeBatch.class) || method.isAnnotationPresent(AfterBatch.class)) && HOOKS.add(method)) {
-                GameTestRegistry.register(method);
+            // 日常批与慢批共用一份用例类,批前批后的方法只登记一次
+            BeforeBatch before = method.getAnnotation(BeforeBatch.class);
+            if (before != null) {
+                hook(BEFORE, before.batch(), method);
             }
+            AfterBatch after = method.getAnnotation(AfterBatch.class);
+            if (after != null) {
+                hook(AFTER, after.batch(), method);
+            }
+        }
+    }
+
+    private static void hook(Map<String, List<Method>> hooks, String batch, Method method) {
+        requireStatic(method);
+        List<Method> methods = hooks.computeIfAbsent(batch, b -> new ArrayList<>());
+        if (!methods.contains(method)) {
+            methods.add(method);
         }
     }
 
@@ -227,9 +275,9 @@ public final class GameTestSuites {
             forgetMarks(helper);
             invoke(method, helper);
         };
-        return new TestFunction(test.batch(), suite + "." + name, template,
+        return new TestFunction(test.batch(), suite == null ? name : suite + "." + name, template,
                 StructureUtils.getRotationForRotationSteps(test.rotationSteps()), test.timeoutTicks(), test.setupTicks(),
-                test.required(), test.manualOnly(), test.attempts(), test.requiredSuccesses(), test.skyAccess(), body);
+                test.required(), test.skyAccess(), body);
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.dwinovo.numen.pathing.gametest;
 
 import net.minecraft.world.entity.EntitySpawnReason;
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
 import com.dwinovo.numen.pathing.api.NavRequest;
@@ -16,9 +17,8 @@ import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
-import net.minecraft.gametest.framework.GameTestAssertException;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
@@ -62,14 +62,14 @@ public class RecheckGameTests {
         NavRequest request = NavRequest.to(Goals.at(t.at(19, 1, 5)), RouteSpec.defaults());
         t.plan(body, PlanQuery.of(request.goal(), request.spec()), plan -> {
             if (plan.route() == null) {
-                throw new GameTestAssertException("没规划出路:" + plan.outcome());
+                throw Checks.failure("没规划出路:" + plan.outcome());
             }
             t.change(12, 1, 5, Blocks.STONE.defaultBlockState());
             t.go(body, request.following(plan.route())).within(251)
                     .fails(Outcome.NeedsChanges.class, o -> {
                         if (o.changes().size() != 1 || !o.changes().get(0).pos().equals(stone)
                                 || !(o.changes().get(0) instanceof Edit.Dig dig) || !dig.state().is(Blocks.STONE)) {
-                            throw new GameTestAssertException("结局没点对:" + o.changes());
+                            throw Checks.failure("结局没点对:" + o.changes());
                         }
                     })
                     .then(Scenes::unaltered);
@@ -87,14 +87,14 @@ public class RecheckGameTests {
         corridor(t);
         BlockPos cell = t.at(12, 1, 5);
         Boat boat = EntityType.OAK_BOAT.create(t.level, EntitySpawnReason.STRUCTURE);
-        boat.moveTo(cell.getX() + 0.5, cell.getY(), cell.getZ() + 0.5, 90, 0);
+        boat.snapTo(cell.getX() + 0.5, cell.getY(), cell.getZ() + 0.5, 90, 0);
         t.level.addFreshEntity(boat);
         TestBody body = t.body(4, 1, 5);
         t.go(body, Goals.at(t.at(19, 1, 5)), RouteSpec.defaults()).within(479)
                 .fails(Outcome.Blocked.class, o -> {
                     Blockage b = o.blockage();
                     if (!b.cell().equals(boat.blockPosition()) || b.move() != MoveKind.WALK || b.hitch() != Blockage.Hitch.STUCK) {
-                        throw new GameTestAssertException("结局没点对:" + b);
+                        throw Checks.failure("结局没点对:" + b);
                     }
                 })
                 .then(r -> boat.discard());
@@ -122,17 +122,17 @@ public class RecheckGameTests {
                     if (!noticed[0] && r.navigation.report().journal().replans(Journal.Replan.AHEAD) > 0) {
                         noticed[0] = true;
                         if (r.body.getX() >= changed[0].from().getX()) {
-                            throw new GameTestAssertException("走到了改掉的那一步 " + t.rel(changed[0].from()) + "→" + t.rel(changed[0].to())
+                            throw Checks.failure("走到了改掉的那一步 " + t.rel(changed[0].from()) + "→" + t.rel(changed[0].to())
                                     + " 的起点才停下,身体在 " + t.rel(r.body.blockPosition()));
                         }
                     }
                 })
                 .arrives().then(r -> {
                     if (changed[0] == null) {
-                        throw new GameTestAssertException("场景没起作用:没在路上改到格子");
+                        throw Checks.failure("场景没起作用:没在路上改到格子");
                     }
                     if (r.report.journal().replans(Journal.Replan.AHEAD) < 1) {
-                        throw new GameTestAssertException("没有因往前核不成立重规划:" + r.report.journal().replans());
+                        throw Checks.failure("没有因往前核不成立重规划:" + r.report.journal().replans());
                     }
                 });
     }

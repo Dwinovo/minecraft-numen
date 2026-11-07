@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.pathing.plan.Permit;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -226,7 +227,7 @@ final class Trial {
             Thread.sleep(1);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new GameTestAssertException("等搜索的结论时被打断");
+            throw Checks.failure("等搜索的结论时被打断");
         }
     }
 
@@ -292,7 +293,7 @@ final class Trial {
         Map<BlockPos, BlockState> last = new HashMap<>();
         for (EditLedger.Entry e : entries) {
             if (!spec.changes() && !(e instanceof EditLedger.Toggled)) {
-                throw new GameTestAssertException("不许挖也不许放,却在 " + rel(e.pos()) + " 改了地形:" + e);
+                throw Checks.failure("不许挖也不许放,却在 " + rel(e.pos()) + " 改了地形:" + e);
             }
             last.put(e.pos(), switch (e) {
                 case EditLedger.Dug d -> null;
@@ -316,7 +317,7 @@ final class Trial {
             }
         });
         if (!problems.isEmpty()) {
-            throw new GameTestAssertException("实际账与世界不符:" + String.join(";", problems));
+            throw Checks.failure("实际账与世界不符:" + String.join(";", problems));
         }
     }
 
@@ -397,7 +398,7 @@ final class Trial {
             expected = NavStatus.State.FAILED;
             outcomeCheck = o -> {
                 if (!kind.isInstance(o)) {
-                    throw new GameTestAssertException("结局应是 " + kind.getSimpleName() + ",却是 " + o);
+                    throw Checks.failure("结局应是 " + kind.getSimpleName() + ",却是 " + o);
                 }
                 check.accept(kind.cast(o));
             };
@@ -462,7 +463,7 @@ final class Trial {
                 }
                 report = navigation.report();
                 if (status.state() != expected) {
-                    throw new GameTestAssertException("应当 " + expected + ",却是 " + status.state() + " " + status.outcome()
+                    throw Checks.failure("应当 " + expected + ",却是 " + status.state() + " " + status.outcome()
                             + ",身体在 " + trial.rel(body.blockPosition()) + " " + navigation);
                 }
                 if (expected == NavStatus.State.FAILED) {
@@ -478,13 +479,13 @@ final class Trial {
                 navigation.stop();
                 body.leave();
                 throw e instanceof GameTestAssertException assertion ? assertion
-                        : new GameTestAssertException("用例抛出了 " + e);
+                        : Checks.failure("用例抛出了 " + e);
             }
         }
 
         private void overdue() {
             if (ticks >= limit) {
-                throw new GameTestAssertException("时限内没收场:身体在 " + trial.rel(body.blockPosition())
+                throw Checks.failure("时限内没收场:身体在 " + trial.rel(body.blockPosition())
                         + " (" + fmt(body.getX()) + "," + fmt(body.getY()) + "," + fmt(body.getZ()) + ") "
                         + navigation);
             }

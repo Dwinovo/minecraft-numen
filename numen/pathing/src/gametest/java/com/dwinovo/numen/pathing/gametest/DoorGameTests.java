@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import static com.dwinovo.numen.pathing.gametest.Scenes.door;
 import static com.dwinovo.numen.pathing.gametest.Scenes.trapdoor;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
@@ -9,9 +10,8 @@ import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.Direction;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
-import net.minecraft.gametest.framework.GameTestAssertException;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
@@ -36,13 +36,13 @@ public class DoorGameTests {
 
     private static void toggled(Trial.Run r) {
         if (r.report.ledger().entries().stream().noneMatch(e -> e instanceof EditLedger.Toggled)) {
-            throw new GameTestAssertException("没开门:" + r.report.ledger().entries());
+            throw Checks.failure("没开门:" + r.report.ledger().entries());
         }
     }
 
     private static void untouched(Trial.Run r) {
         if (!r.report.ledger().entries().isEmpty()) {
-            throw new GameTestAssertException("动了门:" + r.report.ledger().entries());
+            throw Checks.failure("动了门:" + r.report.ledger().entries());
         }
     }
 

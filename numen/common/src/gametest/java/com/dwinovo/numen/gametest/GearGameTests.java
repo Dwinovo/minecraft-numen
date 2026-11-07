@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.api.gear.GearSlot;
 import com.dwinovo.numen.api.gear.GearSource;
@@ -11,8 +12,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
@@ -123,11 +124,11 @@ public class GearGameTests {
         ToolRun equip = lua(companion, "numen.gear.wear(\"minecraft:amethyst_shard\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(equip.done(), "gear wear has not finished");
-            helper.assertTrue(equip.succeeded() && equip.outcome().contains("gametest:ring"),
+            Checks.assertTrue(helper, equip.done(), "gear wear has not finished");
+            Checks.assertTrue(helper, equip.succeeded() && equip.outcome().contains("gametest:ring"),
                     "the reply does not name the ring slot: " + equip.outcome());
-            helper.assertTrue(gear.ring(0).worn.is(Items.AMETHYST_SHARD), "the shard is not in the first ring slot");
-            helper.assertTrue(companion.getInventory().countItem(Items.AMETHYST_SHARD) == 0,
+            Checks.assertTrue(helper, gear.ring(0).worn.is(Items.AMETHYST_SHARD), "the shard is not in the first ring slot");
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.AMETHYST_SHARD) == 0,
                     "the shard is still in her backpack");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -139,16 +140,16 @@ public class GearGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_sealed", new BlockPos(4, 2, 4), false);
         FakeGear gear = dress(companion);
         companion.getInventory().add(new ItemStack(Items.EMERALD));
-        companion.getInventory().selected = 5;   // 主手是空的那格,绿宝石在第 0 格
+        companion.getInventory().setSelectedSlot(5);   // 主手是空的那格,绿宝石在第 0 格
         ToolRun equip = lua(companion, "numen.gear.wear(\"minecraft:emerald\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(equip.done(), "gear wear has not finished");
-            helper.assertTrue(!equip.succeeded() && equip.outcome().contains("sealed"),
+            Checks.assertTrue(helper, equip.done(), "gear wear has not finished");
+            Checks.assertTrue(helper, !equip.succeeded() && equip.outcome().contains("sealed"),
                     "the failure does not carry the slot's reason: " + equip.outcome());
-            helper.assertTrue(companion.getMainHandItem().isEmpty(), "her main hand changed");
-            helper.assertTrue(companion.getInventory().countItem(Items.EMERALD) == 1, "the emerald left her backpack");
-            helper.assertTrue(gear.charm().worn.isEmpty(), "the sealed slot took it anyway");
+            Checks.assertTrue(helper, companion.getMainHandItem().isEmpty(), "her main hand changed");
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.EMERALD) == 1, "the emerald left her backpack");
+            Checks.assertTrue(helper, gear.charm().worn.isEmpty(), "the sealed slot took it anyway");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -159,14 +160,14 @@ public class GearGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_beltless", new BlockPos(4, 2, 4), false);
         dress(companion);
         companion.getInventory().add(new ItemStack(Items.DIAMOND));
-        companion.getInventory().selected = 5;
+        companion.getInventory().setSelectedSlot(5);
         ToolRun equip = lua(companion, "numen.gear.wear(\"minecraft:diamond\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(equip.done(), "gear wear has not finished");
-            helper.assertTrue(!equip.succeeded() && equip.outcome().contains("gametest:belt"),
+            Checks.assertTrue(helper, equip.done(), "gear wear has not finished");
+            Checks.assertTrue(helper, !equip.succeeded() && equip.outcome().contains("gametest:belt"),
                     "the failure does not name the missing kind of slot: " + equip.outcome());
-            helper.assertTrue(companion.getMainHandItem().isEmpty(), "the diamond went into her hand instead");
+            Checks.assertTrue(helper, companion.getMainHandItem().isEmpty(), "the diamond went into her hand instead");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -180,13 +181,13 @@ public class GearGameTests {
         ToolRun equip = lua(companion, "numen.gear.wear(\"minecraft:amethyst_shard\", {slot = \"gametest:crown\"})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(equip.done(), "gear wear has not finished");
+            Checks.assertTrue(helper, equip.done(), "gear wear has not finished");
             String said = equip.outcome();
-            helper.assertTrue(!equip.succeeded() && said.contains("gametest:crown") && said.contains("mainhand")
+            Checks.assertTrue(helper, !equip.succeeded() && said.contains("gametest:crown") && said.contains("mainhand")
                             && said.contains("head") && said.contains("gametest:ring")
                             && said.contains("gametest:charm"),
                     "the failure does not list the slots she has: " + said);
-            helper.assertTrue(companion.getInventory().countItem(Items.AMETHYST_SHARD) == 1, "the shard moved anyway");
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.AMETHYST_SHARD) == 1, "the shard moved anyway");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -201,12 +202,12 @@ public class GearGameTests {
         ToolRun unequip = lua(companion, "numen.gear.remove({slot = \"gametest:ring\"})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(unequip.done(), "gear remove has not finished");
-            helper.assertTrue(unequip.succeeded() && unequip.outcome().contains("amethyst_shard (gametest:ring)")
+            Checks.assertTrue(helper, unequip.done(), "gear remove has not finished");
+            Checks.assertTrue(helper, unequip.succeeded() && unequip.outcome().contains("amethyst_shard (gametest:ring)")
                             && unequip.outcome().contains("iron_nugget (gametest:ring)"),
                     "the reply does not name both pieces: " + unequip.outcome());
-            helper.assertTrue(gear.ring(0).worn.isEmpty() && gear.ring(1).worn.isEmpty(), "a ring slot is still worn");
-            helper.assertTrue(companion.getInventory().countItem(Items.AMETHYST_SHARD) == 1
+            Checks.assertTrue(helper, gear.ring(0).worn.isEmpty() && gear.ring(1).worn.isEmpty(), "a ring slot is still worn");
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.AMETHYST_SHARD) == 1
                     && companion.getInventory().countItem(Items.IRON_NUGGET) == 1, "the pieces did not come back");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -222,12 +223,12 @@ public class GearGameTests {
         ToolRun unequip = lua(companion, "numen.gear.remove({item = \"minecraft:amethyst_shard\"})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(unequip.done(), "gear remove has not finished");
-            helper.assertTrue(unequip.succeeded() && unequip.outcome().contains("amethyst_shard (gametest:ring)"),
+            Checks.assertTrue(helper, unequip.done(), "gear remove has not finished");
+            Checks.assertTrue(helper, unequip.succeeded() && unequip.outcome().contains("amethyst_shard (gametest:ring)"),
                     "the reply does not name the shard: " + unequip.outcome());
-            helper.assertTrue(gear.ring(1).worn.isEmpty(), "the amethyst shard is still worn");
-            helper.assertTrue(gear.ring(0).worn.is(Items.IRON_NUGGET), "the other ring slot was touched");
-            helper.assertTrue(companion.getInventory().countItem(Items.AMETHYST_SHARD) == 1, "the shard did not come back");
+            Checks.assertTrue(helper, gear.ring(1).worn.isEmpty(), "the amethyst shard is still worn");
+            Checks.assertTrue(helper, gear.ring(0).worn.is(Items.IRON_NUGGET), "the other ring slot was touched");
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.AMETHYST_SHARD) == 1, "the shard did not come back");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -244,11 +245,11 @@ public class GearGameTests {
         ToolRun unequip = lua(companion, "numen.gear.remove({slot = \"gametest:ring\"})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(unequip.done(), "gear remove has not finished");
-            helper.assertTrue(!unequip.succeeded() && unequip.outcome().contains("inventory is full"),
+            Checks.assertTrue(helper, unequip.done(), "gear remove has not finished");
+            Checks.assertTrue(helper, !unequip.succeeded() && unequip.outcome().contains("inventory is full"),
                     "the failure does not say the inventory is full: " + unequip.outcome());
-            helper.assertTrue(gear.ring(0).worn.is(Items.AMETHYST_SHARD), "the ring came off with nowhere to go");
-            helper.assertTrue(helper.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+            Checks.assertTrue(helper, gear.ring(0).worn.is(Items.AMETHYST_SHARD), "the ring came off with nowhere to go");
+            Checks.assertTrue(helper, helper.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
                     companion.getBoundingBox().inflate(4)).isEmpty(), "something was dropped on the ground");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -264,11 +265,11 @@ public class GearGameTests {
         ToolRun unequip = lua(companion, "numen.gear.remove({slot = \"gametest:ring\"})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(unequip.done(), "gear remove has not finished");
-            helper.assertTrue(!unequip.succeeded() && unequip.outcome().contains("stuck fast"),
+            Checks.assertTrue(helper, unequip.done(), "gear remove has not finished");
+            Checks.assertTrue(helper, !unequip.succeeded() && unequip.outcome().contains("stuck fast"),
                     "the failure does not carry the slot's reason: " + unequip.outcome());
-            helper.assertTrue(gear.ring(0).worn.is(Items.AMETHYST_SHARD), "the stuck ring came off");
-            helper.assertTrue(companion.getInventory().countItem(Items.AMETHYST_SHARD) == 0,
+            Checks.assertTrue(helper, gear.ring(0).worn.is(Items.AMETHYST_SHARD), "the stuck ring came off");
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.AMETHYST_SHARD) == 0,
                     "the stuck ring was copied into her backpack");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -308,11 +309,11 @@ public class GearGameTests {
                     .mapToInt(e -> e.getItem().getCount()).sum();
             int diamonds = drops.stream().filter(e -> e.getItem().is(Items.DIAMOND))
                     .mapToInt(e -> e.getItem().getCount()).sum();
-            helper.assertTrue(shards == 1, "the worn shard did not drop exactly once: " + shards);
-            helper.assertTrue(helmets == 1, "the helmet did not drop exactly once: " + helmets);
-            helper.assertTrue(diamonds == 1, "the carried diamond did not drop exactly once: " + diamonds);
-            helper.assertTrue(gear.ring(1).worn.isEmpty(), "the shard is still worn by a dismissed body");
-            helper.assertTrue(NumenPlayer.findByUuid(level.getServer(), companion.getUUID()) == null,
+            Checks.assertTrue(helper, shards == 1, "the worn shard did not drop exactly once: " + shards);
+            Checks.assertTrue(helper, helmets == 1, "the helmet did not drop exactly once: " + helmets);
+            Checks.assertTrue(helper, diamonds == 1, "the carried diamond did not drop exactly once: " + diamonds);
+            Checks.assertTrue(helper, gear.ring(1).worn.isEmpty(), "the shard is still worn by a dismissed body");
+            Checks.assertTrue(helper, NumenPlayer.findByUuid(level.getServer(), companion.getUUID()) == null,
                     "the dismissed body is still in the world");
             drops.forEach(net.minecraft.world.entity.Entity::discard);
             leave(owner);

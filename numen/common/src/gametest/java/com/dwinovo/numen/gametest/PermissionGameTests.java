@@ -1,6 +1,7 @@
 package com.dwinovo.numen.gametest;
 
 import net.minecraft.world.entity.EntitySpawnReason;
+import com.dwinovo.numen.api.gametest.Checks;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.permission.Listing;
@@ -9,8 +10,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -69,9 +70,9 @@ public class PermissionGameTests {
                 new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(floor),
                         net.minecraft.core.Direction.UP, floor, false));
         var result = ctx.getItemInHand().useOn(ctx);
-        helper.assertTrue(result.consumesAction() && level.getBlockState(helper.absolutePos(rel)).is(block),
+        Checks.assertTrue(helper, result.consumesAction() && level.getBlockState(helper.absolutePos(rel)).is(block),
                 "the mock player failed to place " + item + " at " + rel.toShortString());
-        helper.assertTrue(com.dwinovo.numen.api.permission.PlacedBlocks.of(level)
+        Checks.assertTrue(helper, com.dwinovo.numen.api.permission.PlacedBlocks.of(level)
                         .isPlaced(helper.absolutePos(rel), level.getBlockState(helper.absolutePos(rel))),
                 "BlockItem.place by a real player was not recorded");
     }
@@ -134,15 +135,15 @@ public class PermissionGameTests {
         succeedWhen(helper, () -> {
             TaskRecord<?> record = walk.task();
             if (!answered[0]) {
-                helper.assertTrue(record != null, "the walk has not set off");
+                Checks.assertTrue(helper, record != null, "the walk has not set off");
                 var pending = desk(companion).pending();
-                helper.assertTrue(pending != null, "no consent request at the wall");
+                Checks.assertTrue(helper, pending != null, "no consent request at the wall");
                 // 开走前不问:请求挂上的时候她已经走过了屋里那两格,站在墙前
-                helper.assertTrue(companion.blockPosition().getX() - start.getX() >= 2,
+                Checks.assertTrue(helper, companion.blockPosition().getX() - start.getX() >= 2,
                         "she asked before getting to the wall, at " + companion.blockPosition().toShortString());
-                helper.assertTrue(record.getResult() == null, "the walk finished while waiting for the owner");
-                helper.assertTrue(plankCount(helper, 7, 7) == planksBefore, "a plank broke before the owner said yes");
-                helper.assertTrue(pending.items().stream().allMatch(i -> i.subject().equals("oak_planks")),
+                Checks.assertTrue(helper, record.getResult() == null, "the walk finished while waiting for the owner");
+                Checks.assertTrue(helper, plankCount(helper, 7, 7) == planksBefore, "a plank broke before the owner said yes");
+                Checks.assertTrue(helper, pending.items().stream().allMatch(i -> i.subject().equals("oak_planks")),
                         "the request does not name the wall: " + pending.items());
                 listed[0] = pending.items().size();
                 requests[0]++;
@@ -156,16 +157,16 @@ public class PermissionGameTests {
                         com.dwinovo.numen.api.permission.ConsentAnswer.Decision.ALLOW_ONCE, "");
             }
             String reply = record.getResult() == null ? null : record.getResult().message();
-            helper.assertTrue(reply != null, "the walk has not finished");
-            helper.assertTrue(record.getResult().success(), "the walk failed after the owner allowed it: " + reply);
-            helper.assertTrue(walk.receipt() != null, "the program has not handed in its receipt");
+            Checks.assertTrue(helper, reply != null, "the walk has not finished");
+            Checks.assertTrue(helper, record.getResult().success(), "the walk failed after the owner allowed it: " + reply);
+            Checks.assertTrue(helper, walk.receipt() != null, "the program has not handed in its receipt");
             com.google.gson.JsonArray rulings = walk.data().getAsJsonObject("returned").getAsJsonArray("rulings");
-            helper.assertTrue(listed[0] >= 2 && rulings.size() == listed[0]
+            Checks.assertTrue(helper, listed[0] >= 2 && rulings.size() == listed[0]
                             && rulings.toString().contains("\"allowed\":true"),
                     "the account does not list every cell the yes lets through (" + listed[0] + "): " + walk.receipt());
-            helper.assertTrue(requests[0] == 1, "the owner was asked " + requests[0] + " times");
-            helper.assertTrue(plankCount(helper, 7, 7) < planksBefore, "no plank was broken");
-            helper.assertTrue(reply.contains("the owner allowed"), "the reply does not say the owner allowed it: " + reply);
+            Checks.assertTrue(helper, requests[0] == 1, "the owner was asked " + requests[0] + " times");
+            Checks.assertTrue(helper, plankCount(helper, 7, 7) < planksBefore, "no plank was broken");
+            Checks.assertTrue(helper, reply.contains("the owner allowed"), "the reply does not say the owner allowed it: " + reply);
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
         });
@@ -197,13 +198,13 @@ public class PermissionGameTests {
                         com.dwinovo.numen.api.permission.ConsentAnswer.Decision.DENY, "别拆我的墙");
             }
             String reply = record == null || record.getResult() == null ? null : record.getResult().message();
-            helper.assertTrue(reply != null, "the walk has not finished");
-            helper.assertTrue(!record.getResult().success() && "denied".equals(walk.kind())
+            Checks.assertTrue(helper, reply != null, "the walk has not finished");
+            Checks.assertTrue(helper, !record.getResult().success() && "denied".equals(walk.kind())
                     && reply.contains("your owner: 别拆我的墙") && reply.contains("kept out of this walk"),
                     "the refusal does not quote the owner: " + reply);
-            helper.assertTrue(answered[0] && cards[0] == 1, "the owner was asked " + cards[0] + " times for the same kind of wall");
-            helper.assertTrue(plankCount(helper, 7, 7) == planksBefore, "the wall was damaged after a no");
-            helper.assertTrue(companion.blockPosition().distSqr(target) > 3 * 3,
+            Checks.assertTrue(helper, answered[0] && cards[0] == 1, "the owner was asked " + cards[0] + " times for the same kind of wall");
+            Checks.assertTrue(helper, plankCount(helper, 7, 7) == planksBefore, "the wall was damaged after a no");
+            Checks.assertTrue(helper, companion.blockPosition().distSqr(target) > 3 * 3,
                     "she got out through the wall though the owner refused: " + companion.blockPosition().toShortString());
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
@@ -234,11 +235,11 @@ public class PermissionGameTests {
         });
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(mine.done(), "mine has not finished");
-            helper.assertTrue(mine.succeeded(), "mine failed after the owner allowed: " + mine.outcome());
-            helper.assertTrue(companion.getInventory().countItem(Items.OAK_LOG) >= 2,
+            Checks.assertTrue(helper, mine.done(), "mine has not finished");
+            Checks.assertTrue(helper, mine.succeeded(), "mine failed after the owner allowed: " + mine.outcome());
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.OAK_LOG) >= 2,
                     "companion has not gathered 2 logs: " + mine.outcome());
-            helper.assertTrue(requests.size() == 1, "asked " + requests.size() + " times for the same kind of log");
+            Checks.assertTrue(helper, requests.size() == 1, "asked " + requests.size() + " times for the same kind of log");
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
         });
@@ -267,14 +268,14 @@ public class PermissionGameTests {
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(mine.done(), "mine has not finished");
-            helper.assertTrue(companion.getInventory().countItem(Items.ACACIA_LOG) >= 2,
+            Checks.assertTrue(helper, mine.done(), "mine has not finished");
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.ACACIA_LOG) >= 2,
                     "companion has not gathered 2 logs: " + mine.outcome());
             for (BlockPos rel : placed) {
-                helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).is(Blocks.ACACIA_LOG),
+                Checks.assertTrue(helper, level.getBlockState(helper.absolutePos(rel)).is(Blocks.ACACIA_LOG),
                         "a player-placed log was cut while wild ones stood nearby at " + rel.toShortString());
             }
-            helper.assertTrue(!asked[0], "asked the owner although wild logs were there");
+            Checks.assertTrue(helper, !asked[0], "asked the owner although wild logs were there");
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
         });
@@ -308,22 +309,22 @@ public class PermissionGameTests {
 
         succeedWhen(helper, () -> {
             if (mine[0] == null) {
-                helper.assertTrue(reply.reply() != null, "scan_blocks has not replied");
+                Checks.assertTrue(helper, reply.reply() != null, "scan_blocks has not replied");
                 var cluster = clusterHolding(clustersIn(reply.reply()), helper.absolutePos(stems.get(0)));
-                helper.assertTrue(cluster != null && !cluster.has("permission") && !reply.reply().contains("denied"),
+                Checks.assertTrue(helper, cluster != null && !cluster.has("permission") && !reply.reply().contains("denied"),
                         "the scan tells her what her owner allows: " + reply.reply());
                 mine[0] = mineCluster(companion, cluster);
             }
             String result = mine[0].done() ? mine[0].outcome() : null;
-            helper.assertTrue(result != null, "mine has not finished");
-            helper.assertTrue(mine[0].task() == null, "a dig of a denied cluster was accepted: " + mine[0].reply());
-            helper.assertTrue(!mine[0].succeeded() && result.contains("denied by rule"),
+            Checks.assertTrue(helper, result != null, "mine has not finished");
+            Checks.assertTrue(helper, mine[0].task() == null, "a dig of a denied cluster was accepted: " + mine[0].reply());
+            Checks.assertTrue(helper, !mine[0].succeeded() && result.contains("denied by rule"),
                     "the refusal does not carry the rule: " + result);
             for (BlockPos rel : stems) {
-                helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).is(Blocks.CRIMSON_STEM),
+                Checks.assertTrue(helper, level.getBlockState(helper.absolutePos(rel)).is(Blocks.CRIMSON_STEM),
                         "a denied stem was cut at " + rel.toShortString());
             }
-            helper.assertTrue(!asked[0], "a denied cluster raised a consent card");
+            Checks.assertTrue(helper, !asked[0], "a denied cluster raised a consent card");
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
         });
@@ -362,19 +363,19 @@ public class PermissionGameTests {
 
         succeedWhen(helper, () -> {
             if (mine[0] == null) {
-                helper.assertTrue(reply.reply() != null, "scan_blocks has not replied");
+                Checks.assertTrue(helper, reply.reply() != null, "scan_blocks has not replied");
                 var cluster = clusterHolding(clustersIn(reply.reply()), helper.absolutePos(column.get(0)));
-                helper.assertTrue(cluster != null && cluster.get("count").getAsInt() == 4,
+                Checks.assertTrue(helper, cluster != null && cluster.get("count").getAsInt() == 4,
                         "the column is not one cluster of four: " + reply.reply());
                 mine[0] = mineCluster(companion, cluster);
             }
             String result = mine[0].done() ? mine[0].outcome() : null;
-            helper.assertTrue(result != null, "mine has not finished");
+            Checks.assertTrue(helper, result != null, "mine has not finished");
             for (BlockPos rel : column) {
-                helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).isAir(),
+                Checks.assertTrue(helper, level.getBlockState(helper.absolutePos(rel)).isAir(),
                         "a log of the column is still standing at " + rel.toShortString());
             }
-            helper.assertTrue(mine[0].succeeded() && mine[0].dug() == 4
+            Checks.assertTrue(helper, mine[0].succeeded() && mine[0].dug() == 4
                     && !result.contains("gone"), "the cells she broke on the way were not counted as hers: " + result);
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -398,17 +399,17 @@ public class PermissionGameTests {
         });
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(dig[0] != null, "use block not dispatched yet");
+            Checks.assertTrue(helper, dig[0] != null, "use block not dispatched yet");
             if (!answered[0]) {
                 var pending = desk(companion).pending();
-                helper.assertTrue(pending != null, "no consent request before hitting the owner's chest");
-                helper.assertTrue(!dig[0].done(), "the call did not wait for the owner");
-                helper.assertTrue(level.getBlockState(chest).is(Blocks.CHEST), "the chest broke before the owner said yes");
+                Checks.assertTrue(helper, pending != null, "no consent request before hitting the owner's chest");
+                Checks.assertTrue(helper, !dig[0].done(), "the call did not wait for the owner");
+                Checks.assertTrue(helper, level.getBlockState(chest).is(Blocks.CHEST), "the chest broke before the owner said yes");
                 answered[0] = desk(companion).answer(pending.id(),
                         com.dwinovo.numen.api.permission.ConsentAnswer.Decision.ALLOW_ONCE, "");
             }
-            helper.assertTrue(dig[0].done(), "use hit has not finished");
-            helper.assertTrue(level.getBlockState(chest).isAir(),
+            Checks.assertTrue(helper, dig[0].done(), "use hit has not finished");
+            Checks.assertTrue(helper, level.getBlockState(chest).isAir(),
                     "the chest is still there after the owner allowed: " + dig[0].outcome());
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
@@ -425,9 +426,9 @@ public class PermissionGameTests {
         NumenPlayer companion = armedCompanion(helper, new BlockPos(4, 2, 4));
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_swineherd");
         var pig = EntityType.PIG.create(level, EntitySpawnReason.STRUCTURE);
-        helper.assertTrue(pig != null, "pig did not spawn");
+        Checks.assertTrue(helper, pig != null, "pig did not spawn");
         BlockPos at = helper.absolutePos(new BlockPos(6, 2, 4));
-        pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        pig.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pig.setNoAi(true);
         pig.setCustomName(net.minecraft.network.chat.Component.literal("Wilbur"));
         level.addFreshEntity(pig);
@@ -446,7 +447,7 @@ public class PermissionGameTests {
                 }
                 return;
             }
-            helper.assertTrue(pending != null && pending.id() == asked[0],
+            Checks.assertTrue(helper, pending != null && pending.id() == asked[0],
                     "the pig moved and the request was raised again: " + pending);
             waited[0]++;
             if (waited[0] % 5 == 0) {
@@ -459,8 +460,8 @@ public class PermissionGameTests {
         });
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(denied[0] && record.getResult() != null, "attack has not finished after the no");
-            helper.assertTrue(pig.isAlive(), "the pig was hit after the owner said no");
+            Checks.assertTrue(helper, denied[0] && record.getResult() != null, "attack has not finished after the no");
+            Checks.assertTrue(helper, pig.isAlive(), "the pig was hit after the owner said no");
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
         });
@@ -481,16 +482,16 @@ public class PermissionGameTests {
 
         succeedWhen(helper, () -> {
             if (!stopped[0]) {
-                helper.assertTrue(desk(companion).pending() != null, "inv drop did not ask");
+                Checks.assertTrue(helper, desk(companion).pending() != null, "inv drop did not ask");
                 com.dwinovo.numen.api.task.CompanionTickDispatcher.cancelFor(companion);
                 stopped[0] = true;
             }
             String reply = record.done() ? record.outcome() : null;
-            helper.assertTrue(reply != null, "the stopped drop has not settled");
-            helper.assertTrue(!record.succeeded() && reply.startsWith("the owner pressed Stop"),
+            Checks.assertTrue(helper, reply != null, "the stopped drop has not settled");
+            Checks.assertTrue(helper, !record.succeeded() && reply.startsWith("the owner pressed Stop"),
                     "the result does not say the owner stopped it: " + reply);
-            helper.assertTrue(desk(companion).pending() == null, "the card is still up after the stop");
-            helper.assertTrue(companion.getInventory().countItem(Items.GOLD_INGOT) == 4, "dropped after the stop");
+            Checks.assertTrue(helper, desk(companion).pending() == null, "the card is still up after the stop");
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.GOLD_INGOT) == 4, "dropped after the stop");
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
         });
@@ -533,14 +534,14 @@ public class PermissionGameTests {
                 case 0 -> {
                     if (pending != null) {
                         List<String> said = runAs(stranger, "numen consent allow " + pending.id());
-                        helper.assertTrue(said.stream().anyMatch(m -> m.contains("not yours")),
+                        Checks.assertTrue(helper, said.stream().anyMatch(m -> m.contains("not yours")),
                                 "a stranger's answer was not turned away: " + said);
-                        helper.assertTrue(desk(companion).pending() == pending, "a stranger's command settled it");
+                        Checks.assertTrue(helper, desk(companion).pending() == pending, "a stranger's command settled it");
                         com.dwinovo.numen.api.network.payload.ConsentReplyPayload.handle(
                                 new com.dwinovo.numen.api.network.payload.ConsentReplyPayload(companion.getUUID(),
                                         pending.id(), com.dwinovo.numen.api.permission.ConsentAnswer.Decision.ALLOW_ONCE,
                                         "小心点"), owner);
-                        helper.assertTrue(desk(companion).pending() == pending,
+                        Checks.assertTrue(helper, desk(companion).pending() == pending,
                                 "an allow carrying a note was taken; a note only goes with a deny");
                         com.dwinovo.numen.api.network.payload.ConsentReplyPayload.handle(
                                 new com.dwinovo.numen.api.network.payload.ConsentReplyPayload(companion.getUUID(),
@@ -551,7 +552,7 @@ public class PermissionGameTests {
                 }
                 case 1 -> {
                     if (calls[0].done()) {
-                        helper.assertTrue(calls[0].succeeded()
+                        Checks.assertTrue(helper, calls[0].succeeded()
                                         && calls[0].outcome().contains("the owner allowed"),
                                 "the card answer did not go through: " + calls[0].outcome());
                         calls[1] = lua(companion, "numen.inv.drop(\"minecraft:emerald\", {count = 2})");
@@ -561,14 +562,14 @@ public class PermissionGameTests {
                 case 2 -> {
                     if (pending != null) {
                         List<String> said = runAs(owner, "numen consent remember " + pending.id());
-                        helper.assertTrue(said.stream().anyMatch(m -> m.contains("Answered consent request")),
+                        Checks.assertTrue(helper, said.stream().anyMatch(m -> m.contains("Answered consent request")),
                                 "the owner's command was not taken: " + said);
                         step[0] = 3;
                     }
                 }
                 case 3 -> {
                     if (calls[1].done()) {
-                        helper.assertTrue(calls[1].succeeded()
+                        Checks.assertTrue(helper, calls[1].succeeded()
                                         && calls[1].outcome().contains("remembered it"),
                                 "the command answer did not go through: " + calls[1].outcome());
                         calls[2] = lua(companion, "numen.inv.drop(\"minecraft:emerald\", {count = 2})");
@@ -576,7 +577,7 @@ public class PermissionGameTests {
                     }
                 }
                 case 4 -> {
-                    helper.assertTrue(pending == null, "asked again after remembering: " + pending);
+                    Checks.assertTrue(helper, pending == null, "asked again after remembering: " + pending);
                     if (calls[2].done()) {
                         step[0] = 5;
                     }
@@ -586,14 +587,14 @@ public class PermissionGameTests {
         });
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(step[0] == 5, "the three drops have not finished");
-            helper.assertTrue(calls[2].succeeded(), "the remembered drop failed: " + calls[2].outcome());
-            helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 1
+            Checks.assertTrue(helper, step[0] == 5, "the three drops have not finished");
+            Checks.assertTrue(helper, calls[2].succeeded(), "the remembered drop failed: " + calls[2].outcome());
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.DIAMOND) == 1
                     && companion.getInventory().countItem(Items.EMERALD) == 0, "the drops did not all happen");
-            helper.assertTrue(storeOf(owner).rules().allow().stream().map(Object::toString).toList()
+            Checks.assertTrue(helper, storeOf(owner).rules().allow().stream().map(Object::toString).toList()
                     .equals(List.of("drop(minecraft:emerald)")), "the remembered row: " + storeOf(owner).rules().allow());
             List<String> stale = runAs(owner, "numen consent deny 987654321");
-            helper.assertTrue(stale.stream().anyMatch(m -> m.contains("No pending consent request")),
+            Checks.assertTrue(helper, stale.stream().anyMatch(m -> m.contains("No pending consent request")),
                     "answering a missing request did not say so: " + stale);
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
@@ -612,9 +613,9 @@ public class PermissionGameTests {
         BlockPos chest = helper.absolutePos(new BlockPos(6, 2, 5));
         level.setBlockAndUpdate(chest, Blocks.CHEST.defaultBlockState());
         var wolf = EntityType.WOLF.create(level, EntitySpawnReason.STRUCTURE);
-        helper.assertTrue(wolf != null, "wolf did not spawn");
+        Checks.assertTrue(helper, wolf != null, "wolf did not spawn");
         BlockPos wolfAt = helper.absolutePos(new BlockPos(6, 2, 9));
-        wolf.moveTo(wolfAt.getX() + 0.5, wolfAt.getY(), wolfAt.getZ() + 0.5, 0.0f, 0.0f);
+        wolf.snapTo(wolfAt.getX() + 0.5, wolfAt.getY(), wolfAt.getZ() + 0.5, 0.0f, 0.0f);
         wolf.setNoAi(true);
         wolf.setCustomName(net.minecraft.network.chat.Component.literal("Rex"));
         level.addFreshEntity(wolf);
@@ -623,24 +624,24 @@ public class PermissionGameTests {
         var gate = com.dwinovo.numen.api.permission.Permission.gateFor(companion);
         var digEmpty = com.dwinovo.numen.api.permission.Action.breakBlock(chest, level.getBlockState(chest));
         var emptyVerdict = gate.judgeLive(digEmpty, level);
-        helper.assertTrue(emptyVerdict.asks() && emptyVerdict.rule().toString().equals("break(unknown)"),
+        Checks.assertTrue(helper, emptyVerdict.asks() && emptyVerdict.rule().toString().equals("break(unknown)"),
                 "an empty chest nobody placed: " + emptyVerdict);
         String emptyRow = gate.consentItemLive(digEmpty, emptyVerdict, level).remember().toString();
-        helper.assertTrue(emptyRow.equals("break(unknown & minecraft:chest & !contents)"), "remembered " + emptyRow);
+        Checks.assertTrue(helper, emptyRow.equals("break(unknown & minecraft:chest & !contents)"), "remembered " + emptyRow);
 
         var attack = com.dwinovo.numen.api.permission.Action.attack(wolf);
         var wolfVerdict = gate.judgeLive(attack, level);
-        helper.assertTrue(wolfVerdict.asks() && wolfVerdict.rule().toString().equals("attack(named)"),
+        Checks.assertTrue(helper, wolfVerdict.asks() && wolfVerdict.rule().toString().equals("attack(named)"),
                 "a named wolf: " + wolfVerdict);
         String wolfRow = gate.consentItemLive(attack, wolfVerdict, level).remember().toString();
-        helper.assertTrue(wolfRow.equals("attack(entity:" + wolf.getUUID() + ")"), "remembered " + wolfRow);
+        Checks.assertTrue(helper, wolfRow.equals("attack(entity:" + wolf.getUUID() + ")"), "remembered " + wolfRow);
 
         ((net.minecraft.world.level.block.entity.ChestBlockEntity) level.getBlockEntity(chest))
                 .setItem(0, new ItemStack(Items.DIAMOND));
         var digFull = com.dwinovo.numen.api.permission.Action.breakBlock(chest, level.getBlockState(chest));
         var fullVerdict = gate.judgeLive(digFull, level);
         String fullRow = gate.consentItemLive(digFull, fullVerdict, level).remember().toString();
-        helper.assertTrue(fullRow.equals("break(unknown & minecraft:chest)"), "remembered " + fullRow);
+        Checks.assertTrue(helper, fullRow.equals("break(unknown & minecraft:chest)"), "remembered " + fullRow);
 
         wolf.discard();
         CompanionFactory.despawn(level.getServer(), companion);
@@ -658,25 +659,25 @@ public class PermissionGameTests {
         var evoker = EntityType.EVOKER.create(level, EntitySpawnReason.STRUCTURE);
         var minion = EntityType.WOLF.create(level, EntitySpawnReason.STRUCTURE);
         var pet = EntityType.WOLF.create(level, EntitySpawnReason.STRUCTURE);
-        helper.assertTrue(evoker != null && minion != null && pet != null, "entities did not spawn");
-        evoker.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        Checks.assertTrue(helper, evoker != null && minion != null && pet != null, "entities did not spawn");
+        evoker.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         evoker.setNoAi(true);
         level.addFreshEntity(evoker);
-        minion.moveTo(at.getX() + 2.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        minion.snapTo(at.getX() + 2.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         minion.setNoAi(true);
-        minion.setOwnerUUID(evoker.getUUID());
+        minion.setOwnerReference(new net.minecraft.world.entity.EntityReference<>(evoker.getUUID()));
         level.addFreshEntity(minion);
-        pet.moveTo(at.getX() + 4.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        pet.snapTo(at.getX() + 4.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pet.setNoAi(true);
-        pet.setOwnerUUID(java.util.UUID.randomUUID());
+        pet.setOwnerReference(new net.minecraft.world.entity.EntityReference<>(java.util.UUID.randomUUID()));
         level.addFreshEntity(pet);
         NumenPlayer companion = spawnAt(helper, "gametest_hunter", new BlockPos(3, 2, 5), false);
 
         var gate = com.dwinovo.numen.api.permission.Permission.gateFor(companion);
         var minionVerdict = gate.judgeLive(com.dwinovo.numen.api.permission.Action.attack(minion), level);
-        helper.assertTrue(minionVerdict.allowed(), "a wolf owned by an evoker is nobody's: " + minionVerdict);
+        Checks.assertTrue(helper, minionVerdict.allowed(), "a wolf owned by an evoker is nobody's: " + minionVerdict);
         var petVerdict = gate.judgeLive(com.dwinovo.numen.api.permission.Action.attack(pet), level);
-        helper.assertTrue(!petVerdict.allowed() && !petVerdict.asks(),
+        Checks.assertTrue(helper, !petVerdict.allowed() && !petVerdict.asks(),
                 "a wolf owned by an absent player is someone's: " + petVerdict);
 
         evoker.discard();
@@ -713,9 +714,9 @@ public class PermissionGameTests {
             var pending = desk(companion).pending();
             switch (step[0]) {
                 case 1 -> {
-                    helper.assertTrue(pending == null, "opening the chest asked: " + pending);
+                    Checks.assertTrue(helper, pending == null, "opening the chest asked: " + pending);
                     if (calls[0].done()) {
-                        helper.assertTrue(calls[0].succeeded()
+                        Checks.assertTrue(helper, calls[0].succeeded()
                                         && companion.containerMenu != companion.inventoryMenu,
                                 "the chest did not open: " + calls[0].outcome());
                         calls[1] = takeFirstSlot(companion);
@@ -724,11 +725,11 @@ public class PermissionGameTests {
                 }
                 case 2 -> {
                     if (pending != null) {
-                        helper.assertTrue(pending.items().get(0).rule().equals("take(*)")
+                        Checks.assertTrue(helper, pending.items().get(0).rule().equals("take(*)")
                                         && pending.items().get(0).subject().equals("chest"),
                                 "asked something else: " + pending.items());
-                        helper.assertTrue(!calls[1].done(), "transfer did not wait for the owner");
-                        helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 0,
+                        Checks.assertTrue(helper, !calls[1].done(), "transfer did not wait for the owner");
+                        Checks.assertTrue(helper, companion.getInventory().countItem(Items.DIAMOND) == 0,
                                 "took before the owner answered");
                         desk(companion).answer(pending.id(),
                                 com.dwinovo.numen.api.permission.ConsentAnswer.Decision.ALLOW_ONCE, "");
@@ -740,12 +741,12 @@ public class PermissionGameTests {
         });
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(step[0] == 3 && calls[1].done(), "transfer has not finished");
-            helper.assertTrue(calls[1].succeeded(), "transfer failed after allow: "
+            Checks.assertTrue(helper, step[0] == 3 && calls[1].done(), "transfer has not finished");
+            Checks.assertTrue(helper, calls[1].succeeded(), "transfer failed after allow: "
                     + calls[1].outcome());
-            helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 3, "the diamonds did not arrive");
+            Checks.assertTrue(helper, companion.getInventory().countItem(Items.DIAMOND) == 3, "the diamonds did not arrive");
             var box = (net.minecraft.world.level.block.entity.ChestBlockEntity) level.getBlockEntity(chest);
-            helper.assertTrue(box.getItem(0).isEmpty(), "the chest still holds the diamonds");
+            Checks.assertTrue(helper, box.getItem(0).isEmpty(), "the chest still holds the diamonds");
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
         });
@@ -777,12 +778,12 @@ public class PermissionGameTests {
 
         succeedWhen(helper, () -> {
             for (ToolRun call : calls) {
-                helper.assertTrue(call != null && call.done(), "a dig has not finished");
-                helper.assertTrue(!call.succeeded()
+                Checks.assertTrue(helper, call != null && call.done(), "a dig has not finished");
+                Checks.assertTrue(helper, !call.succeeded()
                                 && call.outcome().contains(com.dwinovo.numen.act.BlockDigger.SERVER_REFUSED),
                         "the bounced break is not reported as refused by the server: " + call.outcome());
             }
-            helper.assertTrue(level.getBlockState(helper.absolutePos(survivalRel)).is(Blocks.DIRT)
+            Checks.assertTrue(helper, level.getBlockState(helper.absolutePos(survivalRel)).is(Blocks.DIRT)
                     && level.getBlockState(helper.absolutePos(creativeRel)).is(Blocks.DIRT), "the protected dirt is gone");
             CompanionFactory.despawn(level.getServer(), digger);
             CompanionFactory.despawn(level.getServer(), builder);
@@ -804,10 +805,10 @@ public class PermissionGameTests {
         ToolRun build = lua(companion, "numen.build.place({{name = \"tnt\", pos = " + xyz(spot) + "}})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(build.done(), "build has not finished");
-            helper.assertTrue(!build.succeeded() && build.outcome().contains("refused by the owner"),
+            Checks.assertTrue(helper, build.done(), "build has not finished");
+            Checks.assertTrue(helper, !build.succeeded() && build.outcome().contains("refused by the owner"),
                     "the reply does not say the owner refused that cell: " + build.outcome());
-            helper.assertTrue(!level.getBlockState(spot).is(Blocks.TNT)
+            Checks.assertTrue(helper, !level.getBlockState(spot).is(Blocks.TNT)
                             && companion.getInventory().countItem(Items.TNT) == 1,
                     "the TNT was placed next to the owner's planks");
             CompanionFactory.despawn(level.getServer(), companion);
@@ -822,7 +823,7 @@ public class PermissionGameTests {
         ServerLevel level = helper.getLevel();
         var villager = EntityType.VILLAGER.create(level, EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(7, 2, 4));
-        villager.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        villager.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         villager.setNoAi(true);
         level.addFreshEntity(villager);
         NumenPlayer companion = spawnAt(helper, "gametest_enforcer", new BlockPos(3, 2, 4), false);
@@ -842,9 +843,9 @@ public class PermissionGameTests {
         });
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(requests.size() == 1, "asked " + requests.size() + " times about the villager");
-            helper.assertTrue(!hitBeforeYes[0], "the villager was hit before the owner said yes");
-            helper.assertTrue(!villager.isAlive() || villager.getHealth() < villager.getMaxHealth(),
+            Checks.assertTrue(helper, requests.size() == 1, "asked " + requests.size() + " times about the villager");
+            Checks.assertTrue(helper, !hitBeforeYes[0], "the villager was hit before the owner said yes");
+            Checks.assertTrue(helper, !villager.isAlive() || villager.getHealth() < villager.getMaxHealth(),
                     "the villager was not hit after the owner said yes: " + attack.outcome());
             villager.discard();
             CompanionFactory.despawn(level.getServer(), companion);
@@ -858,20 +859,20 @@ public class PermissionGameTests {
         ServerLevel level = helper.getLevel();
         var wolf = EntityType.WOLF.create(level, EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(7, 2, 4));
-        wolf.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        wolf.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         wolf.setTame(true, false);
         NumenPlayer companion = spawnAt(helper, "gametest_dogsitter", new BlockPos(3, 2, 4), false);
-        wolf.setOwnerUUID(companion.getOwnerUuid());
+        wolf.setOwnerReference(new net.minecraft.world.entity.EntityReference<>(companion.getOwnerUuid()));
         wolf.setNoAi(true);
         level.addFreshEntity(wolf);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
         ToolRun attack = lua(companion, "numen.fight.attack(" + ref(wolf) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(attack.done(), "attack has not finished");
-            helper.assertTrue(!attack.succeeded() && attack.outcome().contains("refused by the owner"),
+            Checks.assertTrue(helper, attack.done(), "attack has not finished");
+            Checks.assertTrue(helper, !attack.succeeded() && attack.outcome().contains("refused by the owner"),
                     "the refusal does not come from asking the owner: " + attack.outcome());
-            helper.assertTrue(wolf.getHealth() == wolf.getMaxHealth(), "the owner's wolf was hit");
+            Checks.assertTrue(helper, wolf.getHealth() == wolf.getMaxHealth(), "the owner's wolf was hit");
             wolf.discard();
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -883,9 +884,9 @@ public class PermissionGameTests {
         ServerLevel level = helper.getLevel();
         var wolf = EntityType.WOLF.create(level, EntitySpawnReason.STRUCTURE);
         BlockPos at = helper.absolutePos(new BlockPos(7, 2, 4));
-        wolf.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        wolf.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         wolf.setTame(true, false);
-        wolf.setOwnerUUID(UUID.randomUUID());
+        wolf.setOwnerReference(new net.minecraft.world.entity.EntityReference<>(UUID.randomUUID()));
         wolf.setNoAi(true);
         level.addFreshEntity(wolf);
         NumenPlayer companion = spawnAt(helper, "gametest_dogcatcher", new BlockPos(3, 2, 4), false);
@@ -895,11 +896,11 @@ public class PermissionGameTests {
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(attack.done(), "attack has not finished");
-            helper.assertTrue(!attack.succeeded() && attack.outcome().contains("hard rule attack(other)"),
+            Checks.assertTrue(helper, attack.done(), "attack has not finished");
+            Checks.assertTrue(helper, !attack.succeeded() && attack.outcome().contains("hard rule attack(other)"),
                     "the refusal does not quote the hard rule: " + attack.outcome());
-            helper.assertTrue(!asked[0], "a hard rule raised a consent card");
-            helper.assertTrue(wolf.getHealth() == wolf.getMaxHealth(), "the tamed wolf was hit");
+            Checks.assertTrue(helper, !asked[0], "a hard rule raised a consent card");
+            Checks.assertTrue(helper, wolf.getHealth() == wolf.getMaxHealth(), "the tamed wolf was hit");
             wolf.discard();
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -915,10 +916,10 @@ public class PermissionGameTests {
         Mining mine = mineScanned(helper, companion, 8, "minecraft:chest", 1);
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(mine.done(), "mine has not finished");
-            helper.assertTrue(!mine.succeeded() && mine.outcome().contains("refused by the owner"),
+            Checks.assertTrue(helper, mine.done(), "mine has not finished");
+            Checks.assertTrue(helper, !mine.succeeded() && mine.outcome().contains("refused by the owner"),
                     "the refusal does not come from asking the owner: " + mine.outcome());
-            helper.assertTrue(level.getBlockState(chest).is(Blocks.CHEST)
+            Checks.assertTrue(helper, level.getBlockState(chest).is(Blocks.CHEST)
                             && level.getBlockEntity(chest) instanceof net.minecraft.world.Container box
                             && box.countItem(Items.DIAMOND) == 5,
                     "the chest or its diamonds are gone");
@@ -941,10 +942,10 @@ public class PermissionGameTests {
         ToolRun pour = lua(companion, "numen.use.block(" + xyz(floor) + ", {item = \"minecraft:water_bucket\"})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(pour.done(), "use block has not finished");
-            helper.assertTrue(!pour.succeeded() && pour.outcome().contains("refused by the owner"),
+            Checks.assertTrue(helper, pour.done(), "use block has not finished");
+            Checks.assertTrue(helper, !pour.succeeded() && pour.outcome().contains("refused by the owner"),
                     "the refusal does not come from asking the owner: " + pour.outcome());
-            helper.assertTrue(!level.getBlockState(floor.above()).is(Blocks.WATER)
+            Checks.assertTrue(helper, !level.getBlockState(floor.above()).is(Blocks.WATER)
                             && companion.getInventory().countItem(Items.WATER_BUCKET) == 1,
                     "the water was poured next to the owner's planks");
             CompanionFactory.despawn(level.getServer(), companion);
@@ -966,7 +967,7 @@ public class PermissionGameTests {
         NumenPlayer companion = adopted(spawnAt(helper, "gametest_house_sitter", new BlockPos(4, 2, 5), true), owner);
 
         List<String> added = runAs(owner, "numen permission rules add deny break(owner)");
-        helper.assertTrue(added.stream().anyMatch(m -> m.contains("Added to deny")), "the row was not added: " + added);
+        Checks.assertTrue(helper, added.stream().anyMatch(m -> m.contains("Added to deny")), "the row was not added: " + added);
 
         ToolRun[] calls = new ToolRun[2];
         int[] step = {0};
@@ -984,16 +985,16 @@ public class PermissionGameTests {
         });
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(step[0] == 2 && calls[1].done(), "the two clicks have not finished");
+            Checks.assertTrue(helper, step[0] == 2 && calls[1].done(), "the two clicks have not finished");
             String refused = calls[0].outcome();
-            helper.assertTrue(!calls[0].succeeded() && refused.contains("denied by rule break(owner)"),
+            Checks.assertTrue(helper, !calls[0].succeeded() && refused.contains("denied by rule break(owner)"),
                     "the dig of the placed stone was not refused by the row: " + refused);
-            helper.assertTrue(level.getBlockState(helper.absolutePos(placedRel)).is(Blocks.STONE),
+            Checks.assertTrue(helper, level.getBlockState(helper.absolutePos(placedRel)).is(Blocks.STONE),
                     "the placed stone was dug");
-            helper.assertTrue(calls[1].succeeded()
+            Checks.assertTrue(helper, calls[1].succeeded()
                             && level.getBlockState(helper.absolutePos(naturalRel)).isAir(),
                     "the natural stone was not dug: " + calls[1].outcome());
-            helper.assertTrue(!asked[0], "a deny row raised a consent card");
+            Checks.assertTrue(helper, !asked[0], "a deny row raised a consent card");
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
         });
@@ -1021,20 +1022,20 @@ public class PermissionGameTests {
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(first.done(), "the first mine has not finished");
-            helper.assertTrue(first.succeeded() && level.getBlockState(helper.absolutePos(outsideRel)).isAir(),
+            Checks.assertTrue(helper, first.done(), "the first mine has not finished");
+            Checks.assertTrue(helper, first.succeeded() && level.getBlockState(helper.absolutePos(outsideRel)).isAir(),
                     "the wild pumpkin was not mined: " + first.outcome());
-            helper.assertTrue(level.getBlockState(helper.absolutePos(insideRel)).is(Blocks.PUMPKIN),
+            Checks.assertTrue(helper, level.getBlockState(helper.absolutePos(insideRel)).is(Blocks.PUMPKIN),
                     "the placed pumpkin in the barn was mined");
             if (second[0] == null) {
                 second[0] = mine(companion, first.blocks(), 1);
             }
-            helper.assertTrue(second[0].done(), "the second mine has not finished");
-            helper.assertTrue(!second[0].succeeded() && second[0].outcome().contains("break(owner)"),
+            Checks.assertTrue(helper, second[0].done(), "the second mine has not finished");
+            Checks.assertTrue(helper, !second[0].succeeded() && second[0].outcome().contains("break(owner)"),
                     "the second mine does not stop on the placed row: " + second[0].outcome());
-            helper.assertTrue(level.getBlockState(helper.absolutePos(insideRel)).is(Blocks.PUMPKIN),
+            Checks.assertTrue(helper, level.getBlockState(helper.absolutePos(insideRel)).is(Blocks.PUMPKIN),
                     "the placed pumpkin in the barn was mined");
-            helper.assertTrue(!asked[0], "a deny row raised a consent card");
+            Checks.assertTrue(helper, !asked[0], "a deny row raised a consent card");
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
         });
@@ -1065,21 +1066,21 @@ public class PermissionGameTests {
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(mine.done(), "the dig has not finished");
+            Checks.assertTrue(helper, mine.done(), "the dig has not finished");
             String said = mine.outcome();
-            helper.assertTrue(mine.task() == null && !mine.succeeded(),
+            Checks.assertTrue(helper, mine.task() == null && !mine.succeeded(),
                     "a dig whose only target is walled in was accepted: " + mine.reply());
-            helper.assertTrue(said.contains("every face of pumpkin at " + Listing.coords(pumpkin)
+            Checks.assertTrue(helper, said.contains("every face of pumpkin at " + Listing.coords(pumpkin)
                                     + " is covered by a block I may not break")
                             && wool.stream().allMatch(cell -> said.contains("white_wool at " + Listing.coords(cell)))
                             && said.contains("denied by rule break(minecraft:white_wool)"),
                     "the reply does not name the denied blocks walling the pumpkin in and the row: " + said);
-            helper.assertTrue(level.getBlockState(pumpkin).is(Blocks.PUMPKIN), "the pumpkin was mined");
+            Checks.assertTrue(helper, level.getBlockState(pumpkin).is(Blocks.PUMPKIN), "the pumpkin was mined");
             for (BlockPos cell : wool) {
-                helper.assertTrue(level.getBlockState(cell).is(Blocks.WHITE_WOOL),
+                Checks.assertTrue(helper, level.getBlockState(cell).is(Blocks.WHITE_WOOL),
                         "the denied wool was broken at " + cell.toShortString());
             }
-            helper.assertTrue(!asked[0], "a denied block raised a consent card");
+            Checks.assertTrue(helper, !asked[0], "a denied block raised a consent card");
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
         });
@@ -1112,22 +1113,22 @@ public class PermissionGameTests {
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(dig.done(), "work dig has not answered");
+            Checks.assertTrue(helper, dig.done(), "work dig has not answered");
             String said = dig.outcome();
-            helper.assertTrue(dig.task() == null && !dig.succeeded(),
+            Checks.assertTrue(helper, dig.task() == null && !dig.succeeded(),
                     "a dig whose only target is walled in by blocks needing consent was accepted: " + said);
-            helper.assertTrue(said.contains("every face of pumpkin at " + Listing.coords(pumpkin)
+            Checks.assertTrue(helper, said.contains("every face of pumpkin at " + Listing.coords(pumpkin)
                                     + " is covered by a block I may not break")
                             && planks.stream().allMatch(cell -> said.contains("oak_planks at " + Listing.coords(cell)))
                             && said.contains("changing it needs the owner's consent"),
                     "the reply does not name the blocks walling the pumpkin in and why: " + said);
-            helper.assertTrue(level.getBlockState(pumpkin).is(Blocks.PUMPKIN), "the pumpkin was dug");
+            Checks.assertTrue(helper, level.getBlockState(pumpkin).is(Blocks.PUMPKIN), "the pumpkin was dug");
             for (BlockPos cell : planks) {
-                helper.assertTrue(level.getBlockState(cell).is(Blocks.OAK_PLANKS),
+                Checks.assertTrue(helper, level.getBlockState(cell).is(Blocks.OAK_PLANKS),
                         "a plank needing consent was broken at " + cell.toShortString());
             }
-            helper.assertTrue(!asked[0], "a block needing consent in the way raised a consent card");
-            helper.assertTrue(companion.blockPosition().equals(stand), "she moved");
+            Checks.assertTrue(helper, !asked[0], "a block needing consent in the way raised a consent card");
+            Checks.assertTrue(helper, companion.blockPosition().equals(stand), "she moved");
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
         });
@@ -1194,9 +1195,9 @@ public class PermissionGameTests {
         placedStarts.forEach(Runnable::run);
         CompanionFactory.despawn(level.getServer(), companion);
 
-        helper.assertTrue(inVillage.asks() && inVillage.rule().toString().equals("break(structure(#minecraft:village))"),
+        Checks.assertTrue(helper, inVillage.asks() && inVillage.rule().toString().equals("break(structure(#minecraft:village))"),
                 "planks in a village: " + inVillage);
-        helper.assertTrue(inShaft.allowed() && inShaft.rule().toString()
+        Checks.assertTrue(helper, inShaft.allowed() && inShaft.rule().toString()
                         .equals("break(structure & !structure(#minecraft:village) & !block_entity)"),
                 "planks in an abandoned mineshaft: " + inShaft);
         helper.succeed();
@@ -1232,8 +1233,8 @@ public class PermissionGameTests {
         });
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(step[0] == 2 && calls[1].done(), "the two clicks have not finished");
-            helper.assertTrue(!calls[0].succeeded() && calls[1].succeeded(),
+            Checks.assertTrue(helper, step[0] == 2 && calls[1].done(), "the two clicks have not finished");
+            Checks.assertTrue(helper, !calls[0].succeeded() && calls[1].succeeded(),
                     "the dirt was dug or the stone was not: " + calls[0].outcome() + " / " + calls[1].outcome());
             var store = storeOf(owner);
             var denyRule = com.dwinovo.numen.api.permission.Groups.parse("break(minecraft:dirt)");
@@ -1242,17 +1243,17 @@ public class PermissionGameTests {
                     com.dwinovo.numen.permission.Verdict.Kind.DENY, denyRule).count();
             int allowed = store.hitsOf(com.dwinovo.numen.api.permission.Layers.FACTORY,
                     com.dwinovo.numen.permission.Verdict.Kind.ALLOW, factoryRule).count();
-            helper.assertTrue(denied >= 1 && allowed >= 1, "the ledger missed the live questions: " + denied + "/" + allowed);
+            Checks.assertTrue(helper, denied >= 1 && allowed >= 1, "the ledger missed the live questions: " + denied + "/" + allowed);
             List<String> lines = String.join("\n", runAs(owner, "numen permission rules list")).lines().toList();
-            helper.assertTrue(lines.stream().anyMatch(l -> l.contains("1. break(minecraft:dirt)")
+            Checks.assertTrue(helper, lines.stream().anyMatch(l -> l.contains("1. break(minecraft:dirt)")
                             && l.contains(denied + " hit(s)")),
                     "the list does not show the owner's row with its hits: " + lines);
-            helper.assertTrue(lines.stream().anyMatch(l -> l.contains("- break(nature & !block_entity)")
+            Checks.assertTrue(helper, lines.stream().anyMatch(l -> l.contains("- break(nature & !block_entity)")
                             && l.contains(allowed + " hit(s)")),
                     "the list does not show the factory row with its hits: " + lines);
-            helper.assertTrue(lines.stream().anyMatch(l -> l.contains("- deny break(other)") && l.contains("never hit")),
+            Checks.assertTrue(helper, lines.stream().anyMatch(l -> l.contains("- deny break(other)") && l.contains("never hit")),
                     "the list does not show an unused hard rule as never hit: " + lines);
-            helper.assertTrue(lines.stream().anyMatch(l -> l.contains("Hard rules")), "the list lacks the hard rules");
+            Checks.assertTrue(helper, lines.stream().anyMatch(l -> l.contains("Hard rules")), "the list lacks the hard rules");
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
         });
@@ -1287,11 +1288,11 @@ public class PermissionGameTests {
                 case 1 -> {
                     if (pending != null) {
                         var item = pending.items().get(0);
-                        helper.assertTrue(item.name().getString().equals(
+                        Checks.assertTrue(helper, item.name().getString().equals(
                                         "/numen permission rules add allow break(owner & minecraft:wheat)")
                                         && item.remember() == null,
                                 "the card is not the command she cannot run herself, or can be remembered: " + item);
-                        helper.assertTrue(storeOf(owner).rules().allow().isEmpty(), "written before the owner answered");
+                        Checks.assertTrue(helper, storeOf(owner).rules().allow().isEmpty(), "written before the owner answered");
                         desk(companion).answer(pending.id(),
                                 com.dwinovo.numen.api.permission.ConsentAnswer.Decision.DENY, "还不行");
                         step[0] = 2;
@@ -1319,7 +1320,7 @@ public class PermissionGameTests {
                 }
                 case 5 -> {
                     if (pending != null) {
-                        helper.assertTrue(pending.items().get(0).name().getString().startsWith(
+                        Checks.assertTrue(helper, pending.items().get(0).name().getString().startsWith(
                                         "/numen permission rules remove deny 1")
                                         && pending.items().get(0).name().getString().contains("break(owner & minecraft:chest)"),
                                 "the removal card: " + pending.items());
@@ -1333,35 +1334,35 @@ public class PermissionGameTests {
         });
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(step[0] == 6 && later[2].done(), "the card round trips have not finished");
-            helper.assertTrue(deny.succeeded() && Boolean.TRUE.equals(deny.field("changed"))
+            Checks.assertTrue(helper, step[0] == 6 && later[2].done(), "the card round trips have not finished");
+            Checks.assertTrue(helper, deny.succeeded() && Boolean.TRUE.equals(deny.field("changed"))
                             && Boolean.TRUE.equals(deny.field("told"))
                             && "deny break(owner & minecraft:chest)".equals(deny.field("row")),
                     "the deny did not report what it wrote and that the owner was told: " + deny.reply());
-            helper.assertTrue(again.succeeded() && Boolean.FALSE.equals(again.field("changed")),
+            Checks.assertTrue(helper, again.succeeded() && Boolean.FALSE.equals(again.field("changed")),
                     "a row already there was reported as new: " + again.reply());
-            helper.assertTrue(typo.refused() && typo.outcome().contains("unknown verb 'brek'"),
+            Checks.assertTrue(helper, typo.refused() && typo.outcome().contains("unknown verb 'brek'"),
                     "a mistyped rule was not taught: " + typo.outcome());
-            helper.assertTrue(ask.succeeded(), "ask failed: " + ask.outcome());
-            helper.assertTrue(!later[0].succeeded() && later[0].outcome().contains("还不行"),
+            Checks.assertTrue(helper, ask.succeeded(), "ask failed: " + ask.outcome());
+            Checks.assertTrue(helper, !later[0].succeeded() && later[0].outcome().contains("还不行"),
                     "a refused allow did not quote the owner: " + later[0].outcome());
-            helper.assertTrue(later[1].succeeded() && later[2].succeeded(), "an allowed card did not go through: "
+            Checks.assertTrue(helper, later[1].succeeded() && later[2].succeeded(), "an allowed card did not go through: "
                     + later[1].outcome() + " / " + later[2].outcome());
             var store = storeOf(owner);
-            helper.assertTrue(store.rows(com.dwinovo.numen.permission.Verdict.Kind.ALLOW).size() == 1
+            Checks.assertTrue(helper, store.rows(com.dwinovo.numen.permission.Verdict.Kind.ALLOW).size() == 1
                             && store.rows(com.dwinovo.numen.permission.Verdict.Kind.ALLOW).get(0).source()
                             == com.dwinovo.numen.api.permission.PermissionStore.Source.HER
                             && store.rows(com.dwinovo.numen.permission.Verdict.Kind.ALLOW).get(0).note().equals("harvest the farm"),
                     "the allow row is not hers, with her reason, and alone: " + store.rows(
                             com.dwinovo.numen.permission.Verdict.Kind.ALLOW));
-            helper.assertTrue(store.rows(com.dwinovo.numen.permission.Verdict.Kind.DENY).isEmpty(),
+            Checks.assertTrue(helper, store.rows(com.dwinovo.numen.permission.Verdict.Kind.DENY).isEmpty(),
                     "the removed row is still there");
-            helper.assertTrue(store.rows(com.dwinovo.numen.permission.Verdict.Kind.ASK).size() == 1
+            Checks.assertTrue(helper, store.rows(com.dwinovo.numen.permission.Verdict.Kind.ASK).size() == 1
                             && store.rows(com.dwinovo.numen.permission.Verdict.Kind.ASK).get(0).source()
                             == com.dwinovo.numen.api.permission.PermissionStore.Source.HER,
                     "the ask row she added is missing");
             String listed = String.join("\n", runAs(owner, "numen permission rules list"));
-            helper.assertTrue(listed.contains("she added it: harvest the farm"),
+            Checks.assertTrue(helper, listed.contains("she added it: harvest the farm"),
                     "the owner's list does not mark her rows: " + listed);
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
@@ -1399,14 +1400,14 @@ public class PermissionGameTests {
         });
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(choose.done(), "gui choose has not finished");
-            helper.assertTrue(asked[0], "the owner was not asked about a window of unknown origin");
+            Checks.assertTrue(helper, choose.done(), "gui choose has not finished");
+            Checks.assertTrue(helper, asked[0], "the owner was not asked about a window of unknown origin");
             if (allowed) {
-                helper.assertTrue(choose.succeeded() && menu.getPrimaryEffect() != null
-                                && menu.getPrimaryEffect().is(net.minecraft.world.effect.MobEffects.DIG_SPEED),
+                Checks.assertTrue(helper, choose.succeeded() && menu.getPrimaryEffect() != null
+                                && menu.getPrimaryEffect().is(net.minecraft.world.effect.MobEffects.HASTE),
                         "the beacon was not set after the owner said yes: " + choose.outcome());
             } else {
-                helper.assertTrue(!choose.succeeded() && choose.outcome().contains("not this beacon")
+                Checks.assertTrue(helper, !choose.succeeded() && choose.outcome().contains("not this beacon")
                                 && menu.getPrimaryEffect() == null,
                         "the refusal does not quote the owner, or the beacon changed: " + choose.outcome());
             }
