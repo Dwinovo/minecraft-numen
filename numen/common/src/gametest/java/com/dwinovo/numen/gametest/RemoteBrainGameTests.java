@@ -158,7 +158,7 @@ public class RemoteBrainGameTests {
             helper.assertTrue(her.hold() == Hold.EXTERNAL, "the external brain did not take the seat: " + her.hold());
             helper.assertTrue(her.disconnects() == 0, "she was collected while the brain was connected");
             try {
-                her.brain.disconnect();
+                her.brain.disconnect(her.server);
             } catch (Exception e) {
                 throw new IllegalStateException(e);
             }
@@ -181,7 +181,7 @@ public class RemoteBrainGameTests {
         her.brain.afterConnected(helper, 5, () -> {
             helper.assertTrue(her.hold() == Hold.EXTERNAL, "the external brain did not take the seat: " + her.hold());
             try {
-                her.brain.disconnect();
+                her.brain.disconnect(her.server);
             } catch (Exception e) {
                 throw new IllegalStateException(e);
             }
@@ -210,7 +210,7 @@ public class RemoteBrainGameTests {
                         + her.hold());
                 helper.assertTrue(her.disconnects() == 0, "collected while his brain was still connected: " + her.halts);
                 try {
-                    her.brain.disconnect();
+                    her.brain.disconnect(her.server);
                 } catch (Exception e) {
                     throw new IllegalStateException(e);
                 }

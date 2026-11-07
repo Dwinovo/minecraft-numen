@@ -10,7 +10,23 @@ import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 
+import java.io.IOException;
+import java.net.Authenticator;
+import java.net.CookieHandler;
+import java.net.ProxySelector;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
+import net.minecraft.server.MinecraftServer;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -26,8 +42,13 @@ final class McpTestClient {
     /** 还在跑的外部大脑脚本({@link #drive}):每一条要么在算、要么停在一次等游戏的请求里。 */
     private static final java.util.concurrent.atomic.AtomicInteger DRIVING = new java.util.concurrent.atomic.AtomicInteger();
 
+    /** 断开之前等自己的请求收场,最多等这么久:远大于任何正常的请求,到了还没收场就是卡住了。 */
+    private static final long SETTLE_SECONDS = 60;
+
     private final int port;
     private final String secret;
+    /** 这个客户端发出、答复还没回来的 HTTP 请求:它自己调的,和 SDK 替它自动发的(收到工具表变了的通知后补发的 tools/list)。 */
+    private final AtomicInteger inFlight = new AtomicInteger();
     private volatile McpSyncClient client;
     private volatile Throwable failure;
     /** 端点向这个客户端弹的征询(表单请求),按到达顺序。 */
@@ -41,6 +62,7 @@ final class McpTestClient {
     private McpClient.SyncSpec spec() {
         HttpClientStreamableHttpTransport transport = HttpClientStreamableHttpTransport
                 .builder("http://127.0.0.1:" + port).jsonMapper(McpJson.MAPPER).endpoint("/mcp").openConnectionOnStartup(true)
+                .clientBuilder(new CountingClient.Builder(inFlight))
                 .addHttpRequestCustomizer((builder, method, uri, body, context) ->
                         builder.header("Authorization", "Bearer " + secret))
                 .build();
@@ -178,8 +200,18 @@ final class McpTestClient {
         return callResult(tool, args).getAsJsonArray("content").get(0).getAsJsonObject().get("text").getAsString();
     }
 
-    /** 结束会话。 */
-    void disconnect() {
+    /**
+     * 结束会话:先等自己发出的请求都收场,再 DELETE。守规矩的客户端就是这样走的;不等的话,结束之后才到服务端的请求得到 404,
+     * SDK 客户端会因此另开一个会话,她的驾驶席又被占上。等的请求可能要服务端主线程替它办事(列工具),所以等的时候主线程照常执行
+     * 排给它的任务。
+     */
+    void disconnect(MinecraftServer server) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(SETTLE_SECONDS);
+        server.managedBlock(() -> inFlight.get() == 0 || System.nanoTime() > deadline);
+        if (inFlight.get() != 0) {
+            throw new IllegalStateException(inFlight.get() + " request(s) of the gametest mcp client did not finish within "
+                    + SETTLE_SECONDS + " s");
+        }
         client.closeGracefully();
     }
 
@@ -188,6 +220,175 @@ final class McpTestClient {
         McpSyncClient opened = client;
         if (opened != null) {
             opened.close();
+        }
+    }
+
+    /**
+     * 数在飞请求的 HTTP 客户端:请求交出去加一,答复头回来(或请求失败、被取消)减一。答复头回来时服务端已经收下这个请求、处理到
+     * 开始答复;开着的 GET 流也只数到它的答复头。其余原样交给 JDK 的客户端。
+     */
+    private static final class CountingClient extends HttpClient {
+        private final HttpClient delegate;
+        private final AtomicInteger inFlight;
+
+        private CountingClient(HttpClient delegate, AtomicInteger inFlight) {
+            this.delegate = delegate;
+            this.inFlight = inFlight;
+        }
+
+        @Override
+        public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request, HttpResponse.BodyHandler<T> handler) {
+            return counted(() -> delegate.sendAsync(request, handler));
+        }
+
+        @Override
+        public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request, HttpResponse.BodyHandler<T> handler,
+                                                                HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
+            return counted(() -> delegate.sendAsync(request, handler, pushPromiseHandler));
+        }
+
+        @Override
+        public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> handler)
+                throws IOException, InterruptedException {
+            inFlight.incrementAndGet();
+            try {
+                return delegate.send(request, handler);
+            } finally {
+                inFlight.decrementAndGet();
+            }
+        }
+
+        private <T> CompletableFuture<T> counted(Supplier<CompletableFuture<T>> send) {
+            inFlight.incrementAndGet();
+            CompletableFuture<T> sent;
+            try {
+                sent = send.get();
+            } catch (RuntimeException e) {
+                inFlight.decrementAndGet();
+                throw e;
+            }
+            sent.whenComplete((response, error) -> inFlight.decrementAndGet());
+            return sent;
+        }
+
+        @Override
+        public Optional<CookieHandler> cookieHandler() {
+            return delegate.cookieHandler();
+        }
+
+        @Override
+        public Optional<Duration> connectTimeout() {
+            return delegate.connectTimeout();
+        }
+
+        @Override
+        public Redirect followRedirects() {
+            return delegate.followRedirects();
+        }
+
+        @Override
+        public Optional<ProxySelector> proxy() {
+            return delegate.proxy();
+        }
+
+        @Override
+        public SSLContext sslContext() {
+            return delegate.sslContext();
+        }
+
+        @Override
+        public SSLParameters sslParameters() {
+            return delegate.sslParameters();
+        }
+
+        @Override
+        public Optional<Authenticator> authenticator() {
+            return delegate.authenticator();
+        }
+
+        @Override
+        public Version version() {
+            return delegate.version();
+        }
+
+        @Override
+        public Optional<Executor> executor() {
+            return delegate.executor();
+        }
+
+        /** SDK 的传输用它造客户端:设置原样交给 JDK 的 builder(默认同 SDK 的 HTTP/1.1),造出来的客户端套上计数。 */
+        private static final class Builder implements HttpClient.Builder {
+            private final HttpClient.Builder delegate = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1);
+            private final AtomicInteger inFlight;
+
+            Builder(AtomicInteger inFlight) {
+                this.inFlight = inFlight;
+            }
+
+            @Override
+            public Builder cookieHandler(CookieHandler cookieHandler) {
+                delegate.cookieHandler(cookieHandler);
+                return this;
+            }
+
+            @Override
+            public Builder connectTimeout(Duration duration) {
+                delegate.connectTimeout(duration);
+                return this;
+            }
+
+            @Override
+            public Builder sslContext(SSLContext sslContext) {
+                delegate.sslContext(sslContext);
+                return this;
+            }
+
+            @Override
+            public Builder sslParameters(SSLParameters sslParameters) {
+                delegate.sslParameters(sslParameters);
+                return this;
+            }
+
+            @Override
+            public Builder executor(Executor executor) {
+                delegate.executor(executor);
+                return this;
+            }
+
+            @Override
+            public Builder followRedirects(Redirect policy) {
+                delegate.followRedirects(policy);
+                return this;
+            }
+
+            @Override
+            public Builder version(Version version) {
+                delegate.version(version);
+                return this;
+            }
+
+            @Override
+            public Builder priority(int priority) {
+                delegate.priority(priority);
+                return this;
+            }
+
+            @Override
+            public Builder proxy(ProxySelector proxySelector) {
+                delegate.proxy(proxySelector);
+                return this;
+            }
+
+            @Override
+            public Builder authenticator(Authenticator authenticator) {
+                delegate.authenticator(authenticator);
+                return this;
+            }
+
+            @Override
+            public HttpClient build() {
+                return new CountingClient(delegate.build(), inFlight);
+            }
         }
     }
 }
