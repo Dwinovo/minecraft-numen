@@ -58,7 +58,7 @@ final class CuriosGear implements GearSource {
     @Override
     public Set<String> kindsOf(NumenPlayer body, ItemStack stack) {
         boolean curio = CuriosApi.getCurio(stack).isPresent()
-                || stack.getTags().anyMatch(tag -> tag.location().getNamespace().equals(CuriosApi.MODID));
+                || stack.typeHolder().tags().anyMatch(tag -> tag.location().getNamespace().equals(CuriosApi.MODID));
         if (!curio) {
             return Set.of();
         }
