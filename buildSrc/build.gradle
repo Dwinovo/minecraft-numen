@@ -7,8 +7,9 @@ repositories {
 }
 
 dependencies {
-    // 链接检查(src/main/java 下的 LinkCheck):读成品与服务端 jar 的字节码
-    implementation 'org.ow2.asm:asm:9.7.1'
+    // 链接检查(src/main/java 下的 LinkCheck):读成品与服务端 jar 的字节码。它也在所有构建脚本的类路径上(Loom 读 Java 25 的
+    // Minecraft 用的就是这一份),版本要认得 Java 25 的类文件
+    implementation 'org.ow2.asm:asm:9.9'
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'

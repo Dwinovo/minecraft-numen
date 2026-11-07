@@ -80,14 +80,14 @@ sourceSets {
 }
 
 repositories {
-    // MCProtocolLib 不发到 Maven Central。这里用 1.21.11 线上的正式构建
+    // MCProtocolLib 不发到 Maven Central。这里用 26.1 线上的正式构建(26.1 与 26.1.2 同一个协议号)
     maven { url = 'https://repo.opencollab.dev/maven-snapshots' }
     // MCProtocolLib 依赖的 cloudburstmc 库发在这一个
     maven { url = 'https://repo.opencollab.dev/maven-releases' }
 }
 
 dependencies {
-    e2eImplementation 'org.geysermc.mcprotocollib:protocol:1.21.11-1'
+    e2eImplementation 'org.geysermc.mcprotocollib:protocol:26.1-1'
     e2eImplementation 'com.google.code.gson:gson:2.10.1'
     e2eImplementation platform('org.junit:junit-bom:5.11.4')
     e2eImplementation 'org.junit.jupiter:junit-jupiter'
@@ -95,9 +95,14 @@ dependencies {
 }
 
 // GameTest 的结构模板:各模块的在自己的 src/gametest/structures/。原版只认一个模板目录,运行前把 Numen 本体跑批带的各模块的同步进
-// 构建目录里的一处,各加载器的 GameTest 运行配置与联动、评测的运行配置都指向它(模板文件名各模块之间不重名)。
+// 构建目录里的一处,各加载器的 GameTest 运行配置与联动、评测的运行配置都指向它。26.x 的模板目录是资源包的布局,每个模块的模板放在
+// 它的套件名(也是结构模板的命名空间)下:data/<套件名>/structure/<模板>.snbt。
 tasks.register('syncGameTestStructures', Sync) {
-    rootProject.ext.numenGameTestModules.each { from project(it).file('src/gametest/structures') }
+    rootProject.ext.numenGameTestModules.each { path ->
+        from(project(path).file('src/gametest/structures')) {
+            into "data/${rootProject.ext.numenSuites[path].gametest}/structure"
+        }
+    }
     into layout.buildDirectory.dir('gameteststructures')
 }
 

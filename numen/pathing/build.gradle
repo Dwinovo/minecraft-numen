@@ -50,6 +50,9 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // 单测会话开头引导原版环境的那个监听(VanillaSession)对着 JUnit 的启动器接口写;运行时启动器由测试的类路径提供
+    fixturesCompileOnly platform('org.junit:junit-bom:5.11.4')
+    fixturesCompileOnly 'org.junit.platform:junit-platform-launcher'
     // GameTest 的套件机制(原版注解之外的唯一依赖):套件接口与登记的入口,见 numen-api 的测试夹具
     gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
 }

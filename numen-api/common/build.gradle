@@ -56,6 +56,8 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // 单测会话开头引导原版的那个监听(McTestComponents)对着 JUnit 的启动器接口写
+    testCompileOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 configurations {
