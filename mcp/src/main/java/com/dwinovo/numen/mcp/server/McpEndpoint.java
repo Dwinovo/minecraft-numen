@@ -8,6 +8,8 @@ import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpStreamableServerSession;
+import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import jakarta.servlet.Filter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ReadListener;
@@ -27,6 +29,7 @@ import org.apache.tomcat.util.descriptor.web.FilterDef;
 import org.apache.tomcat.util.descriptor.web.FilterMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -57,7 +60,7 @@ import java.util.function.Consumer;
  *   <li><b>认人</b>:每个请求要 {@code Authorization: Bearer <令牌>}({@link McpTokens}),令牌不进查询串;没认出令牌的按来源地址限流
  *       并合并审计({@link McpStrangers});带 {@code Origin} 的必须是访问这个地址的同一个源(防 DNS 重绑定),否则 403;</li>
  *   <li><b>谁带着什么</b>:每张令牌一个 SDK 服务器(会话因此不会跨令牌),带着它这位主人、这个身份看得到的工具({@link McpHost#tools});
- *       客户端列工具时现算一次,变了就增删,SDK 会通知客户端工具表变了;</li>
+ *       开会话(initialize)与客户端列工具时现算一次,变了就增删,一批增删只通知一次工具表变了({@link ToolNotices});</li>
  *   <li><b>限流与审计</b>:接入与每次工具调用受 {@link McpLimits} 限,每次接入与调用记一条审计({@link McpAudit}),只记编号、令牌编号、
  *       工具名、成败与字节数;</li>
  *   <li><b>谁连着</b>:{@link McpPresence};</li>
@@ -266,6 +269,8 @@ public final class McpEndpoint {
     private final class Hosted {
         final McpToken token;
         final HttpServletStreamableServerTransportProvider transport;
+        /** SDK 服务器交通知用的那一层:工具表一批增删只发一条 list_changed。 */
+        private final ToolNotices notices;
         final McpSyncServer server;
         /** 已登记给 SDK 的工具,按名字。 */
         final Map<String, McpHost.ToolInfo> registered = new LinkedHashMap<>();
@@ -283,10 +288,11 @@ public final class McpEndpoint {
                     .maxRequestSize(MAX_BODY_BYTES)
                     .sessionSweepInterval(SESSION_SWEEP)
                     .build();
+            this.notices = new ToolNotices(transport);
             McpHost.Identity who = host.identity();
             McpSchema.Implementation info = new McpSchema.Implementation(who.name(), who.title(), who.version(),
                     who.description(), List.of(icon(who.iconPng())), null);
-            this.server = McpServer.sync(transport)
+            this.server = McpServer.sync(notices)
                     .jsonMapper(json)
                     .jsonSchemaValidator(McpJson.SCHEMA_VALIDATOR)
                     .serverInfo(info)
@@ -306,7 +312,10 @@ public final class McpEndpoint {
             }
         }
 
-        /** 把这张令牌此刻该看到的工具对上 SDK 里登记的:多的撤掉,少的与变了的登记。 */
+        /**
+         * 把这张令牌此刻该看到的工具对上 SDK 里登记的:多的撤掉,少的与变了的登记。这一批增删只通知一次工具表变了({@link ToolNotices}),
+         * 发给这张令牌此刻开着的会话。
+         */
         synchronized void refresh() throws Exception {
             Map<String, McpHost.ToolInfo> now = new LinkedHashMap<>();
             for (McpHost.ToolInfo tool : host.tools(token)) {
@@ -314,18 +323,20 @@ public final class McpEndpoint {
                     now.put(tool.name(), tool);
                 }
             }
-            for (String name : new ArrayList<>(registered.keySet())) {
-                if (!now.containsKey(name)) {
-                    server.removeTool(name);
-                    registered.remove(name);
+            notices.batch(() -> {
+                for (String name : new ArrayList<>(registered.keySet())) {
+                    if (!now.containsKey(name)) {
+                        server.removeTool(name);
+                        registered.remove(name);
+                    }
                 }
-            }
-            for (McpHost.ToolInfo tool : now.values()) {
-                if (!tool.equals(registered.get(tool.name()))) {
-                    server.addTool(spec(tool));
-                    registered.put(tool.name(), tool);
+                for (McpHost.ToolInfo tool : now.values()) {
+                    if (!tool.equals(registered.get(tool.name()))) {
+                        server.addTool(spec(tool));
+                        registered.put(tool.name(), tool);
+                    }
                 }
-            }
+            });
         }
 
         McpSyncServerExchange borrow() {
@@ -585,6 +596,15 @@ public final class McpEndpoint {
                 }
                 String client = clientLabel(message.params());
                 presence.named(token, client);
+                // 工具表在 SDK 开这个会话之前就对好:会话一开就是对好的表,第一次 tools/list 没有变化可通知。不这样的话,新令牌的第一次
+                // 列表才逐个登记工具,刚开的会话收到一串"工具表变了",客户端每条都重列一次
+                try {
+                    hostedFor(token).refresh();
+                } catch (Exception failed) {
+                    LOG.warn("[numen-mcp] 取不到令牌 {} 的工具表: {}", token.id(), failed.toString());
+                    listFailed(resp, message, failed);
+                    return;
+                }
                 SessionCapture capture = new SessionCapture(resp, session -> presence.opened(token, session));
                 chain.doFilter(req, capture);
                 audit.connected(capture.sessionId == null ? "-" : capture.sessionId, token, client);
@@ -654,6 +674,70 @@ public final class McpEndpoint {
             return version.isBlank() ? name : name + " " + version;
         }
         return "unknown client";
+    }
+
+    /**
+     * SDK 服务器交给传输层的通知原样转给 SDK 自己的传输,只有一处不同:工具表一批增删({@link Hosted#refresh})期间,SDK 每增删一个工具
+     * 发一条的 tools/list_changed 合成一条,这一批做完再发。否则 N 个工具变了就是 N 条,客户端每收一条就重列一次工具表。
+     *
+     * <p>SDK 的同步服务器增删工具时在调用线程上当场交出通知,{@link Hosted#refresh} 又在这张令牌的服务器上串行,所以批的开合只在
+     * 调 refresh 的线程上发生。
+     */
+    private static final class ToolNotices implements McpStreamableServerTransportProvider {
+        private final HttpServletStreamableServerTransportProvider sdk;
+        private volatile boolean batching;
+        private volatile boolean changed;
+
+        ToolNotices(HttpServletStreamableServerTransportProvider sdk) {
+            this.sdk = sdk;
+        }
+
+        void batch(Runnable changes) {
+            batching = true;
+            changed = false;
+            try {
+                changes.run();
+            } finally {
+                batching = false;
+            }
+            if (changed) {
+                sdk.notifyClients(McpSchema.METHOD_NOTIFICATION_TOOLS_LIST_CHANGED, null).block();
+            }
+        }
+
+        @Override
+        public void setSessionFactory(McpStreamableServerSession.Factory sessionFactory) {
+            sdk.setSessionFactory(sessionFactory);
+        }
+
+        @Override
+        public Mono<Void> notifyClients(String method, Object params) {
+            if (batching && McpSchema.METHOD_NOTIFICATION_TOOLS_LIST_CHANGED.equals(method)) {
+                changed = true;
+                return Mono.empty();
+            }
+            return sdk.notifyClients(method, params);
+        }
+
+        @Override
+        public Mono<Void> notifyClient(String sessionId, String method, Object params) {
+            return sdk.notifyClient(sessionId, method, params);
+        }
+
+        @Override
+        public Mono<Void> closeGracefully() {
+            return sdk.closeGracefully();
+        }
+
+        @Override
+        public void close() {
+            sdk.close();
+        }
+
+        @Override
+        public List<String> protocolVersions() {
+            return sdk.protocolVersions();
+        }
     }
 
     /** 过滤器交给 SDK 的那一步。 */

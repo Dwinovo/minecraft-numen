@@ -330,6 +330,27 @@ class McpEndpointTest {
         assertEquals(List.of("lua"), client.listTools().tools().stream().map(McpSchema.Tool::name).toList());
     }
 
+    @Test
+    void openingASessionAnnouncesNothingAndABatchOfToolChangesIsAnnouncedOnce() {
+        java.util.concurrent.atomic.AtomicInteger announced = new java.util.concurrent.atomic.AtomicInteger();
+        McpSyncClient client = spec(brain(McpToken.Scope.ALL).secret()).toolsChangeConsumer(tools -> announced.incrementAndGet())
+                .build();
+        client.initialize();
+        clients.add(client);
+        assertEquals(2, client.listTools().tools().size());
+        sleep(300);
+        assertEquals(0, announced.get(), "会话开的时候工具表已经对好,第一次列表没有变化可通知");
+
+        host.tools = List.of(host.tools.get(0), new McpHost.ToolInfo("hold", null, "holds", "{\"type\":\"object\"}",
+                new McpHost.Hints(false, false, false, false)));
+        assertEquals(List.of("lua", "hold"), client.listTools().tools().stream().map(McpSchema.Tool::name).toList());
+        for (int i = 0; i < 100 && announced.get() == 0; i++) {
+            sleep(20);
+        }
+        sleep(300);
+        assertEquals(1, announced.get(), "撤一个、加一个是一批变化,只通知一次");
+    }
+
     // ---- 调用与进度 ----
 
     @Test
