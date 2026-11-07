@@ -1,14 +1,9 @@
 package com.dwinovo.numen.plugins;
 
 import com.dwinovo.numen.ModJar;
-import com.dwinovo.numen.plugins.ysm.Ysm;
-import com.dwinovo.numen.plugins.ysm.YsmHost;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.server.MinecraftServer;
 
 import java.nio.file.Path;
-import java.util.function.Consumer;
 
 /**
  * 本加载器内嵌了哪些联动、各自要谁——以及加载器替它们做的那几件事。
@@ -17,7 +12,7 @@ import java.util.function.Consumer;
  * 集合用的。列在一处,"现在内嵌了哪些、各自要谁"一眼答得完。闸门本身三个加载器共用,
  * 见 {@link Gate}。
  *
- * <p>只有 YSM 与 Litematica:车万女仆等没有 Fabric 版,这里装不上它们,联动也就无从谈起。
+ * <p>只有 Litematica 与 JEI:车万女仆等没有 Fabric 版,YSM 在这个 MC 版本没有构建。
  *
  * <h2>联动的类型只许出现在嵌套类里</h2>
  * 本类自己的方法(含 lambda 编译出来的合成方法)一个都不能提联动的类型:校验器为了核对
@@ -31,7 +26,6 @@ public final class Builtin {
 
     public static void registerAll() {
         Gate gate = new Gate(FabricLoader.getInstance()::isModLoaded, ModJar::find);
-        gate.open("yes_steve_model", "ysm", content -> () -> YsmOnFabric.install(content));
         gate.openClientMod("litematica", "litematica", content -> () -> LitematicaOnFabric.install(content));
         gate.openClientMod("jei", "jei", () -> JeiOnFabric::install);
     }
@@ -49,22 +43,6 @@ public final class Builtin {
         }
     }
 
-    /** YSM 联动只写原版;它要的加载器专属的两件事,Fabric 的答案在这里。 */
-    private static final class YsmOnFabric implements YsmHost {
-        static void install(Path content) {
-            com.dwinovo.numen.plugins.ysm.NumenYsm.install(new YsmOnFabric(), content);
-        }
-
-        @Override
-        public void onServerTick(Consumer<MinecraftServer> listener) {
-            ServerTickEvents.END_SERVER_TICK.register(listener::accept);
-        }
-
-        @Override
-        public Ysm.Storage storage() {
-            return Ysm.Storage.FABRIC;
-        }
-    }
 
     /** Litematica 联动不需要加载器替它做什么事:函数都在主人的客户端上跑,经 Numen API 的同一条反向请求。 */
     private static final class LitematicaOnFabric {

@@ -1,5 +1,7 @@
 package com.dwinovo.numen.plugins.curios;
 
+import net.minecraft.world.entity.EntityTypes;
+
 import com.dwinovo.numen.api.gear.GearSlot;
 import com.dwinovo.numen.api.gear.GearSource;
 import com.dwinovo.numen.api.entity.NumenPlayer;
@@ -21,7 +23,7 @@ import java.util.TreeSet;
 /**
  * 饰品栏这一处穿戴来源。槽名是 {@code curios:<槽类型>}({@code curios:ring}),同类多格同名。
  *
- * <p>假玩家按 {@code EntityType.PLAYER} 拿到和真玩家同一套槽;整合包没给玩家分槽时饰品栏能力不会挂上,
+ * <p>假玩家按 {@code EntityTypes.PLAYER} 拿到和真玩家同一套槽;整合包没给玩家分槽时饰品栏能力不会挂上,
  * 这里就一格都没有。
  */
 final class CuriosGear implements GearSource {

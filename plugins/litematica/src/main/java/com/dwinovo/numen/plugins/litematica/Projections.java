@@ -14,7 +14,7 @@ import fi.dy.masa.litematica.schematic.placement.SubRegionPlacement;
 import fi.dy.masa.litematica.selection.Box;
 import fi.dy.masa.litematica.util.PositionUtils;
 import fi.dy.masa.malilib.util.LayerMode;
-import fi.dy.masa.malilib.util.LayerRange;
+import fi.dy.masa.malilib.util.position.LayerRange;
 import net.minecraft.commands.arguments.blocks.BlockStateParser;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Blocks;
@@ -97,8 +97,8 @@ final class Projections {
         LayerMode mode = range.getLayerMode();
         boolean bounded = mode != LayerMode.ALL;
         // ALL 没有范围;ALL_ABOVE 没有上界,ALL_BELOW 没有下界(Litematica 用 ±30000000 当没有)
-        Optional<Integer> from = bounded && mode != LayerMode.ALL_BELOW ? Optional.of(range.getLayerMin()) : Optional.empty();
-        Optional<Integer> to = bounded && mode != LayerMode.ALL_ABOVE ? Optional.of(range.getLayerMax()) : Optional.empty();
+        Optional<Integer> from = bounded && mode != LayerMode.ALL_BELOW ? Optional.of(range.getMinLayerBoundary()) : Optional.empty();
+        Optional<Integer> to = bounded && mode != LayerMode.ALL_ABOVE ? Optional.of(range.getMaxLayerBoundary()) : Optional.empty();
         return new LitematicaApi.Layer(mode.getStringValue(), range.getAxis(), from, to);
     }
 
