@@ -3,7 +3,6 @@ package com.dwinovo.numen.api.platform;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.platform.services.IBoatPhysics;
 import com.dwinovo.numen.api.platform.services.IBodyAdmission;
-import com.dwinovo.numen.api.platform.services.IBreakingState;
 import com.dwinovo.numen.api.platform.services.IClientLanguage;
 import com.dwinovo.numen.api.platform.services.INumenConfig;
 import com.dwinovo.numen.api.platform.services.IPermissions;
@@ -27,7 +26,6 @@ public class Services {
     private static final Lazy<IPermissions> PERMISSIONS = new Lazy<>(IPermissions.class);
     private static final Lazy<ICommandSources> COMMAND_SOURCES = new Lazy<>(ICommandSources.class);
     private static final Lazy<IBodyAdmission> ADMISSION = new Lazy<>(IBodyAdmission.class);
-    private static final Lazy<IBreakingState> BREAKING = new Lazy<>(IBreakingState.class);
     private static final Lazy<IClientLanguage> CLIENT_LANGUAGE = new Lazy<>(IClientLanguage.class);
     // 语音工厂是客户端专属服务,注册在 client 包的 ClientServices 里——
     // 其实现类引用 client-only 的 Sound 类,放这里急加载会在专用服务端
@@ -63,10 +61,6 @@ public class Services {
 
     public static IBodyAdmission admission() {
         return ADMISSION.get();
-    }
-
-    public static IBreakingState breaking() {
-        return BREAKING.get();
     }
 
     public static IClientLanguage clientLanguage() {

@@ -95,8 +95,9 @@ public final class BlockDigger {
      */
     public DigResult digStep(BlockPos target, Predicate<BlockPos> mayClear, Consumer<BodyAction> told) {
         player.controls().stop();
-        if (player.mouse().awaitingServer()) {
-            // 已经送过 STOP,服务端自己在挖掉它:不再瞄、不再换工具,问鼠标挖掉了没有。方块已经变了的话,瞄准那一套就找不到它了
+        if (player.mouse().stopSent()) {
+            // 这一格送过一次 STOP、方块还在:不再瞄、不再换工具,手还按在它上面,接着按。它随时可能没了(那是挖掉了,由鼠标报),
+            // 方块变了的话瞄准那一套就找不到它了
             return result(player.mouse().dig(), target);
         }
         BlockPos effective = target;
@@ -144,9 +145,9 @@ public final class BlockDigger {
         }
     }
 
-    /** 送过 STOP、在等服务端自己把它挖掉({@link com.dwinovo.numen.api.entity.Mouse#awaitingServer})。 */
-    public boolean awaitingServer() {
-        return player.mouse().awaitingServer();
+    /** 正在挖的那一格送过一次 STOP、方块还在({@link com.dwinovo.numen.api.entity.Mouse#stopSent})。 */
+    public boolean stopSent() {
+        return player.mouse().stopSent();
     }
 
     /** 松开左键:正在挖的那一格放下,进度清零。 */
