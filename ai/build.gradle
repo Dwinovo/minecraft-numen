@@ -45,9 +45,10 @@ repositories {
 }
 
 dependencies {
-    // 游戏进程里由平台提供,发布 pom 里如实声明。Gson 编译对着 2.10.1:1.21.4 的游戏带 2.11.0(向后兼容),而 2.11.0 的 POM
-    // 把 error_prone_annotations 拉进开发期运行的类路径,和游戏那份在模块层里撞名(Module ... reads more than one module named ...)。
-    api 'com.google.code.gson:gson:2.10.1'
+    // 与 MC 1.21.4 运行时同版:游戏进程里由平台提供,发布 pom 里如实声明。
+    // 2.11.0 的 POM 带着 error_prone_annotations(只是编译期注解,gson 的 module-info 里是 requires static):NeoForge 自己带着另一版,
+    // 两份同名模块进了模块层就起不来,所以不传递
+    api('com.google.code.gson:gson:2.11.0') { exclude group: 'com.google.errorprone' }
     api 'org.slf4j:slf4j-api:2.0.16'
     // 落盘的基础件(日志、小文档):会话日志与目录缓存只保留各自的记录格式。api 配置让 agent 与 Numen API 透视得到。
     api project(':store')
