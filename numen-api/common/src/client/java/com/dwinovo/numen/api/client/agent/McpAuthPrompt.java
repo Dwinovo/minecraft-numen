@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.client.agent;
 
-import net.minecraft.util.Util;
+import com.mojang.blaze3d.Blaze3D;
 
 import java.net.URI;
 import java.util.HashSet;
@@ -34,7 +34,7 @@ public final class McpAuthPrompt {
                 return true;
             }
             if (row.authUrl() != null) {
-                Util.getPlatform().openUri(URI.create(row.authUrl()));
+                Blaze3D.openUri(URI.create(row.authUrl()));
                 return true;
             }
             return switch (row.status()) {

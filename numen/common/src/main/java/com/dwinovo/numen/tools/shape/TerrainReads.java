@@ -7,6 +7,7 @@ import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.tools.shape.ShapeMasks.Mask;
 import net.minecraft.core.BlockPos;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Blocks;
@@ -126,7 +127,7 @@ final class TerrainReads {
                         && q.getZ() >= minZ && q.getZ() <= maxZ
                         && (q.getX() == minX || q.getX() == maxX || q.getY() == minY || q.getY() == maxY
                         || q.getZ() == minZ || q.getZ() == maxZ);
-                if (onFace && !w.at(q).blocksMotion() && outside.add(q.asLong()) && region.contains(q.asLong())) {
+                if (onFace && !w.at(q).is(BlockTags.BLOCKS_MOTION) && outside.add(q.asLong()) && region.contains(q.asLong())) {
                     spreading.add(q);
                 }
             }
@@ -135,7 +136,7 @@ final class TerrainReads {
             BlockPos p = spreading.poll();
             for (Direction d : SIX) {
                 BlockPos q = p.relative(d);
-                if (!w.at(q).blocksMotion() && outside.add(q.asLong()) && region.contains(q.asLong())) {
+                if (!w.at(q).is(BlockTags.BLOCKS_MOTION) && outside.add(q.asLong()) && region.contains(q.asLong())) {
                     spreading.add(q);
                 }
             }
@@ -282,7 +283,7 @@ final class TerrainReads {
     /** 一列里最高的"地面":蒙版里最高的一格,没蒙版是挡得住移动的;一格也没有是 minY。 */
     private static int highest(LoadedBlocks w, int x, int z, int minY, int maxY, Mask mask) {
         for (int y = maxY; y >= minY; y--) {
-            if (mask == null ? w.at(x, y, z).blocksMotion() : mask.test(w, x, y, z)) {
+            if (mask == null ? w.at(x, y, z).is(BlockTags.BLOCKS_MOTION) : mask.test(w, x, y, z)) {
                 return y;
             }
         }
@@ -700,7 +701,7 @@ final class TerrainReads {
         if (s.isAir() || (stack && s.is(Blocks.SNOW))) {
             return false;
         }
-        return s.is(Blocks.WATER) || s.blocksMotion();
+        return s.is(Blocks.WATER) || s.is(BlockTags.BLOCKS_MOTION);
     }
 
     /** 地面 ground 上落雪:静水结冰;头上是空气就放一层(原版判得住的地方),stack 时头上的雪层再加一层、满七层成雪块。 */
@@ -771,7 +772,7 @@ final class TerrainReads {
                     put(w, out, x, y, z, Blocks.GRASS_BLOCK.defaultBlockState());
                     break;
                 }
-                if (liquid(s) || s.blocksMotion()) {
+                if (liquid(s) || s.is(BlockTags.BLOCKS_MOTION)) {
                     break;
                 }
             }

@@ -248,10 +248,10 @@ public class CompanionChatScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyEvent event) {
-        int keyCode = com.dwinovo.numen.api.client.ui.KeyCodes.canonical(event.key());   // 小键盘回车并成回车
+        int keyCode = com.dwinovo.numen.api.client.ui.KeyCodes.canonical(com.dwinovo.numen.api.client.ui.mc.McInput.key(event));   // 小键盘回车并成回车
         // 输入行先拿:弹层的上下/Tab/回车、面板的整个键盘、回车发送。它不要的(比如
         // 没开面板时的 Esc)才落到屏幕——Esc 关屏
-        if (inputBar != null && inputBar.keyPressed(keyCode, event.modifiers())) {
+        if (inputBar != null && inputBar.keyPressed(keyCode, com.dwinovo.numen.api.client.ui.mc.McInput.modifiers(event))) {
             return true;
         }
         return super.keyPressed(event);
@@ -274,7 +274,7 @@ public class CompanionChatScreen extends Screen {
                 && ConsentMessage.click(this.font, card, keysX, keysY, keysW, mouseX, mouseY)) {
             return true;
         }
-        boolean handled = inputBar != null && inputBar.mouseClicked(mouseX, mouseY, event.button())
+        boolean handled = inputBar != null && inputBar.mouseClicked(mouseX, mouseY, com.dwinovo.numen.api.client.ui.mc.McInput.button(event.button()))
                 || super.mouseClicked(event, doubleClick);
         // 这一屏只是一行输入:点到哪儿输入框都不失焦。失了焦字打不进、回车也没反应,只剩发送键还能点
         if (inputBar != null) inputBar.setFocused(true);

@@ -26,6 +26,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.level.block.entity.SignTextSlot;
 import net.minecraft.world.phys.Vec3;
 
 import com.dwinovo.numen.api.permission.Action;
@@ -356,7 +357,7 @@ public final class UseApi {
                 out.fail(new ApiError(ErrorKind.NOT_FOUND, "the sign is gone", null));
                 return;
             }
-            List<String> shown = Signs.lines(now.getText(front));
+            List<String> shown = Signs.lines(now.getText(front ? SignTextSlot.FRONT : SignTextSlot.BACK));
             if (!shown.equals(wanted)) {
                 out.fail(new ApiError(ErrorKind.FAILED, "the sign was not changed: it reads " + shown,
                         Call.of("numen.scan.block", pos)));

@@ -8,6 +8,8 @@ import com.dwinovo.numen.api.entity.NumenPlayer;
 
 import net.minecraft.world.item.ItemStack;
 import top.theillusivec4.curios.api.CuriosApi;
+import top.theillusivec4.curios.api.CuriosResources;
+import top.theillusivec4.curios.api.CuriosSlotTypes;
 import top.theillusivec4.curios.api.type.ISlotType;
 import top.theillusivec4.curios.api.type.capability.ICuriosItemHandler;
 import top.theillusivec4.curios.api.type.inventory.ICurioStacksHandler;
@@ -28,7 +30,7 @@ import java.util.TreeSet;
  */
 final class CuriosGear implements GearSource {
 
-    static final String PREFIX = CuriosApi.MODID + ":";
+    static final String PREFIX = CuriosResources.MOD_ID + ":";
 
     /** 界面里看得见的槽类型,按 Curios 自己的顺序({@link ISlotType#getOrder})逐格展开。 */
     @Override
@@ -38,7 +40,7 @@ final class CuriosGear implements GearSource {
             return List.of();
         }
         ICuriosItemHandler inv = found.get();
-        Map<String, ISlotType> types = CuriosApi.getSlots(body.level());
+        Map<String, ISlotType> types = CuriosSlotTypes.getSlotTypes(body.level().isClientSide());
         List<ICurioStacksHandler> handlers = new ArrayList<>();
         for (ICurioStacksHandler h : inv.getCurios().values()) {
             if (h.isVisible()) handlers.add(h);
@@ -60,12 +62,12 @@ final class CuriosGear implements GearSource {
     @Override
     public Set<String> kindsOf(NumenPlayer body, ItemStack stack) {
         boolean curio = CuriosApi.getCurio(stack).isPresent()
-                || stack.typeHolder().tags().anyMatch(tag -> tag.location().getNamespace().equals(CuriosApi.MODID));
+                || stack.typeHolder().tags().anyMatch(tag -> tag.location().getNamespace().equals(CuriosResources.MOD_ID));
         if (!curio) {
             return Set.of();
         }
         Set<String> kinds = new TreeSet<>();
-        for (String id : CuriosApi.getItemStackSlots(stack, body.level()).keySet()) {
+        for (String id : CuriosSlotTypes.getItemSlotTypes(stack, body.level().isClientSide()).keySet()) {
             kinds.add(PREFIX + id);
         }
         return kinds;

@@ -20,8 +20,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.biome.Biome;
-import net.minecraft.world.level.biome.BiomeSource;
-import net.minecraft.world.level.biome.Climate;
+import net.minecraft.world.level.biome.BiomeResolver;
 
 import java.util.function.Predicate;
 
@@ -62,8 +61,7 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
     private static final int Y_STEP_BLOCKS = 64;
 
     private Predicate<Holder<Biome>> match;
-    private BiomeSource biomeSource;
-    private Climate.Sampler sampler;
+    private BiomeResolver biomes;
     private int[] yBlocks;          // probe heights, ordered outward from entity Y
     private int centerX, centerZ;   // block coords of the search origin
     private int ring, perimIdx;
@@ -92,8 +90,7 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
             fail(failReason, FailureType.UNKNOWN);   // failReason set by resolveBiomePredicate
             return;
         }
-        biomeSource = sl.getChunkSource().getGenerator().getBiomeSource();
-        sampler = sl.getChunkSource().randomState().sampler();
+        biomes = sl.getChunkSource().getGenerator().getBiomeSource().createUncachedResolver(sl.getChunkSource().randomState());
         yBlocks = Mth.outFromOrigin(player.getBlockY(),
                 sl.getMinY() + 1, sl.getMaxY(), Y_STEP_BLOCKS).toArray();
         centerX = player.getBlockX();
@@ -192,7 +189,7 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
         int qx = QuartPos.fromBlock(x);
         int qz = QuartPos.fromBlock(z);
         for (int y : yBlocks) {
-            Holder<Biome> biome = biomeSource.getNoiseBiome(qx, QuartPos.fromBlock(y), qz, sampler);
+            Holder<Biome> biome = biomes.getNoiseBiome(qx, QuartPos.fromBlock(y), qz);
             if (match.test(biome)) {
                 return new BlockPos(x, y, z);
             }

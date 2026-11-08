@@ -1,8 +1,8 @@
 package com.dwinovo.numen.api.client.ui;
 
 /**
- * NumenUI 用到的键码常量——数值即 GLFW 键码(稳定跨版本),适配层原样透传,只有小键盘回车
- * 先过 {@link #canonical} 并成回车;组件库因此不需要 import 任何 MC/GLFW 类。
+ * NumenUI 用到的键码常量——数值即 GLFW 键码(稳定跨版本),适配层({@code McInput})把原版的输入换成这套编号再交来,
+ * 只有小键盘回车先过 {@link #canonical} 并成回车;组件库因此不需要 import 任何 MC/GLFW 类。
  */
 public final class KeyCodes {
 

@@ -18,7 +18,6 @@ import com.dwinovo.numen.api.client.ui.TextWrap;
 import com.dwinovo.numen.api.client.ui.mc.McDrawSurface;
 
 import com.mojang.blaze3d.platform.InputConstants;
-import com.mojang.blaze3d.platform.Window;
 
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.input.KeyEvent;
@@ -29,8 +28,9 @@ import com.dwinovo.numen.api.client.skin.ConversationFaces;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-import org.lwjgl.glfw.GLFW;
+import org.lwjgl.sdl.SDLMouse;
 
+import java.nio.FloatBuffer;
 import java.util.List;
 
 /**
@@ -98,21 +98,22 @@ public class CompanionWheelScreen extends Screen {
         }
     }
 
-    private static boolean physicallyDown(Window window, KeyMapping k) {
+    private static boolean physicallyDown(KeyMapping k) {
         if (k.isUnbound()) {
             return false;
         }
         InputConstants.Key key = InputConstants.getKey(k.saveString());
         if (key.getType() == InputConstants.Type.MOUSE) {
-            return GLFW.glfwGetMouseButton(window.handle(), key.getValue()) == GLFW.GLFW_PRESS;
+            // SDL 的鼠标键位掩码:第 n 号键是第 n-1 位
+            return (SDLMouse.SDL_GetMouseState((FloatBuffer) null, (FloatBuffer) null) & (1 << (key.getValue() - 1))) != 0;
         }
-        return InputConstants.isKeyDown(window, key.getValue());
+        return InputConstants.isKeyDown(key.getValue());
     }
 
     /**
      * 移动放行的唯一通路(由 {@code MixinKeyboardInput} 在原版采样之后
      * 调用,两个加载器同一个点):开屏期间按键系统被闸,采出来的移动
-     * 意图全是零——这里按 GLFW 物理按键状态原样重建,奔跑不为选人断步,
+     * 意图全是零——这里按 SDL 物理按键状态原样重建,奔跑不为选人断步,
      * 开盘前就按住的 W 也无缝接上。不碰 {@code KeyMapping} 状态,键位
      * 冲突类模组无感。鼠标视角仍锁定(被转盘征用),武器轮盘式取舍。
      *
@@ -128,13 +129,12 @@ public class CompanionWheelScreen extends Screen {
      */
     public static net.minecraft.world.phys.Vec2 feedMovement(net.minecraft.client.player.ClientInput input) {
         Minecraft mc = Minecraft.getInstance();
-        Window window = mc.getWindow();
-        boolean up = physicallyDown(window, mc.options.keyUp);
-        boolean down = physicallyDown(window, mc.options.keyDown);
-        boolean left = physicallyDown(window, mc.options.keyLeft);
-        boolean right = physicallyDown(window, mc.options.keyRight);
-        boolean jump = physicallyDown(window, mc.options.keyJump);
-        boolean shift = physicallyDown(window, mc.options.keyShift);
+        boolean up = physicallyDown(mc.options.keyUp);
+        boolean down = physicallyDown(mc.options.keyDown);
+        boolean left = physicallyDown(mc.options.keyLeft);
+        boolean right = physicallyDown(mc.options.keyRight);
+        boolean jump = physicallyDown(mc.options.keyJump);
+        boolean shift = physicallyDown(mc.options.keyShift);
         input.keyPresses = new net.minecraft.world.entity.player.Input(
                 up, down, left, right, jump, shift, input.keyPresses.sprint());
         float forward = (up ? 1f : 0f) - (down ? 1f : 0f);
@@ -325,7 +325,7 @@ public class CompanionWheelScreen extends Screen {
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         double mouseX = event.x();
         double mouseY = event.y();
-        if (event.button() != 0 || entries.isEmpty()) {
+        if (com.dwinovo.numen.api.client.ui.mc.McInput.button(event.button()) != 0 || entries.isEmpty()) {
             return super.mouseClicked(event, doubleClick);
         }
         // 命中检测与渲染同一套席位坐标

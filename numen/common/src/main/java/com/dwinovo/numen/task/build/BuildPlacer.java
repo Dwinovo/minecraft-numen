@@ -11,6 +11,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.SwingAnimation;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -133,10 +134,11 @@ final class BuildPlacer {
                 player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(item));
             }
             try {
+                SwingAnimation animation = player.getMainHandItem().getInteractAnimation();   // 放完这一叠可能就没了
                 InteractionResult result = player.gameMode.useItemOn(player, player.level(), player.getMainHandItem(),
                         InteractionHand.MAIN_HAND, hit);
                 if (result.consumesAction()) {
-                    player.swing(InteractionHand.MAIN_HAND);
+                    player.swing(InteractionHand.MAIN_HAND, animation, false);
                 }
             } finally {
                 if (restore != null) {

@@ -11,7 +11,6 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
-import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.HayBlock;
 import net.minecraft.world.level.block.HoneyBlock;
 import net.minecraft.world.level.block.PointedDripstoneBlock;
@@ -87,13 +86,12 @@ public record BodySnapshot(BodyStats stats, GameType gameMode, float health, dou
     /**
      * 从 {@code height} 格高处落到 {@code onto} 上掉几点血。全模块只在这里回答:坠落的定价与摔不摔得起都读它。
      *
-     * <p>照原版:落地时原版对脚下那块调 {@code Block.fallOn},默认把落差原样交给 {@code causeFallDamage}(倍率 1);
-     * 下面几种方块覆写了它,改的是交过去的落差或倍率——
+     * <p>照原版:落地时原版对脚下那块调 {@code Block.fallOn},默认把落差按方块的 {@code fallDistanceReduction}(床、层架菌
+     * 是 0.5,别的方块是 0)减掉再交给 {@code causeFallDamage}(倍率 1);下面几种方块覆写了它,改的是交过去的落差或倍率——
      * <ul>
      *   <li>朝上的滴水石锥尖({@code PointedDripstoneBlock}:{@code tip_direction=up} 且 {@code thickness=tip}):落差加 2、
      *       倍率 2,落差过 1 格就疼;锥身、朝下的锥与别的粗细按默认;</li>
      *   <li>干草块({@code HayBlock})、蜂蜜块({@code HoneyBlock}):倍率 0.2;</li>
-     *   <li>床({@code BedBlock}):落差减半;</li>
      *   <li>黏液块({@code SlimeBlock}):不按潜行时倍率 0——寻路计划的落地都不按潜行;</li>
      *   <li>细雪({@code PowderSnowBlock}):不调 {@code causeFallDamage},不疼。只有细雪托得住的身体才落得到它上面。</li>
      * </ul>
@@ -116,9 +114,7 @@ public record BodySnapshot(BodyStats stats, GameType gameMode, float health, dou
             case HayBlock hay -> multiplier = 0.2F;
             case HoneyBlock honey -> multiplier = 0.2F;
             case SlimeBlock slime -> multiplier = 0.0F;
-            case BedBlock bed -> distance *= 0.5F;
-            default -> {
-            }
+            default -> distance *= 1.0F - onto.getBlock().getFallDistanceReduction();
         }
         float over = distance - (float) safeFallDistance;
         return Math.max(0, Mth.ceil((double) (over * multiplier) * fallDamageMultiplier));

@@ -9,6 +9,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.level.block.entity.SignText;
+import net.minecraft.world.level.block.entity.SignTextSlot;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,7 +35,7 @@ public final class Signs {
     }
 
     public static Text read(SignBlockEntity sign) {
-        return new Text(lines(sign.getFrontText()), lines(sign.getBackText()), sign.isWaxed());
+        return new Text(lines(sign.getText(SignTextSlot.FRONT)), lines(sign.getText(SignTextSlot.BACK)), sign.isWaxed());
     }
 
     /** 一面的四行字。 */

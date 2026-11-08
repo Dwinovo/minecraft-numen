@@ -1648,8 +1648,8 @@ public final class NumenScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyEvent event) {
-        int keyCode = com.dwinovo.numen.api.client.ui.KeyCodes.canonical(event.key());   // 小键盘回车并成回车
-        int modifiers = event.modifiers();
+        int keyCode = com.dwinovo.numen.api.client.ui.KeyCodes.canonical(com.dwinovo.numen.api.client.ui.mc.McInput.key(event));   // 小键盘回车并成回车
+        int modifiers = com.dwinovo.numen.api.client.ui.mc.McInput.modifiers(event);
         int k = keyCode;
         if (overlayOpen()) {   // 确认卡在场:Esc = 取消(UiRoot 浮层通道保证),其余键不下传
             if (overlayUi.keyPressed(keyCode, modifiers)) { rebuild(); return true; }
@@ -1766,7 +1766,7 @@ public final class NumenScreen extends Screen {
     private boolean mouseClickedInner(MouseButtonEvent event, boolean doubleClick) {
         double mouseX = event.x();
         double mouseY = event.y();
-        int button = event.button();
+        int button = com.dwinovo.numen.api.client.ui.mc.McInput.button(event.button());
         if (overlayOpen()) {   // 确认卡:卡上按钮生效,卡外点击一律吞掉(危险操作不给误触留门)
             boolean handled = overlayUi.mouseClicked(mouseX, mouseY, button);
             if (!overlayOpen()) rebuild();   // 卡关了(取消/确认):背景 widget 复位
@@ -1929,7 +1929,7 @@ public final class NumenScreen extends Screen {
     public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
         double mx = event.x();
         double my = event.y();
-        int button = event.button();
+        int button = com.dwinovo.numen.api.client.ui.mc.McInput.button(event.button());
         if (button == 0 && railPressed >= 0) {
             // 模态/浮层在场时侧栏只是逃生口,不拖
             if (!railDragging && !modalOpen() && !overlayOpen()
@@ -1954,7 +1954,7 @@ public final class NumenScreen extends Screen {
     public boolean mouseReleased(MouseButtonEvent event) {
         double mx = event.x();
         double my = event.y();
-        int button = event.button();
+        int button = com.dwinovo.numen.api.client.ui.mc.McInput.button(event.button());
         if (button == 0 && railPressed >= 0) {
             int pressed = railPressed;
             railPressed = -1;

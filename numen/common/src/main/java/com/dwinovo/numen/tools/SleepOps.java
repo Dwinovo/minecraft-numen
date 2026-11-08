@@ -12,7 +12,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.AbstractBedBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 
@@ -53,7 +53,10 @@ public final class SleepOps {
             throw noBed(self.getInventory(), given);
         }
 
-        Either<Player.BedSleepingProblem, Unit> result = self.startSleepInBed(bedHead);
+        BlockState bed = self.level().getBlockState(bedHead);
+        AbstractBedBlock bedBlock = (AbstractBedBlock) bed.getBlock();
+        Either<Player.BedSleepingProblem, Unit> result = self.startSleepInBed(bedBlock, bed,
+                bedBlock.getBedRule(self.level(), bedHead), bedHead);
         Player.BedSleepingProblem rejection = result.left().orElse(null);
 
         // 这三条的顺序就是判据本身:先看原版拒没拒,再看她是不是真躺下了。
@@ -114,14 +117,14 @@ public final class SleepOps {
      */
     private static BlockPos headOf(Level level, BlockPos pos) {
         BlockState state = level.getBlockState(pos);
-        if (!(state.getBlock() instanceof BedBlock)
-                || !state.hasProperty(BedBlock.PART)
-                || !state.hasProperty(BedBlock.FACING)) {
+        if (!(state.getBlock() instanceof AbstractBedBlock)
+                || !state.hasProperty(AbstractBedBlock.PART)
+                || !state.hasProperty(AbstractBedBlock.FACING)) {
             return null;   // 认床看类型不看 id:模组的床自动算数,不用列 16 种颜色
         }
-        return state.getValue(BedBlock.PART) == BedPart.HEAD
+        return state.getValue(AbstractBedBlock.PART) == BedPart.HEAD
                 ? pos.immutable()
-                : pos.relative(state.getValue(BedBlock.FACING)).immutable();
+                : pos.relative(state.getValue(AbstractBedBlock.FACING)).immutable();
     }
 
     /** 没床时把下一步递到她面前——包括"你自己身上就带着一张"({@code inventory} 是她的背包)。 */
@@ -142,7 +145,7 @@ public final class SleepOps {
         for (int i = 0; i < inv.getContainerSize(); i++) {
             ItemStack stack = inv.getItem(i);
             if (!stack.isEmpty() && stack.getItem() instanceof BlockItem block
-                    && block.getBlock() instanceof BedBlock) {
+                    && block.getBlock() instanceof AbstractBedBlock) {
                 return BuiltInRegistries.ITEM.getKey(stack.getItem()).toString()
                         + " x" + stack.getCount();
             }

@@ -32,7 +32,7 @@ public abstract class MixinGuiGraphics {
         return GuiAlpha.apply(color);
     }
 
-    @ModifyVariable(method = "innerBlit(Lcom/mojang/blaze3d/pipeline/RenderPipeline;Lcom/mojang/blaze3d/textures/GpuTextureView;Lcom/mojang/blaze3d/textures/GpuSampler;IIIIFFFFI)V",
+    @ModifyVariable(method = "innerBlit(Lcom/mojang/renderpearl/api/pipeline/RenderPipeline;Lcom/mojang/renderpearl/api/textures/GpuTextureView;Lcom/mojang/renderpearl/api/textures/GpuSampler;IIIIFFFFI)V",
             at = @At("HEAD"), argsOnly = true, ordinal = 4)
     private int numen$blitColor(int color) {
         return GuiAlpha.apply(color);

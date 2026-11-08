@@ -18,6 +18,7 @@ import net.minecraft.network.protocol.game.ServerboundPlayerAbilitiesPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket;
+import net.minecraft.network.protocol.game.ServerboundPunchPacket;
 import net.minecraft.network.protocol.game.ServerboundRenameItemPacket;
 import net.minecraft.network.protocol.game.ServerboundSelectTradePacket;
 import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
@@ -33,6 +34,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Abilities;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.entity.SignTextSlot;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -65,9 +67,23 @@ public final class ClientPackets {
                 new ServerboundClientCommandPacket(ServerboundClientCommandPacket.Action.PERFORM_RESPAWN));
     }
 
-    /** 答传送编号:服务端每次传送她都等客户端报这个数。 */
+    /**
+     * 答传送编号:服务端每次传送她都等客户端报这个数,连同客户端把传送落到自己身上之后的位置与朝向——服务端已经把她的身体
+     * 放到了传送点,报的就是她此刻的位置与朝向,和原版客户端落定之后报的一样。
+     *
+     * <p>服务端把这个报告当一次移动来查,起点是它记下的"这一刻开头她在哪"({@code resetPosition})。真玩家的这个起点由网络层每刻
+     * 的 {@code tickPlayer} 记下,传送与回执之间总隔着一次;她的一刻不走那趟(身体由 {@link Physics} 推动),所以回执前先记下她此刻的位置,
+     * 和真玩家回执时服务端手里的起点一样,这次移动是零。
+     */
     public void acceptTeleport(int id) {
-        body.connection.handleAcceptTeleportPacket(new ServerboundAcceptTeleportationPacket(id));
+        body.connection.resetPosition();
+        body.connection.handleAcceptTeleportPacket(new ServerboundAcceptTeleportationPacket(id,
+                body.getX(), body.getY(), body.getZ(), body.getYRot(), body.getXRot()));
+    }
+
+    /** 左键挥一下(打、挖的每一下):原版服务端按主手物品的攻击动作挥手给看着她的人,并把攻击蓄力清零。 */
+    public void punch() {
+        body.connection.handlePunch(ServerboundPunchPacket.INSTANCE);
     }
 
     /** 报"世界加载好了":服务端开始给她发区块后,客户端加载完就发这个,在这之前服务端不收她的动作包。 */
@@ -129,8 +145,8 @@ public final class ClientPackets {
         while (four.size() < 4) {
             four.add("");
         }
-        body.connection.handleSignUpdate(new ServerboundSignUpdatePacket(pos, front, four.get(0), four.get(1),
-                four.get(2), four.get(3)));
+        body.connection.handleSignUpdate(new ServerboundSignUpdatePacket(pos, List.copyOf(four),
+                front ? SignTextSlot.FRONT : SignTextSlot.BACK));
     }
 
     /**

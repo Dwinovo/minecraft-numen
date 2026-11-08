@@ -6,6 +6,7 @@ import com.dwinovo.numen.pathing.world.Semantics.Kind;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.FallingBlock;
 import net.minecraft.world.level.block.GameMasterBlock;
@@ -75,11 +76,11 @@ public final class DigRules {
         return null;
     }
 
-    /** 原版 {@code IceBlock.playerDestroy}:下面挡得住移动或是液体时,冰挖掉留下一格水。原版用的就是这两个方法。 */
+    /** 原版 {@code IceBlock.playerDestroy}:下面是 {@code #ice_melts_when_destroyed_above} 或液体时,冰挖掉留下一格水。原版看的就是这两样。 */
     @SuppressWarnings("deprecation")
     private static boolean melts(WorldView view, BlockPos pos) {
         BlockState below = view.getBlockState(pos.below());
-        return below.blocksMotion() || below.liquid();
+        return below.is(BlockTags.ICE_MELTS_WHEN_DESTROYED_ABOVE) || below.liquid();
     }
 
     /** 水平邻格的液体会不会流进挖空的格。 */

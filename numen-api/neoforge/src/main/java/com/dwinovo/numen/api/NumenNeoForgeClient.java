@@ -92,7 +92,8 @@ public class NumenNeoForgeClient {
     /** 点在消息通知上的那一下归通知,界面不再处理。 */
     static void onScreenMousePressed(net.neoforged.neoforge.client.event.ScreenEvent.MouseButtonPressed.Pre event) {
         if (com.dwinovo.numen.api.client.notify.MessageNotices.click(
-                event.getMouseX(), event.getMouseY(), event.getButton())) {
+                event.getMouseX(), event.getMouseY(),
+                com.dwinovo.numen.api.client.ui.mc.McInput.button(event.getButton()))) {
             event.setCanceled(true);
         }
     }

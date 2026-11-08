@@ -2,7 +2,7 @@ package com.dwinovo.numen.tools;
 
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.knowledge.RecipePage;
-import net.minecraft.core.HolderLookup;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.Item;
@@ -84,7 +84,7 @@ public final class RecipeBook {
     }
 
     /** 从这些配方里挑出 {@code wanted} 要的,每条描述成一行;一条坏配方只丢它自己。 */
-    static RecipePage collect(Iterable<? extends RecipeHolder<?>> holders, HolderLookup.Provider registries,
+    static RecipePage collect(Iterable<? extends RecipeHolder<?>> holders, RegistryAccess registries,
                          BiPredicate<Recipe<?>, ItemStack> wanted, CraftingRow crafting) {
         List<com.dwinovo.numen.api.knowledge.Recipe> described = new ArrayList<>();
         List<com.dwinovo.numen.api.knowledge.Recipe> skeletons = new ArrayList<>();

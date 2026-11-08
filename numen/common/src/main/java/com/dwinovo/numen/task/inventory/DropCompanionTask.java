@@ -12,6 +12,7 @@ import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.task.base.Precondition;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Prediction;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 
@@ -67,7 +68,7 @@ public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTask
         // (附魔/耐久/改名/容器内容物),不按数量销毁再 new ItemStack 重造——凭空重造只属于创造模式的 creative give。
         // 丢哪一种由 Stacks.pick 定(只说了 id、背包里有几种不同的叠时,是主手那叠、否则第一格那叠),只丢这一种,
         // 别的叠一件不动;回执说丢的是哪一种、剩下的还有哪些。
-        // Toss like a real player: native Player.drop(stack, false) throws each stack in the facing
+        // Toss like a real player: native Player.drop throws each stack in the facing
         // direction with vanilla motion + pickup delay and fires the drop event (mods watching item
         // tosses see it) — instead of hand-building an ItemEntity with a made-up velocity.
         Optional<Stacks.Pick> pick = Stacks.pick(inv, r.item);
@@ -77,7 +78,7 @@ public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTask
             if (remaining <= 0) break;
             ItemStack out = inv.removeItem(slot, Math.min(inv.getItem(slot).getCount(), remaining));
             remaining -= out.getCount();
-            player.drop(out, false);
+            player.drop(out, false, Prediction.PREDICTED);
         }
         inv.setChanged();
         what = pick.map(p -> StackLabel.brief(p.sample())).orElse(r.label);

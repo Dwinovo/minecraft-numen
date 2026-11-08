@@ -78,7 +78,7 @@ final class PaperBodyHooks implements Listener {
             if (!change.isEmpty()) {
                 String id = holder.id().toString();
                 NumenEvents.advancementReward(her, id,
-                        holder.value().display().map(d -> d.getTitle().getString()).orElse(id), change);
+                        holder.value().display().map(d -> d.title().getString()).orElse(id), change);
             }
         });
     }

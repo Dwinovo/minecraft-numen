@@ -98,7 +98,7 @@ public final class StackLabel {
         }
         var bundle = stack.get(DataComponents.BUNDLE_CONTENTS);
         if (bundle != null && !bundle.isEmpty()) {
-            parts.add("holds " + contents(bundle.itemCopyStream().toList()));
+            parts.add("holds " + contents(bundle.itemCopies().toList()));
         }
         String brew = brew(stack);
         if (!brew.isEmpty()) {
@@ -126,9 +126,9 @@ public final class StackLabel {
             parts.add("lore");
         }
         List<String> others = new ArrayList<>();
-        stack.getComponentsPatch().entrySet().forEach(e -> {
-            if (e.getValue().isPresent() && !known(e.getKey())) {
-                others.add(BuiltInRegistries.DATA_COMPONENT_TYPE.getKey(e.getKey()).getPath());
+        stack.getComponentsPatch().split().added().keySet().forEach(type -> {
+            if (!known(type)) {
+                others.add(BuiltInRegistries.DATA_COMPONENT_TYPE.getKey(type).getPath());
             }
         });
         if (!others.isEmpty()) {

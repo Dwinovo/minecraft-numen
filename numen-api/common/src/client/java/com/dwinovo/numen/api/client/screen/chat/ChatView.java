@@ -1761,7 +1761,7 @@ public final class ChatView {
         if (mc.options.chatLinksPrompt().get()) {
             net.minecraft.client.gui.screens.ConfirmLinkScreen.confirmLinkNow(mc.gui.screen(), uri, false);
         } else {
-            net.minecraft.util.Util.getPlatform().openUri(uri);
+            com.mojang.blaze3d.Blaze3D.openUri(uri);
         }
     }
 }

@@ -31,6 +31,7 @@ import net.minecraft.world.item.FireChargeItem;
 import net.minecraft.world.item.FlintAndSteelItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.SwingAnimation;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
@@ -286,7 +287,7 @@ public class Mouse {
         BlockState state = level.getBlockState(pos);
         if (body.gameMode.isCreative()) {
             cooldown(true, true);
-            body.swing(InteractionHand.MAIN_HAND);
+            packets.punch();
             send(ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, pos, face);
             return landed(level, pos, state);
         }
@@ -299,7 +300,7 @@ public class Mouse {
             return Strike.SWINGING;
         }
         progress += state.getDestroyProgress(body, level, pos);
-        body.swing(InteractionHand.MAIN_HAND);
+        packets.punch();
         if (progress < 1.0F) {
             return Strike.SWINGING;
         }
@@ -323,7 +324,7 @@ public class Mouse {
     /** 第一下:原版客户端换了目标就先放下旧的,再送 START;秒破的当场碎,否则开始累加进度。 */
     private Strike start(ServerLevel level, BlockPos pos, Direction face, BlockState state) {
         release();
-        body.swing(InteractionHand.MAIN_HAND);
+        packets.punch();
         boolean instant = !state.isAir() && state.getDestroyProgress(body, level, pos) >= 1.0F;
         send(ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, pos, face);
         if (instant) {
@@ -426,7 +427,7 @@ public class Mouse {
         }
         body.setSprinting(false);
         body.attack(target);
-        body.swing(InteractionHand.MAIN_HAND);
+        packets.punch();
         return new Blow.Landed(target);
     }
 
@@ -554,14 +555,12 @@ public class Mouse {
         if (pos.getY() > level.getMaxY() || !level.mayInteract(body, pos)) {
             return InteractionResult.PASS;
         }
+        SwingAnimation animation = stack.getInteractAnimation();
         InteractionResult result = body.gameMode.useItemOn(body, level, stack, hand, hit);
         if (result.consumesAction()) {
             CriteriaTriggers.ANY_BLOCK_USE.trigger(body, pos, stack.copy());
         }
-        if (result instanceof InteractionResult.Success success
-                && success.swingSource() == InteractionResult.SwingSource.SERVER) {
-            body.swing(hand, true);
-        }
+        swing(result, hand, animation);
         return result;
     }
 
@@ -575,12 +574,20 @@ public class Mouse {
 
     /** 用手里的东西({@code useItem});它吃掉了这一下为 true。 */
     private boolean useItem(ServerLevel level, ItemStack stack, InteractionHand hand) {
+        SwingAnimation animation = stack.getInteractAnimation();
         InteractionResult result = body.gameMode.useItem(body, level, stack, hand);
-        if (result instanceof InteractionResult.Success success
-                && success.swingSource() == InteractionResult.SwingSource.SERVER) {
-            body.swing(hand);
-        }
+        swing(result, hand, animation);
         return result.consumesAction();
+    }
+
+    /**
+     * 右键之后挥手,照原版服务端:结果说该挥就按物品的交互动作挥,并把攻击蓄力清零;客户端已经自己挥过的({@code PREDICTED})
+     * 只挥给看着她的人。{@code animation} 取自用之前的那一叠(用完可能就没了)。
+     */
+    private void swing(InteractionResult result, InteractionHand hand, SwingAnimation animation) {
+        if (result instanceof InteractionResult.Success success && success.shouldSwing()) {
+            body.swingAndResetAttackStrength(hand, animation, success.swingSource() != InteractionResult.SwingSource.PREDICTED);
+        }
     }
 
     /**

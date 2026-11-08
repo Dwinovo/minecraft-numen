@@ -1,6 +1,6 @@
 package com.dwinovo.numen.tools;
 
-import net.minecraft.core.HolderLookup;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.util.context.ContextMap;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingInput;
@@ -40,9 +40,9 @@ public final class RecipeProbe {
      * 任意类型配方(含模组机器的)展示给配方书的产出:第一个解得出东西的展示里的产出格。配方书按类型列配方时问它,
      * 模组配方的输入各不相同,空输入 assemble 问不了。
      */
-    public static ItemStack displayedResult(Recipe<?> recipe, HolderLookup.Provider registries) {
-        ContextMap context = new ContextMap.Builder().withParameter(SlotDisplayContext.REGISTRIES, registries)
-                .create(SlotDisplayContext.CONTEXT);
+    public static ItemStack displayedResult(Recipe<?> recipe, RegistryAccess registries) {
+        ContextMap context = ContextMap.builder().set(SlotDisplayContext.REGISTRIES, registries)
+                .buildAndValidate(SlotDisplayContext.CONTEXT);
         return probe(() -> recipe.display().stream().map(display -> display.result().resolveForFirstStack(context))
                 .filter(stack -> !stack.isEmpty()).findFirst().orElse(ItemStack.EMPTY));
     }

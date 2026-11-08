@@ -52,7 +52,7 @@ import java.util.function.Consumer;
  * <h2>玩家打她的击退:客户端本该应用的那个速度包</h2>
  * 原版玩家攻击另一名玩家时,把击退算进目标的速度、给目标发一个速度包,随即把服务端上的速度清回原值——击退是由目标的客户端
  * 收到包后应用的。她没有客户端,所以不接的话玩家打她纹丝不动。这里只接这一种:发给她自己的速度包、而且发的当时
- * {@code hurtMarked} 为真(原版清它在发包之后)。别的速度包不归这里:怪打她的击退由服务端实体追踪发出,那时 {@code hurtMarked}
+ * {@code syncVelocity} 为真(原版清它在发包之后)。别的速度包不归这里:怪打她的击退由服务端实体追踪发出,那时 {@code syncVelocity}
  * 已经清了,而且服务端上的速度本来就是对的。
  *
  * <h2>死了以后点"重生"</h2>
@@ -152,16 +152,15 @@ public final class FakeClient {
                 && event.getEvent() == ClientboundGameEventPacket.LEVEL_CHUNKS_LOAD_START) {
             awaitingLoaded = true;
         } else if (packet instanceof ClientboundSetEntityMotionPacket motion
-                && motion.id() == player.getId() && player.hurtMarked) {
+                && motion.id() == player.getId() && player.syncVelocity) {
             knockback = motion.movement();
         } else if (packet instanceof ClientboundSystemChatPacket said) {
             heard(said.content(), said.overlay());
         } else if (arrived && packet instanceof ClientboundPlayerChatPacket chat
                 && chat.chatType().chatType().is(ChatType.MSG_COMMAND_INCOMING)) {
             // 签了名的私聊带着发话人的 uuid;正文是服务端加工过的那一版,没有就是原文
-            Component text = chat.unsignedContent();
             Whispers.heard(player, chat.sender(), chat.chatType().name().getString(),
-                    text != null ? text.getString() : chat.body().content());
+                    chat.unsignedContent().map(Component::getString).orElse(chat.body().content()));
         }
     }
 

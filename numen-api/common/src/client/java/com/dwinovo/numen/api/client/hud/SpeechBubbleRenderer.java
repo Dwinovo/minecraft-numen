@@ -128,7 +128,7 @@ public final class SpeechBubbleRenderer {
         // 锚点在名牌上方:小方尾的尖端落在这里,气泡向上生长
         poseStack.translate(0, body.getBbHeight() + 0.95, 0);
         // 1.21.9+ 相机朝向从渲染状态里取(与原版名牌同一个来源)。
-        poseStack.mulPose(camera.orientation);
+        poseStack.rotate(camera.orientation);
         poseStack.scale(SCALE, -SCALE, SCALE);
         drawBubble(poseStack, collector, mc.font, st, dtMs / 1000f);
         poseStack.popPose();

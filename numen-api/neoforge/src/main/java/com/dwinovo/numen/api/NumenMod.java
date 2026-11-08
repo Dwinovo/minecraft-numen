@@ -23,8 +23,10 @@ public class NumenMod {
         // Register the TOML config spec — NeoForge handles file creation +
         // hot-reload from this point on. SPEC is built lazily in the
         // NeoForgeNumenConfig static initialiser so referencing it here is
-        // safe (no I/O happens until the world loads).
-        container.registerConfig(ModConfig.Type.COMMON, NeoForgeNumenConfig.SPEC);
+        // safe (no I/O happens until the world loads). LOCAL is the per-install,
+        // never-synced type; the file keeps its numen-common.toml name so the
+        // values players already filled in are still read.
+        container.registerConfig(ModConfig.Type.LOCAL, NeoForgeNumenConfig.SPEC, "numen-common.toml");
 
         // Queue payload registrations into NeoForgeNetworkChannel; the queue
         // flushes when RegisterPayloadHandlersEvent fires (see below).

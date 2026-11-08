@@ -8,6 +8,7 @@ import com.dwinovo.numen.api.network.NumenNetwork;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 
@@ -633,7 +634,9 @@ public final class Companions {
     private static void dropEverything(NumenPlayer body) {
         for (GearSlot slot : NumenPlugins.gearSlots(body)) {
             ItemStack worn = slot.swap(ItemStack.EMPTY);
-            if (!worn.isEmpty()) body.drop(worn, true, false);
+            // 和原版 Inventory.dropAll 掉物品栏里的东西一样:散落在身边,不算从手里扔出
+            ItemEntity dropped = worn.isEmpty() ? null : body.createItemStackToDrop(worn, true, false);
+            if (dropped != null) body.level().addFreshEntity(dropped);
         }
         body.getInventory().dropAll();
     }

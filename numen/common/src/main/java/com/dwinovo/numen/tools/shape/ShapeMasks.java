@@ -4,6 +4,7 @@ import com.dwinovo.numen.build.BuildStates;
 import net.minecraft.commands.arguments.blocks.BlockStateParser;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderSet;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.EmptyBlockGetter;
 import net.minecraft.world.level.block.Block;
@@ -75,7 +76,7 @@ final class ShapeMasks {
             case "#air":
                 return AIR;
             case "#solid":
-                return (w, x, y, z) -> w.at(x, y, z).blocksMotion();
+                return (w, x, y, z) -> w.at(x, y, z).is(BlockTags.BLOCKS_MOTION);
             case "#fullcube":
                 return (w, x, y, z) -> Block.isShapeFullBlock(w.at(x, y, z).getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO));
             case "#exposed", "#surface":

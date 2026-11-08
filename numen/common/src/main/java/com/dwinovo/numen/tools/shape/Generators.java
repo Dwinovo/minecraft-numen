@@ -18,8 +18,9 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LeavesBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkGenerator;
-import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
+import net.minecraft.world.level.levelgen.densityfunction.SamplerContext;
 import net.minecraft.world.level.levelgen.feature.CoralTreeFeature;
+import net.minecraft.world.level.levelgen.feature.Feature;
 import net.minecraft.world.level.levelgen.feature.TreeFeature;
 import net.minecraft.world.level.levelgen.placement.PlacedFeature;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
@@ -74,7 +75,7 @@ final class Generators {
         Registry<PlacedFeature> placed = level.registryAccess().lookupOrThrow(Registries.PLACED_FEATURE);
         List<String> out = new ArrayList<>();
         for (var entry : placed.entrySet()) {
-            var feature = entry.getValue().feature().value().feature();
+            Feature feature = entry.getValue().feature().value();
             if (feature instanceof TreeFeature || feature instanceof CoralTreeFeature) {
                 out.add(entry.getKey().identifier().toString());
             }
@@ -103,7 +104,7 @@ final class Generators {
     static Grown feature(LoadedBlocks w, BlockPos at, String text) {
         ServerLevel level = w.level();
         Identifier id = id(text, "feature", "numen.shape.feature");
-        ConfiguredFeature<?, ?> feature = level.registryAccess().lookupOrThrow(Registries.CONFIGURED_FEATURE).getValue(id);
+        Feature feature = level.registryAccess().lookupOrThrow(Registries.FEATURE).getValue(id);
         if (feature == null) {
             throw new ApiError(ErrorKind.NOT_FOUND, "no feature \"" + text + "\" in this game", hint("numen.shape.feature"));
         }
@@ -140,8 +141,10 @@ final class Generators {
         try {
             placed = recorded.attempt(() -> {
                 StructureStart start = structure.generate(registry.wrapAsHolder(structure), level.dimension(),
-                        level.registryAccess(), generator, generator.getBiomeSource(), level.getChunkSource().randomState(),
-                        level.getStructureManager(), level.getSeed(), chunkPos, 0, view, biome -> true);
+                        level.registryAccess(), generator, generator.getBiomeSource(),
+                        level.getChunkSource().randomState().createClimateSampler(SamplerContext.EMPTY_UNCACHED),
+                        level.getChunkSource().randomState(), level.getStructureTemplateManager(), level.getSeed(), chunkPos, 0,
+                        view, biome -> true);
                 if (!start.isValid()) {
                     return false;
                 }

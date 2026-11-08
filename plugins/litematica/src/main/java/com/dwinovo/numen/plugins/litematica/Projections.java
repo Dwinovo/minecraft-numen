@@ -200,7 +200,7 @@ final class Projections {
             }
             BlockPos regionPos = sub.getPos();
             // 子区域里的下标 (0,0,0) 在它最低的那个角,而子区域的位置是它画的那个角(可以是任何一个)
-            BlockPos posEndRel = new BlockPos(PositionUtils.getRelativeEndPositionFromAreaSize(regionSize)).offset(regionPos);
+            BlockPos posEndRel = regionPos.offset(PositionUtils.getRelativeEndPositionFromAreaSize(regionSize));
             BlockPos posMinRel = PositionUtils.getMinCorner(regionPos, posEndRel);
             BlockPos total = PositionUtils.getTransformedBlockPos(regionPos, mirrored, turned).offset(placement.getOrigin());
             Rotation rotation = turned.getRotated(sub.getRotation());

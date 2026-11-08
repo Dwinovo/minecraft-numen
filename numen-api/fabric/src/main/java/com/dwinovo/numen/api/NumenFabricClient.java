@@ -52,7 +52,8 @@ public class NumenFabricClient implements ClientModInitializer {
                             com.dwinovo.numen.api.client.notify.MessageNotices.renderOver(g, mouseX, mouseY));
             net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents.allowMouseClick(screen).register(
                     (s, click) ->
-                            !com.dwinovo.numen.api.client.notify.MessageNotices.click(click.x(), click.y(), click.button()));
+                            !com.dwinovo.numen.api.client.notify.MessageNotices.click(click.x(), click.y(),
+                                    com.dwinovo.numen.api.client.ui.mc.McInput.button(click.button())));
         });
         net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK
                 .register(client -> {

@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.client.skin;
 
 import com.dwinovo.numen.api.Constants;
+import com.mojang.blaze3d.Blaze3D;
 import net.minecraft.util.Util;
 
 import java.io.IOException;
@@ -8,7 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * 在这台机器的系统文件管理器里打开一个文件夹(原版的 {@link Util.OS#openFile})。Windows 与 macOS 一定有;Linux 靠 {@code xdg-open},
+ * 在这台机器的系统文件管理器里打开一个文件夹(原版的 {@link Blaze3D#openPath},经 SDL 打开)。Windows 与 macOS 一定有;Linux 靠 {@code xdg-open},
  * 手机上的启动器(FCL 等)没有它——那里打不开,界面改成显示路径,请玩家用手机自带的文件管理器把图放进去(FCL 会把游戏目录通过
  * FolderProvider 交给手机的文件管理器)。
  */
@@ -30,7 +31,7 @@ public final class FolderOpener {
             Constants.LOG.warn("[numen-skin] 建不了皮肤文件夹 {}: {}", dir, e.toString());
             return;
         }
-        Util.getPlatform().openFile(dir.toFile());
+        Blaze3D.openPath(dir);
     }
 
     private static boolean onPath(String program) {

@@ -12,6 +12,7 @@ import com.dwinovo.numen.api.sdk.Note;
 import com.dwinovo.numen.api.sdk.Omitted;
 import com.dwinovo.numen.api.sdk.ServerCall;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.util.Prediction;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
@@ -61,7 +62,7 @@ public final class CreativeApi {
             int n = Math.min(remaining, item.getDefaultMaxStackSize());
             ItemStack stack = new ItemStack(item, n);
             if (!companion.getInventory().add(stack) && !stack.isEmpty()) {
-                companion.drop(stack, false);
+                companion.drop(stack, false, Prediction.SERVER_ONLY);
             }
             remaining -= n;
         }

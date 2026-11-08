@@ -62,7 +62,7 @@ final class BuildShowmanship {
         // ——每批都触发就是手臂永远画不完一个来回,看起来是抽搐不是干活。
         boolean swung = --swingCooldown <= 0;
         if (swung) {
-            player.swing(InteractionHand.MAIN_HAND);
+            player.swing(InteractionHand.MAIN_HAND, player.getMainHandItem().getInteractAnimation(), false);
             swingCooldown = SWING_PERIOD_TICKS;
         }
         if (sample != null) {

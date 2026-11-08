@@ -23,6 +23,6 @@ public final class DataGenerators {
     @SubscribeEvent
     public static void gatherData(GatherDataEvent.Client event) {
         PackOutput output = event.getGenerator().getPackOutput();
-        event.getGenerator().addProvider(true, new ModItemTagsProvider(output, event.getLookupProvider()));
+        event.getGenerator().addProvider(true, new ModItemTagsProvider(output, event.getWorldLookupProvider()));
     }
 }
