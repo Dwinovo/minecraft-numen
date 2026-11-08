@@ -85,6 +85,7 @@ public class BodyReportGameTests {
     public static void an_advancement_reward_arrives_as_an_event(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_achiever", new BlockPos(4, 2, 4), false);
+        // 这一代带经验奖励的进度取 bullseye(奖励 50 点经验)
         var holder = level.getServer().getAdvancements().getAdvancement(new ResourceLocation("minecraft:adventure/bullseye"));
         var advancements = companion.getAdvancements();
         List<String> remaining = new java.util.ArrayList<>();
@@ -95,7 +96,7 @@ public class BodyReportGameTests {
             List<String> told = GameTestKit.events(companion).stream()
                     .filter(e -> EventTypes.ADVANCEMENT_REWARD.equals(e.type()))
                     .map(com.dwinovo.numen.api.agent.inbox.EventQueue.Entry::text).toList();
-            helper.assertTrue(told.size() == 1 && told.get(0).contains("experience +40 points"),
+            helper.assertTrue(told.size() == 1 && told.get(0).contains("experience +50 points"),
                     "not one advancement_reward event with the experience: " + told);
             Constants.LOG.info("[numen-sample] advancement reward event -> {}", told.get(0));
             CompanionFactory.despawn(level.getServer(), companion);
