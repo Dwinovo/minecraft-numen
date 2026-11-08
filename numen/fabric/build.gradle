@@ -47,7 +47,7 @@ dependencies {
  * numen_api_gametest 里。用例、夹具与小模组的输出以普通类路径进开发运行(localRuntime),编译时对着 Numen 本体的类,运行时解析到
  * 本模块 main 的那一份。
  */
-// 结构模板:原版只在 IDE 里才从磁盘目录加载,Fabric 的 GameTest API 改从数据包的 data/<命名空间>/gametest/structure/ 加载。
+// 结构模板:原版只在 IDE 里才从磁盘目录加载,Fabric 的 GameTest API 改从数据包的 data/<命名空间>/gametest/structures/ 加载(这一代是复数)。
 // 把各模块的模板按它的套件名(也是它的结构命名空间)放到那里,当作小模组 numen_api_gametest 的资源(下面的 loom.mods 把它们并进同一个模组)
 sourceSets {
     gametestData {}
@@ -58,7 +58,7 @@ def syncFabricStructures = tasks.register('syncFabricGameTestStructures', Sync) 
     rootProject.ext.numenGameTestModules.each { path ->
         from(project(path).file('src/gametest/structures')) {
             include '*.snbt'
-            into "data/${rootProject.ext.numenSuites[path].gametest}/gametest/structure"
+            into "data/${rootProject.ext.numenSuites[path].gametest}/gametest/structures"
         }
     }
 }
