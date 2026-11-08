@@ -1596,10 +1596,10 @@ api client 23 编译错收敛七类符号、单测 2 红(id=0 的 hashCode)、ga
 方法:以 26.1.2 的对齐结果(`align-26.1.2`,已含 352c6fec8 与 26.1.2 的全部适配)为底,把 26.1.2 → 26.2 那一段差异(取自上一轮
 origin/26.1.2 → origin/26.2 的落地)逐个文件三方合并进去,冲突先取 26.1.2 那边,再由编译器与 GameTest 点名。下面只记 26.1.2 → 26.2 这一段。
 
-**构建旋钮**:MC `26.2` / range `[26.2, 26.3)` / NeoForm `26.2-2` / NeoForge `26.2.0.67` / Fabric API `0.161.0+26.2` / loader `0.20.1` /
+**构建旋钮**:MC `26.2` / range `[26.2, 26.3)` / NeoForm `26.2-2` / NeoForge `26.2.0.93` / Fabric API `0.161.0+26.2` / loader `0.20.1` /
 gson `2.14.0`(游戏自带的版本,slf4j 仍是 `2.0.17`)/ Paper 开发包 `26.2.build.135-stable` / MCProtocolLib `26.2`。
-NeoForge 没取最新的 `26.2.0.93`:它的打补丁源码在 moddev `2.0.141` 自带的 NFRT 里重编不过(`HolderSet` 匿名类的 `contents()`
-降了可见性),要换更新的 moddev,这一档不升插件。
+moddev 是 `2.0.148`:NeoForge `26.2.0.93` 的打补丁源码在 moddev `2.0.141` 自带的 NFRT 里重编不过(`HolderSet` 匿名类的 `contents()`
+降了可见性),`2.0.148` 带的 NFRT 编得过。
 
 **代码侧**
 - 客户端的屏幕与 HUD 拆家:`mc.screen` → `mc.gui.screen()`,`gui.getChat()`/`getGuiTicks()` → `gui.hud.*`,`mc.getToastManager()` →
