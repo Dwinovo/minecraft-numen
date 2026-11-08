@@ -1444,5 +1444,20 @@ Fabric 是原生 Loom(`net.fabricmc.fabric-loom`,不重映射,没有 `mappings`�
 **联动**:Curios `15.0.0+26.1.2`、YSM `2.6.5`(26.1)、KubeJS `26.1.2-8.0.8`(Rhino `2101.2.8-build.91`;运行期还要 Better Advanced Tooltips
 `2601.1.0-build.11`,`2601.1.1-build.12` 的 mods.toml 写的是 NeoForge 26.3 以上)、Litematica `0.27.14`/MaLiLib `0.28.12`(26.1 的发布物就是
 Mojang 名,普通 `compileOnly`)、JEI `29.53.0.115`。KubeJS 用例脚本里杀目标是 `target.kill(target.level)`(`Entity.kill` 要 `ServerLevel`)。
-不带:车万女仆、森罗物语厨房(没有 26.1 构建);FTB Quests `26.1.2.10` 有构建,但去掉了 Architectury:事件换成它自己的
-`api/event/*Event`,"是不是假玩家"挪进 FTB Library(`NeoMiscImpl.isFakePlayer`,判据同 Architectury),联动要按新接口重写,这一档没带。
+不带:车万女仆、森罗物语厨房(没有 26.1 构建)。
+
+**FTB Quests 联动(只 NeoForge)**:FTB Quests `26.1.2.10`、FTB Library `26.1.2.12`、FTB Teams `26.1.2.5`(Quests 构建时声明的一组)。
+这一代 FTB 不再用 Architectury,联动照新接口重写,设计不变(她是真玩家、同队一起推进、奖励进她背包要报告):
+- "是不是假玩家"挪进 FTB Library 的 `NeoMiscImpl.isFakePlayer`(凡是 `ServerPlayer` 子类都判假,判据同 Architectury)。联动自带一份
+  窄 mixin(`numen_ftbquests.mixins.json`,`neoforge.mods.toml` 里 `requiredMods = ["ftblibrary"]`),对同伴答"不是"。
+- 完成事件:`ObjectCompletedEvent` 没了,换成进度事件 `QuestProgressEvent`/`ChapterProgressEvent`(类型 STARTED/COMPLETED,数据是
+  `ProgressEventData`:队伍、对象、在线成员);NeoForge 上由 FTB Library 转成 `FTBQuestsEvent.QuestProgress/ChapterProgress` 发到
+  NeoForge 总线。换队是 `FTBTeamsEvent.PlayerChangedTeam`(数据里 `player()` 不在线为 null)。
+- `ServerQuestFile.INSTANCE`/`ClientQuestFile.INSTANCE` 私有化 → `getInstance()`;客户端玩家取 FTB Library 的 `ClientUtils.getClientPlayer()`。
+- 任务书数据从 NBT 换成 JSON5(`de.marhali.json5.Json5Object`,FTB Library 内嵌的 json5-java `3.0.0`):`readData` 对必有的字段
+  `orElseThrow`。用例照编辑器的做法搭任务书:新对象先填好(物品任务的物品),写出自己的数据再读回。
+- 标题原文的解析照 FTB 的 `TextUtils.parseRawText`:先把 Unicode 转义还原(commons-lang3 的 `UnicodeUnescaper`),JSON 走
+  `ComponentSerialization.CODEC`。
+- 26.x 的 GameTest 登记不再看 `neoforge.enabledGameTestNamespaces`,NeoForge 自己的联网协商用例因此进了每一次跑批;装着 FTB 时
+  原版客户端被 FTB 的频道拒之门外,和这条用例要查的"我们的频道"无关。照 1.21.1 的口径,运行配置只开联动命名空间时不带这条用例。
+- 26.2、26.3 没有 FTB 的构建,这两档不带。
