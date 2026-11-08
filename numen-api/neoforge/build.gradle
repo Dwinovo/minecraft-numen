@@ -31,14 +31,14 @@ dependencies {
     }
     // mcp 模块的其余第三方库(Reactor、Tomcat……)同理嵌套带上;清单从 mcp 的依赖解析出来。官方 SDK 与重定位过的 Jackson、Nimbus
     // 不在其中,它们的类平铺进发行 jar(见 numen-api-loader.gradle)。
-    Modules.nestedLibraries(project(':mcp')).each { coordinate ->
+    Modules.nestedLibraries(rootProject.project(':mcp')).each { coordinate ->
         def libVersion = coordinate.split(':')[2]
         jarJar(coordinate) {
             transitive = false
             version { strictly "[${libVersion},)"; prefer libVersion }
         }
     }
-    gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
+    gametestCompileOnly rootProject.project(':numen-api:common').sourceSets.testFixtures.output
 }
 processGametestResources {
     var expandProps = ['neoforge_loader_version_range': neoforge_loader_version_range]
