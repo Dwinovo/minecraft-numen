@@ -402,6 +402,7 @@ Thread.ofVirtual().name(n).start(r)    →  守护平台线程(缓存线程池)
   (`GameTestServerRulesMixin` 照旧);`@GameTest` 没有 `skyAccess`(`SkyAccess` 照旧)。模板一律经 `StructureTemplateManager` 取,
   测试模板目录这个来源只在 `IS_RUNNING_IN_IDE` 时登记:`StructureTemplateTestDirMixin` 在测试服里照样登记。结构模板 SNBT 的 `DataVersion` 是 3700。
 - Forge 49 的 GameTest 用例过滤(`forge.enabledGameTestNamespaces`)按批次名(等于这个名字或以它加分隔符开头),联动跑批的批次名就是套件名。
-- 端到端的协议客户端是 MCProtocolLib 1.20.4-1;JEI 17 没有 `getRecipeIngredients`,配方的格位由 `createRecipeLayoutDrawable` 排出来读;
+- 端到端的协议客户端是 MCProtocolLib 1.20.4-1(有配置阶段:品牌包到了报语言,ping 回 pong;它的 pom 指着已经没有的 Adventure 4.15.0 快照,
+  用 Adventure 的 BOM 取同版正式发行);JEI 17 没有 `getRecipeIngredients`,配方的格位由 `createRecipeLayoutDrawable` 排出来读;
   Litematica 0.17 用 `getAreaSize`。FTB Quests 2004 没有 `Quest.isSearchable` 与 `TeamData.getCannotStartReason`(用 `isVisible`,
   `QuestBook.cannotStartReason` 点名还没完成的前置任务),服务端那本书的 JSON 标题按 FTB 的顺序先试 `Component.Serializer`(`QuestNames`)。
