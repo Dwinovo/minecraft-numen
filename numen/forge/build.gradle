@@ -11,6 +11,10 @@ evaluationDependsOn(':numen:common')
 evaluationDependsOn(':numen-api:forge')
 evaluationDependsOn(':mcp')
 
+// ForgeGradle 把开发期的 Forge(版本带 _mapped_,只在本机的 FG 缓存里有)记成依赖,原样发出去第三方解析不了:
+// fg.component 把它从 POM 里去掉,并且不发 Gradle 模块元数据(第三方与 fg.deobf 都按 POM 解析)。
+publishing.publications.named('mavenJava', MavenPublication) { fg.component(it) }
+
 // Forge 1.20.4 运行期是 SRG 名,而 mixin 源码按官方名写——必须生成 refmap 把
 // @Accessor("nibble") 之类的字符串引用翻译过去,否则运行期找不到字段直接崩。
 // (Fabric 那边由 loom 在 remapJar 期改写注解,机制不同,见 fabric/build.gradle。)
