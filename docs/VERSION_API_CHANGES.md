@@ -1152,8 +1152,9 @@ FTB Teams `2111.1.1`、Architectury `19.0.1` 一组;2111 这一线的 `neoforge.
 (JSON 标题走 `ComponentSerialization.CODEC` 加任务书的注册表上下文,和 FTB 自己的 `TextUtils.parseRawText` 同一条路);
 它的 GameTest 换成 Numen API 夹具的 `@GameTest`/`@BeforeBatch` 与 `Checks.assertTrue`。
 不带 YSM、车万女仆、森罗物语厨房、KubeJS(1.21.11 都没有可用构建;KubeJS 的 maven 只有 2004–2101 与 26.x)。
-不带 Litematica:1.21.11 的 Litematica/MaLiLib 构建全出自 Loom 1.16.3 与 1.17.20(清单的 `Fabric-Loom-Version`),本仓库的 Loom 1.14.10
-拒收更新的 Loom 打的模组(`Mod was built with a newer version of Loom`),Loom 1.17 又要更新的 Gradle。
+带 Litematica `0.26.16`/MaLiLib `0.27.20`(Litematica 要 MaLiLib `>=0.27.19`),联动代码与 1.21.10 相同,NeoForge 上的目标模组是 Forgematica。
+这两个构建出自 Loom 1.17.20(清单的 `Fabric-Loom-Version`),Loom 拒收 major.minor 比自己新的 Loom 打的模组
+(`Mod was built with a newer version of Loom`),所以本分支的 Loom 是 `1.17.21`(Loom 1.16 起要 Gradle 9.4+,本仓库 9.7.1)。
 Paper 开发包 `1.21.11-R0.1-SNAPSHOT`。
 
 ## 1.21.11 → 26.1.2
