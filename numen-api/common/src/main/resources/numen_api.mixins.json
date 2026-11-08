@@ -6,7 +6,6 @@
   "mixins": [
     "BlockItemPlaceMixin",
     "BoatAccessor",
-    "GameModeAccessor",
     "ItemEntityTouchMixin",
     "PlayerAdvancementsRewardMixin",
     "PlayerListRespawnMixin",

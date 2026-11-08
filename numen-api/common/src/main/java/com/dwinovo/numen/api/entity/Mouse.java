@@ -10,7 +10,6 @@ import com.dwinovo.numen.api.permission.ConsentItem;
 import com.dwinovo.numen.api.permission.Gate;
 import com.dwinovo.numen.api.permission.PlacedBlocks;
 import com.dwinovo.numen.api.permission.Permission;
-import com.dwinovo.numen.api.platform.Services;
 import com.dwinovo.numen.permission.Verdict;
 
 import net.minecraft.advancements.triggers.CriteriaTriggers;
@@ -57,8 +56,12 @@ import net.minecraft.world.phys.Vec3;
  * 模式缓 5 刻,秒破的不缓)。手上的东西换了就从头挖;原地变了的(修补附魔吸经验改了耐久)还是同一件,不重开——原版客户端记的是
  * 手上那一叠本身。换了一格挖,或松开({@link #release})进度清零。
  *
- * <p>服务端没挖掉就是没让挖:送 STOP 之后方块没变,看服务端自己的记账({@link Awaiting})——它把这一格挂成延迟破坏(进度比
- * 客户端慢)就接着等它自己挖掉;没挂着、方块也没变,以 {@link Refusal#SERVER} 收场,不空挥到超时。
+ * <p>送了 STOP 之后只看眼前这一格,不问服务端的记账,照原版客户端:STOP 时客户端先把这一格预测成空气,服务端确认这个序号时
+ * ({@code BlockStatePredictionHandler.endPredictionsUpTo})把它改回服务端那头的样子——服务端进度不够、挂成延迟破坏时,方块就弹了回来。
+ * 键还按着,客户端缓过 {@code destroyDelay} 就对同一格({@code destroyBlockPos} 没清)从 0 接着累进度,不再送 START,累满再送一次 STOP;
+ * 服务端按从第一次 START 起走过的刻数判第二次 STOP。所以这里:方块没了(不管是哪一头挖掉的)就是挖掉了;方块还在就缓手、
+ * 同一格从 0 再挖一轮;第二轮挖满、第二次 STOP 之后方块还在,才以 {@link Refusal#SERVER} 收场——真玩家看到方块第二次弹回来就明白
+ * 挖不掉了。不数刻:服务端的钟走得快慢不一(Paper 按墙钟补刻)。
  *
  * <h2>右键:用</h2>
  * 照原版客户端的 {@code Minecraft.startUseItem}:两次右键至少隔 4 刻;正在挖时不按;每只手(主手先)先试准星落着的东西——方块
@@ -168,7 +171,7 @@ public class Mouse {
     /** 开挖时手上那一叠本身(不是副本)。 */
     private ItemStack destroyingItem = ItemStack.EMPTY;
     private float progress;
-    /** 送过 STOP、等服务端落地的那一格与原来的方块;没在等为 null。 */
+    /** 正在挖的那一格送过一次 STOP、方块还在时,那一格与送 STOP 时的方块;没送过为 null。 */
     private BlockPos stopped;
     private BlockState stoppedState;
 
@@ -239,7 +242,7 @@ public class Mouse {
 
     // ==================== 左键 ====================
 
-    /** 左键正按在某一格上(包括送了 STOP 在等服务端落地)。 */
+    /** 左键正按在某一格上(包括送过一次 STOP、方块还在的那一格)。 */
     public boolean digging() {
         return pressing() != null;
     }
@@ -249,14 +252,17 @@ public class Mouse {
         return progress;
     }
 
-    /** 送过 STOP、方块还没变、服务端还挂着这一格:等它自己挖掉。这时只该再调 {@link #dig},看它报挖掉了还是被退回。 */
-    public boolean awaitingServer() {
+    /**
+     * 正在挖的那一格送过一次 STOP、方块还在:它随时可能没了(服务端挂着的延迟破坏走完),也可能要再挖一轮。这时只该接着调
+     * {@link #dig},看它报挖掉了、还在挖,还是没让挖。
+     */
+    public boolean stopSent() {
         return stopped != null;
     }
 
-    /** 左键正按在哪一格上(包括送了 STOP 在等服务端落地的那一格);没按为 null。 */
+    /** 左键正按在哪一格上(包括送过一次 STOP、方块还在的那一格);没按为 null。 */
     public BlockPos pressing() {
-        return stopped != null ? stopped : destroying;
+        return destroying;
     }
 
     /**
@@ -265,8 +271,12 @@ public class Mouse {
      */
     public Strike dig() {
         ServerLevel level = body.level();
-        if (stopped != null) {
-            return awaitStop(level);
+        if (stopped != null && level.getBlockState(stopped) != stoppedState) {
+            // 送过 STOP 的那一格没了:挖掉了
+            BlockPos pos = stopped;
+            BlockState before = stoppedState;
+            forget();
+            return new Strike.Broke(pos, before);
         }
         if (!(pick() instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) {
             release();
@@ -296,7 +306,7 @@ public class Mouse {
             return start(level, pos, face, state);
         }
         if (state.isAir()) {
-            destroying = null;
+            forget();
             return Strike.SWINGING;
         }
         progress += state.getDestroyProgress(body, level, pos);
@@ -304,16 +314,30 @@ public class Mouse {
         if (progress < 1.0F) {
             return Strike.SWINGING;
         }
-        destroying = null;
         progress = 0;
         cooldown(false, false);
         send(ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, pos, face);
         if (level.getBlockState(pos) != state) {
+            forget();
             return new Strike.Broke(pos, state);
         }
+        if (stopped != null) {
+            // 第二轮挖满、第二次 STOP 之后还在:没让挖
+            forget();
+            return new Strike.Refused(pos, Refusal.SERVER);
+        }
+        // 方块弹了回来:还按在这一格上,缓过手同一格从 0 再挖一轮
         stopped = pos;
         stoppedState = state;
         return Strike.SWINGING;
+    }
+
+    /** 这一格挖完了(挖掉了或没让挖):不再按在它上面。 */
+    private void forget() {
+        destroying = null;
+        progress = 0;
+        stopped = null;
+        stoppedState = null;
     }
 
     /** 碎掉一格之后缓手:缓的那几刻里不挖,下一刻才挖下一格。 */
@@ -343,53 +367,16 @@ public class Mouse {
                 : new Strike.Refused(pos, Refusal.SERVER);
     }
 
-    /** 送过 STOP 还没碎之后,服务端那一头的几种情形。 */
-    enum Awaiting {
-        /** 方块变了:挖掉了。 */
-        BROKE,
-        /** 方块还在,服务端还挂着这一格(延迟破坏,或仍在按进度破坏它):还在挖,等。 */
-        WAIT,
-        /** 方块还在,服务端也没再挂着它:被退回了。 */
-        REFUSED
-    }
-
     /**
-     * 判据只此一处,读服务端自己的记账而不数刻:挖到一半松手(服务端按它自己的钟算进度不够)会被挂成延迟破坏,它自己走完进度才破坏——
-     * 走得快慢随服务端的钟(Paper 按墙钟补刻),所以不能约定"等几刻"。
+     * 松开左键:正在挖的那一格放下,进度清零。没在挖时什么也不做。照原版客户端的 {@code stopDestroyBlock}:只在第一轮里(送 STOP 之前)
+     * 送 ABORT;送过 STOP 之后客户端已不在"破坏中",松手不再送。
      */
-    static Awaiting awaiting(boolean blockChanged, boolean serverStillBreaking) {
-        if (blockChanged) {
-            return Awaiting.BROKE;
-        }
-        return serverStillBreaking ? Awaiting.WAIT : Awaiting.REFUSED;
-    }
-
-    /** 送过 STOP 还没碎:服务端还挂着这一格就接着等,方块变了是挖掉了,两样都不是就是没让挖。 */
-    private Strike awaitStop(ServerLevel level) {
-        BlockPos pos = stopped;
-        switch (awaiting(level.getBlockState(pos) != stoppedState, Services.breaking().breaking(body.gameMode, pos))) {
-            case BROKE -> {
-                stopped = null;
-                return new Strike.Broke(pos, stoppedState);
-            }
-            case WAIT -> {
-                return Strike.SWINGING;
-            }
-            default -> {
-                stopped = null;
-                return new Strike.Refused(pos, Refusal.SERVER);
-            }
-        }
-    }
-
-    /** 松开左键:正在挖的那一格放下,进度清零。没在挖时什么也不做。 */
     public void release() {
-        if (destroying != null) {
+        if (destroying != null && stopped == null) {
             send(ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK, destroying, Direction.DOWN);
             body.resetAttackStrengthTicker();
         }
-        destroying = null;
-        progress = 0;
+        forget();
     }
 
     /** 这一个动作经服务端收包的入口送进去。 */
