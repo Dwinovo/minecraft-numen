@@ -291,6 +291,9 @@ stack.putByte("Count", (byte) 1);
   `JavaExec` 指定这一代的工具链。
 - 根项目一处写齐 ForgeGradle、MixinGradle、VanillaGradle 的版本:子项目继承父项目的构建脚本类路径(`:plugins:ysm` 用 VanillaGradle、
   它的子项目 `:plugins:ysm:gametest` 用 ForgeGradle),各写各的话 srgutils 有两份,子项目里 ForgeGradle 初始化就崩。
+- Forge 47 的事件总线变换器给每个新加载的类按线程上下文加载器查父类。外接大脑端点的内嵌 Tomcat 默认另建一个上级是系统加载器的
+  应用类加载器、处理请求时换成线程上下文加载器,在模组加载器下它找不到类,专用服一起端点就刷几十行 EVENTBUS 错误;端点停了
+  Reactor 的工作线程还带着作废的它。`McpEndpoint` 给上下文的加载器就是加载端点的那个(各版本同一写法)。
 
 ### 语言 / 线程(Java 17)
 ```java
@@ -345,6 +348,8 @@ Thread.ofVirtual().name(n).start(r)    →  守护平台线程(缓存线程池)
 - Forge 47 的服务端入口在 GameTest 模式下拿 `server.properties` 建好的世界直接 `new GameTestServer(...)`,不经 `GameTestServer.create`:
   测试世界成了普通地形,夹具挂在 `create` 上的清空世界目录、数据包维度、种子都不生效。numen-api/forge 的开发期小模组里
   `ForgeGameTestWorldMixin`(只在 Forge 跑批的运行配置里挂)把那一处换回 `create`。
+- 这一代原版给新玩家挑出生点(`ServerPlayer.fudgeSpawnLocation`)用当场新建、种子不定的随机数,扮主人的玩家每次开服落脚不同,
+  身边走刻的区块跟着变、世界随机数就错开:测试夹具 `ServerPlayerSpawnMixin` 按玩家在这一批里的编号定种子。
 - Forge 的 `StructureUtils` 补丁按模板名的路径(不带命名空间)在模板目录里找 SNBT;原版与 Fabric 开发期找不到时拿整个名字(带冒号)
   拼路径,Windows 上直接抛 `InvalidPathException`,所以 Fabric 的模板一定要放进数据包。
 - 因这一代的差异改过的用例场景:`an_advancement_reward_arrives_as_an_event` 用 bullseye(这一代没有 blowback,奖励 50 点经验);
