@@ -1,0 +1,93 @@
+/**
+ * 联动的 GameTest 在 Forge 上的那一次跑批(`./gradlew :plugins:<联动>:runGameTestServer`),几个联动共用的运行配置。
+ *
+ * <p>照成品拼:本体、联动(成品 jar 里它平铺在本体里)、联动的用例同在 numen 这一个模组里;Numen API 与它平铺的纯 JVM 模块是模组
+ * numen_api;GameTest 的支持(套件入口、模拟主人连接)是开发期的小模组 numen_api_gametest。目标模组由运行时类路径带进来,和玩家装它
+ * 一样被当成模组加载。Numen 自己的用例与寻路的用例不在这一次的类路径上,所以只跑这个联动的套件(根 build.gradle 的 numenSuites)。
+ *
+ * <p>应用它的项目要先应用 ForgeGradle,再在应用之前写好 {@code ext.pluginGameTest}:
+ * <ul>
+ *   <li>{@code sources}:并进模组 numen 的、本联动的源码集(联动本身与它的用例);</li>
+ *   <li>{@code mixins}:成品里由本体 jar 清单挂上、开发运行要显式挂的联动 mixin 配置(没有就空表)。</li>
+ * </ul>
+ */
+import com.dwinovo.numen.build.Modules
+
+evaluationDependsOn(':numen:forge')
+evaluationDependsOn(':numen-api:forge')
+evaluationDependsOn(':numen:pathing')
+
+def spec = project.ext.pluginGameTest
+def numenForge = project(':numen:forge')
+def gameTestStructures = project(':numen:common').layout.buildDirectory.dir('gameteststructures')
+def suite = providers.gradleProperty('gametest').orElse(rootProject.ext.numenSuites[project.path].gametest)
+
+// 跑批的类路径(见下面"Forge 49 的开发运行")
+sourceSets {
+    gameTestRun {}
+}
+
+minecraft {
+    runs {
+        gameTestServer {
+            workingDirectory project.file('runs/gametestserver')
+            ideaModule "${rootProject.name}.${project.path.substring(1).replace(':', '.')}.main"
+            taskName 'runGameTestServer'
+            property 'numen.gametest.suites', suite.get()
+            // 目标模组可能自带 GameTest,第三方模组的用例不归我们跑:Forge 49 按批次名过滤(等于这个名字或以它加分隔符开头),
+            // 我们这一批的批次名就是套件名
+            property 'forge.enabledGameTestNamespaces', suite.get()
+            property 'numen.gametest.structures', gameTestStructures.get().asFile.absolutePath
+            // 同仓的源码集在开发期是官方名,它们的 mixin 也按官方名写——不用 refmap 才对得上
+            property 'mixin.env.disableRefMap', 'true'
+            // 本体、Numen API 与联动在运行里是开发期打的 jar(不带清单),它们的 mixin 配置没人替它们声明:
+            // 发行物里由 jar 的 MixinConfigs 清单项接手,开发运行在这里显式挂。
+            (['numen.mixins.json', 'numen_api.mixins.json', 'numen_api.forge.mixins.json', 'numen_api_gametest.mixins.json',
+              'numen_api_gametest.forge.mixins.json']
+                    + spec.mixins).each { args '--mixin.config', it }
+            source sourceSets.gameTestRun
+        }
+    }
+}
+
+/*
+ * Forge 49 的开发运行只把"自带 META-INF/mods.toml 的类路径根"当模组,一个模组的类要在同一个根里(见 numen/forge/build.gradle):
+ * 模组 numen 是本体、平铺进发行 jar 的寻路模块、Numen 的夹具与本联动(联动本身与它的用例)打成的一个 jar;numen_api 与
+ * numen_api_gametest 用 Numen API 打好的那两个。目标模组由运行时类路径带进来(runtimeOnly),和玩家装它一样被当成模组加载。
+ */
+def numenDev = tasks.register('gametestDevJar', Zip) {
+    from numenForge.sourceSets.main.output
+    from project(':numen:pathing').sourceSets.main.output
+    from project(':numen:common').sourceSets.testFixtures.output
+    spec.sources.each { from it.output }
+    archiveClassifier = 'gametest-dev'
+    archiveExtension = 'jar'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    destinationDirectory = layout.buildDirectory.dir('devjars')
+}
+def apiForge = project(':numen-api:forge')
+
+configurations.named('gameTestRunRuntimeOnly') {
+    extendsFrom configurations.minecraft, configurations.minecraftLibrary, configurations.runtimeOnly
+}
+
+dependencies {
+    // 运行里 Numen API 是开发期打的 jar,不读 jarJar:它的内嵌库在这里进运行类路径
+    minecraftLibrary "org.commonmark:commonmark:${commonmark_version}"
+    minecraftLibrary "org.commonmark:commonmark-ext-gfm-strikethrough:${commonmark_version}"
+    Modules.nestedLibraries(project(':mcp')).each { coordinate ->
+        minecraftLibrary(coordinate) { transitive = false }
+    }
+    // mcp 产出的官方 SDK 与重定位过的库平铺在 Numen API 的 devJar 里
+    gameTestRunRuntimeOnly files(numenDev, { apiForge.tasks.named('devJar') }, { apiForge.tasks.named('gametestDevJar') })
+}
+
+tasks.matching { it.name == 'runGameTestServer' }.configureEach {
+    // 运行任务在动作里才读类路径,不认上面 files(...) 带的任务依赖
+    dependsOn numenDev, ':numen-api:forge:devJar', ':numen-api:forge:gametestDevJar', ':numen:common:syncGameTestStructures'
+    // 测试服的配置目录每次开服从空的开始(世界目录由 TerrainWorld 清):上一次跑批(包括失败的一次)改过的开关、签过的皮肤缓存、
+    // 发过的令牌、存下的档案不带进这一次
+    doFirst {
+        delete project.file('runs/gametestserver/config')
+    }
+}

@@ -1,0 +1,128 @@
+/**
+ * 端到端测试的起服层之一:Forge 专用服。应用在 numen/forge 的构建脚本末尾(它要用到模组 numen 的运行配置)。
+ *
+ * <p>场景(numen/common 的 e2e 源码集里的 JUnit)只认一份规格——numen-e2e 里的 {@code ext.e2e}:服务端要在哪个地址、RCON 口与密码、
+ * 配置根里要预先放哪些文件(种子)。怎么把满足这份规格的服务端起起来,是这一层的事;换一种服务端就是另一层,
+ * 同样提供 {@code e2eServerStart}/{@code e2eServerStop} 两个任务、守同一份规格,场景一行不用改。
+ *
+ * <ul>
+ *   <li>{@code e2eServerStart}:清空独立的运行目录 {@code runs/e2e}(每次一个新世界),写入 eula 与 server.properties
+ *       (离线模式、规格里的端口、平坦世界),把种子铺进配置根 {@code config/numen/},起服并等它报"起好了";</li>
+ *   <li>{@code e2eServerStop}:关服并保证进程收干净(构建服务在构建结束时也会关);场景失败时把服务端日志的关键段打出来。</li>
+ * </ul>
+ *
+ * <p>起的就是 ForgeGradle 的 {@code e2e} 运行配置(Forge userdev 的专用服配置,模组只有 Numen 与 Numen API)那一条命令行。
+ */
+import com.dwinovo.numen.buildsrc.TestServer
+
+plugins {
+    id 'numen-e2e'
+}
+
+def spec = project.ext.e2e
+
+// 独立的运行目录:每次起服前整个清空重建,所以只能是 runs/ 下这一个固定的位置
+def gameDir = project.file('runs/e2e')
+
+minecraft {
+    runs {
+        e2e {
+            workingDirectory gameDir
+            taskName 'E2e'
+            args '--nogui'
+        }
+    }
+}
+
+// 专用服的主类与启动参数是 Forge userdev 的 server 配置给的。ForgeGradle 6 在它自己的 afterEvaluate 里把那份配置挂成 server 运行的父配置,
+// 并当场按名字顺序把每个运行的父配置并进来(只并一层)。e2e 不能挂 server 当父配置:它排在 server 前面,并的时候 server 还没有主类,
+// 而且 server 带着 GameTest 的用例与夹具。这里在那之后把 userdev 的那份直接并进 e2e。
+afterEvaluate {
+    def runs = minecraft.runs
+    runs.e2e.merge(runs.server.parents.first(), false)
+}
+
+def server = gradle.sharedServices.registerIfAbsent('testServer', TestServer) {}
+// ForgeGradle 在项目配置完之后才生成运行配置的任务,这里只在用到时取
+def game = provider { tasks.getByName('E2e') as JavaExec }
+def tests = tasks.named('e2eTest')
+
+tasks.register('e2eServerStart') {
+    group = 'verification'
+    description = '起一台端到端测试用的 Forge 专用服(新世界、离线模式),等它起好'
+    usesService(server)
+    // E2e 依赖的那些(编译、模板、运行配置的参数),不含 E2e 本身
+    dependsOn { game.get().taskDependencies.getDependencies(game.get()) }
+    dependsOn 'e2eSeed'
+    doLast {
+        def run = game.get()
+        def dir = gameDir
+        dir.deleteDir()
+        dir.mkdirs()
+        new File(dir, 'eula.txt').text = 'eula=true\n'
+        new File(dir, 'server.properties').text = [
+                'online-mode=false',
+                // 不签名的客户端(MCProtocolLib)进得来、私聊指令的参数不带签名也收
+                'enforce-secure-profile=false',
+                "server-ip=${spec.host}",
+                "server-port=${spec.port}",
+                'enable-rcon=true',
+                "rcon.port=${spec.rconPort}",
+                "rcon.password=${spec.rconPassword}",
+                'broadcast-rcon-to-ops=false',
+                'level-type=minecraft\\:flat',
+                'generator-settings={"biome":"minecraft:plains","layers":[{"block":"minecraft:bedrock","height":1},'
+                        + '{"block":"minecraft:dirt","height":2},{"block":"minecraft:grass_block","height":1}],'
+                        + '"features":false,"lakes":false,"structure_overrides":[]}',
+                'generate-structures=false',
+                'spawn-protection=0',
+                'difficulty=peaceful',
+                'spawn-monsters=false',
+                'view-distance=4',
+                'simulation-distance=4',
+                'max-tick-time=-1',
+                'sync-chunk-writes=false',
+                'motd=numen e2e',
+        ].join('\n') + '\n'
+        ant.copy(todir: new File(dir, 'config/numen')) { fileset(dir: spec.seed.get().asFile) }
+
+        // ForgeGradle 6 的运行任务在自己的任务动作里才拼出参数、JVM 参数、系统属性、环境变量与类路径(配置期只有主类),
+        // 这里用它自己的那几个方法照样拼一遍,命令行与跑 E2e 任务时一字不差,只是放到后台起
+        def config = run.runConfig.get()
+        def generator = run.getClass().classLoader.loadClass('net.minecraftforge.gradle.common.util.runs.RunConfigGenerator')
+        def tokens = generator.configureTokensLazy(project, config, generator.mapModClassesToGradle(project, config),
+                run.minecraftArtifacts, run.runtimeClasspathArtifacts)
+        def args = generator.getArgsStream(config, tokens, false).toList()
+        def jvmArgs = config.jvmArgs.collect { config.replace(tokens, it) }
+        def properties = config.properties.collect { k, v -> "-D${k}=${config.replace(tokens, v)}" }
+        def cp = project.files(config.allSources.collect { it.runtimeClasspath }).plus(run.classpath).asPath
+        def java = run.javaLauncher.get().executablePath.asFile.absolutePath
+        def command = [java] + jvmArgs + properties + (cp.isEmpty() ? [] : ['-cp', cp]) + [config.main] + args
+        def env = new HashMap<String, String>(System.getenv())
+        config.environment.each { k, v -> env.put(k.toString(), config.replace(tokens, v).toString()) }
+        def log = new File(dir, 'e2e-server.log')
+        server.get().start(command.collect { it.toString() }, dir, env, log)
+        logger.lifecycle("[numen-e2e] 起服,日志 ${log}")
+        if (!server.get().awaitReady('Done (', 5 * 60 * 1000L)) {
+            server.get().stop()
+            throw new GradleException("服务端没有起好,日志末尾:\n" + log.readLines('UTF-8').takeRight(80).join('\n'))
+        }
+        logger.lifecycle("[numen-e2e] 服务端就绪 ${spec.host}:${spec.port}")
+    }
+}
+
+tasks.register('e2eServerStop') {
+    group = 'verification'
+    description = '关掉端到端测试用的专用服;场景没过时打出服务端日志的关键段'
+    usesService(server)
+    doLast {
+        def log = server.get().logFile()
+        server.get().stop()
+        if (log != null && log.exists() && tests.get().state.failure != null) {
+            def lines = log.readLines('UTF-8')
+            logger.lifecycle("[numen-e2e] 场景没过,服务端日志的错误与警告行:\n"
+                    + lines.findAll { it =~ /\] \[.*\/(ERROR|WARN)\]/ }.takeRight(60).join('\n')
+                    + "\n[numen-e2e] 服务端日志末尾 80 行(全文 ${log}):\n" + lines.takeRight(80).join('\n'))
+        }
+    }
+}

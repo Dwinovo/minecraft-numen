@@ -507,6 +507,7 @@ public class LuaClosure extends LuaFunction {
 		} catch ( LuaError le ) {
 			if (le.traceback == null)
 				processErrorHooks(le, p, pc);
+			hintMethod(le, p);
 			throw le;
 		} catch ( Exception e ) {
 			LuaError le = new LuaError(e);
@@ -518,6 +519,20 @@ public class LuaClosure extends LuaFunction {
 					if ( openups[u] != null )
 						openups[u].close();
 		}
+	}
+
+	/**
+	 * Numen:类型错误沿调用栈经过第一个方法(第一个参数叫 self 的函数)时,在报错后面说清方法要用冒号调用。点号调用 {@code a.f(b)}
+	 * 不传 self,方法里取到的是错位的参数(缺的那个参数是 nil),报错落在方法里用到它的那一行,看不出是调用写法错了。
+	 * 报错出在方法调的辅助函数里也一样,所以看的是栈上第一个方法,不只是出错的那一层。
+	 */
+	private static void hintMethod(LuaError le, Prototype p) {
+		if (le.methodHinted || le.traceback == null || !le.isTypeError() || p.locvars == null || p.locvars.length == 0
+				|| p.numparams == 0 || !"self".equals(p.locvars[0].varname.tojstring())) {
+			return;
+		}
+		le.methodHinted = true;
+		le.traceback += " (this is a method: call it as obj:name(args), not obj.name(args), so it receives self)";
 	}
 
 	/**

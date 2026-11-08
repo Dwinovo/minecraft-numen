@@ -1,0 +1,180 @@
+package com.dwinovo.numen.pathing.plan;
+
+import java.util.List;
+
+import com.dwinovo.numen.pathing.world.BodyStats;
+import com.dwinovo.numen.pathing.world.CellFlags;
+import com.dwinovo.numen.pathing.world.Clearance;
+import com.dwinovo.numen.pathing.world.Footing;
+import com.dwinovo.numen.pathing.world.Semantics;
+import com.dwinovo.numen.pathing.world.Kinematics;
+
+import net.minecraft.core.BlockPos;
+
+/**
+ * 跑酷:朝东南西北起跳,越过一到三格的空隙,落在同一个节点高度,或(规格开着时)高一级。
+ *
+ * <p>前提:规格开着跑酷;起步时站在地上、脚下不泡在液体里;紧挨着的那一列是空隙(托不住脚——托得住就直接走过去);
+ * 起跳能升的高度按脚下方块的起跳系数算({@link Kinematics#jumpHeight}),起步那一列头顶与空中经过的每一列在起跳的脚高与
+ * 最高点都放得下身体;落点是第一列托得住脚、放得下身体的节点。跳多远看助跑:脚下步速慢(灵魂沙、蜂蜜块)最远落到第 2 列,
+ * 不疾跑最远第 3 列,疾跑第 4 列;落到第 4 列、落点比起跳的脚高(跳上高一级,或落在比起跳处高半格的半砖上)都要疾跑——
+ * 落点越高,身体越早落回那个高度,留给水平飞的刻数越少。落点再往前一列不能是这条路线排除的格——
+ * 落地时的冲劲会把身体带过去。跑酷不改地形。
+ */
+final class Parkour implements Move {
+
+    /** 跳上高一级最远落到第几列。 */
+    private static final int ASCEND_SPAN = 3;
+
+    @Override
+    public MoveKind kind() {
+        return MoveKind.PARKOUR;
+    }
+
+    @Override
+    public List<Heading> headings() {
+        return Heading.CARDINAL;
+    }
+
+
+    @Override
+    public Premise premise(CostModel model, WorldView view, BlockPos from, Stance stance, Heading heading) {
+        if (!model.spec().parkour()) {
+            return Premise.fail(from, Reason.DISABLED);
+        }
+        if (!stance.grounded() || Strides.feetInFluid(view, from)) {
+            return Premise.fail(from, Reason.WRONG_STANCE);
+        }
+        BodyStats body = model.body().stats();
+        Draft draft = new Draft(model, view);
+        int x = from.getX();
+        int y = from.getY();
+        int z = from.getZ();
+        int dx = heading.dx();
+        int dz = heading.dz();
+        double f0 = stance.feetY();
+        double peak = f0 + Kinematics.jumpHeight(body, Semantics.jumpFactor(view, x, f0, z));
+        if (!Double.isNaN(Footing.height(view, body, x + dx, y, z + dz))) {
+            return Premise.fail(from.offset(dx, 0, dz), Reason.NO_GAP);
+        }
+        if (!Clearance.fits(view, body, x, peak, z)) {
+            return Premise.fail(from.above(2), Reason.NO_CLEARANCE);
+        }
+        boolean sprintable = model.maySprint();
+        int longest = Semantics.speedFactor(view, x, f0, z) < 1 ? 2 : 4;
+        BlockPos to = null;
+        Stance landing = null;
+        int span = 0;
+        for (int d = 1; d <= longest && to == null; d++) {
+            int cx = x + dx * d;
+            int cz = z + dz * d;
+            if (d >= 2) {
+                double flat = Footing.height(view, body, cx, y, cz);
+                double up = Footing.height(view, body, cx, y + 1, cz);
+                if (!Double.isNaN(up)) {
+                    if (d > ASCEND_SPAN || up - f0 > 1 + Footing.EPSILON || up > peak) {
+                        return Premise.fail(new BlockPos(cx, y + 1, cz), Reason.TOO_HIGH);
+                    }
+                    to = new BlockPos(cx, y + 1, cz);
+                } else if (!Double.isNaN(flat)) {
+                    if (flat > f0 + body.stepHeight() + Footing.EPSILON) {
+                        return Premise.fail(new BlockPos(cx, y, cz), Reason.TOO_HIGH);
+                    }
+                    to = new BlockPos(cx, y, cz);
+                }
+                if (to != null) {
+                    landing = Stance.at(view, body, to);
+                    if (landing == null || !landing.grounded()) {
+                        return Premise.fail(to, Reason.NO_CLEARANCE);
+                    }
+                    span = d;
+                    break;
+                }
+            }
+            // 空中经过这一列:起跳的脚高与最高点都放得下
+            if (!Clearance.fits(view, body, cx, f0, cz)
+                    || !Clearance.fits(view, body, cx, peak, cz)) {
+                return Premise.fail(new BlockPos(cx, y + 1, cz), Reason.NO_CLEARANCE);
+            }
+        }
+        if (to == null) {
+            return Premise.fail(from.offset(dx * longest, 0, dz * longest), Reason.NO_FOOTING);
+        }
+        // 起跳点:跑到格边上起跳。脚下托着脚的碰撞箱要铺到格边(背朝空隙的楼梯,靠空隙那半低一级,身子走不到边就先下了一级),
+        // 摩擦要是常规的(黏液块、冰上加速、刹车都不是规划按的那一份)
+        BlockPos takeoff = stance.support(x, z);
+        if (!Footing.reachesEdge(view, body, x, y, z, f0, dx, dz)
+                || view.getBlockState(takeoff).getBlock().getFriction() != (float) Kinematics.DEFAULT_FRICTION) {
+            return Premise.fail(takeoff, Reason.NO_FOOTING);
+        }
+        if (!Footing.broad(view, body, to.getX(), to.getY(), to.getZ(), landing.feetY())) {
+            return Premise.fail(to, Reason.NO_FOOTING);
+        }
+        // 空中一列一列飞过去,途中、尤其是越过列与列的交界时,身体的盒(升到最高点的、落地时的)不能撞上交界处的门板、薄板
+        for (int d = 0; d < span; d++) {
+            // 最后一跳落在落点那一列:落点比起跳高时,在起跳的脚高上身体的盒本来就压在落点的方块里,从落点的脚高起看
+            double low = d == span - 1 ? Math.max(f0, landing.feetY()) : f0;
+            for (double h : new double[] {low, peak}) {
+                List<BlockPos> blockers = Clearance.blockers(view, body, x + dx * d, h, z + dz * d, dx, dz);
+                if (!blockers.isEmpty()) {
+                    return Premise.fail(blockers.get(0), Reason.NO_CLEARANCE);
+                }
+            }
+        }
+        boolean ascend = landing.feetY() > f0 + Footing.EPSILON;
+        // 不助跑跳不过去:落到第 4 列,或落点比起跳时高
+        boolean runUp = span == 4 || ascend;
+        if (runUp && !sprintable) {
+            return Premise.fail(to, Reason.NO_SPRINT);
+        }
+        Contact contact = new Contact(body, from, f0);
+        for (int d = 1; d < span; d++) {
+            contact.column(x + dx * d, z + dz * d, f0, peak);
+        }
+        contact.column(to.getX(), to.getZ(), landing.feetY(), peak);
+        // 落地的冲劲会把身体带进前面那一列:那里的脚、头与脚下都不能是这条路线排除的格
+        BlockPos beyond = to.offset(dx, 0, dz);
+        for (BlockPos cell : new BlockPos[] {beyond, beyond.above(), beyond.below()}) {
+            if (model.excludes(Semantics.mask(view, cell))) {
+                return Premise.fail(cell, Reason.EXCLUDED);
+            }
+        }
+        BlockPos support = landing.support(to.getX(), to.getZ());
+        if (!contact.admit(draft, model, support, true)) {
+            return draft.failure();
+        }
+        return new Premise.Holds(new Maneuver(MoveKind.PARKOUR, heading, from, stance, to, landing, true, runUp,
+                false, Strides.inWater(view, to), Strides.submerged(view, body, from, stance, to, landing),
+                Semantics.speedFactor(view, x, f0, z), Math.max(0, f0 - landing.feetY()), 0,
+                span, draft.edits(), contact.cells(), contact.exposure(), support,
+                // 跳回去的跨距与落差不比去时难:落点不比起点低
+                true));
+    }
+
+    /**
+     * 规格不许跑酷,一步也不成立;要站着、脚所在的格不泡在流体里;其余答"可能":落点取最近的第 2 列,代价至少是助跑的步速跨过两列,
+     * 加上起跳的罚分。
+     */
+    @Override
+    public int quick(Quick q, Heading heading) {
+        if (!q.model().spec().parkour() || !q.stance().grounded() || (q.own() & CellFlags.FLUID) != 0) {
+            return Quick.REJECT;
+        }
+        return q.likelyNear(2 * heading.dx(), 0, 2 * heading.dz(), 2 * q.pace() + q.jumpPenalty());
+    }
+
+    @Override
+    public double cost(CostModel model, Maneuver m) {
+        return movement(model, m) + model.spec().jumpPenalty() + model.overhead(m);
+    }
+
+    @Override
+    public double ticks(CostModel model, Maneuver m) {
+        return movement(model, m) + model.workTicks(m);
+    }
+
+    /** 身体跳过去的刻数:按助跑的步速跨过这几列,空中的时间不短于落在那一高度上的工夫。 */
+    private static double movement(CostModel model, Maneuver m) {
+        return Kinematics.leapTicks(model.body().stats(), m.span(), model.maySprint(), Strides.rise(m));
+    }
+}

@@ -1,0 +1,501 @@
+package com.dwinovo.numen.pathing.plan;
+
+import java.util.List;
+import java.util.Objects;
+
+import com.dwinovo.numen.pathing.spec.PositionCosts;
+import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
+import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.dwinovo.numen.pathing.world.Bounds;
+import com.dwinovo.numen.api.entity.Faces;
+import com.dwinovo.numen.api.entity.Replaceable;
+import com.dwinovo.numen.pathing.world.Semantics;
+import com.dwinovo.numen.pathing.world.BodyStats;
+import com.dwinovo.numen.pathing.world.Kinematics;
+
+import com.dwinovo.numen.pathing.world.Recall;
+
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import net.minecraft.core.BlockPos;
+import net.minecraft.util.Mth;
+import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+
+/**
+ * 成本模型:一次搜索(或一次执行复核)"能做什么、每样多贵"的全部依据。它由几部分组合而成,每部分一个出处:
+ * <ul>
+ *   <li>物理代价与罚分常量——{@link ActionCosts};</li>
+ *   <li>路线规格——{@link RouteSpec}:能力开关、排除的格子种类、按位置与按种类、四项动作罚分;</li>
+ *   <li>许可——端口 {@link TerrainPolicy}:一格能不能挖或放;</li>
+ *   <li>垫路料——端口 {@link Materials}:建模型时问一次下一块用什么,没有就是没料;</li>
+ *   <li>身体——{@link BodySnapshot}:迈步、起跳、交互距离、游戏模式、摔伤与摔落上限、背包里的工具({@link ToolChoice});</li>
+ *   <li>生物危险——端口 {@link Threats}:建模型时问一次,变成按位置的代价。</li>
+ * </ul>
+ * 不许继承;任务要改价,只能换一份路线规格({@link #withSpec}),或在规格的按位置代价表里加减。
+ *
+ * <p>挖与放能不能进路线、放一块与挖一格多少钱,都只在这里定:{@link #admitDig}、{@link #admitPlace}、{@link #digCost}、
+ * {@link #placeCost}。
+ */
+public final class CostModel {
+
+    /**
+     * 挖一格手上最好的工具也要这么多刻(一分钟)以上,就算挖不动:不进路线,收场报告说挖不动({@link Reason#TOO_HARD})。原版没有
+     * "挖不动"一说,空手挖黑曜石要四分多钟、木镐也要两分多钟,谁也不会拿它当路;钻石镐十来秒、铁镐四十秒,仍是路。
+     */
+    public static final int MAX_DIG_TICKS = 20 * 60;
+
+    /** 倒一桶水接住坠落:往格里放水。 */
+    private static final TerrainPolicy.Change POUR = new TerrainPolicy.Change.Place(Blocks.WATER);
+
+    private final RouteSpec spec;
+    private final BodySnapshot body;
+    private final TerrainPolicy terrain;
+    /** 下一块垫路料;没料为 null。 */
+    private final Block placing;
+    /** 往格里放 {@link #placing} 这件改动:许可每问一次都要一份,问得极多,组模型时造一份共用;没料为 null。 */
+    private final TerrainPolicy.Change placingChange;
+    private final PositionCosts danger;
+    private final ToolChoice tools;
+    /** 这次搜索里问过的许可;不是给一次搜索用的(执行复核、诊断前)为 null。 */
+    private final Permits permits;
+    /** 规格排除的格子种类,按 {@link Semantics#mask(java.util.Set)} 编成掩码。 */
+    private final int excluded;
+
+    private CostModel(RouteSpec spec, BodySnapshot body, TerrainPolicy terrain, Block placing, PositionCosts danger,
+                      ToolChoice tools, Permits permits) {
+        this.spec = Objects.requireNonNull(spec, "spec");
+        this.body = Objects.requireNonNull(body, "body");
+        this.terrain = Objects.requireNonNull(terrain, "terrain");
+        this.placing = placing;
+        this.placingChange = placing == null ? null : new TerrainPolicy.Change.Place(placing);
+        this.danger = danger;
+        this.tools = tools;
+        this.permits = permits;
+        this.excluded = Semantics.mask(spec.excluded());
+    }
+
+    /** 在派发那一刻组一份:问一次垫路料、问一次生物危险。 */
+    public static CostModel of(RouteSpec spec, BodySnapshot body, TerrainPolicy terrain, Materials materials,
+                               Threats threats) {
+        Block next = materials.next().orElse(null);
+        return new CostModel(spec, body, terrain, next, dangerCosts(threats.current(), body.stats()), new ToolChoice(body), null);
+    }
+
+    /** 同一具身体、同样的端口答复,换一份路线规格。 */
+    public CostModel withSpec(RouteSpec spec) {
+        return new CostModel(spec, body, terrain, placing, danger, tools, null);
+    }
+
+    /** 同一份模型,换一个许可(诊断"换一种答复有没有路"用)。 */
+    public CostModel withTerrain(TerrainPolicy terrain) {
+        return new CostModel(spec, body, terrain, placing, danger, tools, null);
+    }
+
+    /** 同一份模型,下一块垫路料换成 {@code placing}(诊断"有料的话有没有路"用)。 */
+    public CostModel withPlacing(Block placing) {
+        return new CostModel(spec, body, terrain, placing, danger, tools, null);
+    }
+
+    /**
+     * 同一份模型,给一次搜索用:许可的答复在这次搜索里按"格、改动、方块状态"记下,同一格同一种改动只问一次。只记快照里没被这一路
+     * 改过的格(叠了改动的格,周围变了,照问)。一次搜索在一个线程上跑完,记下的答复只活这一次搜索;许可层本身不动。
+     */
+    public CostModel searching() {
+        return new CostModel(spec, body, terrain, placing, danger, tools, new Permits());
+    }
+
+    public TerrainPolicy terrain() {
+        return terrain;
+    }
+
+    public RouteSpec spec() {
+        return spec;
+    }
+
+    public BodySnapshot body() {
+        return body;
+    }
+
+    /** 下一块垫路料;身上没料为 null(规划一步要问几十次,不包 {@link java.util.Optional})。 */
+    public Block placing() {
+        return placing;
+    }
+
+    // ==================== 身体与规格合起来的上限 ====================
+
+    /**
+     * 站着落地摔掉 {@code damage} 点血({@link BodySnapshot#fallDamage},已按落差、落点方块、游戏模式与属性算好),这一下摔不摔得起:
+     * 身体受得起({@link BodySnapshot#bears}),也不超过规格愿意承受的摔伤——规格只能收紧身体的上限。能跳多高就是这两样换算出来的,
+     * 不另设一个写死的落差。
+     */
+    public boolean bearsFall(int damage) {
+        return damage <= spec.maxFallDamage() && body.bears(damage);
+    }
+
+    /** 落在硬地上最高能落多少({@link BodySnapshot#maxDrop}):身体受得起、规格也愿意承受的摔伤换算出来的落差,不会摔伤的身体不限。 */
+    public double maxFallDrop() {
+        return body.maxDrop(spec.maxFallDamage());
+    }
+
+    /**
+     * 身体从 {@code drop} 高处落到 {@code support}(落定后脚踩的那一格)上摔掉几点血:站着落地、没落进水里,才照身体快照按落差与
+     * 那一格算({@link BodySnapshot#fallDamage});落进水里、攀着、浮着不摔。
+     *
+     * <p>脚踩的那一格是托住脚的碰撞箱所在的格(第 0 层 {@code Footing.supportY})。原版结算摔伤看的是脚底往下 0.2 格处那一格
+     * ({@code Entity.getOnPosLegacy}),两者只在托脚的是不到 0.2 格厚的薄片(地毯、一层雪、中继器)时不同:那时原版看的是薄片底下那一块。
+     */
+    public int fallDamage(BlockGetter level, Stance landing, BlockPos support, double drop, boolean wading) {
+        if (!landing.grounded() || wading || support == null) {
+            return 0;
+        }
+        return fallDamage(drop, level.getBlockState(support));
+    }
+
+    /** 站着落地、没落进水里,从 {@code drop} 高处落到 {@code onto} 上摔掉几点血:搜索的快判断已经读出了脚踩的方块状态。 */
+    int fallDamage(double drop, BlockState onto) {
+        return body.fallDamage(drop, onto);
+    }
+
+    /**
+     * 这个落点摔得起摔不起:站着落地、没落进水里的,身体受得起这一摔({@link BodySnapshot#bears})、也在规格愿意承受的摔伤以内
+     * ({@link #bearsFall});攀着、浮着、落进水里的不摔。所有会落下去的走法(落下一级、斜走、向下挖)与步态({@code Gait}
+     * 判多掉一次摔不摔得起)问的都是这一处。
+     */
+    public boolean bearsLanding(Stance landing, boolean wading, int damage) {
+        return !landing.grounded() || wading || bearsFall(damage);
+    }
+
+    /** 这次能不能疾跑:身体跑得动(饱食度够,或能飞)。 */
+    public boolean maySprint() {
+        return body.canSprint();
+    }
+
+    /** 水里走或游一格要几刻({@link Kinematics#wadeTicksPerBlock},按水下移动效率)。 */
+    public double waterStep() {
+        return Kinematics.wadeTicksPerBlock(body.stats(), body.waterMovementEfficiency());
+    }
+
+    /**
+     * 这一趟有没有可能往任何一格放方块:规格许放、身上有料、游戏模式放得了。答否,{@link #admitPlace} 对每一格都拒绝;
+     * 答是只说明前几关过了,具体哪一格放不放得下还要它自己判。
+     */
+    boolean mayPlace() {
+        return spec.place() && placing != null && body.mayEdit();
+    }
+
+    /**
+     * 摔不起时有没有可能倒水接住:背包里有水桶、这个维度倒得出水、规格许放、游戏模式放得了。答否,{@link #admitCatch}
+     * 对每一格都拒绝。
+     */
+    boolean mayCatch(WorldView view) {
+        return body.carriesWaterBucket() && !view.ultraWarm() && spec.place() && body.mayEdit();
+    }
+
+    // ==================== 按种类与按位置 ====================
+
+    /** 有没有按位置的禁令或加价(规格的与生物危险的):没有,{@link #forbids}、{@link #extra} 对每一格都答否、答 0。 */
+    boolean positional() {
+        return !spec.positions().isEmpty() || danger != PositionCosts.EMPTY;
+    }
+
+    /** 种类掩码是 {@code kinds} 的格,这条路线排除它吗:任何一种被排除,整格就排除。 */
+    public boolean excludes(int kinds) {
+        return (kinds & excluded) != 0;
+    }
+
+    /** 这一格禁不禁止这样用:只有路线规格能禁。 */
+    public boolean forbids(Use use, long cell) {
+        return spec.positions().forbids(use, cell);
+    }
+
+    /** 这样用这一格额外加的价钱:规格的按位置代价加上生物危险。 */
+    public double extra(Use use, long cell) {
+        return spec.positions().extra(use, cell) + danger.extra(use, cell);
+    }
+
+    // ==================== 挖与放能不能进路线 ====================
+
+    /**
+     * 挖与放的准入:许可的答复,或拒绝的原因(连同许可给的理由)。
+     *
+     * @param permit  准入时许可的答复(放行或要问);拒绝时为 null
+     * @param refused 拒绝的原因;准入时为 null
+     * @param detail  许可拒绝时它给的理由
+     */
+    public record Admission(Permit permit, Reason refused, Object detail) {
+
+        static Admission refuse(Reason reason) {
+            return new Admission(null, reason, null);
+        }
+
+        public boolean ok() {
+            return refused == null;
+        }
+    }
+
+    /**
+     * 挖 {@code pos} 能不能进路线,依次问:这一趟挖不挖、按位置与按种类禁不禁、物理上挖不挖得了({@link DigRules})、
+     * 许可怎么答——拒绝不进,要问的只在规格把要问的格算能走({@link RouteSpec#consent})时进。
+     */
+    public Admission admitDig(WorldView view, BlockPos pos, BlockState state) {
+        if (!spec.dig()) {
+            return Admission.refuse(Reason.NO_DIGGING);
+        }
+        if (forbids(Use.DIG, pos.asLong()) || spec.bans().breaking().contains(state.getBlock())) {
+            return Admission.refuse(Reason.FORBIDDEN);
+        }
+        Reason physical = DigRules.check(view, body, pos, state);
+        if (physical != null) {
+            return Admission.refuse(physical);
+        }
+        if (tooHard(state)) {
+            return Admission.refuse(Reason.TOO_HARD);
+        }
+        return judge(TerrainPolicy.Change.DIG, pos, state, view);
+    }
+
+    /**
+     * 往 {@code pos}(此刻是 {@code current})放一块垫路料能不能进路线,依次问:这一趟放不放、按位置与按种类禁不禁、
+     * 身上有没有料、游戏模式与世界边界、这一格放不放得进去({@link Replaceable})、有没有能点的面({@link Faces})、许可怎么答。
+     * "这一趟不放"与"没有料"分成两个原因,不合成一个。
+     */
+    public Admission admitPlace(WorldView view, BlockPos pos, BlockState current) {
+        if (!spec.place()) {
+            return Admission.refuse(Reason.NO_PLACING);
+        }
+        if (forbids(Use.PLACE, pos.asLong()) || spec.bans().placingInto().contains(current.getBlock())) {
+            return Admission.refuse(Reason.FORBIDDEN);
+        }
+        if (placing == null) {
+            return Admission.refuse(Reason.NO_MATERIALS);
+        }
+        if (!body.mayEdit()) {
+            return Admission.refuse(Reason.EDIT_RESTRICTED);
+        }
+        if (!Bounds.allowsEdit(view.border(), view, pos)) {
+            return Admission.refuse(Reason.OUT_OF_BOUNDS);
+        }
+        if (!Replaceable.replaceableBy(current, placing)) {
+            return Admission.refuse(Reason.NOT_REPLACEABLE);
+        }
+        if (!Faces.anyAgainst(view, pos, placing)) {
+            return Admission.refuse(Reason.NO_FACE);
+        }
+        return judge(placingChange, pos, current, view);
+    }
+
+    /**
+     * 下落摔不起时在落点 {@code pos}(此刻是 {@code current})倒一桶水接住能不能进路线,依次问:身上有没有一桶水、这个维度倒不
+     * 倒得出水(没有就还是摔不起)、规格许不许改地形、按种类禁不禁(水冲掉的那一格原来的方块)、游戏模式与世界边界、这一格
+     * 倒不倒得进水、有没有能点的面(落点脚下那块的顶面)、许可怎么答(按往这一格放东西问)。
+     *
+     * <p>按位置的"放"({@link Use#PLACE})管的是放下之后留在世界上的方块;倒下的水在同一步里就收回,不问它——目标格保护
+     * 不许往要站的格里放方块,却不拦倒水接住落进那一格的自己。
+     */
+    public Admission admitCatch(WorldView view, BlockPos pos, BlockState current) {
+        if (!body.carriesWaterBucket() || view.ultraWarm()) {
+            return Admission.refuse(Reason.TOO_FAR_TO_FALL);
+        }
+        if (!spec.place()) {
+            return Admission.refuse(Reason.NO_PLACING);
+        }
+        if (spec.bans().placingInto().contains(current.getBlock())) {
+            return Admission.refuse(Reason.FORBIDDEN);
+        }
+        if (!body.mayEdit()) {
+            return Admission.refuse(Reason.EDIT_RESTRICTED);
+        }
+        if (!Bounds.allowsEdit(view.border(), view, pos)) {
+            return Admission.refuse(Reason.OUT_OF_BOUNDS);
+        }
+        if (!Replaceable.replaceableBy(current, Blocks.WATER)) {
+            return Admission.refuse(Reason.NOT_REPLACEABLE);
+        }
+        if (!Faces.anyAgainst(view, pos, Blocks.WATER)) {
+            return Admission.refuse(Reason.NO_FACE);
+        }
+        return judge(POUR, pos, current, view);
+    }
+
+    private Admission judge(TerrainPolicy.Change change, BlockPos pos, BlockState state, WorldView view) {
+        // 搜索读的视图都记着相对快照改过哪些格({@link Recall.Source}):这一路改过的格照问
+        Permit permit = permits != null && view instanceof Recall.Source source
+                && !source.changed(pos.getX(), pos.getY(), pos.getY(), pos.getZ())
+                ? permits.judge(terrain, change, pos, state, view)
+                : terrain.judge(change, pos.immutable(), state, view);
+        if (permit instanceof Permit.Allow allow) {
+            return new Admission(permit, null, null);
+        } else if (permit instanceof Permit.Ask ask) {
+            return spec.consent()
+                    ? new Admission(permit, null, null)
+                    : Admission.refuse(Reason.NEEDS_CONSENT);
+        } else {
+            Permit.Deny deny = (Permit.Deny) permit;
+            return new Admission(null, Reason.DENIED, deny.reason());
+        }
+    }
+
+    /**
+     * 一次搜索里许可的答复,按"格、改动、方块状态"记。搜索要对很多候选步问同一格(四面八方挖进同一块石头),许可每问一次都要
+     * 新建动作与事实、过一遍规则表;这一格在快照里没变过,答复就不会变。
+     */
+    private static final class Permits {
+
+        /** 一格上记下的一条答复;同一格上不同的改动、方块状态串成一串。 */
+        private record Entry(TerrainPolicy.Change change, BlockState state, Permit permit, Entry next) {}
+
+        private final Long2ObjectOpenHashMap<Entry> byCell = new Long2ObjectOpenHashMap<>();
+
+        Permit judge(TerrainPolicy terrain, TerrainPolicy.Change change, BlockPos pos, BlockState state, WorldView view) {
+            long cell = pos.asLong();
+            Entry first = byCell.get(cell);
+            for (Entry e = first; e != null; e = e.next()) {
+                if (e.state() == state && e.change().equals(change)) {
+                    return e.permit();
+                }
+            }
+            Permit permit = terrain.judge(change, pos.immutable(), state, view);
+            byCell.put(cell, new Entry(change, state, permit, first));
+            return permit;
+        }
+    }
+
+    // ==================== 价钱 ====================
+
+    /**
+     * 挖一格:用挑中的工具挖掉它手上要花的刻数(挖到碎,加碎了之后缓手的那几刻,{@link ToolChoice#handTicks}),加规格的挖掘罚分
+     * 与这一格的按位置加价;许可要问的乘规格的 {@link RouteSpec#consentMultiplier}。
+     */
+    public double digCost(Edit.Dig dig) {
+        double cost = tools.handTicks(dig.state(), dig.eyeInWater(), dig.grounded()) + spec.breakPenalty()
+                + extra(Use.DIG, dig.pos().asLong());
+        return dig.permit() instanceof Permit.Ask ? cost * spec.consentMultiplier() : cost;
+    }
+
+    /**
+     * 挖掉 {@code state} 至少要多少钱:{@link #digCost} 在最省的情形下——眼睛不在水里、脚踏实地、没有按位置加价、许可放行。
+     * 挖不动的(硬度为负)是无穷大。搜索的估价拿它给"绕不开的挖掘"定下界({@code search.Burial}),快判断拿它给要挖的整块定乐观的价。
+     */
+    public double digFloor(BlockState state) {
+        return tooHard(state) ? Double.POSITIVE_INFINITY : tools.handTicks(state, false, true) + spec.breakPenalty();
+    }
+
+    /** 手上最好的工具挖掉 {@code state} 要几刻,超过 {@link #MAX_DIG_TICKS}:挖不动(挖不碎的基岩也在内)。 */
+    private boolean tooHard(BlockState state) {
+        return tools.ticks(state, false, true) > MAX_DIG_TICKS;
+    }
+
+    /**
+     * 放一块:规格的放置罚分加这一格的按位置加价,许可要问的乘规格的 {@link RouteSpec#consentMultiplier}。
+     */
+    public double placeCost(Edit.Place place) {
+        double cost = spec.placeCost() + extra(Use.PLACE, place.pos().asLong());
+        if (place.permit() instanceof Permit.Ask) {
+            cost *= spec.consentMultiplier();
+        }
+        return cost;
+    }
+
+    /**
+     * 放一块至少多少钱:{@link #placeCost} 在最省的情形下——没有按位置加价、许可放行。搜索的快判断拿它给要垫的一块定乐观的价。
+     */
+    public double placeFloor() {
+        return spec.placeCost();
+    }
+
+    /**
+     * 倒一桶水接住坠落:与放一块同样的罚分(许可要问的乘规格的 {@link RouteSpec#consentMultiplier}),再加上落定之后把水收回桶里的
+     * 那一下。按位置的"放"加价管的是留在世界上的方块,水当场收回,不加。
+     */
+    public double catchCost(Edit.Catch caught) {
+        double cost = spec.placeCost();
+        if (caught.permit() instanceof Permit.Ask) {
+            cost *= spec.consentMultiplier();
+        }
+        return cost + ActionCosts.SCOOP_WATER;
+    }
+
+    /**
+     * 一步里手上的活真要花的刻数:挖一格按挑中的工具挖到碎连同缓手({@link ToolChoice#handTicks}),倒水接坠落加上收水那一下;
+     * 放一块、开关门不另计时。{@link #overhead} 里这些刻数连同罚分一起算进价钱,这里只要刻数(憋气按它算)。
+     */
+    public double workTicks(Maneuver m) {
+        double ticks = 0;
+        for (Edit edit : m.edits()) {
+            if (edit instanceof Edit.Dig dig) {
+                ticks += tools.handTicks(dig.state(), dig.eyeInWater(), dig.grounded());
+            } else if (edit instanceof Edit.Catch) {
+                ticks += ActionCosts.SCOOP_WATER;
+            }
+        }
+        return ticks;
+    }
+
+    /**
+     * 一步里除了身体移动本身以外的价钱,每种走法都一样加:要做的改动、身体新进入的格与落脚那一格的按位置加价、
+     * 紧挨着伤身的格走过的加价、落到水里的涉水罚分。
+     */
+    public double overhead(Maneuver m) {
+        double cost = 0;
+        for (Edit edit : m.edits()) {
+            if (edit instanceof Edit.Dig dig) {
+                cost += digCost(dig);
+            } else if (edit instanceof Edit.Place place) {
+                cost += placeCost(place);
+            } else if (edit instanceof Edit.Catch caught) {
+                cost += catchCost(caught);
+            }
+        }
+        return passing(cost, m.cells(), m.cells().length, m.exposure(), m.support() != null, m.support() == null ? 0 : m.support().asLong(),
+                m.wading());
+    }
+
+    /**
+     * {@link #overhead} 里改动之后的那几项,接着 {@code cost} 往下加:身体新进入的前 {@code count} 格与落脚那一格的按位置加价、
+     * 紧挨着伤身的格走过的加价、落到水里的涉水罚分。没有改动的步子从 0 起加,次序同 {@link #overhead}。
+     */
+    double passing(double cost, long[] cells, int count, int exposure, boolean standing, long support, boolean wading) {
+        for (int i = 0; i < count; i++) {
+            cost += extra(Use.PASS, cells[i]);
+        }
+        if (exposure != 0) {
+            cost += exposure * spec.exposurePenalty() * Kinematics.walkTicksPerBlock(body.stats());
+        }
+        if (standing) {
+            cost += extra(Use.STAND, support);
+        }
+        if (wading) {
+            cost += spec.wadePenalty();
+        }
+        return cost;
+    }
+
+    // ==================== 生物危险 ====================
+
+    /** 每只生物危险半径里的每一格,身体进去一格加 {@link ActionCosts#DANGER_BLOCKS} 格平走的耗时。几只重叠就叠加。 */
+    static PositionCosts dangerCosts(List<Threat> threats, BodyStats body) {
+        if (threats.isEmpty()) {
+            return PositionCosts.EMPTY;
+        }
+        PositionCosts.Builder b = PositionCosts.builder();
+        double danger = ActionCosts.DANGER_BLOCKS * Kinematics.walkTicksPerBlock(body);
+        for (Threat t : threats) {
+            int r = Mth.ceil(t.radius());
+            int cx = Mth.floor(t.x());
+            int cy = Mth.floor(t.y());
+            int cz = Mth.floor(t.z());
+            for (int x = cx - r; x <= cx + r; x++) {
+                for (int y = cy - r; y <= cy + r; y++) {
+                    for (int z = cz - r; z <= cz + r; z++) {
+                        if (t.covers(x, y, z)) {
+                            b.add(Use.PASS, BlockPos.asLong(x, y, z), danger);
+                        }
+                    }
+                }
+            }
+        }
+        return b.build();
+    }
+}
