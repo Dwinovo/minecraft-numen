@@ -406,3 +406,18 @@ Thread.ofVirtual().name(n).start(r)    →  守护平台线程(缓存线程池)
   用 Adventure 的 BOM 取同版正式发行);JEI 17 没有 `getRecipeIngredients`,配方的格位由 `createRecipeLayoutDrawable` 排出来读;
   Litematica 0.17 用 `getAreaSize`。FTB Quests 2004 没有 `Quest.isSearchable` 与 `TeamData.getCannotStartReason`(用 `isVisible`,
   `QuestBook.cannotStartReason` 点名还没完成的前置任务),服务端那本书的 JSON 标题按 FTB 的顺序先试 `Component.Serializer`(`QuestNames`)。
+
+### 1.20.2(Forge 48 / Fabric 0.15.0):在 1.20.4 写法之上退回去的地方
+以对齐好的 1.20.4 为底:1.20.2 起就有的(`CustomPacketPayload`、配置阶段、`SavedData.Factory`、`AdvancementHolder`/`RecipeHolder`、`blitSprite`、`PlayerSkin`、
+四参 `mouseScrolled`)照 1.20.4;1.20.3 才有的,照 1.20.1 的写法。
+- **构建**:Forge 48 的开发运行仍认 `MOD_CLASSES` 合并的源码集,`numen-api/forge`、`numen/forge` 的构建脚本照 1.20.1(没有 1.20.4 的 `devJar`)。
+  Gson 2.10.1、slf4j 2.0.7。插件:Curios 6.1.0(`CuriosApi.getSlots()` 不带参数,`getItemStackSlots(物品, 生物)`)、JEI 16.0.0.2、
+  Litematica 0.16.1(MaLiLib 0.17.0);车万女仆、森罗厨房、YSM、FTB Quests 没有 1.20.2 的构建,Forgematica 也没有 Forge 1.20.2 的版本:这几个联动不带,
+  也就没有联动跑批。
+- **1.20.3 才有、这里照 1.20.1 的**:回执是 `ResultConsumer`(`Echo`),解析结果自己查(`McApi.validate`,没有 `Commands.validateParseResults` 与
+  `ContextChain`);`NbtIo.readCompressed(File)`;`Blocks.GRASS`/`"minecraft:grass"`;`FlowerPotBlock.getContent()`;`withStyle` 上色(没有
+  `MutableComponent.withColor(int)`);`ServerLoginPacketListenerImpl.isValidUsername`;`ShapedRecipe` 的构造带宽高与格位表(没有 `ShapedRecipePattern`)。
+- **GameTest** 与 1.20.1 同一套原版:场地起点写死 `(0, -60, 0)`、`Collections.shuffle` 洗区块刻、`spawnStructure` 摆场地且只钉起点周围几格区块
+  (`GameTestOrigin`、`ChunkTickShuffleMixin`、`StructureChunksMixin`、`GameTestStructureBlockMixin` 照 1.20.1)、`getBounds()` 是私有的
+  (`TestBounds` 照 1.20.1)、模板由 `StructureUtils` 直接读测试模板目录(不要 `StructureTemplateTestDirMixin`)。结构模板 SNBT 的 `DataVersion` 是 3578。
+- 端到端的协议客户端是 MCProtocolLib 1.20.2-1。
