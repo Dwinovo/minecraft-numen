@@ -20,7 +20,7 @@ def ftb = ["dev.ftb.mods:ftb-quests-neoforge:${ftb_quests_version}",
 
 dependencies {
     // 瘦 api jar 取 NeoForge 那份:本联动本来就只跑在 NeoForge 上
-    compileOnly files(project(':numen-api:neoforge').tasks.named('apiJar'))
+    compileOnly files(rootProject.project(':numen-api:neoforge').tasks.named('apiJar'))
     ftb.each { compileOnly it }
     // 防漂移测试登记 ftbquests 组时,动作的处理函数(读任务书的 ClientBook 等)要连上 FTB 的类:只加载、不运行,
     // 同样不进任何产物
@@ -77,9 +77,9 @@ neoForge {
 
 dependencies {
     gametestCompileOnly files({ numenNeoForge.sourceSets.main.output })
-    gametestCompileOnly project(':numen:common').sourceSets.testFixtures.output
+    gametestCompileOnly rootProject.project(':numen:common').sourceSets.testFixtures.output
     // 套件接口:本联动的用例经它报到(numen_ftbquests)
-    gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
+    gametestCompileOnly rootProject.project(':numen-api:common').sourceSets.testFixtures.output
     // 用例直接读联动里包内的类(任务书的样子),不绕客户端
     gametestCompileOnly sourceSets.main.output
     // 整个 Numen API(不是瘦 api jar):用例拉起同伴、调工具,和 Numen 的用例一样;运行时它就是 numen_api 那个模组
