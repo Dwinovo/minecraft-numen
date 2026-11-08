@@ -40,16 +40,11 @@ dependencies {
     Modules.ALL.each { api project(it) }
 
     compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
-    // fabric and forge both bundle mixinextras, so it is safe to use it in common
-    compileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
-    annotationProcessor group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
     // 客户端 mixin 迁到 client 源码集,注解在编译它时也要在场
     clientCompileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
-    clientCompileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
 
     // 夹具里的 mixin(GameTest 世界并入数据包维度、可指定种子)编译时,注解要在场
     testFixturesCompileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
-    testFixturesCompileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'

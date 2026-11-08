@@ -181,9 +181,6 @@ dependencies {
     // refmap 由 mixin 注解处理器在编译期生成——AP 必须显式挂上,否则 mixin 照样编译
     // 通过、jar 照样打出来,只是里面没有 refmap,运行期才炸(与 Numen API 的 forge 模块同款声明)。
     annotationProcessor 'org.spongepowered:mixin:0.8.5-SNAPSHOT:processor'
-    // common 用到 MixinExtras;Forge 运行期自带,dev 编译期需要在 classpath 上。
-    compileOnly 'io.github.llamalad7:mixinextras-common:0.3.5'
-    annotationProcessor 'io.github.llamalad7:mixinextras-common:0.3.5'
 
     // 单元测试之外的开发运行要 Numen API 在类路径上的内嵌库(运行配置里 Numen API 是源码集,不读 jarJar)
     minecraftLibrary "org.commonmark:commonmark:${commonmark_version}"

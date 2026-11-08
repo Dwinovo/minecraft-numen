@@ -82,9 +82,6 @@ dependencies {
     // refmap 由 mixin 注解处理器在编译期生成——AP 必须显式挂上,否则 mixin 照样编译
     // 通过、jar 照样打出来,只是里面没有 refmap,运行期才炸。
     annotationProcessor 'org.spongepowered:mixin:0.8.5-SNAPSHOT:processor'
-    // common uses MixinExtras; Forge bundles it at runtime, but the dev compile needs it on classpath.
-    compileOnly 'io.github.llamalad7:mixinextras-common:0.3.5'
-    annotationProcessor 'io.github.llamalad7:mixinextras-common:0.3.5'
 
     // 聊天气泡的 Markdown 解析库(ui 模块用它)与 mcp 模块的其余第三方库(Reactor、Tomcat……)是内嵌的库,
     // 不是平铺进来的类。发行物是 Numen 的 -all,它把本模块与这些库并排嵌在 META-INF/jarjar/ 里(见 numen/forge/build.gradle);

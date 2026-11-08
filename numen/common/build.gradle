@@ -28,9 +28,6 @@ dependencies {
     testImplementation project(':numen:pathing').sourceSets.fixtures.output
 
     compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
-    // fabric and forge both bundle mixinextras, so it is safe to use it in common
-    compileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
-    annotationProcessor group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
