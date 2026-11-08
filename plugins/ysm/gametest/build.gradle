@@ -62,11 +62,11 @@ neoForge {
 
 dependencies {
     compileOnly files({ numenNeoForge.sourceSets.main.output })
-    compileOnly project(':numen:common').sourceSets.testFixtures.output
+    compileOnly rootProject.project(':numen:common').sourceSets.testFixtures.output
     // 套件接口:本联动的用例经它报到(numen_ysm)
-    compileOnly project(':numen-api:common').sourceSets.testFixtures.output
+    compileOnly rootProject.project(':numen-api:common').sourceSets.testFixtures.output
     // 用例装联动用它的入口(NumenYsm.install)
-    compileOnly project(':plugins:ysm').sourceSets.main.output
+    compileOnly rootProject.project(':plugins:ysm').sourceSets.main.output
     // 整个 Numen API(不是瘦 api jar):用例拉起同伴、调工具,和 Numen 的用例一样;运行时它就是 numen_api 那个模组
     implementation project(':numen-api:neoforge')
 }

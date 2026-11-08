@@ -42,7 +42,7 @@ dependencies {
     // 考题只对着评测的接口写;这些类在运行时由模组 numen_bench 提供,不作为依赖进类路径
     benchCompileOnly project(':bench:game')
     // 考题实现 GameTestSuite
-    benchCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
+    benchCompileOnly rootProject.project(':numen-api:common').sourceSets.testFixtures.output
     // 整个 Numen API:运行时它就是 numen_api 那个模组,和 GameTest 的运行一样
     benchImplementation project(':numen-api:neoforge')
 }

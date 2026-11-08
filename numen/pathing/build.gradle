@@ -43,15 +43,15 @@ sourceSets {
 
 dependencies {
     // 瘦 api jar:同插件一样的一扇门
-    compileOnly files(project(':numen-api:common').tasks.named('apiJar'))
+    compileOnly files(rootProject.project(':numen-api:common').tasks.named('apiJar'))
     // 单测跑起来也要这扇门里的类(挖掘公式、视线几何):运行期同一个瘦 jar
-    testRuntimeOnly files(project(':numen-api:common').tasks.named('apiJar'))
-    benchmarkRuntimeOnly files(project(':numen-api:common').tasks.named('apiJar'))
+    testRuntimeOnly files(rootProject.project(':numen-api:common').tasks.named('apiJar'))
+    benchmarkRuntimeOnly files(rootProject.project(':numen-api:common').tasks.named('apiJar'))
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     // GameTest 的套件机制(原版注解之外的唯一依赖):套件接口与登记的入口,见 numen-api 的测试夹具
-    gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
+    gametestCompileOnly rootProject.project(':numen-api:common').sourceSets.testFixtures.output
 }
 
 test {

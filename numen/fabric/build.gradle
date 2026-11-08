@@ -68,11 +68,11 @@ tasks.named('processGametestDataResources') { dependsOn syncFabricStructures }
 dependencies {
     // Fabric 的 GameTest API(fabric-api 的合集 jar 里没有它)
     modLocalRuntime fabricApi.module('fabric-gametest-api-v1', fabric_version)
-    localRuntime project(':numen-api:fabric').sourceSets.gametest.output
+    localRuntime rootProject.project(':numen-api:fabric').sourceSets.gametest.output
     localRuntime sourceSets.gametestData.output
-    localRuntime project(':numen-api:common').sourceSets.testFixtures.output
-    localRuntime project(':numen:common').sourceSets.testFixtures.output
-    rootProject.ext.numenGameTestModules.each { localRuntime project(it).sourceSets.gametest.output }
+    localRuntime rootProject.project(':numen-api:common').sourceSets.testFixtures.output
+    localRuntime rootProject.project(':numen:common').sourceSets.testFixtures.output
+    rootProject.ext.numenGameTestModules.each { localRuntime rootProject.project(it).sourceSets.gametest.output }
 }
 
 def gameTestStructures = project(':numen:common').layout.buildDirectory.dir('gameteststructures')
