@@ -55,7 +55,7 @@ tasks.register('e2eServerStart') {
         ])
         ant.copy(todir: new File(dir, 'plugins/numen')) { fileset(dir: spec.seed.get().asFile) }
 
-        def command = PaperServer.command(game.get(), [], [])
+        def command = PaperServer.command(game.get())
         def log = new File(dir, 'e2e-server.log')
         server.get().start(command, dir, new HashMap<String, String>(System.getenv()), log)
         logger.lifecycle("[numen-e2e] 起服,日志 ${log}")
