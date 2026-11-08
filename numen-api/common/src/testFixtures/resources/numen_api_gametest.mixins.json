@@ -13,6 +13,7 @@
     "GameTestServerWorldMixin",
     "GameTestHelperBoundsInvoker",
     "GameTestTickOrderMixin",
+    "ServerPlayerSpawnMixin",
     "StructureChunksMixin",
     "StructureClearMixin"
   ],
