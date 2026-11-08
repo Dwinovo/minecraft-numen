@@ -3,7 +3,7 @@ package com.example.nav;
 import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.api.task.TaskFactory;
 
-import net.neoforged.fml.common.Mod;
+import net.minecraftforge.fml.common.Mod;
 
 /**
  * 第三方的寻路:登记一个函数让模型调用({@code mynav.nav.go}),函数起一件活({@link GoTask}),活每刻按她的键盘、转她的
