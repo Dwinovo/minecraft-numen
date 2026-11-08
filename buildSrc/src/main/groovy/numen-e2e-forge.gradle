@@ -11,7 +11,7 @@
  *   <li>{@code e2eServerStop}:关服并保证进程收干净(构建服务在构建结束时也会关);场景失败时把服务端日志的关键段打出来。</li>
  * </ul>
  *
- * <p>起的就是 ForgeGradle 的 {@code e2e} 运行配置(从 {@code server} 派生,模组只有 Numen 与 Numen API)那一条命令行,只换运行目录。
+ * <p>起的就是 ForgeGradle 的 {@code e2e} 运行配置(Forge userdev 的专用服配置,模组只有 Numen 与 Numen API)那一条命令行。
  */
 import com.dwinovo.numen.buildsrc.TestServer
 
@@ -27,12 +27,19 @@ def gameDir = project.file('runs/e2e')
 minecraft {
     runs {
         e2e {
-            parent runs.server
             workingDirectory gameDir
             taskName 'E2e'
             args '--nogui'
         }
     }
+}
+
+// 专用服的主类与启动参数是 Forge userdev 的 server 配置给的。ForgeGradle 6 在它自己的 afterEvaluate 里把那份配置挂成 server 运行的父配置,
+// 并当场按名字顺序把每个运行的父配置并进来(只并一层)。e2e 不能挂 server 当父配置:它排在 server 前面,并的时候 server 还没有主类,
+// 而且 server 带着 GameTest 的用例与夹具。这里在那之后把 userdev 的那份直接并进 e2e。
+afterEvaluate {
+    def runs = minecraft.runs
+    runs.e2e.merge(runs.server.parents.first(), false)
 }
 
 def server = gradle.sharedServices.registerIfAbsent('testServer', TestServer) {}
@@ -79,11 +86,20 @@ tasks.register('e2eServerStart') {
         ].join('\n') + '\n'
         ant.copy(todir: new File(dir, 'config/numen')) { fileset(dir: spec.seed.get().asFile) }
 
+        // ForgeGradle 6 的运行任务在自己的任务动作里才拼出参数、JVM 参数、系统属性、环境变量与类路径(配置期只有主类),
+        // 这里用它自己的那几个方法照样拼一遍,命令行与跑 E2e 任务时一字不差,只是放到后台起
+        def config = run.runConfig.get()
+        def generator = run.getClass().classLoader.loadClass('net.minecraftforge.gradle.common.util.runs.RunConfigGenerator')
+        def tokens = generator.configureTokensLazy(project, config, generator.mapModClassesToGradle(project, config),
+                run.minecraftArtifacts, run.runtimeClasspathArtifacts)
+        def args = generator.getArgsStream(config, tokens, false).toList()
+        def jvmArgs = config.jvmArgs.collect { config.replace(tokens, it) }
+        def properties = config.properties.collect { k, v -> "-D${k}=${config.replace(tokens, v)}" }
+        def cp = project.files(config.allSources.collect { it.runtimeClasspath }).plus(run.classpath).asPath
         def java = run.javaLauncher.get().executablePath.asFile.absolutePath
-        def cp = run.classpath.asPath
-        def command = [java] + run.allJvmArgs + (cp.isEmpty() ? [] : ['-cp', cp]) + [run.mainClass.get()] + run.args
+        def command = [java] + jvmArgs + properties + (cp.isEmpty() ? [] : ['-cp', cp]) + [config.main] + args
         def env = new HashMap<String, String>(System.getenv())
-        run.environment.each { k, v -> env.put(k.toString(), v.toString()) }
+        config.environment.each { k, v -> env.put(k.toString(), config.replace(tokens, v).toString()) }
         def log = new File(dir, 'e2e-server.log')
         server.get().start(command.collect { it.toString() }, dir, env, log)
         logger.lifecycle("[numen-e2e] 起服,日志 ${log}")
