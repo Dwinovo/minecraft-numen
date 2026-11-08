@@ -26,7 +26,7 @@ public final class InitTag {
     /**
      * Foods that may be used to feed/heal a companion. Datapack-driven so server
      * admins can extend the list without code changes — see
-     * {@code data/numen/tags/item/tame_foods.json}.
+     * {@code data/numen/tags/items/tame_foods.json}.
      */
     public static final TagKey<Item> TAME_FOODS = item("tame_foods");
 
@@ -35,7 +35,7 @@ public final class InitTag {
      * stepping up, and pillaring — when its description names no {@code materials}
      * (reflexes always use it).
      * Datapack-driven so packs can add their own cheap blocks — see
-     * {@code data/numen/tags/item/throwaway.json}.
+     * {@code data/numen/tags/items/throwaway.json}.
      */
     public static final TagKey<Item> THROWAWAY = item("throwaway");
 
