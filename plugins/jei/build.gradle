@@ -13,7 +13,7 @@ repositories {
 
 dependencies {
     // 瘦 api jar 取跨加载器那份:与本模块一样只有原版 MC 的类型
-    compileOnly files(project(':numen-api:common').tasks.named('apiJar'))
+    compileOnly files(rootProject.project(':numen-api:common').tasks.named('apiJar'))
     // 只对着 JEI 的公共 API 编译;运行时由玩家自己装的那份提供,本模块不携带它一个字节(JEI 是 MIT)。
     compileOnly "mezz.jei:jei-${minecraft_version}-common-api:${jei_version}"
 }

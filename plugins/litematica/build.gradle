@@ -9,7 +9,7 @@ plugins {
 dependencies {
     minecraft "com.mojang:minecraft:${minecraft_version}"
     // 瘦 api jar 取跨加载器那份(Mojang 名),与 plugins/ysm 一样
-    compileOnly files(project(':numen-api:common').tasks.named('apiJar'))
+    compileOnly files(rootProject.project(':numen-api:common').tasks.named('apiJar'))
 }
 
 repositories {
