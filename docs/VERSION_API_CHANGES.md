@@ -222,7 +222,7 @@ registryAccess().registryOrThrow(Registries.STRUCTURE)  → registryAccess().loo
 
 **构建**
 - paperweight-userdev 1.7.2 认不得 1.21.4 的开发包(新格式,`paperweightDevelopmentBundle` 解析出多个文件就报错),换 `2.0.0-beta.22`(最后一个只要 Gradle 插件 API 9.0 的;beta.24 要 9.7)。`reobfArtifactConfiguration`、`paperDevBundle` 写法不变。
-- slf4j 声明跟游戏走到 2.0.16;Gson 仍编译对着 2.10.1:游戏带的是 2.11.0(向后兼容),而 2.11.0 的 POM 依赖 `error_prone_annotations`,它进了开发期运行的类路径以后和游戏那份在模块层撞名(`Module org.reactivestreams reads more than one module named com.google.errorprone.annotations`),NeoForge 的 runData 与 GameTest 服务器起不来。
+- slf4j、Gson 的声明跟游戏走:2.0.16、2.11.0。Gson 2.11.0 的 POM 依赖 `error_prone_annotations`(只是编译期注解),它进了开发期运行的类路径就和 NeoForge 带的那份在模块层撞名(`Module org.reactivestreams reads more than one module named com.google.errorprone.annotations`),NeoForge 的 runData 与 GameTest 服务器起不来,所以声明时把它排除、不传递。
 - `@EventBusSubscriber` 在 FML 6 不按事件类型挑总线,`GatherDataEvent.Client` 的订阅要写明 `bus = MOD`(否则 "IModBusEvent events are not allowed on the common NeoForge bus")。
 - Litematica/MaLiLib 的 masa maven 坐标按 MC 版本分(`litematica-fabric-1.21.4`),build.gradle 里的坐标后缀改用 `${minecraft_version}`。
 

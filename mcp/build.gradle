@@ -50,7 +50,9 @@ dependencies {
     // 落盘的基础件(令牌库、审计日志):api 让消费方透视得到 Io 等类型。
     api project(':store')
     api 'org.slf4j:slf4j-api:2.0.16'
-    api 'com.google.code.gson:gson:2.10.1'
+    // 2.11.0 的 POM 带着 error_prone_annotations(只是编译期注解,gson 的 module-info 里是 requires static):NeoForge 自己带着另一版,
+    // 两份同名模块进了模块层就起不来,所以不传递
+    api('com.google.code.gson:gson:2.11.0') { exclude group: 'com.google.errorprone' }
     // 官方 MCP Java SDK(规范 2025-11-25,旧版客户端它自己协商)与 OAuth 用的 Nimbus 经下面的 relocatedSdk 交给编译与运行,不直接依赖。
     // 服务端的 HTTP:SDK 的 Streamable HTTP 传输是个 Servlet,挂在内嵌 Tomcat 上(SDK 自己的测试也这样用)。
     implementation "org.apache.tomcat.embed:tomcat-embed-core:${tomcat_version}"
