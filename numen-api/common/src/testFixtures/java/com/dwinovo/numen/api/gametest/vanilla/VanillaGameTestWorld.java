@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.gametest.vanilla;
 
 import com.dwinovo.numen.api.gametest.GameTestWorld;
+import com.dwinovo.numen.api.text.ServerLang;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import net.minecraft.server.MinecraftServer;
@@ -10,7 +11,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.GameRules;
 
-/** 原版的做法(NeoForge、Fabric 的 GameTest 用)。Paper 的签名不同,这个包整包不进 Paper 的测试插件。 */
+/** 原版的做法(Forge、Fabric 的 GameTest 用)。 */
 public final class VanillaGameTestWorld implements GameTestWorld {
 
     @Override
@@ -25,7 +26,7 @@ public final class VanillaGameTestWorld implements GameTestWorld {
 
     @Override
     public String text(Component message) {
-        return message.getString();
+        return ServerLang.of("en_us").translate(message).getString();
     }
 
     @Override

@@ -35,8 +35,8 @@ public interface GameTestWorld {
     void await(MinecraftServer server, BooleanSupplier done);
 
     /**
-     * 指令回给英文客户端的这句话的文字(翻译键已换成字)。模组上服务端自己的语言表里就有 Numen 的词条,{@code getString()} 即是;
-     * Paper 上词条在 Adventure 的翻译源里,要走和发给客户端同一条本地化编码的路。
+     * 指令回给英文客户端的这句话的文字(翻译键已换成字),走和发给没装 Numen 的客户端同一条路:Numen 的词条经 {@code ServerLang} 翻,
+     * 其余的由服务端的语言表翻。这一代 Forge 服务端的语言表只读数据包里的 {@code lang},没有 Numen 的词条,不能只靠 {@code getString()}。
      */
     String text(Component message);
 
