@@ -1,0 +1,30 @@
+modLoader = "javafml"
+loaderVersion = "${forge_loader_version_range}"
+license = "MIT"
+
+[[mods]]
+modId = "mynav"
+version = "1.0"
+displayName = "My Nav"
+description = '''A minimal third-party pathfinder written against the published Numen API only.'''
+
+[[dependencies.mynav]]
+modId = "forge"
+mandatory = true
+versionRange = "${forge_version_range}"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.mynav]]
+modId = "minecraft"
+mandatory = true
+versionRange = "${minecraft_version_range}"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.mynav]]
+modId = "numen_api"
+mandatory = true
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "BOTH"
