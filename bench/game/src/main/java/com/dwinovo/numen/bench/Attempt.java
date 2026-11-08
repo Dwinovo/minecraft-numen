@@ -491,11 +491,11 @@ final class Attempt {
      */
     private static void settleWorld(ServerLevel level) {
         level.getServer().setDifficulty(Difficulty.PEACEFUL, true);
-        GameTestWorld.INSTANCE.setDayTime(level, 6000);
+        GameTestWorld.setDayTime(level, 6000);
         level.getGameRules().set(GameRules.ADVANCE_TIME, false, level.getServer());
         level.getGameRules().set(GameRules.SPAWN_MOBS, false, level.getServer());
         level.getGameRules().set(GameRules.ADVANCE_WEATHER, false, level.getServer());
-        GameTestWorld.INSTANCE.setWeather(level, 24000, 0, false, false);
+        GameTestWorld.setWeather(level, 24000, 0, false, false);
     }
 
     /** 场地里一格的正中,站在它上面。 */

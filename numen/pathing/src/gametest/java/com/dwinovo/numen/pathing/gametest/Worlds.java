@@ -11,9 +11,9 @@ final class Worlds {
     private Worlds() {}
 
     static void settle(ServerLevel level) {
-        GameTestWorld.INSTANCE.setDifficulty(level, Difficulty.PEACEFUL);
-        GameTestWorld.INSTANCE.setDayTime(level, 6000);
-        GameTestWorld.INSTANCE.setRule(level, GameRules.SPAWN_MOBS, false);
-        GameTestWorld.INSTANCE.setWeather(level, 24000, 0, false, false);
+        GameTestWorld.setDifficulty(level, Difficulty.PEACEFUL);
+        GameTestWorld.setDayTime(level, 6000);
+        GameTestWorld.setRule(level, GameRules.SPAWN_MOBS, false);
+        GameTestWorld.setWeather(level, 24000, 0, false, false);
     }
 }
