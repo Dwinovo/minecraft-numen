@@ -4,7 +4,7 @@ plugins {
     // obfuscated-MC path used on 1.21.x). Same 1.14.x line.
     id 'net.fabricmc.fabric-loom' version '1.14.10' apply false
     // see https://projects.neoforged.net/neoforged/moddevgradle for new versions
-    id 'net.neoforged.moddev' version '2.0.141' apply false
+    id 'net.neoforged.moddev' version '2.0.148' apply false
     // Paper 端:开发包(Mojang 名的服务端)与本地起服。见 docs/paper.md §三。
     // 1.21.2 起的开发包是新格式(带多份产物),要 paperweight 2.x 才认得,1.7.x 解析时报"不止一个文件"。
     id 'io.papermc.paperweight.userdev' version '2.0.0-beta.22' apply false

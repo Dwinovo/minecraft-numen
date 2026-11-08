@@ -80,14 +80,14 @@ sourceSets {
 }
 
 repositories {
-    // MCProtocolLib 不发到 Maven Central。这里用 26.2 线上的正式构建
+    // MCProtocolLib 不发到 Maven Central。这里用 26.3 线上的正式构建
     maven { url = 'https://repo.opencollab.dev/maven-snapshots' }
     // MCProtocolLib 依赖的 cloudburstmc 库发在这一个
     maven { url = 'https://repo.opencollab.dev/maven-releases' }
 }
 
 dependencies {
-    e2eImplementation 'org.geysermc.mcprotocollib:protocol:26.2'
+    e2eImplementation 'org.geysermc.mcprotocollib:protocol:26.3-3'
     e2eImplementation 'com.google.code.gson:gson:2.10.1'
     e2eImplementation platform('org.junit:junit-bom:5.11.4')
     e2eImplementation 'org.junit.jupiter:junit-jupiter'
