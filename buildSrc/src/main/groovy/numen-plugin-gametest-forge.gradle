@@ -79,7 +79,8 @@ dependencies {
         minecraftLibrary(coordinate) { transitive = false }
     }
     // mcp 产出的官方 SDK 与重定位过的库平铺在 Numen API 的 devJar 里
-    gameTestRunRuntimeOnly files(numenDev, { apiForge.tasks.named('devJar') }, { apiForge.tasks.named('gametestDevJar') })
+    gameTestRunRuntimeOnly files(numenDev.flatMap { it.archiveFile }, apiForge.tasks.named('devJar', Zip).flatMap { it.archiveFile },
+            apiForge.tasks.named('gametestDevJar', Zip).flatMap { it.archiveFile })
 }
 
 tasks.matching { it.name == 'runGameTestServer' }.configureEach {

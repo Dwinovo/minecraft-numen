@@ -150,9 +150,11 @@ def apiForge = project(':numen-api:forge')
 ['devRunRuntimeOnly', 'gameTestRunRuntimeOnly'].each { name ->
     configurations.named(name) { extendsFrom configurations.minecraft, configurations.minecraftLibrary }
 }
+def apiDev = apiForge.tasks.named('devJar', Zip).flatMap { it.archiveFile }
+def apiGameTestDev = apiForge.tasks.named('gametestDevJar', Zip).flatMap { it.archiveFile }
 dependencies {
-    devRunRuntimeOnly files(numenDev, { apiForge.tasks.named('devJar') })
-    gameTestRunRuntimeOnly files(numenGameTestDev, { apiForge.tasks.named('devJar') }, { apiForge.tasks.named('gametestDevJar') })
+    devRunRuntimeOnly files(numenDev.flatMap { it.archiveFile }, apiDev)
+    gameTestRunRuntimeOnly files(numenGameTestDev.flatMap { it.archiveFile }, apiDev, apiGameTestDev)
 }
 
 // 运行任务在动作里才读类路径,不认上面 files(...) 带的任务依赖
