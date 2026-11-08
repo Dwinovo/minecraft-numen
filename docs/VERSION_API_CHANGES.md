@@ -280,7 +280,11 @@ stack.putByte("Count", (byte) 1);
   VanillaGradle。Forge 的成品是 SRG 名:`compileJava` 关增量(mixin 注解处理器在增量轮次不重跑,refmap 会静默丢掉),jar 里查 refmap。
 - Numen API 在 Forge 上随 Numen 的 `jarJar` 发;它与内嵌库(commonmark、mcp 的第三方库)都挂在 `numen/forge` 的 jarJar 上(ForgeGradle 的 jarJar
   只认坐标,嵌不进别的项目的 -all)。
-- 联动的 GameTest 跑批共用 `buildSrc/numen-plugin-gametest-forge.gradle`;端到端起服层是 `numen-e2e-forge.gradle`(ForgeGradle 的 `e2e` 运行配置)。
+- 联动的 GameTest 跑批共用 `buildSrc/numen-plugin-gametest-forge.gradle`:运行类路径同本体一样带上 mcp 的重定位 jar;
+  `forge.enabledGameTestNamespaces` 设成套件名(我们用例的模板命名空间),目标模组自带的 GameTest(车万女仆有一条)不跑。
+- 端到端起服层是 `numen-e2e-forge.gradle`(ForgeGradle 的 `e2e` 运行配置)。ForgeGradle 6 在自己的 afterEvaluate 里把 userdev 的
+  server 配置挂成 `server` 的父配置并当场按名字顺序只并一层,`e2e` 挂 `server` 当父配置拿不到主类(还会带上 GameTest 的东西),
+  所以在那之后把 userdev 那份直接并进 `e2e`;运行任务的参数、类路径在任务动作里才拼,起服任务用 `RunConfigGenerator` 的同几个方法拼出同一条命令放到后台。
 - 这一代没有的:`:bench:game`(只在 NeoForge 分支)、KubeJS 联动(KubeJS 6 没有 1.21 那套插件接口)、Paper 端(Paper 1.20.x 没有
   插件引导阶段装标签的接口)。
 - mcp 的重定位 jar 用 Shadow 8.3.9(Shadow 9 要 Gradle 9,ForgeGradle 6 与 Loom 1.6 只到 Gradle 8),任务写法与 1.21.1 相同;8.3 这一线
@@ -350,11 +354,14 @@ Thread.ofVirtual().name(n).start(r)    →  守护平台线程(缓存线程池)
   `ForgeGameTestWorldMixin`(只在 Forge 跑批的运行配置里挂)把那一处换回 `create`。
 - 这一代原版给新玩家挑出生点(`ServerPlayer.fudgeSpawnLocation`)用当场新建、种子不定的随机数,扮主人的玩家每次开服落脚不同,
   身边走刻的区块跟着变、世界随机数就错开:测试夹具 `ServerPlayerSpawnMixin` 按玩家在这一批里的编号定种子。
+- 这一代原版的 `GameTestInfo` 每次按坐标去世界里取场地的结构方块(它就在场地原点那一格),用例在原点铺地面后范围成了 null,
+  收场时清场空指针、服务器崩;`GameTestStructureBlockMixin` 照 1.21.1 用 `spawnStructure` 记下的那个。
 - Forge 的 `StructureUtils` 补丁按模板名的路径(不带命名空间)在模板目录里找 SNBT;原版与 Fabric 开发期找不到时拿整个名字(带冒号)
   拼路径,Windows 上直接抛 `InvalidPathException`,所以 Fabric 的模板一定要放进数据包。
 - 因这一代的差异改过的用例场景:`an_advancement_reward_arrives_as_an_event` 用 bullseye(这一代没有 blowback,奖励 50 点经验);
   `a_dimension_change_is_acknowledged` 去末地(去下界会落在传送门里,站在门里冷却每刻重置);
-  `a_body_alone_in_a_dimension_keeps_ticking_and_moving` 用 `teleportTo` 去下界的指定落点;成书、潜影盒、旗帜、信标、村民交易的场景数据换成 NBT 写法。
+  `a_body_alone_in_a_dimension_keeps_ticking_and_moving` 用 `teleportTo` 去下界的指定落点;成书、潜影盒、旗帜、信标、村民交易的场景数据换成 NBT 写法;
+  `a_rotated_shape_is_built_as_vanilla_rotates_it` 的六向朝向格用发射器(这一代没有合成器,唯一带 `orientation` 的拼图方块不可建造)。
 
 ### 联动
 - tlm、curios、kaleidoscope、ftbquests:只在 Forge 上接(同前)。jei:Forge 与 Fabric 都接(JEI 15)。litematica:Fabric 上对着
@@ -363,4 +370,5 @@ Thread.ofVirtual().name(n).start(r)    →  守护平台线程(缓存线程池)
 - ftbquests(FTB Quests 2001):书没有 `getTeamData(玩家)`,队伍进度经 `TeamProgress` 问 FTB Teams;Forge 的专用服务器把 FTB 标了
   `OnlyIn` 的取名方法删掉,服务端那本书的名字由 `QuestNames` 照 FTB 的规则自己算(物品任务项、物品奖励、类型显示名)。
 - tlm:这一代车万女仆没有按坐标播语音的口,不做模型语音(没有 `MaidVoice`);外观同步走自己的 `SimpleChannel`(`Outfit`/`OutfitClient`)。
+  它的祭坛配方类型叫 `altar_crafting`,由 `RecipeType.simple` 造出、没进注册表:配方书的类别取注册表名,没登记的取类型自己报的名字(`RecipeBook.categoryOf`)。
 - 端到端的协议客户端是 MCProtocolLib 1.20-2(1.20.1 的协议;它依赖的认证库与 NBT 库在 JitPack)。
