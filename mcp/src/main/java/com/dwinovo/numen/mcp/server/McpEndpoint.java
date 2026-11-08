@@ -23,6 +23,7 @@ import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpServletResponseWrapper;
 import org.apache.catalina.Context;
+import org.apache.catalina.Loader;
 import org.apache.catalina.connector.Connector;
 import org.apache.catalina.startup.Tomcat;
 import org.apache.tomcat.util.descriptor.web.FilterDef;
@@ -31,6 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
+import java.beans.PropertyChangeListener;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -125,6 +127,7 @@ public final class McpEndpoint {
         // Tomcat 的接收与工作线程默认就是守护线程:崩溃、被强杀时 stop 到不了,也不会拖住 JVM 退出
         t.setConnector(connector);
         Context context = t.addContext("", baseDir.toString());
+        context.setLoader(new OwnLoader());
         Tomcat.addServlet(context, "mcp", new Dispatch()).setAsyncSupported(true);
         context.addServletMappingDecoded("/mcp", "mcp");
         FilterDef def = new FilterDef();
@@ -825,6 +828,56 @@ public final class McpEndpoint {
                 sessionId = value;
                 opened.accept(value);
             }
+        }
+    }
+
+    /**
+     * 端点没有 Web 应用要隔离,类就从加载本类的加载器来。Tomcat 默认给上下文另建一个应用类加载器(上级是 JVM 的系统加载器,在模组加载器下
+     * 看不见 Tomcat 与我们自己的类),处理请求、起停时把线程的上下文加载器换成它,在这期间新建的线程(Reactor 的工作线程)也一直带着它,
+     * 端点停了它跟着作废。按上下文加载器找类的代码(Forge 47 的事件总线变换器给每个新加载的类查父类)就找不到类。
+     */
+    private static final class OwnLoader implements Loader {
+        private Context context;
+
+        @Override
+        public ClassLoader getClassLoader() {
+            return McpEndpoint.class.getClassLoader();
+        }
+
+        @Override
+        public Context getContext() {
+            return context;
+        }
+
+        @Override
+        public void setContext(Context context) {
+            this.context = context;
+        }
+
+        @Override
+        public boolean getDelegate() {
+            return true;
+        }
+
+        @Override
+        public void setDelegate(boolean delegate) {
+        }
+
+        @Override
+        public boolean modified() {
+            return false;
+        }
+
+        @Override
+        public void backgroundProcess() {
+        }
+
+        @Override
+        public void addPropertyChangeListener(PropertyChangeListener listener) {
+        }
+
+        @Override
+        public void removePropertyChangeListener(PropertyChangeListener listener) {
         }
     }
 }
