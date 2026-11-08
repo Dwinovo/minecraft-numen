@@ -330,7 +330,7 @@ public class TlmGameTests {
 
     /**
      * 模组自己的配方类型(祭坛)也经通用的 {@code numen.inv.recipes} 读得到:一条做出物品的祭坛配方,照它的产物去查,
-     * 列出来的那一条带着祭坛的类别、同一个配方 id 与它的输入;祭坛的配方不在合成格里做(这一代它的配方类也不是合成配方),所以没有"装得下的格",合成函数也不认它。
+     * 列出来的那一条带着祭坛的类别(这一代车万女仆管它叫 altar_crafting,类型没进注册表)、同一个配方 id 与它的输入;祭坛的配方不在合成格里做(这一代它的配方类也不是合成配方),所以没有"装得下的格",合成函数也不认它。
      */
     @GameTest(template = "floor16", timeoutTicks = 100, batch = BATCH)
     public static void a_mods_recipe_type_is_listed_by_the_generic_recipe_verb(GameTestHelper helper) {
@@ -350,11 +350,11 @@ public class TlmGameTests {
             for (JsonElement row : recipes.data().getAsJsonObject("returned").getAsJsonArray("recipes")) {
                 var recipe = row.getAsJsonObject();
                 listed |= recipe.get("id").getAsString().equals(altar.getId().toString())
-                        && recipe.get("category").getAsString().equals("touhou_little_maid:altar_recipe")
+                        && recipe.get("category").getAsString().equals("touhou_little_maid:altar_crafting")
                         && recipe.getAsJsonArray("ingredients").size() > 0 && !recipe.has("grid");
             }
             helper.assertTrue(listed, "the altar recipe " + altar.getId() + " is not listed: " + recipes.receipt());
-            helper.assertTrue(!crafted.succeeded() && crafted.outcome().contains("touhou_little_maid:altar_recipe"),
+            helper.assertTrue(!crafted.succeeded() && crafted.outcome().contains("touhou_little_maid:altar_crafting"),
                     "the crafting grid took an altar recipe: " + crafted.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), her);
         });
