@@ -7,18 +7,20 @@ import com.github.steveice10.mc.protocol.data.game.entity.player.HandPreference;
 import com.github.steveice10.mc.protocol.data.game.setting.ChatVisibility;
 import com.github.steveice10.mc.protocol.data.game.setting.SkinPart;
 import com.github.steveice10.mc.protocol.packet.ingame.clientbound.ClientboundCommandSuggestionsPacket;
+import com.github.steveice10.mc.protocol.packet.common.clientbound.ClientboundCustomPayloadPacket;
+import com.github.steveice10.mc.protocol.packet.common.clientbound.ClientboundDisconnectPacket;
+import com.github.steveice10.mc.protocol.packet.common.clientbound.ClientboundPingPacket;
+import com.github.steveice10.mc.protocol.packet.common.serverbound.ServerboundClientInformationPacket;
+import com.github.steveice10.mc.protocol.packet.common.serverbound.ServerboundCustomPayloadPacket;
+import com.github.steveice10.mc.protocol.packet.common.serverbound.ServerboundPongPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.clientbound.ClientboundCustomChatCompletionsPacket;
-import com.github.steveice10.mc.protocol.packet.ingame.clientbound.ClientboundCustomPayloadPacket;
-import com.github.steveice10.mc.protocol.packet.ingame.clientbound.ClientboundDisconnectPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.clientbound.ClientboundDisguisedChatPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.clientbound.ClientboundLoginPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.clientbound.ClientboundPlayerChatPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.clientbound.ClientboundSystemChatPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.serverbound.ServerboundChatCommandPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.serverbound.ServerboundChatPacket;
-import com.github.steveice10.mc.protocol.packet.ingame.serverbound.ServerboundClientInformationPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.serverbound.ServerboundCommandSuggestionPacket;
-import com.github.steveice10.mc.protocol.packet.ingame.serverbound.ServerboundCustomPayloadPacket;
 import com.github.steveice10.packetlib.Session;
 import com.github.steveice10.packetlib.event.session.DisconnectedEvent;
 import com.github.steveice10.packetlib.event.session.PacketErrorEvent;
@@ -78,6 +80,7 @@ final class Bot implements AutoCloseable {
     private final AtomicInteger transaction = new AtomicInteger();
     private final CompletableFuture<Void> joined = new CompletableFuture<>();
     private volatile String disconnected;
+    private boolean informed;
     private final List<String> packetErrors = new CopyOnWriteArrayList<>();
     private final List<String> payloadChannels = new CopyOnWriteArrayList<>();
     private final List<ClientboundCustomPayloadPacket> payloads = new CopyOnWriteArrayList<>();
@@ -138,10 +141,15 @@ final class Bot implements AutoCloseable {
             payloadChannels.add(payload.getChannel());
             payloads.add(payload);
         }
-        if (packet instanceof ClientboundLoginPacket) {
-            // 这一代没有配置阶段:原版客户端进了游戏(收到登录包)才把自己的设置(语言在其中)报上去
+        if (packet instanceof ClientboundCustomPayloadPacket && !informed) {
+            // 配置阶段的第一个包(服务端品牌)到了:原版客户端在这个阶段把自己的语言报上去
+            informed = true;
             session.send(new ServerboundClientInformationPacket(locale, 8, ChatVisibility.FULL, true,
                     List.of(SkinPart.values()), HandPreference.RIGHT_HAND, false, true));
+        } else if (packet instanceof ClientboundPingPacket ping) {
+            // 配置阶段服务端用 ping 探客户端处理到哪了;原版客户端立刻原样回 pong
+            session.send(new ServerboundPongPacket(ping.getId()));
+        } else if (packet instanceof ClientboundLoginPacket) {
             joined.complete(null);
         } else if (packet instanceof ClientboundSystemChatPacket chat) {
             record(new Message(Message.Kind.SYSTEM, chat.getContent(), chat.isOverlay()));

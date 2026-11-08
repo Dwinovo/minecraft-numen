@@ -78,6 +78,8 @@ repositories {
 
 dependencies {
     e2eImplementation 'com.github.steveice10:mcprotocollib:1.20.4-1'
+    // 它的 pom 写的 Adventure 是 4.15.0 的快照,那个快照已经不在任何仓库里;取同一版的正式发行
+    e2eImplementation platform('net.kyori:adventure-bom:4.15.0')
     e2eImplementation 'com.google.code.gson:gson:2.10.1'
     e2eImplementation platform('org.junit:junit-bom:5.11.4')
     e2eImplementation 'org.junit.jupiter:junit-jupiter'
