@@ -108,6 +108,8 @@ minecraft.runs.configureEach { run ->
     boolean withGameTests = run.name != 'e2e'
     if (withGameTests) {
         run.args '--mixin.config', 'numen_api_gametest.mixins.json'
+        // Forge 才要的那一处:GameTest 服务器走原版建测试世界的路(见 numen-api/forge 的 ForgeGameTestWorldMixin)
+        run.args '--mixin.config', 'numen_api_gametest.forge.mixins.json'
     }
     run.mods {
         "${mod_id}" {

@@ -34,7 +34,8 @@ minecraft {
             property 'mixin.env.disableRefMap', 'true'
             // 本体、Numen API 与联动以同仓源码集进运行(不是带 MANIFEST 的模组 jar),它们的 mixin 配置没人替它们声明:
             // 发行物里由 jar 的 MixinConfigs 清单项接手,开发运行在这里显式挂。
-            (['numen.mixins.json', 'numen_api.mixins.json', 'numen_api.forge.mixins.json', 'numen_api_gametest.mixins.json']
+            (['numen.mixins.json', 'numen_api.mixins.json', 'numen_api.forge.mixins.json', 'numen_api_gametest.mixins.json',
+              'numen_api_gametest.forge.mixins.json']
                     + spec.mixins).each { args '--mixin.config', it }
             mods {
                 numen {
