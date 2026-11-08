@@ -1623,3 +1623,59 @@ NeoForge 没取最新的 `26.2.0.93`:它的打补丁源码在 moddev `2.0.141` �
 
 **联动**:带 Curios `16.0.0+26.2`、Litematica `0.28.8`/MaLiLib `0.29.6`、JEI `30.48.0.244`。不带 YSM、KubeJS、车万女仆、森罗物语厨房
 (都没有 26.2 构建);FTB Quests 同 26.1.2 一节。
+
+## 26.2 → 26.3(对齐 1.21.1 @352c6fec8,0.1.5)
+方法:以 26.2 的对齐结果(`align-26.2`)为底,先改旋钮,再由编译器、datagen 与 GameTest 点名逐处适配。下面只记 26.2 → 26.3 这一段。
+
+**构建旋钮**:MC `26.3` / range `[26.3, 26.4)` / NeoForm `26.3-1` / NeoForge `26.3.0.101` / Fabric API `0.165.2+26.3` / loader `0.20.1` /
+gson `2.14.0`、slf4j `2.0.17`(26.3 自带的版本,与 26.2 相同)/ Paper 开发包 `26.3.build.244-stable` / MCProtocolLib `26.3-3`。
+moddev `2.0.141 → 2.0.148`:26.3 的 NeoForge 打补丁源码在 2.0.141 自带的 NFRT 里重编不过(`HolderSet` 匿名类的 `contents()`),
+2.0.148 是同一 2.0.x 线的补丁版,Gradle 9.2 照旧。loom `1.14.10` 不动。FML 是 12。
+
+**输入:GLFW → SDL3(客户端)**
+- 客户端 classpath 上没有 `org.lwjgl.glfw` 与 tinyfd 了,窗口、键鼠都走 `org.lwjgl.sdl`。键是 SDL 扫描码(`InputConstants.KEY_*`,如 `KEY_N = 17`),
+  `InputConstants.Type` 只剩 `KEYBOARD`/`MOUSE`,`isKeyDown(int)` 不再收窗口;鼠标键左 1、中 2、右 3;修饰键分左右两位(`MOD_SHIFT = 3`、`MOD_CONTROL = 192`、`MOD_ALT = 768`)。
+- NumenUI 的编号不变(`KeyCodes` 用 GLFW 的数,鼠标左 0、右 1、中 2),由新的 `McInput` 在屏幕把事件交给 NumenUI 之前换成这套编号,
+  ui 模块与 1.21.1 一字不差。转盘按住移动读物理键:键盘 `InputConstants.isKeyDown`,鼠标 `SDLMouse.SDL_GetMouseState` 的位掩码。
+- 打开网址/文件夹:`Util.getPlatform().openUri/openFile` 删了 → `Blaze3D.openUri/openPath`(内部是 `SDL_OpenURL`)。
+- 记忆导出的保存对话框从 tinyfd 换成 SDL3 的 `SDL_ShowFileDialogWithProperties`(异步,回调可能在别的线程,带标题、建议文件名与 zip 过滤器)。
+
+**渲染**:管线类型搬进 `com.mojang.renderpearl.api`(`RenderPipeline`、`GpuTextureView`、`GpuSampler`):`MixinGuiGraphics` 的 `innerBlit` 描述符跟着改;
+`PoseStack.mulPose(Quaternionf)` → `rotate(Quaternionfc)`。
+
+**服务端与实体**
+- 挥手带动作:`LivingEntity.swing(hand, SwingAnimation, sendToSelf)`,`InteractionResult.SwingSource` 是 `NONE/PREDICTED/SERVER_ONLY`,
+  原版服务端对 `shouldSwing()` 的结果都挥(`swingAndResetAttackStrength`,物品的交互动作)。客户端的挥手包改名 `ServerboundPunchPacket`,服务端
+  `handlePunch` 按主手的攻击动作挥手并把攻击蓄力清零:她打、挖的每一下走 `ClientPackets.punch()`;右键照原版服务端挥。
+- 传送回执带位置:`ServerboundAcceptTeleportationPacket(id, x, y, z, yRot, xRot)`,服务端拿它走一遍 `handlePlayerPositionChange`,起点是
+  `resetPosition()` 记下的位置。她的一刻不走 `tickPlayer`,回执前先 `resetPosition()`(不然起点一直是 0,每次回执都"moved too quickly"、拉回、再回执)。
+- `Entity.hurtMarked` → `syncVelocity`;`setInvulnerable` → `setPermanentlyInvulnerable`;`ClientboundPlayerChatPacket.unsignedContent()` 返回 `Optional`;
+  `ServerboundChatPacket` 的签名是 `Optional<MessageSignature>`。
+- `drop(stack, thrownFromHand, Prediction)`(`util.Prediction`);`Inventory.dropAll` 改成 `createItemStackToDrop(stack, true, false)` 加世界,摘下的饰品照它掉。
+- `onEquippedItemBroken(ItemStack, slot)`;`BundleContents.itemCopies()`;`DataComponentPatch` 没有 `entrySet`,取 `split().added()`;
+  `DisplayInfo` 是记录(`title()`);`FriendlyByteBuf` 的 `writeCollection/readList` 删了。
+- 告示牌分面成 `SignTextSlot`(`getText(slot)`、`updateText(fn, slot)`,`SignText` 不可变、改字走 `asMutable().setLine`);告示牌包是 `(pos, lines, slot)`。
+- `BlockState.blocksMotion()` 删除,换成标签 `#minecraft:blocks_motion`(高度图 `MOTION_BLOCKING` 用 `#blocks_motion_in_heightmap`,冰碎化水看
+  `#ice_melts_when_destroyed_above`)。床减半落差变成方块属性 `fallDistanceReduction`(床、新的层架菌 0.5),默认 `Block.fallOn` 按它减;寻路的摔伤读这个属性。
+- 床:新增 `AbstractBedBlock`(床与新的稻草床),`startSleepInBed(bed, state, rule, pos)`,规则来自 `bed.getBedRule(level, pos)`。
+- `DirtPathBlock` → `PathBlock`、`RedStoneWireBlock` → `RedstoneWireBlock`。
+- 世界生成:`ConfiguredFeature` 并进 `Feature`(注册表 `worldgen/feature`,条目自己会 `place`),`PlacedFeature.feature()` 直接是 `Holder<Feature>`;
+  `Structure.generate` 多一个 `Climate.Sampler`(`randomState.createClimateSampler(SamplerContext.EMPTY_UNCACHED)`);群系查询走
+  `BiomeSource.createUncachedResolver(randomState)`;`getStructureManager()` → `getStructureTemplateManager()`。
+- 配方展示上下文:`ContextMap.builder().set(SlotDisplayContext.REGISTRIES, RegistryAccess).buildAndValidate(...)`。
+- NeoForge(FML 12):`ModConfig.Type.COMMON` 没了,改用 `LOCAL`,文件名显式给 `numen-common.toml`(FML 不迁旧文件,不给就丢了玩家填的值);
+  `GatherDataEvent.getLookupProvider()` → `getWorldLookupProvider()`。
+
+**测试侧**
+- 原版 GameTest 服务器的主世界从 `WorldPresets.FLAT`(平原、草方块)换成 `FLAT_ALL_DIMENSIONS`(沙漠、67 层砂岩):`GameTestServerWorldMixin` 换回经典超平坦。
+- `ServerChunkCache.tickChunks(ProfilerFiller)` 没有 long 参数了(`ChunkTickShuffleMixin`);`TestData` 的全参构造多了维度;
+  `VanillaRegistries.createLookup()` → `createWorldLookup()`;`ServerPacksSource.createVanillaPackSource()` 返回 `VanillaPackResources`,取 `fullResources()`;
+  `RegistryDataLoader.WORLDGEN_REGISTRIES` → `WORLD_REGISTRIES`;`CommandSourceStack` 的名字构造只收一个 `Component`。
+- Paper:`ComponentSerialization.localizedCodec` 没了,按玩家语言渲染改成"编码的 ops 是 `LocaleAwareOps`";`GameTestRunner.Builder.fromInfo` 收服务器,
+  `StructureGridSpawner` 的起点按维度给。
+
+**原版缺陷(26.3)**:`ServerPlayerGameMode.tick()` 的延迟破坏还把"开挖的刻"传给 `incrementDestroyProgress`,而它的参数已改成"挖了几刻",进度成了常数:
+刚上线的玩家挂起的延迟破坏永远挖不掉,上线久的下一刻就秒掉。`DigGameTests` 的两条延迟破坏用例因此在 26.3 上失败(见当次报告)。
+
+**联动**:带 Curios `17.0.0+26.3`(API 重排:模组 id 在 `CuriosResources.MOD_ID`,槽类型在 `CuriosSlotTypes.getSlotTypes/getItemSlotTypes(…, isClient)`)、
+Litematica `0.29.1`/MaLiLib `0.30.2`、JEI `31.17.0.109`。不带 YSM、KubeJS、车万女仆、森罗物语厨房;FTB Quests 同 26.1.2 一节。
