@@ -26,8 +26,8 @@ import java.util.function.Supplier;
  * 程序在自己的虚拟线程上跑,而 GameTest 的时限按刻数算、测试服务器又尽可能快地推进刻,机器一忙时限就先到了。每刻开头等
  * 到这些都停下,一件活要几刻就是几刻,和机器快慢无关。
  *
- * <p>等两处:每刻开头({@link CompanionTickDispatcher#beforeTick},三个平台的测试服务器都走那一处),和每刻收尾、服务端执行别的线程
- * 排给它的任务之前({@link #afterTick}:模组加载器经 {@code GameTestServerTickMixin},Paper 经测试插件的刻尾事件)。这一刻里起的
+ * <p>等两处:每刻开头({@link CompanionTickDispatcher#beforeTick},两个模组加载器的测试服务器都走那一处),和每刻收尾、服务端执行别的线程
+ * 排给它的任务之前({@link #afterTick},经 {@code GameTestServerTickMixin})。这一刻里起的
  * 后台活,做完之后排给主线程的回调(签好的皮肤、MCP 请求要主线程做的那一步)就总在这一刻的收尾执行,不看后台线程赶没赶上。
  * 主线程自己在一刻当中去取结论的(寻路的搜索),取的那一下等它做完({@link #await})。
  *
