@@ -29,12 +29,11 @@ public record NumenTestEnvironment(String batch) implements TestEnvironmentDefin
 
     @Override
     public void setup(ServerLevel level) {
-        GameTestWorld world = GameTestWorld.INSTANCE;
-        world.setRule(level, GameRules.SPAWN_MOBS, false);
-        world.setRule(level, GameRules.ADVANCE_WEATHER, false);
-        world.setRule(level, GameRules.RANDOM_TICK_SPEED, 0);
+        GameTestWorld.setRule(level, GameRules.SPAWN_MOBS, false);
+        GameTestWorld.setRule(level, GameRules.ADVANCE_WEATHER, false);
+        GameTestWorld.setRule(level, GameRules.RANDOM_TICK_SPEED, 0);
         // 火不蔓延、不老化:谁身边都不算火的活动范围
-        world.setRule(level, GameRules.FIRE_SPREAD_RADIUS_AROUND_PLAYER, 0);
+        GameTestWorld.setRule(level, GameRules.FIRE_SPREAD_RADIUS_AROUND_PLAYER, 0);
         level.setWeatherParameters(CLEAR_WEATHER_TICKS, CLEAR_WEATHER_TICKS, false, false);
         GameTestSuites.beforeBatch(batch, level);
     }

@@ -58,28 +58,14 @@ public final class GameTestRegistration {
         }
     }
 
-    private static List<Holder.Reference<GameTestInstance>> instances(WritableRegistry<GameTestInstance> registry, List<TestFunction> functions) {
-        List<Holder.Reference<GameTestInstance>> out = new java.util.ArrayList<>();
+    private static void instances(WritableRegistry<GameTestInstance> registry, List<TestFunction> functions) {
         for (TestFunction function : functions) {
             TestData<Holder<TestEnvironmentDefinition>> data = new TestData<>(ENVIRONMENTS.get(function.batchName()),
                     Identifier.parse(function.structureName()), function.maxTicks(), (int) function.setupTicks(),
                     function.required(), function.rotation(), false, 1, 1, function.skyAccess());
-            out.add(registry.register(ResourceKey.create(Registries.TEST_INSTANCE, id(function.testName())),
-                    new NumenTestInstance(function, data), RegistrationInfo.BUILT_IN));
+            registry.register(ResourceKey.create(Registries.TEST_INSTANCE, id(function.testName())),
+                    new NumenTestInstance(function, data), RegistrationInfo.BUILT_IN);
         }
-        return out;
-    }
-
-    /**
-     * 不经加载数据包、直接把 {@code functions} 登记进两个注册表(Paper 的测试插件:它没有 Mixin,注册表在插件起来时已经读完,
-     * 由它解冻后交到这里)。
-     *
-     * @return 登记好的测试实例,按 {@code functions} 的先后
-     */
-    public static List<Holder.Reference<GameTestInstance>> register(WritableRegistry<TestEnvironmentDefinition> environments,
-            WritableRegistry<GameTestInstance> instances, List<TestFunction> functions) {
-        environments(environments, functions);
-        return instances(instances, functions);
     }
 
     private static Identifier id(String testName) {

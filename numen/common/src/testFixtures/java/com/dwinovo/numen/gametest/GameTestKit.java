@@ -89,7 +89,7 @@ public final class GameTestKit {
      * 定下种子,同样的场景每次走出同样的结果。
      */
     static final long ENTITY_SEED = 0;
-    /** 测试服的模拟距离(区块):端到端与 Paper 测试服也是这个值。 */
+    /** 测试服的模拟距离(区块):端到端的测试服也是这个值。 */
     private static final int SIMULATION_DISTANCE = 4;
 
     /**
@@ -98,13 +98,13 @@ public final class GameTestKit {
      */
     static void settleWorld(ServerLevel level, Difficulty difficulty, long dayTime) {
         // 无头测试服的模拟距离没有按服主的设置来,太小:她作为玩家带起来的区块,邻区块不走实体刻。
-        // 定成和端到端、Paper 测试服同一个值。
+        // 定成和端到端的测试服同一个值。
         for (ServerLevel each : level.getServer().getAllLevels()) {
             each.getChunkSource().setSimulationDistance(SIMULATION_DISTANCE);
         }
-        GameTestWorld.INSTANCE.setDifficulty(level, difficulty);
+        GameTestWorld.setDifficulty(level, difficulty);
         level.setDayTime(dayTime);
-        GameTestWorld.INSTANCE.setRule(level, GameRules.SPAWN_MOBS, false);
+        GameTestWorld.setRule(level, GameRules.SPAWN_MOBS, false);
         level.setWeatherParameters(CLEAR_WEATHER_TICKS, 0, false, false);
         // 无头测试服是专用服,说不清是谁的方块默认按别人的算(服务器设置)。多数用例要的是"问主人"那一半,所以写明不按。
         com.dwinovo.numen.api.brain.ModelServices.of(level.getServer()).settings().setPermission(true, false);
@@ -740,7 +740,7 @@ public final class GameTestKit {
                 new net.minecraft.server.level.ClientInformation(language, info.viewDistance(), info.chatVisibility(),
                         info.chatColors(), info.modelCustomisation(), info.mainHand(), info.textFilteringEnabled(),
                         info.allowsListing(), info.particleStatus()));
-        OwnerLine line = new OwnerLine(installed).language(language);
+        OwnerLine line = new OwnerLine(installed);
         LINES.put(profile.id(), line);
         server.getPlayerList().placeNewPlayer(line, player,
                 net.minecraft.server.network.CommonListenerCookie.createInitial(profile, false));

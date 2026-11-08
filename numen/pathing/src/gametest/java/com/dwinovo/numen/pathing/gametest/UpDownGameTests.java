@@ -44,12 +44,12 @@ public class UpDownGameTests {
     public static void settleLanding(ServerLevel level) {
         Worlds.settle(level);
         regeneration = level.getGameRules().get(GameRules.NATURAL_HEALTH_REGENERATION);
-        GameTestWorld.INSTANCE.setRule(level, GameRules.NATURAL_HEALTH_REGENERATION, false);
+        GameTestWorld.setRule(level, GameRules.NATURAL_HEALTH_REGENERATION, false);
     }
 
     @AfterBatch(batch = LANDING)
     public static void restoreLanding(ServerLevel level) {
-        GameTestWorld.INSTANCE.setRule(level, GameRules.NATURAL_HEALTH_REGENERATION, regeneration);
+        GameTestWorld.setRule(level, GameRules.NATURAL_HEALTH_REGENERATION, regeneration);
     }
 
     /** 跳上一整块。 */
