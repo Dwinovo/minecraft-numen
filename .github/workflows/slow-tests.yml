@@ -1,6 +1,6 @@
 name: Slow tests
 
-# 端到端(起一台真的专用服,用原版客户端协议走一遍玩家能做的事)与 Paper 的 GameTest:时间长,不跟着每次推送跑,
+# 端到端(起一台真的专用服,用原版客户端协议走一遍玩家能做的事):时间长,不跟着每次推送跑,
 # 要跑时手动触发。每次推送只跑 build.yml(编译、单测);各模组加载器的 GameTest 手动触发 gametest.yml。
 on:
   workflow_dispatch:
@@ -17,17 +17,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: e2e (neoforge)
-            task: ":numen:neoforge:e2eTest"
+          - name: e2e (forge)
+            task: ":numen:forge:e2eTest"
             minutes: 30
-          # 第一次要下载 Paper 服务端
-          - name: e2e (paper)
-            task: ":numen:paper:e2eTest"
-            minutes: 30
-          # 按 20 刻每秒、用每条用例自己写的时限跑(挖掘进度按墙钟,不能加速),见 docs/paper.md
-          - name: GameTest (paper)
-            task: ":numen:paper:runGameTestServer"
-            minutes: 120
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -61,7 +53,5 @@ jobs:
           path: |
             **/runs/e2e/logs/
             **/runs/e2e/*.log
-            **/runs/gametest/*.log
-            **/runs/gametest/gametest-result.json
             **/build/reports/
           retention-days: 7

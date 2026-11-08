@@ -6,17 +6,19 @@
 //
 // 编译期只给瘦 api jar(classifier api),和任何第三方插件一样。没有 GameTest:第三方现在没有公开的办法在测试里拉起一个同伴
 // (召唤要一个能收下行包的主人连接,CompanionFactory 是内部类),这一缺口记在 Numen API 的待办里,不绕。
-// 版本、MC 版本、NeoForge 版本与主构建同一份:读仓库根的 gradle.properties,不另写一遍。
+// 版本、MC 版本、Forge 版本与主构建同一份:读仓库根的 gradle.properties,不另写一遍。ForgeGradle 与 numen/forge 用的是同一个
+// 版本范围(写在仓库根 build.gradle 的 plugins 块;plugins 块里的版本只能是字面量)。
 plugins {
     id 'java'
-    id 'net.neoforged.moddev' version '2.0.141'
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
 }
 
 def rootProps = new Properties()
 file('../../gradle.properties').withInputStream { rootProps.load(it) }
 def numenMaven = providers.gradleProperty('numen_maven')
         .orElse(providers.provider { throw new GradleException('要用 -Pnumen_maven=<已发布坐标所在的 maven 目录的 URI>') })
-def numenApi = "com.dwinovo.numen:numen-api-neoforge-${rootProps.minecraft_version}:${rootProps.version}"
+def numenApiModule = "numen-api-forge-${rootProps.minecraft_version}"
+def numenApi = "com.dwinovo.numen:${numenApiModule}:${rootProps.version}"
 
 group = 'com.example.nav'
 version = '1.0'
@@ -28,16 +30,36 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 repositories {
-    // 只有这一个:Numen API 与它依赖的 ai / agent / ui / lua 都从发布出来的坐标取
+    // Numen API 与它依赖的 ai / agent / ui / lua 都从发布出来的坐标取
     maven { url = uri(numenMaven.get()) }
+    // ForgeGradle 自己要的:Forge 与它的工具
+    maven { url = 'https://maven.minecraftforge.net' }
     mavenCentral()
 }
 
-neoForge {
-    version = rootProps.neoforge_version
+minecraft {
+    mappings channel: 'official', version: rootProps.minecraft_version
+}
+
+// Numen API 发布的 POM 按第三方的方式解析一遍:numen-ai / agent / ui / lua 这些传递依赖从这里来(POM 引用了没发布的模块,
+// 或带着只在本机 ForgeGradle 缓存里才有的依赖,这里就解析不出来)
+configurations {
+    numenApiPom
 }
 
 dependencies {
-    // 编译期:瘦 api jar;POM 里的 numen-ai / agent / ui / lua 随它传递进来(POM 引用了没发布的模块,这里就解析不出来)
-    compileOnly "${numenApi}:api"
+    minecraft "net.minecraftforge:forge:${rootProps.minecraft_version}-${rootProps.forge_version}"
+    numenApiPom numenApi
+    // 编译期:瘦 api jar。发出去的 jar 是 SRG 名,fg.deobf 换回开发期的官方名(Forge 上依赖别的模组都这样接);
+    // fg.deobf 出来的依赖不带传递依赖,传递依赖取上面按 POM 解析的那份,Numen API 自己的 jar 不取
+    compileOnly fg.deobf("${numenApi}:api")
+    compileOnly files(configurations.numenApiPom.incoming.artifactView {
+        componentFilter { !(it instanceof ModuleComponentIdentifier && it.module == numenApiModule) }
+    }.files)
+}
+
+tasks.named('processResources', ProcessResources) {
+    def ranges = rootProps.subMap(['minecraft_version_range', 'forge_version_range', 'forge_loader_version_range'])
+    inputs.properties(ranges)
+    filesMatching('META-INF/mods.toml') { expand(ranges) }
 }
