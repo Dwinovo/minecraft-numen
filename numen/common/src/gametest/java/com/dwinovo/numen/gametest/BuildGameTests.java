@@ -920,7 +920,7 @@ public class BuildGameTests {
     }
 
     /**
-     * 一排带朝向的方块(楼梯上下两种、原木、告示牌、合成器、门、一段铁轨)用 {@code layer} 画出来,{@code rotate(90)} 之后经
+     * 一排带朝向的方块(楼梯上下两种、原木、告示牌、发射器(这一代没有合成器)、门、一段铁轨)用 {@code layer} 画出来,{@code rotate(90)} 之后经
      * {@code numen.build.place} 放下:每一格落在转过去的位置,方块状态逐格等于原版 {@code BlockState.rotate} 转出来的那一个。
      * 判据取原版的结果、不取我们自己的算法;格与格之间留空,楼梯的内外角、铁轨的拐弯这类跟邻居走的属性不会被邻居改掉。
      */
@@ -930,14 +930,14 @@ public class BuildGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_turner", new BlockPos(5, 2, 1), true);
         BlockPos o = helper.absolutePos(new BlockPos(3, 2, 1));
         String legend = "{A = \"oak_stairs[facing=north,half=top]\", B = \"oak_stairs[facing=east,half=bottom]\", "
-                + "L = \"oak_log[axis=x]\", S = \"oak_sign[rotation=3]\", C = \"jigsaw[orientation=north_up]\", "
+                + "L = \"oak_log[axis=x]\", S = \"oak_sign[rotation=3]\", C = \"dispenser[facing=north]\", "
                 + "D = \"oak_door[facing=east,half=lower,hinge=left,open=false]\", R = \"rail[shape=east_west]\"}";
         ToolRun build = lua(companion, "numen.build.place(numen.shape.layer(" + xyz(o) + ", {\"A.B.L.S.C.D.RRR\"}, " + legend
                 + "):rotate(90))");
         String row = "A.B.L.S.C.D.RRR";
         java.util.Map<Character, String> written = java.util.Map.of('A', "oak_stairs[facing=north,half=top]",
                 'B', "oak_stairs[facing=east,half=bottom]", 'L', "oak_log[axis=x]", 'S', "oak_sign[rotation=3]",
-                'C', "jigsaw[orientation=north_up]", 'D', "oak_door[facing=east,half=lower,hinge=left,open=false]",
+                'C', "dispenser[facing=north]", 'D', "oak_door[facing=east,half=lower,hinge=left,open=false]",
                 'R', "rail[shape=east_west]");
 
         succeedWhen(helper, () -> {
