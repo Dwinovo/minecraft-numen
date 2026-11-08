@@ -674,7 +674,7 @@ Windows 路径,拿来当路径过滤条件时一个文件都匹配不上。
 - 批次:原版按测试环境分组用的是以环境 Holder 为键的散列表(身份散列,每次开服先后不同),`GameTestBatchOrderMixin` 改成按登记先后分组。
   测试服只跑我们的用例(`GameTestSelectionMixin`):原版数据包自带的 `minecraft:always_pass` 不跑、不计数。
 - 世界规则:`NumenTestEnvironment.setup` 在批前方法之前定下原 `GameTestServer` 的五样(不刷怪、不换天气、随机刻 0、火不 tick、晴天),
-  布尔与数值规则都经 `GameTestWorld`(Paper 的签名不同,`setRule(level, IntegerValue, int)` 是这一轮加的)。
+  布尔与数值规则都经 `GameTestWorld.setRule`(数值规则那一个 `setRule(level, IntegerValue, int)` 是这一轮加的)。
 - 可复现那一套的落点:起点 `startTests` 的局部变量照旧;开批对齐照旧挂 `GameTestRunner.runBatch`(环境的 setup 在里面,一并推迟到整拍);
   同刻回调顺序照旧挂 `GameTestInfo.runAtTickTimeMap/tickInternal`;区块刻洗牌在 `ServerChunkCache.tickChunks(ProfilerFiller, long)`;
   场地强制加载搬到了 `TestInstanceBlockEntity.forceLoadChunks`(`StructureChunksMixin` 跟过去);`GameTestServer.create` 的参数变成
@@ -690,8 +690,6 @@ Windows 路径,拿来当路径过滤条件时一个文件都匹配不上。
   不垫底,围上与拆掉走同一圈。没有这两处,"挖地板钻到墙下"的权限用例与"飞过峡谷"的寻路用例都会在屏障板上走过去。
 - 用例计时:原版用例计时器从不启动(`getRunTime` 总是 0),`TestTicks` 在函数体前自记墙钟,`[numen-gametest-ticks]` 的毫秒才是实数。
 - 区块落定(1.21.1 `352c6fec8`):`Util.ioPool()/backgroundExecutor()` 交出的是 `TracingExecutor`,池在 `service()` 里,先取再强转。
-- Paper 的测试插件没有 Mixin:插件起来时读出用例,开跑前把两个已冻结的注册表解冻、经同一个 `GameTestRegistration.register` 登记、再冻上
-  (原版放场地按测试实例的注册名回表取结构,用例必须在表里)。
 
 **依赖撞包**:MC 1.21.6+ 客户端依赖把 jackson-annotations、Nimbus 一族钉成 strictly 的旧版;mcp 模块的官方 MCP SDK 要新版。由 mcp 产物重定位解决
 (1.21.1 的 `2ca1f9d5f`、`972587017` 两个提交,cherry-pick 进本分支)。对齐期间落到 1.21.1 的十二个通用修复按原顺序逐个 cherry-pick,各自一个提交。
@@ -1136,8 +1134,7 @@ RULE_DOFIRETICK(布尔) → FIRE_SPREAD_RADIUS_AROUND_PLAYER(整数,-1 处处蔓
 `NO_PERMISSIONS`,有主人取 `getProfilePermissions`;`ModPermissions.levels` 问 `permissions().hasPermission(new Permission.HasCommandLevel(...))`;
 客户端面板判 `Permissions.COMMANDS_GAMEMASTER`。命令源、op 名单条目、`withPermission`、`.requires` 的写法见上一节。
 
-**游戏规则**:规则是 `GameRule<T>`,`get(rule)` / `set(rule, value, server)`。用例夹具改规则只经 `GameTestWorld.setRule(level, rule, value)`:
-原版实现传 `MinecraftServer`,Paper 的 `GameRules.set` 第三参是 `ServerLevel`(规则按世界存),只在 Paper 的实现里不同。
+**游戏规则**:规则是 `GameRule<T>`,`get(rule)` / `set(rule, value, server)`。用例夹具改规则只经 `GameTestWorld.setRule(level, rule, value)`(传 `MinecraftServer`)。
 
 **倒水蒸发**:上一节的 `WorldView.waterEvaporates(BlockPos)` 照做;`CostModel.mayCatch(view, pos)` 按落点问,`Drop` 把落点传进去;
 地形烘焙的 `ultra_warm` 键名不变(数据集的键),值取 `WATER_EVAPORATES`。

@@ -32,14 +32,12 @@ On `1.20.1`, `1.20.2` and `1.20.4`, replace `neoforge` with `forge`.
 # Paper 端(第一次要下载 Paper 服务端)
 # Paper side (the first run downloads the Paper server)
 ./gradlew :numen:paper:e2eTest                # 同一批端到端场景对着 Paper 服,约 4 分钟 / the same scenarios against a Paper server, ~4 min
-./gradlew :numen:paper:runGameTestServer      # 同一批 GameTest 在 Paper 上跑,按 20 刻每秒、用每条用例自己写的时限,至少半小时 / the same GameTests on Paper, real time at 20 TPS with each case's own time limit, 30+ min
-# 端到端与 Paper 的 GameTest 时间长,不跟着推送跑;在 GitHub 的 Actions 页手动触发 "Slow tests"。
-# The end-to-end runs and the Paper GameTest are long and do not run on push; trigger "Slow tests" by hand on the Actions page.
+# 端到端时间长,不跟着推送跑;在 GitHub 的 Actions 页手动触发 "Slow tests"。
+# The end-to-end runs are long and do not run on push; trigger "Slow tests" by hand on the Actions page.
 # 排查与证明稳定的开关,加在 runGameTestServer 命令后面 / switches for investigating and proving stability, appended to a runGameTestServer command:
-#   -PgametestOnly='<完整用例名的正则>'   只跑名字匹配的用例(NeoForge、Fabric、Paper);正则要匹配完整名 numen.<类名小写>.<用例名>,如 'numen.braingametests.*'(用 . 不要用 \.,参数文件会把反斜杠原样带进去),写 'braingametests.*' 一条也选不中 / run only the cases whose full name matches (NeoForge, Fabric, Paper); the regex must match the whole name numen.<lowercase class>.<case>, e.g. 'numen.braingametests.*' (write . rather than \. , the argument file passes backslashes through verbatim), while 'braingametests.*' selects nothing
+#   -PgametestOnly='<完整用例名的正则>'   只跑名字匹配的用例(NeoForge、Fabric);正则要匹配完整名 numen.<类名小写>.<用例名>,如 'numen.braingametests.*'(用 . 不要用 \.,参数文件会把反斜杠原样带进去),写 'braingametests.*' 一条也选不中 / run only the cases whose full name matches (NeoForge, Fabric); the regex must match the whole name numen.<lowercase class>.<case>, e.g. 'numen.braingametests.*' (write . rather than \. , the argument file passes backslashes through verbatim), while 'braingametests.*' selects nothing
 #   -PgametestCopies=16                  把选中的每条用例在同一次开服里铺 16 份并行跑(NeoForge、Fabric),证明稳定用这个,不要重启服务器连跑;第 2 份起用例名加 #份号 / run every selected case in 16 parallel copies within one server start (NeoForge, Fabric); this is how to prove a case stable, rather than restarting the server over and over; copies from the 2nd carry #<number> in the name
-#   -PgametestOrigin=x,y,z               场地起点;不给就是固定的默认一处,每次开服相同。失败的用例在日志里写着起点与种子,照着给就能原样重放(NeoForge、Fabric、Paper) / the origin of the test plots; by default one fixed place, the same on every start. A failed case logs its origin and seed; pass them back to replay it as it was (NeoForge, Fabric, Paper)
-#   -PgametestMaxTicks=2400              把每条用例的时限收短到这么多刻,看哪些没做成(Paper) / cap each case's time limit to find what is stuck (Paper)
+#   -PgametestOrigin=x,y,z               场地起点;不给就是固定的默认一处,每次开服相同。失败的用例在日志里写着起点与种子,照着给就能原样重放(NeoForge、Fabric) / the origin of the test plots; by default one fixed place, the same on every start. A failed case logs its origin and seed; pass them back to replay it as it was (NeoForge, Fabric)
 # 每条用例收场时日志里有一行 [numen-gametest-ticks] passed|failed 用了刻数/时限 墙钟毫秒 用例名,定时限看它 / each finished case logs one [numen-gametest-ticks] passed|failed used/limit wall-ms name line; set time limits from it
 ```
 
