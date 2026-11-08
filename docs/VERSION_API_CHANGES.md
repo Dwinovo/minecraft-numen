@@ -281,7 +281,16 @@ stack.putByte("Count", (byte) 1);
 - Numen API 在 Forge 上随 Numen 的 `jarJar` 发;它与内嵌库(commonmark、mcp 的第三方库)都挂在 `numen/forge` 的 jarJar 上(ForgeGradle 的 jarJar
   只认坐标,嵌不进别的项目的 -all)。
 - 联动的 GameTest 跑批共用 `buildSrc/numen-plugin-gametest-forge.gradle`;端到端起服层是 `numen-e2e-forge.gradle`(ForgeGradle 的 `e2e` 运行配置)。
-- 这一代没有的:`:bench:game`(只在 NeoForge 分支)、KubeJS 联动(KubeJS 6 没有 1.21 那套插件接口)。
+- 这一代没有的:`:bench:game`(只在 NeoForge 分支)、KubeJS 联动(KubeJS 6 没有 1.21 那套插件接口)、Paper 端(Paper 1.20.x 没有
+  插件引导阶段装标签的接口)。
+- mcp 的重定位 jar 用 Shadow 8.3.9(Shadow 9 要 Gradle 9,ForgeGradle 6 与 Loom 1.6 只到 Gradle 8),任务写法与 1.21.1 相同;8.3 这一线
+  合成的清单不加 `Multi-Release`,不需要 `addMultiReleaseAttribute`。Forge 47 读声明了 Multi-Release 却没有多版本目录的 jar 直接起不来
+  (snakeyaml-engine 就是这样),所以它也打进重定位 jar。
+- Gson、slf4j 对着这一代游戏自带的版本编译与单测(1.20.1:Gson 2.10、slf4j 2.0.1)。
+- 开发运行(游戏、数据生成、GameTest)也用 Java 17:Loom 的运行任务不跟着工具链走,`numen-common`/`numen-api-common` 给所有
+  `JavaExec` 指定这一代的工具链。
+- 根项目一处写齐 ForgeGradle、MixinGradle、VanillaGradle 的版本:子项目继承父项目的构建脚本类路径(`:plugins:ysm` 用 VanillaGradle、
+  它的子项目 `:plugins:ysm:gametest` 用 ForgeGradle),各写各的话 srgutils 有两份,子项目里 ForgeGradle 初始化就崩。
 
 ### 语言 / 线程(Java 17)
 ```java
@@ -316,15 +325,30 @@ Thread.ofVirtual().name(n).start(r)    →  守护平台线程(缓存线程池)
 - 聊天栏流式行:私有 `addMessage(内容, 签名, 刻, 标签, 只重排)` 不记日志地入栏(没有 `addMessageToDisplayQueue`)。
 
 ### mixin
-- MixinExtras 0.3.5(Forge 47 自带)没有 `@WrapMethod`:用到它的几处在这一代都改成 `@Inject` HEAD/RETURN 成对写法,成品不必内嵌 MixinExtras。
+- Forge 47 不带 MixinExtras(开发运行实测缺 `Operation` 类;Fabric 的加载器带)。1.21.1 上用到它的地方在这一代都只用 Mixin 自己的注入:
+  `@WrapMethod` 改成 `@Inject` HEAD/RETURN 成对写法,测试夹具 `GameTestServerWorldMixin` 的 `@WrapOperation`/`@ModifyExpressionValue`
+  改成带被注入方法参数的 `@Redirect`。编译期也不放 MixinExtras,用到它就编译不过;成品不内嵌它。
 - 玩家连接唯一的下行出口是 `ServerGamePacketListenerImpl.send(Packet, PacketSendListener)`(`MixinServerGamePacketListener`)。
+
+### 数据与目录
+- 这一代数据包的目录是复数:标签 `tags/blocks`、`tags/items`;Fabric 的 GameTest 结构模板放在 `data/<命名空间>/gametest/structures/`。
+  写成 1.21 的单数,编译、打包都不报,开服读不到(natural 标签读不到,挖地形方块一律成了"来历不明")。
 
 ### GameTest
 - 套件经原版 `@GameTestGenerator`(`GameTestSuites`)报到,Forge 经 `RegisterGameTestsEvent`、Fabric 经 `fabric-gametest` 入口登记;
   `TestFunction` 是这一代的类与构造。结构模板 SNBT 的 `DataVersion` 是 3465。
 - 这一代原版只钉场地起点周围几格区块、不围栏:`StructureChunksMixin` 在 `GameTestInfo.spawnStructure` 之后钉住整块场地、就地生成周围两圈,
   并照高版本围上屏障;这一代 `@GameTest` 没有 `skyAccess`,要去顶的用例标 `@SkyAccess`。
-- 因这一代的差异改过的用例场景:`a_dimension_change_is_acknowledged` 去末地(去下界会落在传送门里,站在门里冷却每刻重置);
+- 原版写死的不同:场地起点写死 `(0, -60, 0)`(改的是交给 `runTestBatches` 的参数);区块刻洗牌用的是 `Collections.shuffle(List)`(进程级、
+  种子不定的随机数);开批是 `GameTestBatchRunner.runBatch`;测试服的固定规则只关了刷怪与天气,`GameTestServerRulesMixin` 补上随机刻 0
+  与关火刻(1.21.1 原版自带)。
+- Forge 47 的服务端入口在 GameTest 模式下拿 `server.properties` 建好的世界直接 `new GameTestServer(...)`,不经 `GameTestServer.create`:
+  测试世界成了普通地形,夹具挂在 `create` 上的清空世界目录、数据包维度、种子都不生效。numen-api/forge 的开发期小模组里
+  `ForgeGameTestWorldMixin`(只在 Forge 跑批的运行配置里挂)把那一处换回 `create`。
+- Forge 的 `StructureUtils` 补丁按模板名的路径(不带命名空间)在模板目录里找 SNBT;原版与 Fabric 开发期找不到时拿整个名字(带冒号)
+  拼路径,Windows 上直接抛 `InvalidPathException`,所以 Fabric 的模板一定要放进数据包。
+- 因这一代的差异改过的用例场景:`an_advancement_reward_arrives_as_an_event` 用 bullseye(这一代没有 blowback,奖励 50 点经验);
+  `a_dimension_change_is_acknowledged` 去末地(去下界会落在传送门里,站在门里冷却每刻重置);
   `a_body_alone_in_a_dimension_keeps_ticking_and_moving` 用 `teleportTo` 去下界的指定落点;成书、潜影盒、旗帜、信标、村民交易的场景数据换成 NBT 写法。
 
 ### 联动
