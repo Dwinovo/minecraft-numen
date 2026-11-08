@@ -1,13 +1,17 @@
 package com.dwinovo.numen.plugins.ftbquests;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
+import com.mojang.serialization.JsonOps;
 import dev.ftb.mods.ftblibrary.util.TextComponentParser;
 import dev.ftb.mods.ftbquests.quest.Quest;
 import dev.ftb.mods.ftbquests.quest.QuestObjectBase;
 import dev.ftb.mods.ftbquests.quest.task.Task;
 import dev.ftb.mods.ftbquests.util.TextUtils;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.ComponentSerialization;
+import org.apache.commons.lang3.text.translate.UnicodeUnescaper;
 
 import java.util.List;
 
@@ -49,23 +53,27 @@ final class QuestNames {
         return TextUtils.parseRawText(raw, owner.holderLookup()).getString();
     }
 
+    /** FTB 解析原文之前先把其中的 Unicode 转义还原成字符(它的 {@code TextUtils} 用的就是这一个)。 */
+    @SuppressWarnings("deprecation")
+    private static final UnicodeUnescaper UNESCAPER = new UnicodeUnescaper();
+
     /**
      * FTB 的 {@code TextUtils.parseRawText} 先试 JSON、不成再当富文本,富文本那一支走客户端的 {@code I18n}。服务端照同一个顺序,
      * 富文本交给 FTB Library 的 {@link TextComponentParser},{@code {翻译键}} 按服务端的语言表翻译。
      */
+    @SuppressWarnings("deprecation")
     private static Component serverText(QuestObjectBase owner, String raw) {
         String trimmed = raw.trim();
         if (trimmed.startsWith("[") && trimmed.endsWith("]") || trimmed.startsWith("{") && trimmed.endsWith("}")) {
             try {
-                MutableComponent json = Component.Serializer.fromJson(trimmed, owner.holderLookup());
-                if (json != null) {
-                    return json;
-                }
-            } catch (JsonParseException richText) {
+                JsonElement json = JsonParser.parseString(UNESCAPER.translate(trimmed));
+                return ComponentSerialization.CODEC.parse(owner.holderLookup().createSerializationContext(JsonOps.INSTANCE), json)
+                        .getOrThrow().copy();
+            } catch (IllegalStateException | JsonParseException richText) {
                 // 方括号、花括号开头结尾的富文本({翻译键} 就是),不是 JSON
             }
         }
-        return TextComponentParser.parse(raw, key -> Component.translatable(key));
+        return TextComponentParser.parse(UNESCAPER.translate(raw), key -> Component.translatable(key));
     }
 
     /** 没写标题时的默认名。 */

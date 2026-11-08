@@ -18,9 +18,8 @@ import java.util.function.Consumer;
  * 集合用的。列在一处,"现在内嵌了哪些、各自要谁"一眼答得完。闸门本身三个加载器共用,
  * 见 {@link Gate}。
  *
- * <p>只有 YSM、Curios、Litematica(NeoForge 上是 Forgematica)与 JEI:车万女仆、森罗物语厨房在这个 MC 版本没有构建;
- * FTB Quests 这个版本的构建去掉了 Architectury,联动接的事件与"真玩家"开关都不在了;KubeJS 联动不经这里(KubeJS 按 jar 根上的
- * kubejs.plugins.txt 找到它)。
+ * <p>只有 YSM、Curios、FTB Quests、Litematica(NeoForge 上是 Forgematica)与 JEI:车万女仆、森罗物语厨房在这个 MC 版本没有构建;
+ * KubeJS 联动不经这里(KubeJS 按 jar 根上的 kubejs.plugins.txt 找到它)。
  *
  * <h2>联动的类型只许出现在嵌套类里</h2>
  * 本类自己的方法(含 lambda 编译出来的合成方法)一个都不能提联动的类型:校验器为了核对
@@ -36,6 +35,8 @@ public final class Builtin {
         Gate gate = new Gate(ModList.get()::isLoaded, ModJar::find);
         gate.open("yes_steve_model", "ysm", content -> () -> YsmOnNeoForge.install(content));
         gate.open("curios", "curios", () -> com.dwinovo.numen.plugins.curios.NumenCurios::install);
+        gate.open("ftbquests", "ftbquests",
+                content -> () -> com.dwinovo.numen.plugins.ftbquests.NumenFtbQuests.install(content));
         gate.openClientMod("litematica", "litematica", content -> () -> LitematicaOnNeoForge.install(content));
         gate.openClientMod("jei", "jei", () -> JeiOnNeoForge::install);
     }

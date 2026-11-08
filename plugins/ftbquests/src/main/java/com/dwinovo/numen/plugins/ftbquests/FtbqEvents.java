@@ -51,8 +51,8 @@ final class FtbqEvents {
         attrs.put("id", id);
         String who = "";
         if (by != null) {
-            attrs.put("by", by.getGameProfile().getName());
-            who = by == her ? " — you finished it" : " — " + by.getGameProfile().getName() + " finished it";
+            attrs.put("by", by.getGameProfile().name());
+            who = by == her ? " — you finished it" : " — " + by.getGameProfile().name() + " finished it";
         }
         numen.emit(her, QUEST_COMPLETED, attrs,
                 "your FTB team \"" + team + "\" completed the " + object + " \"" + title + "\"" + who, false);

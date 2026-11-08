@@ -2,16 +2,15 @@ package com.dwinovo.numen.plugins.ftbquests;
 
 import com.dwinovo.numen.api.entity.Belongings;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import dev.architectury.event.EventResult;
 import dev.ftb.mods.ftbquests.api.FTBQuestsAPI;
-import dev.ftb.mods.ftbquests.events.ObjectCompletedEvent;
+import dev.ftb.mods.ftbquests.api.event.progress.ProgressEventData;
+import dev.ftb.mods.ftbquests.api.event.progress.ProgressType;
 import dev.ftb.mods.ftbquests.quest.BaseQuestFile;
 import dev.ftb.mods.ftbquests.quest.Chapter;
 import dev.ftb.mods.ftbquests.quest.QuestObject;
 import dev.ftb.mods.ftbquests.quest.ServerQuestFile;
 import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbquests.quest.reward.Reward;
-import dev.ftb.mods.ftbteams.api.event.PlayerChangedTeamEvent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -29,8 +28,8 @@ import java.util.UUID;
  * 她所在的队伍完成了什么、FTB 因此把哪些奖励记到了她名下——服务端每刻结束时告诉她。
  *
  * <h2>完成</h2>
- * FTB 自己的 {@link ObjectCompletedEvent}:任务、章节各一条。单人游戏里客户端的任务书也会发这个事件,
- * 只认服务端那份。队伍在线成员里的每个同伴各记一条,刻末发。
+ * FTB 自己的进度事件({@code QuestProgress}、{@code ChapterProgress})里标着“完成”的那几条:任务、章节各一条。单人游戏里
+ * 客户端的任务书也会发这个事件,只认服务端那份。队伍在线成员里的每个同伴各记一条,刻末发。
  *
  * <h2>奖励:以 FTB 的领奖记录为准</h2>
  * FTB 自动发奖有三处:任务或章节完成那一串调用里、成员登录时的任务书检查、加入队伍时补发队伍已完成任务的奖励;
@@ -59,26 +58,26 @@ final class QuestWatch {
 
     private record Completion(String object, String id, String title, String team, ServerPlayer by) {}
 
-    static EventResult onCompleted(ObjectCompletedEvent<?> event) {
-        TeamData data = event.getData();
-        if (!data.getFile().isServerSide()) {
-            return EventResult.pass();
+    static void onProgress(ProgressType type, ProgressEventData<? extends QuestObject> progress) {
+        TeamData data = progress.teamData();
+        if (type != ProgressType.COMPLETED || !data.getFile().isServerSide()) {
+            return;
         }
-        QuestObject object = event.getObject();
+        QuestObject object = progress.object();
         Completion completion = new Completion(object instanceof Chapter ? "chapter" : "quest",
                 object.getCodeString(), QuestNames.of(object), data.getName(),
-                ServerQuestFile.INSTANCE.getCurrentPlayer());
-        for (ServerPlayer member : event.getOnlineMembers()) {
+                ServerQuestFile.getInstance().getCurrentPlayer());
+        for (ServerPlayer member : progress.onlineMembers()) {
             if (member instanceof NumenPlayer her) {
                 COMPLETED.computeIfAbsent(her.getUUID(), k -> new ArrayList<>()).add(completion);
                 TO_CHECK.add(her.getUUID());
             }
         }
-        return EventResult.pass();
     }
 
-    static void onTeamChanged(PlayerChangedTeamEvent event) {
-        if (event.getPlayer() instanceof NumenPlayer her) {
+    /** 有人换了队伍;{@code player} 是不在线时为 null。 */
+    static void onTeamChanged(ServerPlayer player) {
+        if (player instanceof NumenPlayer her) {
             TO_CHECK.add(her.getUUID());
         }
     }

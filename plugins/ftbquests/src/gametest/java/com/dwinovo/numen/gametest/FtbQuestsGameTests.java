@@ -1,11 +1,14 @@
 package com.dwinovo.numen.gametest;
 
 import com.dwinovo.numen.api.entity.CompanionFactory;
+import com.dwinovo.numen.api.gametest.BeforeBatch;
+import com.dwinovo.numen.api.gametest.GameTest;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.plugins.ftbquests.FtbqApi;
 import com.dwinovo.numen.plugins.ftbquests.QuestBookProbe;
 import com.google.gson.JsonElement;
-import dev.ftb.mods.ftblibrary.config.Tristate;
+import de.marhali.json5.Json5Object;
+import dev.ftb.mods.ftblibrary.client.config.Tristate;
 import dev.ftb.mods.ftbquests.quest.Chapter;
 import dev.ftb.mods.ftbquests.quest.Quest;
 import dev.ftb.mods.ftbquests.quest.QuestObjectBase;
@@ -14,10 +17,7 @@ import dev.ftb.mods.ftbquests.quest.ServerQuestFile;
 import dev.ftb.mods.ftbquests.quest.reward.ItemReward;
 import dev.ftb.mods.ftbquests.quest.task.ItemTask;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.item.ItemStack;
@@ -46,7 +46,7 @@ public class FtbQuestsGameTests {
      * 她交齐一个物品任务:服务端不崩,任务书里这一章只有这一个任务,所以任务与章节各发一条完成事件,
      * FTB 自动发的奖励也报给她,每条里的名字都是书里的名字;交任务的回执里任务项的名字也对。
      */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
+    @GameTest(template = "numen:floor16", timeoutTicks = 200, batch = BATCH)
     public static void an_item_quest_she_hands_in_is_named_in_what_she_is_told(GameTestHelper helper) {
         NumenPlayer her = keeper(helper, "gametest_ftbq_submitter");
         Fixture book = new Fixture("Mining");
@@ -76,7 +76,7 @@ public class FtbQuestsGameTests {
      * 任务书把一个任务摊开时,任务、章节、任务项、奖励的名字:写了明文标题的是那段文字,写了翻译键的是翻出来的文字,
      * 没写的是 FTB 的默认名(任务取第一个任务项的名字,物品任务项与物品奖励是物品名带数量)。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100, batch = BATCH)
+    @GameTest(template = "numen:floor16", timeoutTicks = 100, batch = BATCH)
     public static void the_book_names_every_object_whether_titled_by_text_by_key_or_not_at_all(GameTestHelper helper) {
         NumenPlayer her = keeper(helper, "gametest_ftbq_reader");
         Fixture book = new Fixture("Mining");
@@ -117,7 +117,7 @@ public class FtbQuestsGameTests {
     }
 
     /** 交任务时她拿不出东西:回执里点的是任务书里的名字,三种标题都一样。 */
-    @GameTest(template = "floor16", timeoutTicks = 100, batch = BATCH)
+    @GameTest(template = "numen:floor16", timeoutTicks = 100, batch = BATCH)
     public static void a_hand_in_with_nothing_to_hand_in_names_the_quest_as_the_book_does(GameTestHelper helper) {
         NumenPlayer her = keeper(helper, "gametest_ftbq_empty_handed");
         Fixture book = new Fixture("Mining");
@@ -167,34 +167,36 @@ public class FtbQuestsGameTests {
      */
     private static final class Fixture {
 
-        private final ServerQuestFile file = ServerQuestFile.INSTANCE;
+        private final ServerQuestFile file = ServerQuestFile.getInstance();
         private final Chapter chapter;
 
         Fixture(String title) {
-            chapter = (Chapter) create(QuestObjectType.CHAPTER, 0L, new CompoundTag(), title);
+            chapter = (Chapter) create(QuestObjectType.CHAPTER, 0L, new Json5Object(), title, object -> {});
         }
 
         Quest quest(String title) {
-            return (Quest) create(QuestObjectType.QUEST, chapter.id, new CompoundTag(), title);
+            return (Quest) create(QuestObjectType.QUEST, chapter.id, new Json5Object(), title, object -> {});
         }
 
         void itemTask(Quest quest, String title, ItemStack stack, int count) {
-            CompoundTag type = new CompoundTag();
-            type.putString("type", "ftbquests:item");
-            ItemTask task = (ItemTask) create(QuestObjectType.TASK, quest.id, type, title);
-            task.setStackAndCount(stack, count);
-            // 交上去就扣:这样它是按提交按钮交的任务项,不是只数背包的
-            task.setConsumeItems(Tristate.TRUE);
+            Json5Object type = new Json5Object();
+            type.addProperty("type", "ftbquests:item");
+            create(QuestObjectType.TASK, quest.id, type, title, object -> {
+                ItemTask task = (ItemTask) object;
+                task.setStackAndCount(stack, count);
+                // 交上去就扣:这样它是按提交按钮交的任务项,不是只数背包的
+                task.setConsumeItems(Tristate.TRUE);
+            });
         }
 
         void itemReward(Quest quest, String title, ItemStack stack, int count, boolean autoClaim) {
             ItemReward reward = new ItemReward(file.newID(), quest, stack, count);
-            CompoundTag nbt = new CompoundTag();
-            reward.writeData(nbt, file.holderLookup());
+            Json5Object data = new Json5Object();
+            reward.writeData(data, file.holderLookup());
             if (autoClaim) {
-                nbt.putString("auto", "enabled");
+                data.addProperty("auto", "enabled");
             }
-            reward.readData(nbt, file.holderLookup());
+            reward.readData(data, file.holderLookup());
             if (title != null) {
                 reward.setRawTitle(title);
             }
@@ -202,9 +204,14 @@ public class FtbQuestsGameTests {
             file.clearCachedData();
         }
 
-        private QuestObjectBase create(QuestObjectType type, long parent, CompoundTag extra, String title) {
+        /** {@code edit} 是编辑器里送出之前填好的那几项(物品任务的物品);送来的数据就是填好之后的新对象自己写出的那一份。 */
+        private QuestObjectBase create(QuestObjectType type, long parent, Json5Object extra, String title,
+                java.util.function.Consumer<QuestObjectBase> edit) {
             QuestObjectBase object = file.create(file.newID(), type, parent, extra);
-            object.readData(new CompoundTag(), file.holderLookup());
+            edit.accept(object);
+            Json5Object data = new Json5Object();
+            object.writeData(data, file.holderLookup());
+            object.readData(data, file.holderLookup());
             if (title != null) {
                 object.setRawTitle(title);
             }

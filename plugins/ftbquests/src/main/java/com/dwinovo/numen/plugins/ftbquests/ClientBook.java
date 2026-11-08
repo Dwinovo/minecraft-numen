@@ -2,8 +2,8 @@ package com.dwinovo.numen.plugins.ftbquests;
 
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
+import dev.ftb.mods.ftblibrary.client.util.ClientUtils;
 import dev.ftb.mods.ftbquests.client.ClientQuestFile;
-import dev.ftb.mods.ftbquests.client.FTBQuestsClient;
 import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbteams.api.FTBTeamsAPI;
 import net.minecraft.world.entity.player.Player;
@@ -29,9 +29,9 @@ final class ClientBook {
             throw new ApiError(ErrorKind.FAILED, "Your owner's quest book has not loaded on their client yet "
                     + "(FTB Quests sends it when they join the world).", null);
         }
-        ClientQuestFile file = ClientQuestFile.INSTANCE;
+        ClientQuestFile file = ClientQuestFile.getInstance();
         TeamData team = file.selfTeamData;
-        Player owner = FTBQuestsClient.getClientPlayer();
+        Player owner = ClientUtils.getClientPlayer();
         boolean herInTeam = FTBTeamsAPI.api().getClientManager().selfTeam().getMembers().contains(companion);
         return new QuestBook(file, team, owner.getUUID(), companion, herInTeam, team.getPinnedQuestIds(owner));
     }

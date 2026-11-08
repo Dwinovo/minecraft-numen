@@ -19,7 +19,7 @@ public final class QuestBookProbe {
     }
 
     private static QuestBook book(NumenPlayer her) {
-        ServerQuestFile file = ServerQuestFile.INSTANCE;
+        ServerQuestFile file = ServerQuestFile.getInstance();
         TeamData team = file.getTeamData(her).orElseThrow();
         return new QuestBook(file, team, her.getUUID(), her.getUUID(), true, new LongOpenHashSet());
     }

@@ -11,6 +11,10 @@ authors = "${mod_author}" #optional
 description = '''${description}''' #mandatory (Supports multiline text)
 [[mixins]]
 config = "${mod_id}.mixins.json"
+# FTB Quests 联动(plugins/ftbquests)的 mixin,只在 FTB Library 在场时挂:它注入 FTB Library 的类,没有 FTB 就没有可注入的东西
+[[mixins]]
+config = "numen_ftbquests.mixins.json"
+requiredMods = ["ftblibrary"]
 [[dependencies.${mod_id}]] #optional
 modId = "numen_api" #mandatory — Numen supplies tools to Numen API
 type="required" #mandatory

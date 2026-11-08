@@ -17,6 +17,7 @@ dependencies {
     // (它们不发布——没人需要依赖我们的联动代码)。
     compileOnly project(':plugins:ysm')
     compileOnly project(':plugins:curios')
+    compileOnly project(':plugins:ftbquests')
     compileOnly project(':plugins:jei')
     // KubeJS 联动不经 Builtin 的闸门:KubeJS 读 jar 根上的 kubejs.plugins.txt 找到它,KubeJS 在场才会加载它的类
     compileOnly project(':plugins:kubejs')
@@ -160,6 +161,7 @@ sourceSets.configureEach {
 tasks.named('jar', Jar) {
     from({ project(':plugins:ysm').sourceSets.main.output })
     from({ project(':plugins:curios').sourceSets.main.output })
+    from({ project(':plugins:ftbquests').sourceSets.main.output })
     from({ project(':plugins:kubejs').sourceSets.main.output })
     from({ project(':plugins:litematica').sourceSets.main.output })
     from({ project(':plugins:jei').sourceSets.main.output })
@@ -167,7 +169,7 @@ tasks.named('jar', Jar) {
 
 // 跟车发的联动,它们的防漂移测试(技能与命令说明按命令树读一遍)随本模块的 check 一起跑:构建发行 jar 就查过它带上的文字
 tasks.named('check') {
-    dependsOn(':plugins:ysm:test', ':plugins:litematica:test', ':plugins:jei:test')
+    dependsOn(':plugins:ysm:test', ':plugins:ftbquests:test', ':plugins:litematica:test', ':plugins:jei:test')
 }
 
 // 真模型评测:Numen 的考题在 numen/common 的 src/bench,:numen:neoforge:runBench 跑它们(见 buildSrc 的 numen-bench.gradle 与 docs/bench.md)。

@@ -34,7 +34,7 @@ final class QuestSubmit {
     private QuestSubmit() {}
 
     static FtbqApi.Submitted submit(NumenPlayer her, String asked) {
-        ServerQuestFile file = ServerQuestFile.INSTANCE;
+        ServerQuestFile file = ServerQuestFile.getInstance();
         Quest quest = file.getQuest(QuestObjectBase.parseCodeString(asked));
         if (quest == null) {
             throw new ApiError(ErrorKind.NOT_FOUND, "No quest has the id \"" + asked + "\"; use the id that "
