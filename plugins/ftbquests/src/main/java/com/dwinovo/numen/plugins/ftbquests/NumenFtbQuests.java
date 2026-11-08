@@ -2,6 +2,7 @@ package com.dwinovo.numen.plugins.ftbquests;
 
 import com.dwinovo.numen.api.CompanionEvent;
 import com.dwinovo.numen.api.NumenPlugins;
+import com.dwinovo.numen.api.plugin.PluginRoster;
 import dev.ftb.mods.ftbquests.events.ObjectCompletedEvent;
 import dev.ftb.mods.ftbteams.api.event.TeamEvent;
 import net.minecraftforge.common.MinecraftForge;
@@ -14,7 +15,7 @@ import java.nio.file.Path;
 /**
  * FTB Quests 联动——她和主人在同一个 FTB 队伍里一起推进任务线。
  *
- * <p>"FTB 把她当真玩家"不在这里:那是引擎对 Architectury 的回答(api 的
+ * <p>"FTB 把她当真玩家"不在这里:那是 Numen API 对 Architectury 的回答(api 的
  * {@code ArchitecturyPlayerHooksMixin}),她的击杀、持物、到场由此进了 FTB 自己的判定,算给谁由 FTB 的
  * 队伍规则决定。这个联动做的是另一半:FTB 那边因此发生在她身上的事——队伍完成了任务、奖励发到了她身上、
  * 有人邀请她入队——一件件告诉她;她自己点不了的任务书与组队按钮,经 {@code ftbquests} 的几个动作走按钮
@@ -28,8 +29,9 @@ public final class NumenFtbQuests {
     private NumenFtbQuests() {}
 
     /** 由 {@code Builtin} 在确认 FTB Quests 在场后调用。 */
-    public static void install(Path skillsRoot) {
-        NumenPlugins.register(FtbqApi.NAMESPACE, numen -> {
+    public static void install(Path content) {
+        // FTB 的事件与 Forge 总线上的监听、对 Architectury 的 Mixin 都在门外,撤不回:卸下要重启
+        NumenPlugins.register(FtbqApi.NAMESPACE, PluginRoster.Unloading.NEEDS_RESTART, numen -> {
             // 事件两侧都要登记(服务端的发出口靠它挡,主人客户端的队列靠它投递),所以直接调,不放进 onClient
             FtbqEvents.bind(numen);
             // 两侧都登记:读书的函数在主人客户端上执行,提交与入队在服务端执行
@@ -56,8 +58,8 @@ public final class NumenFtbQuests {
                 InviteWatch.clear();
             });
 
-            if (skillsRoot != null) {
-                numen.bundleSkills(skillsRoot);
+            if (content != null) {
+                numen.bundleContent(content);
             }
         });
     }

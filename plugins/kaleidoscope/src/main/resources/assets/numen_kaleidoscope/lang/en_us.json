@@ -1,0 +1,8 @@
+{
+  "numen.kaleidoscope.activity.oil": "Pouring oil into the pot at %2$s",
+  "numen.kaleidoscope.activity.base": "Adding the soup base for %1$s at %2$s",
+  "numen.kaleidoscope.activity.fill": "Filling the pot for %1$s at %2$s",
+  "numen.kaleidoscope.activity.lid": "Covering or uncovering the pot at %2$s",
+  "numen.kaleidoscope.activity.stir": "Stir-frying at %2$s",
+  "numen.kaleidoscope.activity.plate": "Plating %1$s at %2$s"
+}

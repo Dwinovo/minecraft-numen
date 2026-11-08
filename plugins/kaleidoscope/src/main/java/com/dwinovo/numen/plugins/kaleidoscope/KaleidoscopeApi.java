@@ -1,17 +1,17 @@
 package com.dwinovo.numen.plugins.kaleidoscope;
 
-import com.dwinovo.numen.agent.script.ApiError;
-import com.dwinovo.numen.agent.script.ErrorKind;
+import com.dwinovo.numen.script.ApiError;
+import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.NumenApi;
-import com.dwinovo.numen.sdk.Doc;
-import com.dwinovo.numen.sdk.Example;
-import com.dwinovo.numen.sdk.Fn;
-import com.dwinovo.numen.sdk.Job;
-import com.dwinovo.numen.sdk.Note;
-import com.dwinovo.numen.sdk.Omitted;
-import com.dwinovo.numen.sdk.Pending;
-import com.dwinovo.numen.sdk.SeeAlso;
-import com.dwinovo.numen.sdk.ServerCall;
+import com.dwinovo.numen.api.sdk.Doc;
+import com.dwinovo.numen.api.sdk.Example;
+import com.dwinovo.numen.api.sdk.Fn;
+import com.dwinovo.numen.api.sdk.Job;
+import com.dwinovo.numen.api.sdk.Note;
+import com.dwinovo.numen.api.sdk.Omitted;
+import com.dwinovo.numen.api.sdk.Pending;
+import com.dwinovo.numen.api.sdk.SeeAlso;
+import com.dwinovo.numen.api.sdk.ServerCall;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -202,8 +202,8 @@ public final class KaleidoscopeApi {
         return call.sync(new PotActRecord(call, args.cell(), PotAct.PLATE, args.recipe()));
     }
 
-    private static final String STAND = "It does not walk: stand within reach of the cookware first (`numen.move.to` "
-            + "it with arrive = \"use\"); out of reach, no pot or stockpot there, or an unknown recipe fails at once "
+    private static final String STAND = "It does not walk: stand within reach of the cookware first (`numen.move.walk(pot, "
+            + "2)`); out of reach, no pot or stockpot there, or an unknown recipe fails at once "
             + "with the reason.";
     private static final String ASKS = "Uses what you carry. Asks your owner first when their rules say so, for using "
             + "the cookware and for taking the dish.";

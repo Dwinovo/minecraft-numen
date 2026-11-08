@@ -32,9 +32,9 @@ import java.util.UUID;
  * 轮不到。脱下女仆模型就把身体还回去,YSM 照旧生效——不需要两个插件互相认识。
  *
  * <h2>代价:原生渲染被取消,气泡跟着没了</h2>
- * NeoForge 把 {@code RenderPlayerEvent.Pre} 编译成
+ * Forge 把 {@code RenderPlayerEvent.Pre} 编译成
  * {@code if (post(pre)) return;}——取消等于整个 {@code PlayerRenderer.render} 提前
- * 返回,引擎挂在它尾部的说话气泡也一起不画。见 {@link #render} 里的处理。
+ * 返回,Numen API 挂在它尾部的说话气泡也一起不画。见 {@link #render} 里的处理。
  */
 public final class MaidBody {
 

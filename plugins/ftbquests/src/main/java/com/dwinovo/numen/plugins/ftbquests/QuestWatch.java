@@ -1,7 +1,7 @@
 package com.dwinovo.numen.plugins.ftbquests;
 
-import com.dwinovo.numen.entity.Belongings;
-import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.Belongings;
+import com.dwinovo.numen.api.entity.NumenPlayer;
 import dev.architectury.event.EventResult;
 import dev.ftb.mods.ftbquests.api.FTBQuestsAPI;
 import dev.ftb.mods.ftbquests.events.ObjectCompletedEvent;

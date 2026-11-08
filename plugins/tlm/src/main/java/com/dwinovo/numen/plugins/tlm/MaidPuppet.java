@@ -86,7 +86,7 @@ public final class MaidPuppet extends Mob implements IMaid {
 
         // 体型跟着本尊。名牌画在 getBbHeight() 上方,而 getBbHeight() 是 final、
         // 只能经 getDimensions 换——傀儡借的是僵尸类型(1.95),不换的话名牌会比
-        // 主人身上时高出一截,更要紧的是会跟气泡对不齐:气泡是引擎画在<b>本尊</b>
+        // 主人身上时高出一截,更要紧的是会跟气泡对不齐:气泡是 Numen API 画在<b>本尊</b>
         // 身上的,两者取不同的高度就会一上一下。
         // setPose 变化时香草自己会 refresh,这里只补第一次。
         if (first) refreshDimensions();

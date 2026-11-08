@@ -1,27 +1,20 @@
 package com.dwinovo.numen.plugins.kaleidoscope;
 
-import com.dwinovo.numen.agent.script.ErrorKind;
-import com.dwinovo.numen.entity.InputDriver;
-import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.permission.Action;
-import com.dwinovo.numen.permission.ConsentAnswer;
-import com.dwinovo.numen.permission.ConsentDesk;
-import com.dwinovo.numen.permission.ConsentItem;
-import com.dwinovo.numen.permission.Gate;
-import com.dwinovo.numen.permission.Permission;
-import com.dwinovo.numen.pathing.body.BodyCompat;
-import com.dwinovo.numen.permission.Verdict;
-import com.dwinovo.numen.sdk.Call;
-import com.dwinovo.numen.task.Preparation;
-import com.dwinovo.numen.task.Task;
-import com.dwinovo.numen.task.TaskResult;
-import com.dwinovo.numen.task.TaskState;
+import com.dwinovo.numen.script.ErrorKind;
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.permission.Action;
+import com.dwinovo.numen.api.permission.GatedAct;
+import com.dwinovo.numen.api.sdk.Call;
+import com.dwinovo.numen.api.task.Preparation;
+import com.dwinovo.numen.api.task.Task;
+import com.dwinovo.numen.api.task.TaskResult;
+import com.dwinovo.numen.api.task.TaskState;
+import com.dwinovo.numen.api.entity.BodyCompat;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -30,7 +23,7 @@ import java.util.Optional;
  * 在一格锅上做一步({@link PotAct})。
  *
  * <h2>它不走路</h2>
- * 身体必须<b>已经</b>在够得着的距离内,否则受理之前就当场拒绝、教她先 {@code numen.move.to}——和 {@code numen.use.block}
+ * 身体必须<b>已经</b>在够得着的距离内,否则受理之前就当场拒绝、教她先 {@code numen.move.walk}——和 {@code numen.use.block}
  * 同一条规矩。这一格不是锅、配方不成,也在受理之前判({@link #prepare})。
  *
  * <h2>能不能动这口锅,权限层说</h2>
@@ -44,9 +37,8 @@ final class PotActTask implements Task {
     private Dish dish;
     private int[] portions;
     private boolean permitted;
-    private ConsentDesk.Ticket consent;
-    /** 主人点头之后回执末尾要交代的那一句;没问过主人时是空串。 */
-    private String allowance = "";
+    /** 动手前过权限层、要问就问主人的那一块;主人点过的头回执末尾交代。 */
+    private final GatedAct gate;
     /** 走到终态时说给模型听的那句话。 */
     private String outcome = "";
     /** 失败收场时是哪一类、能照抄的下一步(没有为 null)。 */
@@ -56,8 +48,9 @@ final class PotActTask implements Task {
     private String lastStep = "not started yet";
     private ItemStack plated = ItemStack.EMPTY;
 
-    PotActTask(PotActRecord record) {
+    PotActTask(NumenPlayer cook, PotActRecord record) {
         this.r = record;
+        this.gate = new GatedAct(cook, () -> record);
     }
 
     @Override
@@ -101,11 +94,10 @@ final class PotActTask implements Task {
         }
         if (!BodyCompat.canReachBlock(cook, r.pos, 0.0)) {
             double away = Math.sqrt(cook.distanceToSqr(r.pos.getX() + 0.5, r.pos.getY() + 0.5, r.pos.getZ() + 0.5));
-            // arrive = "use" 站到看得见、点得到锅的地方
             return TaskResult.fail(ErrorKind.OUT_OF_REACH, "the " + cooker.kind().id() + " at "
                     + Cooker.where(r.pos) + " is " + String.format("%.1f", away) + " blocks away — out of working "
                     + "reach; walk there first, then call " + r.getToolName() + " again",
-                    Call.of("numen.move.to", r.pos, Map.of("arrive", "use")), Map.of("pos", r.pos));
+                    Call.of("numen.move.walk", r.pos, 2), Map.of("pos", r.pos));
         }
         return null;
     }
@@ -152,7 +144,7 @@ final class PotActTask implements Task {
             }
         }
         // 动锅之前先看着它:这些动作直接走方块实体,没有准星射线替身体转头,不看的话她会背对着锅做
-        InputDriver.lookAt(cook, Vec3.atCenterOf(r.pos));
+        cook.look().at(Vec3.atCenterOf(r.pos));
         Cooker cooker = Cooker.at(level, r.pos);
         Cooker.Step step = r.act.on(cooker, cook, dish, portions);
         lastStep = step.note();
@@ -187,35 +179,17 @@ final class PotActTask implements Task {
         List<Action> proposed = r.act == PotAct.PLATE
                 ? List.of(Action.useBlock(r.pos, state), Action.take(r.pos, state, dish.result().getItem()))
                 : List.of(Action.useBlock(r.pos, state));
-        Gate gate = Permission.gateFor(cook);
-        List<ConsentItem> asks = new ArrayList<>();
-        for (Action action : proposed) {
-            Verdict verdict = gate.judgeLive(action, level);
-            switch (verdict.kind()) {
-                case ALLOW -> { }
-                case DENY -> {
-                    return failed(ErrorKind.DENIED, "cannot " + action.describe() + ": " + verdict.reason(), null);
-                }
-                case ASK -> asks.add(gate.consentItemLive(action, verdict, level));
+        List<GatedAct.Permit> permits = gate.permitAll(proposed);
+        for (int i = 0; i < proposed.size(); i++) {
+            if (permits.get(i).state() == GatedAct.PermitState.REFUSED) {
+                return failed(ErrorKind.DENIED, "cannot " + proposed.get(i).describe() + ": " + permits.get(i).refusal(),
+                        null);
             }
         }
-        if (asks.isEmpty()) {
-            permitted = true;
-            return null;
-        }
-        if (consent == null || !consent.request().items().equals(asks)) {
-            consent = ConsentDesk.of(cook).ask(r, asks);
-        }
-        ConsentAnswer answer = consent.poll();
-        if (answer == null) {
+        if (permits.stream().anyMatch(p -> p.state() == GatedAct.PermitState.WAITING)) {
             cook.controls().stop();
             return TaskState.RUNNING;
         }
-        consent = null;
-        if (!answer.allowed()) {
-            return failed(ErrorKind.DENIED, answer.refusal(asks), null);
-        }
-        allowance = answer.allowance(asks);
         permitted = true;
         return null;
     }
@@ -228,17 +202,13 @@ final class PotActTask implements Task {
     }
 
     @Override
-    public void stop(NumenPlayer cook, StopReason why) {
-        cook.controls().stop();
-        // 装盘时为铲菜按下的潜行,还没铲就被停下也松开
-        cook.controls().set(com.dwinovo.numen.pathing.body.Controls.Key.SNEAK, false);
-    }
+    public void stop(NumenPlayer cook, StopReason why) {}
 
     @Override
     public TaskResult result(TaskState terminal) {
         KaleidoscopeApi.Done data = new KaleidoscopeApi.Done(r.pos,
                 plated.isEmpty() ? Optional.empty() : Optional.of(Dish.idOf(plated.getItem())));
-        String tail = allowance.isEmpty() ? "" : " " + allowance + ".";
+        String tail = gate.allowanceNote();
         return switch (terminal) {
             case SUCCESS -> TaskResult.ok(outcome + tail, data);
             case TIMEOUT -> TaskResult.timeout("ran out of time at " + r.act.word + " on the "

@@ -1,6 +1,6 @@
 package com.dwinovo.numen.plugins.ftbquests;
 
-import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.NumenPlayer;
 import dev.ftb.mods.ftbquests.quest.ServerQuestFile;
 import dev.ftb.mods.ftbquests.quest.TeamData;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;

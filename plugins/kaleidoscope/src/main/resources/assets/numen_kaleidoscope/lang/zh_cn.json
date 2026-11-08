@@ -1,0 +1,8 @@
+{
+  "numen.kaleidoscope.activity.oil": "往 %2$s 的锅里倒油",
+  "numen.kaleidoscope.activity.base": "给 %2$s 的锅放汤底(%1$s)",
+  "numen.kaleidoscope.activity.fill": "往 %2$s 的锅里下料(%1$s)",
+  "numen.kaleidoscope.activity.lid": "开合 %2$s 的锅盖",
+  "numen.kaleidoscope.activity.stir": "在 %2$s 翻炒",
+  "numen.kaleidoscope.activity.plate": "在 %2$s 装盘(%1$s)"
+}

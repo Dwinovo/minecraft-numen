@@ -9,7 +9,7 @@ import java.util.function.Consumer;
  *
  * <p>本联动只写原版 MC 与 numen api——编译期对着的就只有原版(见 build.gradle),
  * 加载器的类在这里物理上引用不到。加载器之间不一样的东西全收在这一个接口里,
- * 由 core 各加载器模块的 {@code Builtin} 实现,装上时传进来。于是同一份联动代码在
+ * 由 Numen 各加载器模块的 {@code Builtin} 实现,装上时传进来。于是同一份联动代码在
  * Fabric / Forge / NeoForge 上跑,不必按加载器各写一份。
  */
 public interface YsmHost {

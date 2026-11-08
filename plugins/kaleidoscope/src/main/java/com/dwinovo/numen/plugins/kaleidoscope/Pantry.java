@@ -1,6 +1,6 @@
 package com.dwinovo.numen.plugins.kaleidoscope;
 
-import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.NumenPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 

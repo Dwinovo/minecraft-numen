@@ -1,0 +1,47 @@
+plugins {
+    id 'java-library'
+    id 'net.minecraftforge.gradle'
+}
+
+/*
+ * YSM 联动的 GameTest:用例在本模块,`./gradlew :plugins:ysm:gametest:runGameTestServer` 单开一次跑批。
+ *
+ * 为什么是单独一个模块:YSM 联动本身(:plugins:ysm)对着原版编译、三个加载器通用,类路径上没有加载器的类,
+ * 用例要的 Forge 环境放不进去;这里对着 Forge,把联动的输出放进运行配置。照成品拼(见 buildSrc 的 numen-plugin-gametest-forge):
+ * 本体、联动(成品 jar 里它平铺在本体里)、用例同在 numen 这一个模组里。
+ *
+ * 为什么不挂真的 YSM:YSM 是闭源混淆的模组,在无头测试服务器上加载时它的原生库起不来,`ysm` 命令根本没注册,挂上也只是让用例
+ * 对着一个不工作的模组。联动对 YSM 的全部依赖是命令与 NBT 键名(见 Ysm),所以用例里由 YsmStub 在同样的两处(命令、NBT 里的
+ * model_id)放一个会记录的替身,联动经 NumenYsm.install 装上,从 Lua 入口调用。
+ *
+ * 用例和 Numen 的 GameTest 共用件(GameTestKit)同包,所以用例编译对着 Numen 的测试夹具;套件是 numen_ysm(见 YsmGameTestSuite)。
+ */
+group = 'com.dwinovo.numen'
+java { toolchain.languageVersion = JavaLanguageVersion.of(java_version) }
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+
+evaluationDependsOn(':numen:common')
+evaluationDependsOn(':plugins:ysm')
+
+minecraft {
+    mappings channel: 'official', version: minecraft_version
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+    compileOnly files({ project(':numen:forge').sourceSets.main.output })
+    compileOnly project(':numen:common').sourceSets.testFixtures.output
+    // 套件接口:本联动的用例经它报到(numen_ysm)
+    compileOnly project(':numen-api:common').sourceSets.testFixtures.output
+    // 用例装联动用它的入口(NumenYsm.install)
+    compileOnly project(':plugins:ysm').sourceSets.main.output
+    // 整个 Numen API(不是瘦 api jar):用例拉起同伴、调工具,和 Numen 的用例一样
+    compileOnly project(':numen-api:forge')
+}
+
+tasks.named('compileJava') {
+    dependsOn ':numen:forge:classes', ':numen:common:testFixturesClasses', ':plugins:ysm:classes'
+}
+
+ext.pluginGameTest = [sources: [project(':plugins:ysm').sourceSets.main, sourceSets.main], mixins: []]
+apply plugin: 'numen-plugin-gametest-forge'

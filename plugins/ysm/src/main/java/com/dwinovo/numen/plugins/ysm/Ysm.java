@@ -1,6 +1,6 @@
 package com.dwinovo.numen.plugins.ysm;
 
-import com.dwinovo.numen.sdk.OnHer;
+import com.dwinovo.numen.api.sdk.OnHer;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.ChatFormatting;
 import net.minecraft.nbt.CompoundTag;
@@ -156,6 +156,11 @@ public final class Ysm {
 
     public void stopAnimation(OnHer her) {
         her.run(PLAY, "stop");
+    }
+
+    /** 同伴自己动了,以服务器自己的来源替她停动作(没有哪次调用在手,所以不经 {@link OnHer});目标就是她。 */
+    public void stopAnimation(MinecraftServer server, ServerPlayer her) {
+        asServer(server, PLAY + " " + arg(her.getName().getString()) + " stop");
     }
 
     /** 清空一个玩家的授权表。授权镜像的对账用,以服务器自己的来源执行(见类注释)。 */

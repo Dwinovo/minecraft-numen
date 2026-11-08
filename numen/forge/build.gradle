@@ -1,0 +1,306 @@
+import com.dwinovo.numen.build.Modules
+
+plugins {
+    id 'numen-loader'
+    id 'net.minecraftforge.gradle'
+    id 'org.spongepowered.mixin'
+}
+
+// 要读 Numen 的 gametest 与 testFixtures 源码集、Numen API 的开发期 gametest 源码集,它们得先配置好
+evaluationDependsOn(':numen:common')
+evaluationDependsOn(':numen-api:forge')
+evaluationDependsOn(':mcp')
+
+// Forge 1.20.1 运行期是 SRG 名,而 mixin 源码按官方名写——必须生成 refmap 把
+// @Accessor("nibble") 之类的字符串引用翻译过去,否则运行期找不到字段直接崩。
+// (Fabric 那边由 loom 在 remapJar 期改写注解,机制不同,见 fabric/build.gradle。)
+mixin {
+    add(sourceSets.main, "${mod_id}.refmap.json")
+    config("${mod_id}.mixins.json")
+}
+
+/*
+ * GameTest:用例在 numen/common 与 numen/pathing 的 gametest 里,只用原版,经套件报到;这里只把它们的输出声明进模组 numen(见下面的
+ * mods)。加载器这一层的支持(登记套件入口、模拟主人连接的频道配法)属于 Numen API,在 numen-api/forge 的开发期小模组
+ * numen_api_gametest 里,这里把它声明进运行配置。用例与夹具不进发行 jar:jar 只收 main 的输出。
+ */
+
+// 这一次 GameTest 跑批带的有用例的模块,和它们的套件名(模块与套件名的对应在根 build.gradle 的 numenSuites 表里)。联动的 GameTest
+// 另开一次(它们的构建脚本里),不带这两个模块的用例。
+def gameTestModules = rootProject.ext.numenGameTestModules.collect { project(it) }
+def gameTestSuites = gameTestModules.collect { rootProject.ext.numenSuites[it.path].gametest }
+// 跑哪些套件:默认是这一次带的全部;-Pgametest=numen_pathing(逗号分隔)只跑指定的
+def gameTestSelection = providers.gradleProperty('gametest').orElse(gameTestSuites.join(','))
+
+def gameTestSeed = providers.gradleProperty('gametestSeed')
+// 排查与证明稳定(见 GameTestSuites):-PgametestOnly=<全名正则> 只跑匹配的用例,-PgametestCopies=N 每条铺 N 份并行
+def gameTestOnly = providers.gradleProperty('gametestOnly')
+def gameTestCopies = providers.gradleProperty('gametestCopies')
+// 场地起点(-PgametestOrigin=x,y,z):没给就是固定的默认一处(见 GameTestOrigin),失败日志里写着这次用的哪一处
+def gameTestOrigin = providers.gradleProperty('gametestOrigin')
+
+// GameTest 的结构模板:同步进 numen/common 的构建目录里的一处(见那边的 syncGameTestStructures),运行配置指向它。
+def gameTestStructures = project(':numen:common').layout.buildDirectory.dir('gameteststructures')
+
+minecraft {
+    mappings channel: 'official', version: minecraft_version
+    copyIdeResources = true // Calls processResources when in dev
+
+    // Automatically enable forge AccessTransformers if the file exists.
+    // This location is hardcoded in Forge and can not be changed.
+    def at = file('src/main/resources/META-INF/accesstransformer.cfg')
+    if (at.exists()) {
+        accessTransformer = at
+    }
+
+    runs {
+        client {
+            workingDirectory file('runs/client')
+            ideaModule "${rootProject.name}.numen.${project.name}.main"
+            taskName 'Client'
+            property 'numen.gametest.suites', gameTestSelection.get()
+        }
+        server {
+            workingDirectory file('runs/server')
+            ideaModule "${rootProject.name}.numen.${project.name}.main"
+            taskName 'Server'
+        }
+        data {
+            workingDirectory file('runs/data')
+            ideaModule "${rootProject.name}.numen.${project.name}.main"
+            args '--mod', mod_id, '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
+            taskName 'Data'
+        }
+        gameTestServer {
+            workingDirectory file('runs/gametestserver')
+            ideaModule "${rootProject.name}.numen.${project.name}.main"
+            taskName 'runGameTestServer'
+            property 'numen.gametest.suites', gameTestSelection.get()
+            // 真实地形维度的种子(-PgametestSeed=…):没给就是原版 GameTest 服务器写死的 0
+            if (gameTestSeed.present) {
+                property 'numen.gametest.seed', gameTestSeed.get()
+            }
+            if (gameTestOnly.present) {
+                property 'numen.gametest.only', gameTestOnly.get()
+            }
+            if (gameTestCopies.present) {
+                property 'numen.gametest.copies', gameTestCopies.get()
+            }
+            if (gameTestOrigin.present) {
+                property 'numen.gametest.origin', gameTestOrigin.get()
+            }
+            rootProject.ext.numenTerrainProperties().each { key, value -> property key, value }
+        }
+    }
+}
+
+minecraft.runs.configureEach { run ->
+    // 所有运行配置都指向同步好的 SNBT 模板目录(见 numen/common 的 syncGameTestStructures):无头跑批用,开发客户端里
+    // /test run <用例> 现场围观也用(见 GameTestSuites)。
+    run.property 'numen.gametest.structures', gameTestStructures.get().asFile.absolutePath
+    // 同仓的源码集在开发期是官方名,它们的 mixin 也按官方名写——不用 refmap 才对得上
+    run.property 'mixin.env.disableRefMap', 'true'
+    // Numen API 以同仓源码集进运行(不是带 MANIFEST 的模组 jar),它的 mixin 配置没人替它声明——发行物里由
+    // Numen API jar 的 MixinConfigs 清单项接手,开发运行在这里显式挂。
+    run.args '--mixin.config', 'numen_api.mixins.json'
+    run.args '--mixin.config', 'numen_api.forge.mixins.json'
+    // 端到端测试的服务端是玩家服务器的样子:只有 Numen 与 Numen API,GameTest 的用例、夹具与支持模组都不在里面
+    boolean withGameTests = run.name != 'e2e'
+    if (withGameTests) {
+        run.args '--mixin.config', 'numen_api_gametest.mixins.json'
+    }
+    run.mods {
+        "${mod_id}" {
+            source sourceSets.main
+            // 寻路模块的类平铺进发行 jar(见 numen-loader.gradle),开发期的运行不走那个 jar,在这里同样声明
+            source project(':numen:pathing').sourceSets.main
+            if (withGameTests) {
+                // Numen 的夹具:只含原版类;是联动的 GameTest 也用的那一份
+                source project(':numen:common').sourceSets.testFixtures
+                // 各模块的用例
+                gameTestModules.each { source it.sourceSets.gametest }
+            }
+        }
+        numen_api {
+            source project(':numen-api:forge').sourceSets.main
+            Modules.ALL.each { path -> source project(path).sourceSets.main }
+        }
+        if (withGameTests) {
+            // Numen API 的 GameTest 支持:套件机制与登记入口、模拟主人连接的加载器实现
+            numen_api_gametest {
+                source project(':numen-api:forge').sourceSets.gametest
+                source project(':numen-api:common').sourceSets.testFixtures
+            }
+        }
+    }
+}
+
+// ForgeGradle 在本项目里按名字找运行配置里每个源码集的 classes 任务;别的项目的源码集在这里放一个同名的替身,指向真的那一个。
+tasks.register('gametestClasses') {
+    dependsOn ':numen-api:forge:gametestClasses'
+    gameTestModules.each { dependsOn "${it.path}:gametestClasses" }
+}
+tasks.register('testFixturesClasses') {
+    dependsOn ':numen:common:testFixturesClasses', ':numen-api:common:testFixturesClasses'
+}
+
+tasks.matching { it.name in ['Client', 'Server', 'Data', 'runGameTestServer'] }.configureEach {
+    dependsOn ':numen:common:syncGameTestStructures'
+    dependsOn 'gametestClasses', 'testFixturesClasses'
+}
+
+tasks.matching { it.name == 'runGameTestServer' }.configureEach {
+    // 测试服的配置目录每次开服从空的开始(世界目录由 TerrainWorld 清):上一次跑批(包括失败的一次)改过的开关、签过的皮肤缓存、
+    // 发过的令牌、存下的档案不带进这一次
+    doFirst {
+        delete project.file('runs/gametestserver/config')
+    }
+}
+
+// Package this module's own datagen output (`./gradlew :numen:forge:Data` writes it there).
+sourceSets.main.resources.srcDir 'src/generated/resources'
+sourceSets.main.resources.exclude '.cache/**'
+
+// 发行物是 jarJar 产的 -all:Numen API 与它的内嵌库(聊天气泡的 Markdown 解析库、mcp 模块的第三方库)并排嵌在 META-INF/jarjar/ 里。
+// 内嵌库挂在这里而不是 Numen API 的 jar 里:Numen API 在 Forge 上随 Numen 发,ForgeGradle 的 jarJar 只认坐标,嵌不进别的项目的 -all。
+jarJar.enable()
+
+dependencies {
+    // 内嵌的联动模组。compileOnly:只有 Builtin 那道闸要看见它们的 install 入口,
+    // 类与资源由下面的 jar 块平铺进发行 jar。
+    compileOnly project(':plugins:ysm')
+    compileOnly project(':plugins:tlm')
+    compileOnly project(':plugins:kaleidoscope')
+    compileOnly project(':plugins:curios')
+    compileOnly project(':plugins:ftbquests')
+    // Loom 项目的默认变体是重映射成 intermediary 的 jar,要的是 Mojang 名的那份。目标模组在 Forge 上是 Forgematica。
+    compileOnly project(path: ':plugins:litematica', configuration: 'namedElements')
+    compileOnly project(':plugins:jei')
+
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+    // refmap 由 mixin 注解处理器在编译期生成——AP 必须显式挂上,否则 mixin 照样编译
+    // 通过、jar 照样打出来,只是里面没有 refmap,运行期才炸(与 Numen API 的 forge 模块同款声明)。
+    annotationProcessor 'org.spongepowered:mixin:0.8.5-SNAPSHOT:processor'
+    // common 用到 MixinExtras;Forge 运行期自带,dev 编译期需要在 classpath 上。
+    compileOnly 'io.github.llamalad7:mixinextras-common:0.3.5'
+    annotationProcessor 'io.github.llamalad7:mixinextras-common:0.3.5'
+
+    // 单元测试之外的开发运行要 Numen API 在类路径上的内嵌库(运行配置里 Numen API 是源码集,不读 jarJar)
+    minecraftLibrary "org.commonmark:commonmark:${commonmark_version}"
+    minecraftLibrary "org.commonmark:commonmark-ext-gfm-strikethrough:${commonmark_version}"
+    Modules.nestedLibraries(project(':mcp')).each { coordinate ->
+        minecraftLibrary(coordinate) { transitive = false }
+    }
+
+    // Numen API 在发行物里由下面的 jarJar 带进来;开发运行里是同仓的源码集(上面的 mods 块)。编译期看不见它的内部类
+    // (见 numen-loader.gradle 的瘦 api jar)。transitive=false:只嵌 Numen API 的 jar,Forge/MC 依赖由加载器提供。
+    jarJar(project(':numen-api:forge')) {
+        transitive = false
+        jarJar.ranged(it, '[0.0.0,)')
+    }
+    jarJar("org.commonmark:commonmark:${commonmark_version}") {
+        transitive = false
+        jarJar.ranged(it, "[${commonmark_version},0.31)")
+    }
+    jarJar("org.commonmark:commonmark-ext-gfm-strikethrough:${commonmark_version}") {
+        transitive = false
+        jarJar.ranged(it, "[${commonmark_version},0.31)")
+    }
+    Modules.nestedLibraries(project(':mcp')).each { coordinate ->
+        def libVersion = coordinate.split(':')[2]
+        jarJar(coordinate) {
+            transitive = false
+            jarJar.ranged(it, "[${libVersion},)")
+        }
+    }
+}
+
+// 跟车发的联动,它们的防漂移测试(技能与命令说明按命令树读一遍)随本模块的 check 一起跑:构建发行 jar 就查过它带上的文字
+tasks.named('check') {
+    dependsOn(':plugins:ysm:test', ':plugins:tlm:test', ':plugins:kaleidoscope:test', ':plugins:ftbquests:test', ':plugins:litematica:test', ':plugins:jei:test')
+}
+
+jar.finalizedBy('reobfJar')
+// jarJar 打的是 :numen-api:forge 的 build/libs 产物;必须等它被 reobfJar 原地改写成 SRG 之后再打包,
+// 否则嵌进去的是 official 名的 dev jar,线上加载直接崩。finalizer 不构成消费方的依赖边,这里补上。
+tasks.matching { it.name == 'jarJar' }.configureEach {
+    dependsOn ':numen-api:forge:reobfJar'
+}
+
+// Implement mcgradleconventions loader attribute
+def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements'].each { variant ->
+    configurations.named("$variant") {
+        attributes {
+            attribute(loaderAttribute, 'forge')
+        }
+    }
+}
+sourceSets.configureEach {
+    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant ->
+        configurations.named("$variant") {
+            attributes {
+                attribute(loaderAttribute, 'forge')
+            }
+        }
+    }
+}
+
+// ForgeGradle quirk: classes + resources share one output dir so the dev launcher and the
+// mixin refmap see them together.
+sourceSets.each {
+    def dir = layout.buildDirectory.dir("sourcesSets/$it.name")
+    it.output.resourcesDir = dir
+    it.java.destinationDirectory = dir
+}
+
+// mixin AP 与增量编译不相容：增量轮次 AP 不重跑，refmap 丢失且 jar 静默不带，
+// 生产环境 SRG 运行时 mixin 按官方名找不到目标直接拒启（开发期 disableRefMap 照不出）。
+tasks.named('compileJava', JavaCompile) { options.incremental = false }
+// 绞索：包里有 mixins.json 就必须有 refmap，缺了当场把构建判死，不给静默坏包出门。
+tasks.named('jar', Jar) {
+    doLast {
+        def zf = new java.util.zip.ZipFile(archiveFile.get().asFile)
+        try {
+            boolean hasMixins = zf.entries().any { it.name.endsWith('.mixins.json') }
+            boolean hasRefmap = zf.entries().any { it.name.endsWith('.refmap.json') }
+            if (hasMixins && !hasRefmap) {
+                throw new GradleException("mixin refmap missing from ${archiveFile.get().asFile.name}")
+            }
+        } finally { zf.close() }
+    }
+}
+
+// 联动模组的类与资源平铺进发行 jar——它们本质是独立模组,只是跟车一起发。
+// 目标模组不在时它们一个类都不会被加载,见 com.dwinovo.numen.plugins.Builtin。
+//
+// jar 和 jarJar 都要:Forge 这边真正发出去的是 jarJar 产的 -all(它把 Numen API 嵌进
+// META-INF/jarjar/),而它<b>不继承 jar 的内容配置</b>。只加在 jar 上的话,-all 里
+// 一个联动 class 都没有——装上去就是"工具凭空少了几个",还不报错。
+tasks.matching { it.name == 'jar' || it.name == 'jarJar' }.configureEach {
+    it.from({ project(':plugins:ysm').sourceSets.main.output })
+    it.from({ project(':plugins:tlm').sourceSets.main.output })
+    it.from({ project(':plugins:kaleidoscope').sourceSets.main.output })
+    it.from({ project(':plugins:curios').sourceSets.main.output })
+    it.from({ project(':plugins:ftbquests').sourceSets.main.output })
+    it.from({ project(':plugins:litematica').sourceSets.main.output })
+    it.from({ project(':plugins:jei').sourceSets.main.output })
+    // 联动自己的 mixin 配置(车万女仆的喂食那一处)只在成品里挂:开发运行里联动不在类路径上,放进上面 mixin{} 的 config 就会
+    // 变成每个开发运行的 --mixin.config 而找不到文件。目标模组不在场时它的 mixin 是 @Pseudo,静默跳过。
+    it.doFirst {
+        it.manifest.attributes('MixinConfigs': "${mod_id}.mixins.json,numen_tlm.mixins.json")
+    }
+}
+
+// 联动经目标模组的类型调用原版方法(车万女仆的 maid.getHealth() 之类):reobf 要知道那些类型的继承关系,才能把调用点的方法名翻成 SRG 名,
+// 认不出来的调用点留着官方名、线上就是 NoSuchMethodError。所以把各联动的编译期类路径(目标模组的 jar 在里面)一并交给 reobf 当库。
+tasks.matching { it.name == 'reobfJar' || it.name == 'reobfJarJar' }.configureEach {
+    libraries.from({
+        [':plugins:tlm', ':plugins:kaleidoscope', ':plugins:curios', ':plugins:ftbquests'].collect {
+            project(it).configurations.compileClasspath
+        }
+    })
+}
+
+// 端到端测试(numen/common 的 e2e 源码集,任务 e2eTest):用原版客户端协议连一台真的专用服。
+apply plugin: 'numen-e2e-forge'

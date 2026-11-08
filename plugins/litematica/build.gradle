@@ -1,0 +1,36 @@
+plugins {
+    id 'numen-plugin-base'
+    id 'fabric-loom'
+}
+
+// Litematica 与 MaLiLib 的发布物是 Yarn 名(运行在 intermediary 上)。本联动用 Loom 加官方 Mojang 映射,与 Numen 的 Fabric 端
+// 同一套:modCompileOnly 的 jar 由 Loom 重映射成 Mojang 名,编译出来的类与 Numen 本体同命名,随后由 numen:fabric 的 remapJar
+// 一起换成 intermediary;Forge 上的目标模组是 Forgematica(同样的包与类),由 numen:forge 的 reobfJar 换成 SRG 名。
+
+// 要读 Numen API 的 apiJar 任务,它得先配置好
+evaluationDependsOn(':numen-api:common')
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    mappings loom.officialMojangMappings()
+    // 瘦 api jar 取跨加载器那份(Mojang 名),与 plugins/ysm 一样;Fabric 的 intermediary 成品另有重映射,编译期用不着
+    compileOnly files(project(':numen-api:common').tasks.named('apiJar'))
+}
+
+repositories {
+    // MaLiLib 从 masa 的 maven 取;Litematica 的 1.20.1 版只发在 Modrinth,经它的 maven 按版本 id 取
+    exclusiveContent {
+        forRepository { maven { name = 'Masa'; url = 'https://masa.dy.fi/maven' } }
+        filter { includeGroupAndSubgroups 'fi.dy.masa' }
+    }
+    exclusiveContent {
+        forRepository { maven { name = 'Modrinth'; url = 'https://api.modrinth.com/maven' } }
+        filter { includeGroup 'maven.modrinth' }
+    }
+}
+
+// Litematica 是 LGPL-3.0:只在编译期引用,运行时由玩家自己装的那份提供,本模块不携带它们一个字节。
+// 不要传递依赖:它们的 pom 把 fabric-loader 与 MaLiLib 写成运行期依赖,编译不需要。
+dependencies {
+    modCompileOnly("fi.dy.masa.malilib:malilib-fabric-${minecraft_version}:${malilib_version}") { transitive = false }
+    modCompileOnly("maven.modrinth:litematica:${litematica_version}") { transitive = false }
+}

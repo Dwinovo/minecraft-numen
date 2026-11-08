@@ -1,13 +1,16 @@
 <div align="center">
 
+<img src="assets/branding/logo/svg/numen-square-transparent.svg" alt="Numen" width="128">
+
 # Numen
 
 [**English**](README_EN.md) · [简体中文](README.md)
 
-![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1%20~%2026.2-62B47A?style=flat-square)
-![Loaders](https://img.shields.io/badge/Loaders-Fabric%20%7C%20NeoForge%20%7C%20Forge%20%E2%89%A41.20.4-DE7C36?style=flat-square)
-![Java](https://img.shields.io/badge/Java-17%20%7C%2021%20%7C%2025-007396?style=flat-square&logo=openjdk&logoColor=white)
+![Minecraft](https://img.shields.io/badge/Minecraft-62B47A?style=flat-square)
+![Java](https://img.shields.io/badge/Java-007396?style=flat-square&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/code-LGPL--3.0-A8731E?style=flat-square)
+![QQ](https://img.shields.io/badge/QQ%20Group-1121662678-12B7F5?style=flat-square&logo=qq&logoColor=white)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/FpDCV327vX)
 
 [**Website**](https://numen.dwinovo.cn) · [**Installation**](#installation) · [**Getting Started**](#getting-started) · [**Architecture**](#architecture) · [**Plugins**](#plugins) · [**FAQ**](#faq)
 
@@ -17,7 +20,8 @@
 
 Numen is an **embodied agent that runs inside Minecraft**. *It lives in the game as a mod*, continually explores the Minecraft world, **makes its own decisions, and takes action to get tasks done**.
 
-Learn more on the [website](https://numen.dwinovo.cn).
+> [!TIP]
+> Join us on [Discord](https://discord.gg/FpDCV327vX) or in QQ group **1121662678**. Learn more on the [website](https://numen.dwinovo.cn).
 
 ## Installation
 
@@ -53,7 +57,7 @@ Numen as a whole can act as an **MCP server** and be driven directly by an exter
 The settings page of the panel also provides the following.
 
 - **Persona**: a few simple personas are built in, and you can write any persona you like.
-- **Skin**: set the skin of a summoned agent. Uploaded skins take effect after being signed through [MineSkin](https://mineskin.org).
+- **Skin**: put a skin png in the `config/numen/skins/` folder and pick it on the agent's edit card. It is signed through [MineSkin](https://mineskin.org) the first time it is used, and never signed twice.
 - **Voice**: configure voice input and voice output, so the agent can listen and speak.
 - **Group chat**: drag the avatars of different agents together to start a group chat. In a group chat you can @ a member to have it reply, or @ no one to broadcast to everyone.
 

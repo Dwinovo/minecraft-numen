@@ -1,6 +1,6 @@
 package com.dwinovo.numen.plugins.kaleidoscope;
 
-import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.NumenPlayer;
 
 /**
  * {@code kaleidoscope.pot} 在锅上的一步。一步一个函数,先做哪一步由 Lua 模块 {@code kaleidoscope.pot.cook} 排;每一步动手之前都过

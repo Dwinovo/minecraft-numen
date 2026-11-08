@@ -1,7 +1,6 @@
 package com.dwinovo.numen.plugins.kaleidoscope;
 
 import com.dwinovo.numen.api.NumenPlugins;
-import com.dwinovo.numen.task.TaskFactory;
 
 import java.nio.file.Path;
 
@@ -22,21 +21,20 @@ public final class NumenKaleidoscope {
     private NumenKaleidoscope() {}
 
     /** 由 {@code Builtin} 在确认森罗在场后调用。 */
-    public static void install(Path skillsRoot) {
+    public static void install(Path content) {
         NumenPlugins.register(KaleidoscopeApi.NAMESPACE, numen -> {
             KaleidoscopeApi.install(numen);
 
             // kaleidoscope.pot 的每一步派下来的记录由谁来跑
-            TaskFactory.register(PotActRecord.class, (player, record) -> new PotActTask(record));
+            numen.taskRunner(PotActRecord.class, (player, record) -> new PotActTask(player, record));
 
             // 事件两侧都要登记(服务端的发出口靠它挡,主人客户端的队列靠它投递),
             // 所以直接调,不放进 onClient
             KcEvents.bind(numen);
 
-            if (skillsRoot != null) {
-                numen.bundleSkills(skillsRoot);
-                // 随它发的 Lua 模块(kaleidoscope.pot.cook)和技能挨着放:plugins/kaleidoscope/modules/
-                numen.bundleModules(skillsRoot.resolveSibling("modules"));
+            // 随它发的技能与 Lua 模块(kaleidoscope.pot)都在它自己的 numen/ 目录里
+            if (content != null) {
+                numen.bundleContent(content);
             }
         });
     }

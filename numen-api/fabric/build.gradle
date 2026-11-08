@@ -1,0 +1,97 @@
+import com.dwinovo.numen.build.Modules
+
+plugins {
+    id 'numen-api-loader'
+    id 'fabric-loom'
+}
+
+// mcp 的依赖要先解析好,下面才能列出要嵌套的库
+evaluationDependsOn(':mcp')
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    // Obfuscated MC (1.20.1) → loom remaps to Mojang names to match the common source set.
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
+    // 聊天气泡的 Markdown 解析库(ui 模块用它)是内嵌的库,不是平铺进来的类:include 随发行 jar 带上,玩家不用另装。
+    include "org.commonmark:commonmark:${commonmark_version}"
+    include "org.commonmark:commonmark-ext-gfm-strikethrough:${commonmark_version}"
+    // mcp 模块的第三方库(官方 MCP SDK、Jackson、Reactor、Tomcat、Nimbus……)同理嵌套带上;清单从 mcp 的依赖解析出来。
+    Modules.nestedLibraries(project(':mcp')).each { include(it) { transitive = false } }
+}
+
+// 要读 Numen API 的测试夹具源码集,它得先配置好
+evaluationDependsOn(':numen-api:common')
+
+/*
+ * GameTest 在加载器这一层的支持(src/gametest,开发期的小模组 numen_api_gametest,不进发行 jar):用它的 fabric.mod.json 把套件入口
+ * GameTestSuites 登记成 `fabric-gametest` 入口,和给模拟主人连接用的 MockConnection 实现。用 Numen API 的都用得上(Numen、
+ * 第三方插件),所以归 Numen API;各运行配置把它的输出放进开发运行的类路径(见 numen/fabric/build.gradle)。
+ */
+sourceSets {
+    gametest {
+        // 模拟主人连接的实现(FabricMockConnection)要摸 Numen API 的内部类:它们在本模块的主输出里(common 的源码并进本模块一起编)
+        compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+    }
+}
+dependencies {
+    gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
+}
+
+loom {
+    mixin {
+        // mixins.json 声明的 refmap 名是 ${mod_id}.refmap.json,loom 默认按归档名生成
+        // ${mod_id}-fabric-1.20.1-refmap.json,运行期按声明的名字读不到,这里显式对齐。
+        defaultRefmapName = "${mod_id}.refmap.json"
+    }
+    def aw = project(':numen-api:common').file("src/main/resources/${mod_id}.accesswidener")
+    if (aw.exists()) {
+        accessWidenerPath.set(aw)
+    }
+    runs {
+        client {
+            client()
+            setConfigName('Fabric Client')
+            ideConfigGenerated(true)
+            runDir('runs/client')
+        }
+        server {
+            server()
+            setConfigName('Fabric Server')
+            ideConfigGenerated(true)
+            runDir('runs/server')
+        }
+        datagen {
+            inherit client
+            setConfigName('Fabric Data Generation')
+            ideConfigGenerated(true)
+            runDir('runs/datagen')
+            vmArg("-Dfabric-api.datagen")
+            vmArg("-Dfabric-api.datagen.output-dir=${file('src/generated/resources')}")
+            vmArg("-Dfabric-api.datagen.modid=${mod_id}")
+        }
+    }
+}
+
+sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+// Implement mcgradleconventions loader attribute
+def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements', 'includeInternal', 'modCompileClasspath'].each { variant ->
+    // loom 1.6 没有的配置名(如 includeInternal)直接跳过——matching 不触发未知名报错
+    configurations.matching { it.name == variant }.configureEach {
+        attributes {
+            attribute(loaderAttribute, 'fabric')
+        }
+    }
+}
+sourceSets.configureEach {
+    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant->
+        configurations.named("$variant") {
+            attributes {
+                attribute(loaderAttribute, 'fabric')
+            }
+        }
+    }
+}
