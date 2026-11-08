@@ -21,7 +21,7 @@ evaluationDependsOn(':numen:pathing')
 dependencies {
     // Numen 是 Numen API 的第一个插件,和别的插件走同一扇门:编译期只看得见瘦 api jar 里公开的那部分,
     // 由编译器把关;完整的类运行时由 Numen API 这个模组提供,不随 Numen 发。ai / agent / permission / ui 是插件经 POM 传递依赖拿到的模块。
-    compileOnly files(project(':numen-api:common').tasks.named('apiJar'))
+    compileOnly files(rootProject.project(':numen-api:common').tasks.named('apiJar'))
     Modules.PLUGIN_VISIBLE.each { compileOnly project(it) }
     // 寻路模块(只依赖原版):Numen 的内容,发行 jar 里平铺进 Numen 的加载器 jar,见 numen-loader.gradle
     compileOnly project(':numen:pathing')
@@ -29,8 +29,8 @@ dependencies {
     testImplementation project(':numen-api:common')
     testImplementation project(':numen:pathing')
     // 目标族的终点格核对表要原版世界夹具:TestWorld 与寻路模块的单测共用同一份,原版引导 Vanilla 在寻路模块的 fixtures 源码集里(单测与规划评测共用)
-    testImplementation project(':numen:pathing').sourceSets.test.output
-    testImplementation project(':numen:pathing').sourceSets.fixtures.output
+    testImplementation rootProject.project(':numen:pathing').sourceSets.test.output
+    testImplementation rootProject.project(':numen:pathing').sourceSets.fixtures.output
 
     compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
     // fabric and neoforge both bundle mixinextras, so it is safe to use it in common
@@ -120,16 +120,16 @@ dependencies {
     // 考场是对着 NeoForge 编的(它的模组入口),这里只要它的评测接口,不要它传递进来的加载器
     benchCompileOnly(project(':bench:game')) { transitive = false }
     benchCompileOnly project(':numen-api:common')
-    benchCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
+    benchCompileOnly rootProject.project(':numen-api:common').sourceSets.testFixtures.output
 }
 
 dependencies {
     testFixturesImplementation project(':numen-api:common')
     testFixturesImplementation project(':numen:pathing')
-    testFixturesCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
+    testFixturesCompileOnly rootProject.project(':numen-api:common').sourceSets.testFixtures.output
     gametestImplementation project(':numen-api:common')
     gametestImplementation project(':numen:pathing')
-    gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
+    gametestCompileOnly rootProject.project(':numen-api:common').sourceSets.testFixtures.output
 }
 
 configurations {
