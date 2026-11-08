@@ -20,7 +20,7 @@ import net.minecraft.server.level.ServerLevel;
  * <p>所以每一批都等到服务器刻数是 {@value #PERIOD} 的整数倍的那一刻开头才开始(上面几种周期的公倍数),开始前把实体编号推到
  * {@value #ID_STRIDE} 的整数倍、把每个维度的世界随机数按世界种子与维度重新定种子:这一批里造的实体编号对这些余数而言、
  * 这一批掷出的点数,都与前面无关;每个实体自带的随机数(烟花的寿命)也按它在这一批里的编号定种子({@link #entitySeed})。模组加载器经 {@code GameTestBatchStartMixin} 接管
- * 原版的开批({@code GameTestRunner.runBatch});Paper 的测试服按墙钟走,不在此列。
+ * 原版的开批({@code GameTestRunner.runBatch})。
  */
 public final class BatchStart {
 
