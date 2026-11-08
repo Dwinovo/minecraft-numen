@@ -409,10 +409,10 @@ public class CombatGameTests {
         attacker.teleportTo(level, start.x - 1.0, start.y, start.z, java.util.Set.of(), 270.0f, 0.0f, false);
         // 玩家互相伤害由游戏规则 pvp 管,这里明说要开
         boolean pvp = level.getGameRules().getBoolean(net.minecraft.world.level.GameRules.RULE_PVP);
-        com.dwinovo.numen.api.gametest.GameTestWorld.INSTANCE.setRule(level, level.getGameRules().getRule(net.minecraft.world.level.GameRules.RULE_PVP), true);
+        com.dwinovo.numen.api.gametest.GameTestWorld.setRule(level, level.getGameRules().getRule(net.minecraft.world.level.GameRules.RULE_PVP), true);
         // 世界的规则:不论这条成败都放回去,后面的用例不继承
         com.dwinovo.numen.api.gametest.TestCleanup.whenFinished(helper, () ->
-                com.dwinovo.numen.api.gametest.GameTestWorld.INSTANCE.setRule(level, level.getGameRules().getRule(net.minecraft.world.level.GameRules.RULE_PVP), pvp));
+                com.dwinovo.numen.api.gametest.GameTestWorld.setRule(level, level.getGameRules().getRule(net.minecraft.world.level.GameRules.RULE_PVP), pvp));
         boolean[] hit = {false};
         long ready = level.getGameTime() + SPAWN_PROTECTION_TICKS;
         succeedWhen(helper, () -> {
