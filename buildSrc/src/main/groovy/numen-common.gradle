@@ -13,6 +13,11 @@ java {
     withJavadocJar()
 }
 
+// 开发运行(游戏、数据生成、GameTest)也用这一代的 Java:Loom 的运行任务不跟着工具链走,不设就落到构建所在的 JDK 上
+tasks.withType(JavaExec).configureEach {
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(java_version) }
+}
+
 // Javadoc comments here are written for source readers; strict doclint
 // (HTML-escaping every & and <, mandatory @param) fights that without
 // adding value to a mod jar. Standard practice: turn it off.
