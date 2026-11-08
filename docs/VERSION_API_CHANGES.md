@@ -17,13 +17,13 @@ Fabric + NeoForge 同源。向上移植（把低版本分支的代码搬到高�
 
 `1.20.1 → 1.20.2 → 1.20.4 → 1.20.6 → 1.21.1 → 1.21.4 → 1.21.5 → 1.21.8 → 1.21.10 → 1.21.11 → 26.1.2`
 
-新架构（numen-api 拆分 + 调度器 + raw `NumenTool` + skill 体系）当前基线在 **`1.21.1`**，正逐档向上移植。
+新架构（Numen API 拆分 + 调度器 + raw `NumenTool` + skill 体系）当前基线在 **`1.21.1`**，正逐档向上移植。
 
 ---
 
 ## 每档都要改的构建旋钮 📦
 
-`gradle.properties`（core 与 api 各一份）：
+`gradle.properties`（Numen 与 api 各一份）：
 
 | 键 | 含义 |
 |---|---|
@@ -43,7 +43,7 @@ loader 依赖 build.gradle 里的 `numen-api-*-<mc>` 坐标也要同步成目标
 ## 1.21.1 → 1.21.4
 
 来源：老架构 `v0.0.2-1.21.1-beta` ↔ `v0.0.2-1.21.4-beta` 的纯 MC delta（约 30 个 java 文件）。
-新架构里文件路径/包名已变（`tulpa`→`numen`、工具类移入 `core/tools`），但**API 替换内容一致**。
+新架构里文件路径/包名已变（`tulpa`→`numen`、工具类移入 `numen/tools`），但**API 替换内容一致**。
 
 ### 注册表查询 ❗
 按 `ResourceLocation` 取值的方法整体重命名：
@@ -270,63 +270,68 @@ stack.putByte("Count", (byte) 1);
 
 ---
 
-## 对齐 1.21.1(7a3d3e251)之后的 Java 17 一代(1.20.1 先做,1.20.4 / 1.20.2 同一套写法)
+## 对齐 1.21.1 之后的 Java 17 一代(1.20.1 先做,1.20.4 / 1.20.2 同一套写法)
 
-整树换成 1.21.1 的新架构(Lua 程序整段在服务端跑、客户端函数反向请求、载荷层分片、回执三管道、SDK `@Fn` 登记、`agent/`、`lua/`、
-`pathing/`、`bench/`、五个联动),再把这一代的平台差异逐处回放。1.20.1 上要改的东西,按类别:
+0.1.5 这一轮对齐到 1.21.1 的 19c8710b0:整树换成 1.21.1(模块按模组 id 分:`numen-api/`、`numen/`、`numen/pathing`、纯 JVM 模块、
+`plugins/`),再把这一代的平台差异逐处回放。每处 API 差异只在一个地方适配。1.20.1 上要改的东西,按类别:
+
+### 构建
+- 加载器是 Forge 47(ForgeGradle 6,`numen-api/forge`、`numen/forge`)与 Fabric(Loom 1.6,官方映射);common 与只写原版的联动(ysm、jei)用
+  VanillaGradle。Forge 的成品是 SRG 名:`compileJava` 关增量(mixin 注解处理器在增量轮次不重跑,refmap 会静默丢掉),jar 里查 refmap。
+- Numen API 在 Forge 上随 Numen 的 `jarJar` 发;它与内嵌库(commonmark、mcp 的第三方库)都挂在 `numen/forge` 的 jarJar 上(ForgeGradle 的 jarJar
+  只认坐标,嵌不进别的项目的 -all)。
+- 联动的 GameTest 跑批共用 `buildSrc/numen-plugin-gametest-forge.gradle`;端到端起服层是 `numen-e2e-forge.gradle`(ForgeGradle 的 `e2e` 运行配置)。
+- 这一代没有的:`:bench:game`(只在 NeoForge 分支)、KubeJS 联动(KubeJS 6 没有 1.21 那套插件接口)。
 
 ### 语言 / 线程(Java 17)
 ```java
 switch (x) { case A a -> … }          →  if (x instanceof A a) { … } else if …   // 模式 switch、record 解构
+x instanceof T t   // x 的静态类型就是 T  →  先判空再用            // Java 17 不许
 Math.clamp(v, lo, hi)                  →  Mth.clamp(v, lo, hi)
-list.getFirst() / getLast()            →  list.get(0) / get(list.size() - 1)
-Thread.ofVirtual().name(n).start(r)    →  守护平台线程:new Thread(r, n) + setDaemon(true)
+list.getFirst()                        →  list.get(0)
+Thread.ofVirtual().name(n).start(r)    →  守护平台线程(缓存线程池)
 ```
-没有虚拟线程时语义不变:服务端主线程永远不等 Lua;一段程序的执行体占一条守护线程(`numen-program-N`,`ServerPrograms`),脚本虚拟机占
-一条(`lua-<块名>`,`LuaSandbox.start`);阻塞的宿主函数就在脚本自己的线程上等。单测 `LuaSandboxTest`、`SerialExecutorTest` 查的是同一条语义
-(线程是守护的、不是调用方的线程)。写进了 `docs/shell.md` 的"运行"一节。
+没有虚拟线程时语义不变:服务端主线程永远不等 Lua;一段程序的执行体占一条守护线程(`ServerPrograms`),阻塞的宿主函数就在脚本自己的线程上等。
 
 ### 网络(没有 `CustomPacketPayload` 与配置阶段)
-- 载荷实现 `NumenPayload`(`id()` + `write(FriendlyByteBuf)`,静态 `read`);程序上行/结果/停止、反向请求/结果、分片包都是这一套。
-- 分片一份通用实现(`Fragments`/`Wire`),上限仍是 32767;Forge 47 只有一条 `SimpleChannel`(`numen_api:main`),所有载荷装进
-  `Envelope(ResourceLocation id, byte[] data)` 多路复用,多出的包头开销记在 `Wire.FRAMING = 64`。Fabric 直接用 id + `FriendlyByteBuf`。
-- GameTest 里扮主人客户端的连接不经真网线,下行的包经 `ForgeNetworkChannel.payloadOf` 读回,与客户端收包走同一张解码表。
+- 载荷实现 `NumenPayload`(`id()` + `write(FriendlyByteBuf)`,静态 `read`);`INetworkChannel` 按 `ResourceLocation` 登记解码器。
+- Forge 47 只有一条 `SimpleChannel`(`numen_api:main`),所有载荷装进 `Envelope(id, bytes)` 多路复用,包头开销记在 `Wire.FRAMING = 64`;
+  `canSend` 问 `isRemotePresent`。Fabric 一种载荷一条频道,客户端进游戏后才发 `minecraft:register`,开场在频道登记那一刻发。
+- 客户端报语言(`ServerboundClientInformationPacket`)在进游戏之后,原版服务端不记它:平台服务 `IClientLanguage`,模组上由
+  `ServerPlayerLanguageMixin` 在 `updateOptions` 记下。
+- GameTest 里扮主人客户端的连接:Forge 用 `NetworkHooks.appendConnectionData` 挂上与服务端同一张频道表(`ForgeMockConnection`),
+  Fabric 替他发 `minecraft:register`(`FabricMockConnection`);下行的包经各自通道的解码表读回。
 
 ### 身体与世界 API
-- 没有属性的:方块/实体交互距离、潜行速度、重力、安全落差 → `pathing` 的 `BodyCompat`(数值与后来的属性默认值一致,算法照这一代原版);
-  `EntityDimensions` 没有眼高 → `BodyStats` 单独带 `standingEye`/`crouchingEye`。
-- **迈步高度**:这一代 `ServerPlayer` 构造时 `maxUpStep = 1.0`,一格高的台阶与门板不跳也不开门就迈上去了;真玩家客户端是 0.6。身体(`NumenPlayer`、
-  GameTest 的 `TestBody`)构造后经 `BodyCompat.walkLikeAPlayer` 设回 0.6,规划与执行读同一个值。
-- `SavedData` 老式工厂(`computeIfAbsent(load, new, name)`)、`ResourceLocation` 公开构造、物品 NBT 而不是组件(`Count` 是 byte、附魔 `Enchantments`)、
-  `Recipe<?>.getId()`(没有 `RecipeHolder`)、`ServerGamePacketListenerImpl.send(Packet, PacketSendListener)`、`broadcastBreakEvent(EquipmentSlot)`
-  代替 `onEquippedItemBroken`、Brigadier 1.0.18 的 `ResultConsumer` 与 `CommandSourceStack.withCallback`。
-- DFU 6.0.8 的 `optionalFieldOf` 遇到一个坏元素就丢掉整张表:`PermissionStore` 用逐行容错的 `TABLE` 编解码,一行写坏只丢那一行。
+- 没有属性的:方块/实体交互距离、潜行速度、重力 → `numen-api` 的 `BodyCompat`(数值与后来的属性默认值一致,算法照这一代原版);
+  `EntityDimensions` 没有眼高 → `BodyStats` 带 `standingEye`。迈步高度:身体构造后 `BodyCompat.walkLikeAPlayer` 设回 0.6。
+- 物品 NBT 而不是组件:成书的字(`WrittenBookItem.TAG_*`)、潜影盒里的东西(`BlockEntityTag.Items`)、旗帜花纹(`BannerBlockEntity.getPatternCount`)、
+  附魔表(`EnchantmentHelper.deserializeEnchantments`)、自定义名(`hasCustomHoverName`)。放置时物品带给方块实体的只有 `BlockEntityTag`
+  (`BlockItem.updateCustomBlockEntityTag`),自定义名由方块的 `setPlacedBy` 接。
+- 配方:`Recipe<?>.getId()`,没有 `RecipeHolder`;食物 `Item.getFoodProperties()`,一口的饱和度 = 营养 × 系数 × 2。
+- 信标:`BEACON_EFFECTS` 是 `MobEffect[][]`,效果是 `MobEffect` 不是 `Holder`。
+- 盔甲架:`getScale()` 已含小号的 0.5,没有 `getAgeScale`。
+- 跨维度:`changeDimension(ServerLevel)`(落点由目的维度定)与 `/tp` 走的 `teleportTo(ServerLevel, …)`,没有 `DimensionTransition`。
+- 合成器(crafter)这一代没有:它的窗口与 `numen.gui.toggle` 不在。
+- 聊天栏流式行:私有 `addMessage(内容, 签名, 刻, 标签, 只重排)` 不记日志地入栏(没有 `addMessageToDisplayQueue`)。
 
 ### mixin
-- MixinExtras 0.3.5(Forge 47 自带)没有 `@WrapMethod`(要 ≥ 0.4,**更旧的版本不报错、静默不生效**)。1.21.1 上用到它的四处在这一代都改成不依赖 MixinExtras 的
-  `@Inject` HEAD/RETURN 成对写法(HEAD 记下、RETURN 报出):`PlayerAdvancementsRewardMixin`、`ItemEntityDropsMixin`、`ServerPlayerGameModeDropsMixin`、
-  tlm 的 `TaskFeedOwnerMixin`。源码里一处 `@WrapMethod` 都不留,所以成品不必内嵌 MixinExtras。
-- 保留 `MixinPlayerInfo`(authlib 4 的验签,`@ModifyArg`)。Forge 的 mixin 配置靠 jar 清单的 `MixinConfigs`(api 的在 api jar 里,core 的与 `numen_tlm.mixins.json`
-  在 core 的 `jar`/`jarJar` 清单里);车万女仆那份是 `@Pseudo`,目标模组不在场静默跳过。
+- MixinExtras 0.3.5(Forge 47 自带)没有 `@WrapMethod`:用到它的几处在这一代都改成 `@Inject` HEAD/RETURN 成对写法,成品不必内嵌 MixinExtras。
+- 玩家连接唯一的下行出口是 `ServerGamePacketListenerImpl.send(Packet, PacketSendListener)`(`MixinServerGamePacketListener`)。
 
-### GameTest(Forge 47 的无头服务器是原版 `GameTestServer`,与 NeoForge 21.1 不同)
-- 用例由 `@GameTestHolder` 扫描登记(`ForgeGameTestHooks`),命名空间由 `-Dforge.enabledGameTestNamespaces` 定;结构模板是 SNBT(`DataVersion` 3465),
-  运行前把本模组与寻路模块两处模板同步进 `core/forge/build/gameteststructures`;FG 按名字找 mods 里每个源码集的 `classes` 任务,所以 core/forge 里有一个同名替身
-  `gametestClasses` 指向寻路模块的那一个。
-- 这一代原版 GameTest 缺两样高版本有的东西,寻路用例的"场地是孤岛"靠它们:场地外围的**屏障围栏**与**整块场地的区块都钉住**
-  (原版只钉起点周围固定几格,一百多格长的场地后半截没人加载)。补在 `pathing/src/gametest` 的 `StructureFenceMixin`(只在 GameTest 运行里经
-  `--mixin.config numen_gametest.mixins.json` 挂,不进发行物)。寻路批次另关随机刻与火刻(耕地不会自己变干、火不会自己变老)。
-- 不适用于这一代、没有搬的用例:`TickRateGameTests` 的 3 条(没有 `TickRateManager`);`does_not_place_on_the_world_border`(这一代原版世界边界对"方块在不在界内"
-  的口径是只要有一部分在界内就算——身体站得进、方块却不在界内的那种场地造不出来);游戏里那一半的 bench(`:bench:game`,只在 NeoForge 分支)。
-- 因这一代的差异改过的断言:`an_advancement_reward_arrives_as_an_event` 换成 1.20.1 里存在的进度 `minecraft:adventure/bullseye`(奖励经验 50);
-  `an_outmatched_body_with_no_way_out_fights_back` 开头多等一步"钉住的区块开始刻实体"(区块异步升级,没等就加进去的僵尸既不动也查不到)。
+### GameTest
+- 套件经原版 `@GameTestGenerator`(`GameTestSuites`)报到,Forge 经 `RegisterGameTestsEvent`、Fabric 经 `fabric-gametest` 入口登记;
+  `TestFunction` 是这一代的类与构造。结构模板 SNBT 的 `DataVersion` 是 3465。
+- 这一代原版只钉场地起点周围几格区块、不围栏:`StructureChunksMixin` 在 `GameTestInfo.spawnStructure` 之后钉住整块场地、就地生成周围两圈,
+  并照高版本围上屏障;这一代 `@GameTest` 没有 `skyAccess`,要去顶的用例标 `@SkyAccess`。
+- 因这一代的差异改过的用例场景:`a_dimension_change_is_acknowledged` 去末地(去下界会落在传送门里,站在门里冷却每刻重置);
+  `a_body_alone_in_a_dimension_keeps_ticking_and_moving` 用 `teleportTo` 去下界的指定落点;成书、潜影盒、旗帜、信标、村民交易的场景数据换成 NBT 写法。
 
 ### 联动
-- tlm:她穿的模型(`Outfit`)是 Forge 能力(随玩家数据存盘),同步靠自己的 `SimpleChannel`(换装时发给看着她的人,新进入视野由 `StartTracking` 补发,
-  频道对端缺席也接受);养女仆的动作(`Maids`)把车万女仆的 `*Message` 包经她自己的连接交给 `ServerGamePacketListenerImpl.handleCustomPayload`(Forge 这个入口不看
-  连接有没有协商过频道);P 点与女仆数读车万女仆的 `PowerCapability`/`MaidNumCapability`。这一代车万女仆没有按坐标播语音的口,联动不做受伤/死亡的模型语音。
-  开发运行里车万女仆要走 `fg.deobf`(它的发行 jar 是 SRG 名),仓库要用普通 `maven{}` 而不是 `exclusiveContent`。
-- curios(Forge,Curios 5.14.1)、kaleidoscope(Forge,森罗厨房 1.5.0,cursemaven 文件号 8910014)、ftbquests(Forge,FTB Quests 2001.4.22 + Architectury 9.2.14):
-  都只在 Forge 上接,与 1.21.1 的 NeoForge-only 一致。Fabric 上 Curios 不存在(对应的是 Trinkets/Accessories)、森罗厨房 1.1.0 起停发 Fabric、
-  FTB Quests 联动 1.21.1 本身只接 NeoForge。Architectury 9.2.14 在 Forge 上的 `PlayerHooks.isFake` 是 `instanceof FakePlayer`,同伴不是,所以 Forge 不需要
-  `ArchitecturyPlayerHooksMixin`;Fabric 上它按 `ServerPlayer` 子类判假,Fabric 的那份配置(`numen_api.fabric.architectury.mixins.json`)照旧在。
+- tlm、curios、kaleidoscope、ftbquests:只在 Forge 上接(同前)。jei:Forge 与 Fabric 都接(JEI 15)。litematica:Fabric 上对着
+  Litematica 0.15.4(只发在 Modrinth)编译,Forge 上的目标模组是 Forgematica(模组 id `forgematica`,包与类同 Litematica),
+  目标模组 id 由宿主交给联动。
+- ftbquests(FTB Quests 2001):书没有 `getTeamData(玩家)`,队伍进度经 `TeamProgress` 问 FTB Teams;Forge 的专用服务器把 FTB 标了
+  `OnlyIn` 的取名方法删掉,服务端那本书的名字由 `QuestNames` 照 FTB 的规则自己算(物品任务项、物品奖励、类型显示名)。
+- tlm:这一代车万女仆没有按坐标播语音的口,不做模型语音(没有 `MaidVoice`);外观同步走自己的 `SimpleChannel`(`Outfit`/`OutfitClient`)。
+- 端到端的协议客户端是 MCProtocolLib 1.20-2(1.20.1 的协议;它依赖的认证库与 NBT 库在 JitPack)。
