@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.gametest;
 
+import java.util.Arrays;
 import net.minecraft.core.registries.Registries;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModLoader;
@@ -28,7 +29,11 @@ public final class NeoForgeGameTestMod {
             event.register(Registries.TEST_INSTANCE_TYPE, NumenTestInstance.TYPE, () -> NumenTestInstance.CODEC);
             event.register(Registries.TEST_ENVIRONMENT_DEFINITION_TYPE, NumenTestEnvironment.TYPE, () -> NumenTestEnvironment.CODEC);
         });
-        // NeoForge 的联网协商只有 NeoForge 的类看得见,这条用例放在这里,不进模块的套件
-        GameTestSuites.loaderTests(NeoForgeHandshakeTests.class);
+        // NeoForge 的联网协商只有 NeoForge 的类看得见,这条用例放在这里,不进模块的套件。运行配置用
+        // neoforge.enabledGameTestNamespaces 只开联动自己的命名空间时(联动那几次跑批,装着别的模组)不带它
+        String enabled = System.getProperty("neoforge.enabledGameTestNamespaces");
+        if (enabled == null || Arrays.asList(enabled.split(",")).contains("numen_api_gametest")) {
+            GameTestSuites.loaderTests(NeoForgeHandshakeTests.class);
+        }
     }
 }
