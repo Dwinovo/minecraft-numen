@@ -1,7 +1,7 @@
 package com.dwinovo.numen.buildsrc
 
 /**
- * 测试用的 Paper 服务端怎么起:端到端测试(numen-e2e-paper.gradle)与 Paper 上的 GameTest(numen-gametest-paper.gradle)共用。
+ * 端到端测试(numen-e2e-paper.gradle)用的 Paper 服务端怎么起。
  *
  * <p>起的就是 numen/paper 的 {@code runServer}(run-paper)那一套:同一个 Paper 版本、同一份 JVM 参数、同一组插件 jar,
  * 只换运行目录、不接 Gradle 的标准输入输出。run-paper 的任务类型在 buildSrc 里看不见,所以这里按鸭子类型取它的几个公开属性。
@@ -18,11 +18,6 @@ final class PaperServer {
 
     private PaperServer() {}
 
-    /** 现取一个空闲端口。 */
-    static int freePort() {
-        new ServerSocket(0).withCloseable { it.localPort }
-    }
-
     /**
      * 清空运行目录(Paper 的下载缓存除外),写入 eula 与 server.properties:每次一个新世界。
      * 其余的 server.properties 项(端口、世界类型……)由调用方给。
@@ -35,15 +30,15 @@ final class PaperServer {
     }
 
     /**
-     * 起 Paper 的命令行:java、{@code run} 的 JVM 参数与系统属性、{@code extraJvmArgs}、Paper 服务端 jar、它要加载的插件。
+     * 起 Paper 的命令行:java、{@code run} 的 JVM 参数与系统属性、Paper 服务端 jar、它要加载的插件。
      * 服务端 jar 由 run-paper 的下载服务给(已经下载过就是缓存里的那份)。{@code run} 是 numen/paper 的 {@code runServer} 任务。
      */
-    static List<String> command(def run, List<String> extraJvmArgs, List<File> extraPlugins) {
+    static List<String> command(def run) {
         def jar = run.downloadsApiService.get().resolveBuild(run.progressLoggerFactory, run.version.get(), run.build.get()).toFile()
         def java = run.javaLauncher.get().executablePath.asFile.absolutePath
-        def plugins = (run.pluginJars.files.toList() + extraPlugins).collect { "-add-plugin=${it.absolutePath}".toString() }
+        def plugins = run.pluginJars.files.collect { "-add-plugin=${it.absolutePath}".toString() }
         // 输出写进日志文件,按 UTF-8 写,不跟着系统代码页(中文系统上是 GBK,日志里的中文就成了乱码)
         def encoding = ['-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8']
-        return [java] + run.allJvmArgs + encoding + extraJvmArgs + ['-jar', jar.absolutePath, '--nogui'] + plugins
+        return [java] + run.allJvmArgs + encoding + ['-jar', jar.absolutePath, '--nogui'] + plugins
     }
 }
