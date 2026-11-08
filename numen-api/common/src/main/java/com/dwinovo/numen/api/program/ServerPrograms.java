@@ -1,0 +1,323 @@
+package com.dwinovo.numen.api.program;
+
+import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.agent.inbox.EventQueue;
+import com.dwinovo.numen.api.agent.loop.Program;
+import com.dwinovo.numen.script.ScriptCall;
+import com.dwinovo.numen.api.store.SerialExecutor;
+import com.dwinovo.numen.api.Internal;
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.event.NumenEvents;
+import com.dwinovo.numen.api.network.NumenNetwork;
+import com.dwinovo.numen.api.platform.ServerLifecycle;
+import com.dwinovo.numen.api.script.Modules;
+
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
+
+/**
+ * 在服务端跑她的 Lua 程序的<b>唯一入口</b>:她的大脑({@link LocalPrograms})、管理员的
+ * {@code /numen drive <同伴> <程序>}、重启后接回她手上那件活(记下的那一行 Lua 再跑一遍)、GameTest 与单测都经它。
+ *
+ * <h2>谁做什么</h2>
+ * <ul>
+ *   <li>{@link Program}(agent):一段程序从头到回执,在它自己的执行体上;</li>
+ *   <li>{@link ProgramCalls}:一次调用在哪一端执行——{@link ServerCalls} 排进主线程的车道({@link MainQueue}),
+ *       {@link ClientCalls} 向主人客户端发反向请求({@link ClientTransport}),{@link RoutedCalls} 按函数的端分流;</li>
+ *   <li>{@link Modules}:她的模块,服务器上主人目录里的文件,程序用到一个才去读那个文件;</li>
+ *   <li>这里:登记在跑的程序、准入(每只同伴一段,每位主人、全服各有上限)、把服务端发出的事件交给程序、停、清理。</li>
+ * </ul>
+ *
+ * <h2>线程</h2>
+ * 程序与它的虚拟机在自己的线程上,服务端主线程只在每刻开头执行车道里排着的调用({@link #tick}),<b>从不等程序</b>。
+ * 一段程序的回执与所有 {@code done} 回调都在服务端主线程上。
+ *
+ * <h2>程序等的那件活的收尾</h2>
+ * 程序派了一件占身体的活,这件活的收尾归这段程序:账写进回执,不再作为事件另送给主人的大脑(一件活的收尾只说一次)。
+ * 判断在发事件的那一刻、服务端主线程上做({@link NumenEvents.Watcher}),所以"归谁"和"有没有送出去"不会各说各的;程序停下之后才到的
+ * 收尾由程序转交({@link Program.Port#forward})。
+ */
+@Internal
+public final class ServerPrograms {
+
+    /**
+     * 一段跑着的程序。
+     *
+     * @param claimed 程序刚派出的、占身体的那件活的编号(受理的回执一到就记下,程序线程还没来得及处理):它的收尾归这段程序
+     */
+    private static final class Running {
+        final UUID companion;
+        final UUID owner;
+        final String programId;
+        final MainQueue.Lane lane;
+        /** 这段程序等着的反向请求:每刻查期限、程序结束时撤掉。 */
+        final ClientCalls client;
+        Program program;
+        volatile String claimed;
+
+        Running(UUID companion, UUID owner, String programId, MainQueue.Lane lane, ClientCalls client) {
+            this.companion = companion;
+            this.owner = owner;
+            this.programId = programId;
+            this.lane = lane;
+            this.client = client;
+        }
+    }
+
+    /**
+     * 一次跑程序的请求。
+     *
+     * @param modules        她的模块;程序结束时用到的每个模块在这里记一次战绩
+     * @param reportsToModel 回执是给模型看的(她的大脑、GameTest 与单测里扮大脑的):程序等着的那件活的收尾就写进回执,
+     *                       不再作为事件另送。管理员的 drive、重启后再跑的那一行没有模型读回执,它们派的活的收尾照常作为事件送到她手里
+     */
+    public record Request(String programId, String code, Modules modules, boolean reportsToModel) {}
+
+    private static final MainQueue QUEUE = new MainQueue();
+    /** 在跑的程序,按同伴:一只同伴同一时刻至多一段。 */
+    private static final Map<UUID, Running> RUNNING = new ConcurrentHashMap<>();
+    /** 每只同伴最近一段程序的车道:程序摘了登记之后,它的回执还在车道里排着,{@link #pump(UUID)} 从这里找到它。 */
+    private static final Map<UUID, MainQueue.Lane> LANES = new ConcurrentHashMap<>();
+    /**
+     * 每段程序的执行体各占一条守护线程(这一代没有虚拟线程):停在等结果上只占它自己那一条,主线程永远不等它;
+     * 空闲的线程回收,不拦着进程退出。
+     */
+    private static final Executor THREADS = Executors.newCachedThreadPool(new java.util.concurrent.ThreadFactory() {
+        private final java.util.concurrent.atomic.AtomicInteger next = new java.util.concurrent.atomic.AtomicInteger();
+
+        @Override
+        public Thread newThread(Runnable task) {
+            Thread thread = new Thread(task, "numen-program-" + next.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        }
+    });
+    /** 服务器刻数,{@link #tick} 每刻加一:反向请求的期限({@link ProgramLimits#CLIENT_ANSWER_TICKS})按它量。 */
+    private static volatile long ticks;
+
+    static {
+        NumenEvents.watch(ServerPrograms::watch);
+        ServerLifecycle.onStopped(ServerPrograms::dropAll);
+    }
+
+    private ServerPrograms() {}
+
+    /**
+     * 跑一段程序。结局({@link Program.Outcome})经 {@code done} 恰好交回一次,在服务端主线程上:跑完的回执;同伴已有一段在跑、
+     * 主人或全服到了并发上限,当场是一张失败的回执。
+     *
+     * @param her       她的身体;没有世界的单测是 null
+     * @param companion 她的 UUID
+     * @param owner     主人的 UUID:并发上限按他算
+     * @param transport 反向请求怎么到主人的客户端
+     * @param observer  看着它的每次调用
+     */
+    public static void run(NumenPlayer her, UUID companion, UUID owner, Request request, ClientTransport transport,
+                           CallObserver observer, Consumer<Program.Outcome> done) {
+        MainQueue.Lane lane = QUEUE.lane();
+        ClientCalls client = new ClientCalls(her, companion, lane, transport, () -> ticks);
+        Running running = new Running(companion, owner, request.programId(), lane, client);
+        String refused;
+        synchronized (RUNNING) {
+            refused = admit(her, companion, owner);
+            if (refused == null) {
+                RUNNING.put(companion, running);
+                LANES.put(companion, lane);
+            }
+        }
+        if (refused != null) {
+            running.lane.close();
+            done.accept(Program.Outcome.refused(refused));
+            return;
+        }
+        ProgramCalls calls = new ObservedCalls(new RoutedCalls(
+                new ServerCalls(her, companion, running.lane,
+                        job -> running.claimed = request.reportsToModel() ? job : null),
+                client), observer);
+        Constants.LOG.info("[numen-program] {} runs {} on the server ({} chars)", companion, request.programId(),
+                request.code().length());
+        running.program = new Program(request.programId(), request.code(),
+                new ProgramPort(her, request.modules(), calls), new SerialExecutor(THREADS), outcome -> {
+                    // 程序以任何方式结束(跑完、出错、打断、切断、主人断线)都经这里:它等着的反向请求在这一处撤掉
+                    client.close();
+                    // 排回执与摘登记在同一把锁里做完:看登记的人(准入、idle、running)要么看见它还在跑、回执还没排,
+                    // 要么看见它不在了、回执已经排着。回执一交出去它就不占位了,回调里马上起下一段不会被它挡住
+                    synchronized (RUNNING) {
+                        running.lane.post(() -> {
+                            observer.ended(outcome);
+                            tally(request.modules(), outcome);
+                            done.accept(outcome);
+                        });
+                        running.lane.close();
+                        RUNNING.remove(companion, running);
+                    }
+                });
+        running.program.start();
+    }
+
+    /** 用到的每个模块记一次战绩:战绩记在模块账本里,和模块的文件在一处。 */
+    private static void tally(Modules modules, Program.Outcome outcome) {
+        for (Program.Used used : outcome.used()) {
+            modules.tally(used.module(), used.tally().ok(), used.tally().line(), used.tally().error(),
+                    System.currentTimeMillis());
+        }
+    }
+
+    /**
+     * 服务端自己起的一段程序(管理员的 {@code /numen drive}、重启后再跑的那一行):用她的模块;
+     * 它调的客户端函数照样向她的主人的客户端发反向请求(主人不在线就是一条失败)。整张回执经 {@code receipt} 交回一次。
+     *
+     * @param tag 程序编号的前缀,日志里认它
+     */
+    public static void launch(NumenPlayer her, String tag, String code, CallObserver observer,
+                              Consumer<String> receipt) {
+        UUID owner = her.getOwnerUuid() != null ? her.getOwnerUuid() : her.getUUID();
+        run(her, her.getUUID(), owner, new Request(tag + "-" + UUID.randomUUID(), code, Modules.of(her.getUUID()),
+                false), NetworkTransport.INSTANCE, observer, outcome -> receipt.accept(outcome.receipt()));
+    }
+
+    /** 能不能再开一段:不能就是给模型的那句话。 */
+    private static String admit(NumenPlayer her, UUID companion, UUID owner) {
+        if (RUNNING.containsKey(companion)) {
+            return "another program is already running on " + (her == null ? "this companion"
+                    : her.getName().getString()) + " on the server; wait for it to end";
+        }
+        long mine = RUNNING.values().stream().filter(r -> r.owner.equals(owner)).count();
+        if (mine >= ProgramLimits.PER_OWNER) {
+            return mine + " programs of yours are running on the server, the most one owner may have at a time ("
+                    + ProgramLimits.PER_OWNER + "); wait for one to end";
+        }
+        if (RUNNING.size() >= ProgramLimits.SERVER_WIDE) {
+            return "the server is running as many programs as it allows (" + ProgramLimits.SERVER_WIDE
+                    + "); try again in a moment";
+        }
+        return null;
+    }
+
+    /** 服务端发出了一条事件(发事件的那一刻、主线程上):归程序的收尾交给它,别的让它判断要不要停。 */
+    private static boolean watch(UUID companion, EventQueue.Entry entry) {
+        Running running = RUNNING.get(companion);
+        if (running == null || running.program == null) {
+            return false;
+        }
+        ScriptCall.Finish finish = NumenEvents.finishOf(entry);
+        if (finish != null && finish.task().equals(running.claimed)) {
+            running.claimed = null;
+            running.program.taskFinished(entry);
+            return true;
+        }
+        running.program.arrived(entry);
+        return false;
+    }
+
+    /** 每个服务器刻开头调一次:在预算里执行程序排着的服务端调用,并让等主人客户端答复超了期限的反向请求失败。 */
+    public static void tick() {
+        ticks++;
+        QUEUE.drain(ProgramLimits.TICK_NANOS_ALL, ProgramLimits.TICK_NANOS_PER_PROGRAM);
+        RUNNING.values().forEach(r -> r.client.expire());
+    }
+
+    /**
+     * 没有服务器刻的地方(单测)推进:不看预算,把排着的调用都执行掉。
+     *
+     * @return 执行了几个调用
+     */
+    public static int pump() {
+        return QUEUE.drainAll();
+    }
+
+    /**
+     * 替这一只同伴的程序推进(GameTest 的用例在主线程上要当场读到回执):不看预算,执行它的车道此刻排着的调用,别的程序的不碰。
+     *
+     * @return 执行了几个调用
+     */
+    public static int pump(UUID companion) {
+        MainQueue.Lane lane = LANES.get(companion);
+        return lane == null ? 0 : QUEUE.drain(lane);
+    }
+
+    /** 从此按 {@code meter} 量服务端调用花的预算:GameTest 服务器换成按调用次数计的({@link MainQueue#meter})。 */
+    public static void meter(MainQueue.Meter meter) {
+        QUEUE.meter(meter);
+    }
+
+    /**
+     * 这具身体上的程序此刻是不是停在等外面的事(一次调用的结果、她派的活收尾)上:没有程序在跑,或者它没有任何活在做。
+     * 没有服务器刻的地方(单测、GameTest 的用例)推进车道时据此知道什么时候不用再推了:先看这个、再 {@link #pump},
+     * 闲着又没有调用可执行才算停稳。
+     */
+    public static boolean idle(UUID companion) {
+        Running running;
+        synchronized (RUNNING) {
+            running = RUNNING.get(companion);
+        }
+        return running == null || running.program == null || running.program.idle();
+    }
+
+    /**
+     * 有没有程序此刻还在自己的线程上算(执行体上有活在做或排着):有就是一句说明,点出是哪几具身体,都停在等服务端的事上是
+     * {@code null}。只读。
+     */
+    public static String busy() {
+        List<UUID> computing;
+        synchronized (RUNNING) {
+            computing = RUNNING.values().stream().filter(r -> r.program != null && !r.program.idle())
+                    .map(r -> r.companion).toList();
+        }
+        return computing.isEmpty() ? null : "programs still computing on " + computing;
+    }
+
+    /** 这具身体上此刻有没有程序在跑。 */
+    public static boolean running(UUID companion) {
+        synchronized (RUNNING) {
+            return RUNNING.containsKey(companion);
+        }
+    }
+
+    /** 让她正在跑的这段程序停在调用之间,{@code why} 是给模型的原因。不是这一段(已经结束了、换了一段)不理。 */
+    public static void interrupt(UUID companion, String programId, String why) {
+        Running running = RUNNING.get(companion);
+        if (running != null && running.programId.equals(programId)) {
+            running.program.interrupt(why);
+        }
+    }
+
+    /** 这一轮被切断:这段程序当场停下。{@code stopBody} 见 {@link Program#cancel}。不是这一段不理。 */
+    public static void cutOff(UUID companion, String programId, boolean stopBody) {
+        Running running = RUNNING.get(companion);
+        if (running != null && running.programId.equals(programId)) {
+            running.program.cancel(stopBody);
+        }
+    }
+
+    /** 这具身体离开世界:在跑的程序收掉(它等的活已由任务槽收尾)。 */
+    public static void stop(NumenPlayer her) {
+        Running running = RUNNING.get(her.getUUID());
+        if (running != null) {
+            running.program.cancel(false);
+        }
+    }
+
+    /** 这位主人断线了:他名下的程序收掉,等他答复的反向请求都失败,没收完的分片消息丢掉。 */
+    public static void ownerLeft(UUID owner) {
+        RUNNING.values().stream().filter(r -> r.owner.equals(owner)).forEach(r -> r.program.cancel(false));
+        NetworkTransport.INSTANCE.ownerLeft(owner);
+        NumenNetwork.disconnected(owner);
+    }
+
+    /** 服务器停了:所有程序收掉,排着的调用作废。 */
+    private static void dropAll() {
+        RUNNING.values().forEach(r -> r.program.cancel(false));
+        RUNNING.clear();
+        LANES.clear();
+        QUEUE.clear();
+        NetworkTransport.INSTANCE.clear();
+    }
+}

@@ -1,25 +1,65 @@
 plugins {
-    // 1.20.2 toolchain runs on Java 17; the modern fabric-loom-remap 1.14.x line
-    // requires Java 21, so pin loom to the 1.6 line (Java 17-compatible).
-    // 1.20.2 uses official Mojang mappings, so the plain fabric-loom (not -remap) is correct.
+    // 1.20.2 的工具链是 Java 17;Loom 1.14 那一线要 Java 21,这里钉 1.6 那一线(Java 17 可用)。
+    // 1.20.2 用官方 Mojang 映射,所以是普通的 fabric-loom,不是 -remap 那个。
     id 'fabric-loom' version '1.6-SNAPSHOT' apply false
-    // Forge (ForgeGradle) and common (VanillaGradle) declare their plugins inline
-    // in their own build.gradle, so nothing else is needed here.
+    // Forge(ForgeGradle、MixinGradle)与 common(VanillaGradle)在各自的 build.gradle 里应用。版本只在这里写:子项目继承父项目的
+    // 构建脚本类路径,两个插件共用的库(srgutils)要在同一处解析成一份,各写各的话父子项目里一个用 VanillaGradle、一个用 ForgeGradle
+    // 时,子项目里 ForgeGradle 会读到 VanillaGradle 带的那一版。
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)' apply false
+    id 'org.spongepowered.mixin' version '0.7-SNAPSHOT' apply false
+    id 'org.spongepowered.gradle.vanilla' version '0.2.1-SNAPSHOT' apply false
+    // mcp 模块把官方 MCP SDK 用的几个库重定位进自己的产物(见 mcp/build.gradle),用它的 ShadowJar 任务类型。
+    // Shadow 9 要 Gradle 9;这一代的 ForgeGradle 6 与 Loom 1.6 只到 Gradle 8,用支持 Gradle 8 的 8.3 那一线
+    id 'com.gradleup.shadow' version '8.3.9' apply false
 }
 
-// mod_id 因家族而异(core=numen,api=numen_api),不能放全树共享的 gradle.properties,
-// 在此按家族显式指定。
+// mod_id 与 mod_name 因模组而异(numen=Numen,numen_api=Numen API),不能放全树共享的 gradle.properties,
+// 在此按模组显式指定。
 //
 // 版本号<b>不在这里出现</b>:全树锁步,唯一出处是 gradle.properties 的 version,
 // 各模块继承它。api 曾经走自己的版本线,代价是没人答得上"哪个 api 配哪个模组"——
 // 得有张兼容表,而那张表不存在。锁步之后这个问题不成立:模组 0.1.3 就配 api 0.1.3。
 allprojects { ext.mod_id = 'numen' }
-['api:common', 'api:fabric', 'api:forge'].each { path ->
+
+// 各模块的 GameTest 套件名(没有就不写)。套件按名字报到(资源 META-INF/numen/gametest/套件名)、由运行配置选;
+// 模块与套件名的对应只在这里定义,各加载器的 GameTest 运行配置都从这张表取默认值。
+// 真模型评测的考场(:bench:game)只在 NeoForge 分支上有,这里没有评测套件。
+ext.numenSuites = [
+        ':numen:common'  : [gametest: 'numen'],
+        ':numen:pathing' : [gametest: 'numen_pathing'],
+]
+// Numen 本体的 GameTest 跑批(两个加载器上都是这一份)带哪些模块的用例;联动的 GameTest 另开一次,不在里面。
+ext.numenGameTestModules = [':numen:common', ':numen:pathing']
+// 制作真实地形的固定存档(规划评测的数据集 terrain/<名字>/,见 numen/pathing/src/gametest/terrain/README.md),GameTest 的运行配置从这里取系统属性:
+// -PbakeOut=<目录> 是制作模式(存档写进该目录,种子用 -PgametestSeed,区域用 -PbakeRegion=X,Z,默认 0,0,维度用 -PbakeDimension=terrain|nether,默认 terrain)。
+ext.numenTerrainProperties = {
+    def bake = findProperty('bakeOut')
+    return bake
+            ? ['numen.terrain.bake.out': new File(bake.toString()).absolutePath,
+               'numen.terrain.bake.region': findProperty('bakeRegion') ?: '0,0',
+               'numen.terrain.bake.dimension': findProperty('bakeDimension') ?: 'terrain']
+            : [:]
+}
+// 每次 GameTest 跑批都从空的插件开关名单开始:世界每次是新的,但服务器配置目录里的 plugins.json 不跟着世界走,上一次跑批里被关掉的
+// 插件会留到这一次,开关类用例就从中间开始。所有模块的 runGameTestServer 共用这一处,不在各个用例里清。
+subprojects {
+    tasks.matching { it.name == 'runGameTestServer' }.configureEach { run ->
+        // 各模块的运行目录都是 <模块>/runs/gametestserver
+        def switches = run.project.file('runs/gametestserver/config/numen/server/plugins.json')
+        run.doFirst {
+            run.project.delete(switches, new File(switches.parentFile, switches.name + '.tmp'))
+        }
+    }
+}
+
+['numen-api:common', 'numen-api:fabric', 'numen-api:forge'].each { path ->
     project(path) {
         ext.mod_id = 'numen_api'
-        // 内部模块身份必须与 core 家族区分:两家子项目同名(common/fabric/forge),
-        // 若 group 也相同,Gradle 会把 project(':api:common') 依赖按"同一模块"做版本
-        // 冲突解析,直接指回 core 自己形成任务自环。发布坐标不受影响——api-common.gradle
+        // 显示名是模组列表里看到的那个,不是目录名;gradle.properties 的 mod_name 是 Numen 的
+        ext.mod_name = 'Numen API'
+        // 内部模块身份必须与 Numen 区分:两个模组的子项目同名(common/fabric/forge),
+        // 若 group 也相同,Gradle 会把 project(':numen-api:common') 依赖按"同一模块"做版本
+        // 冲突解析,直接指回 Numen 自己形成任务自环。发布坐标不受影响——numen-api-common.gradle
         // 的 publication 显式写 groupId。
         group = 'com.dwinovo.numen.api'
     }
@@ -28,40 +68,45 @@ allprojects { ext.mod_id = 'numen' }
 // 本分支的第二个 loader。Fabric 每条分支都有,另一个是 NeoForge 还是 Forge 由分支决定,
 // 下面三个入口都按它挑。<b>CI 只认这几个任务名</b>,不做探测:同一个判断写两遍,
 // 迟早只改对一遍。
-def secondLoader = findProject(':core:neoforge') != null ? 'neoforge' : 'forge'
+def secondLoader = findProject(':numen:neoforge') != null ? 'neoforge' : 'forge'
 
 /** 数据生成的统一入口。 */
 tasks.register('datagenAll') {
     group = 'build'
-    description = '跑齐 api 与 core 两家、本分支两个 loader 的数据生成'
-    ['api', 'core'].each { family ->
+    description = '跑齐 Numen API 与 Numen 两个模组、本分支两个 loader 的数据生成'
+    ['numen-api', 'numen'].each { family ->
         dependsOn ":${family}:fabric:runDatagen"
         // NeoForge 是 moddev 的 runData,Forge 是 ForgeGradle 的 Data
         dependsOn ":${family}:${secondLoader}:${secondLoader == 'neoforge' ? 'runData' : 'Data'}"
     }
 }
 
-/** 发布制品的统一入口:api 与 core 两家、本分支两个 loader,外加 ai/agent/ui。 */
+/** 发布制品的统一入口:Numen API 与 Numen 两个模组、本分支两个 loader,外加 ai/script/agent/mcp/ui。 */
 tasks.register('publishAll') {
     group = 'publishing'
-    description = '把 api 与 core 两家、本分支两个 loader 的制品发到 local_maven_url'
-    // ai/agent/ui 也带分支后缀:代码与 MC 版本无关,但各分支上的这份源码目前不同,
+    description = '把 Numen API 与 Numen 两个模组、本分支两个 loader 的制品发到 local_maven_url'
+    // store/ai/script/agent/lua/mcp/ui 也带分支后缀:代码与 MC 版本无关,但各分支上的这份源码目前不同,
     // 共用坐标会变成十三条分支互相覆盖(详见 ai/build.gradle 的 artifactId)。
+    // Numen API 发布出去的 pom 引用了哪个纯 JVM 模块,这里就得发哪个,否则第三方当场解析失败。
+    dependsOn ':store:publish'
     dependsOn ':ai:publish'
+    dependsOn ':script:publish'
     dependsOn ':agent:publish'
+    dependsOn ':permission:publish'
     dependsOn ':lua:publish'
+    dependsOn ':mcp:publish'
     dependsOn ':ui:publish'
-    ['api', 'core'].each { family ->
+    ['numen-api', 'numen'].each { family ->
         ['common', 'fabric', secondLoader].each { dependsOn ":${family}:${it}:publish" }
     }
 }
 
 /**
  * 发给玩家的 jar,一个 loader 一个,收进 build/release/<loader>/。发布流水线只从这里拿:
- * build/libs 里还躺着 sources、javadoc,Forge 另有一个没内嵌引擎的瘦 jar,哪个是成品只有构建知道。
+ * build/libs 里还躺着 sources、javadoc,Forge 另有一个没内嵌 Numen API 的瘦 jar,哪个是成品只有构建知道。
  *
  * <p><b>先 {@code ./gradlew datagenAll},再 {@code ./gradlew releaseJars},分两次调用。</b>
- * 生成资源(api 的语言文件、core 的方块标签)要起一遍游戏才有,而起游戏本身就要先有
+ * 生成资源(Numen API 的语言文件、Numen 的方块标签)要起一遍游戏才有,而起游戏本身就要先有
  * processResources 的产物——同一次调用里没法让 processResources 在生成之后再跑一遍,
  * 所以两步只能分开。下面那道检查把"忘了跑"从静默坏包(进游戏全是翻译键、保护标签为空)
  * 变成当场失败;它只认"有没有生成过",不认"生成得新不新",发版流水线每次都重新生成。
@@ -71,7 +116,7 @@ tasks.register('releaseJars', Sync) {
     description = '把本分支每个 loader 发给玩家的那个 jar 收进 build/release/<loader>/'
     into layout.buildDirectory.dir('release')
     doFirst {
-        ['api', 'core'].each { family ->
+        ['numen-api', 'numen'].each { family ->
             ['fabric', secondLoader].each { loader ->
                 def dir = project(":${family}:${loader}").file('src/generated/resources')
                 def generated = dir.isDirectory() ? fileTree(dir) { exclude '.cache/**' }.files : []
@@ -83,17 +128,17 @@ tasks.register('releaseJars', Sync) {
         }
     }
     // 成品出自哪个任务:Loom 要重映射时是 remapJar(26.1+ 原生 Mojang 名,没有这一步,就是 jar);
-    // moddev 把内嵌的引擎直接打进 jar;ForgeGradle 的 jarJar 另出一个 -all,内嵌引擎的是它。
+    // moddev 把内嵌的 Numen API 直接打进 jar;ForgeGradle 的 jarJar 另出一个 -all,内嵌 Numen API 的是它。
     def shipped = [
         fabric  : { p -> p.tasks.findByName('remapJar') ?: p.tasks.getByName('jar') },
         neoforge: { p -> p.tasks.getByName('jar') },
         forge   : { p -> p.tasks.getByName('jarJar') },
     ]
     ['fabric', secondLoader].each { loader ->
-        from({ shipped[loader](project(":core:${loader}")) }) { into loader }
+        from({ shipped[loader](project(":numen:${loader}")) }) { into loader }
     }
     // Forge 的成品还要过一道 reobf(official 名换成 SRG 名),它原地改写 jarJar 的产物,
     // 由 build 挂上、不是 jarJar 自己的一步。这里明确等它:只依赖 jarJar 的话,拷走的是
     // 改写前的开发 jar,线上一调 MC 的方法就 NoSuchMethodError。
-    if (secondLoader == 'forge') dependsOn ':core:forge:reobfJarJar'
+    if (secondLoader == 'forge') dependsOn ':numen:forge:reobfJarJar'
 }

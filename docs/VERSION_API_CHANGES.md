@@ -17,13 +17,13 @@ Fabric + NeoForge 同源。向上移植（把低版本分支的代码搬到高�
 
 `1.20.1 → 1.20.2 → 1.20.4 → 1.20.6 → 1.21.1 → 1.21.4 → 1.21.5 → 1.21.8 → 1.21.10 → 1.21.11 → 26.1.2`
 
-新架构（numen-api 拆分 + 调度器 + raw `NumenTool` + skill 体系）当前基线在 **`1.21.1`**，正逐档向上移植。
+新架构（Numen API 拆分 + 调度器 + raw `NumenTool` + skill 体系）当前基线在 **`1.21.1`**，正逐档向上移植。
 
 ---
 
 ## 每档都要改的构建旋钮 📦
 
-`gradle.properties`（core 与 api 各一份）：
+`gradle.properties`（Numen 与 api 各一份）：
 
 | 键 | 含义 |
 |---|---|
@@ -43,7 +43,7 @@ loader 依赖 build.gradle 里的 `numen-api-*-<mc>` 坐标也要同步成目标
 ## 1.21.1 → 1.21.4
 
 来源：老架构 `v0.0.2-1.21.1-beta` ↔ `v0.0.2-1.21.4-beta` 的纯 MC delta（约 30 个 java 文件）。
-新架构里文件路径/包名已变（`tulpa`→`numen`、工具类移入 `core/tools`），但**API 替换内容一致**。
+新架构里文件路径/包名已变（`tulpa`→`numen`、工具类移入 `numen/tools`），但**API 替换内容一致**。
 
 ### 注册表查询 ❗
 按 `ResourceLocation` 取值的方法整体重命名：
@@ -198,50 +198,6 @@ core 内嵌 api 用 **ForgeGradle jarJar**:`jarJar.enable()` + `jarJar(group,nam
 **FG6 的 jarJar 产物带 `-all` classifier** → 可分发的 Forge 单文件是 `numen-forge-1.20.4-0.0.3-all.jar`(内嵌 api),
 plain `numen-forge-1.20.4-0.0.3.jar` 是不含 api 的 reobf jar。**发布/CI 要发 `-all.jar`。**
 
-### 1.20.4 落地实录(并仓迁移,1.20.1 树向上走两档时新踩的)❗
-
-只记本次新碰到的;上面各节已有的(config-phase、CustomPacketPayload、GuiCompat、
-RecipeHolder、ChannelBuilder)反着用即可,不重复。
-
-**① Forge 49 的 dev 运行会为模块层做 JPMS 校验**——并仓布局特有的死局:runs 的
-mods 块把 ai/ui 源码集聚进 numen_api 模组模块,而 api 的 `api project(':ai')`
-又把 numen-ai.jar 拖上运行 classpath 当自动模块,同包双模块直接拒启
-(`ResolutionException: Modules numen_api and numen.ai.SNAPSHOT export package …`)。
-Forge 47(1.20.1)没有这道校验,同一份配置好好的。修法在 api/forge 与 core/forge:
-```groovy
-configurations.named('runtimeClasspath') {
-    exclude module: 'ai'   // 兄弟工程 group 与本模块不同——带 group 的规则匹配不上,按 module 名来
-    exclude module: 'ui'
-}
-```
-类经 MOD_CLASSES(源码集输出)进运行一个不少;编译与打包不受影响。
-排查提示:FG6 的 MinecraftRunTask 在**任务动作里**才组装 classpath,配置期改
-`JavaExec.classpath` 是无效的;真实 java 命令行用 `--info` 抓。
-
-**② gametest 注解与模板管线整套换**(Forge 49 ≠ 47):
-- `PrefixGameTestTemplate` 没了,拆成 `GameTestDontPrefix`/`GameTestPrefix`;且本代把
-  批次名与模板名交给同一套前缀逻辑(`GameTestHolder` 的值同时前缀到两者)。解法不用
-  新注解:**模板名写 `numen:floor16`(带冒号直接按完整路径用、跳过前缀)**,批次照常
-  前缀以满足 `forge.enabledGameTestNamespaces` 筛选。
-- 模板一律问 `StructureTemplateManager` 要;"测试模板目录"这个来源只在
-  `SharedConstants.IS_RUNNING_IN_IDE` 为真时登记,无头跑批里是假的(1.20.1 的
-  `StructureUtils.spawnStructure` 自己读盘,没这一出;NeoForge 1.20.6 也没有)。
-  解法:CompanionGameTests 静态块把仓库 SNBT `NbtUtils.snbtToStructure` 转成结构
-  NBT 喂进存档 `generated/numen/structures/`(开闸口令 `numen.gametest.generated`
-  只在 GameTestServer 运行配置上设)——仓库仍只存文本,不提交二进制。
-
-**③ 1.20.2/1.20.3 的三处小刀**(向下手册没记,因为老树在那些点位不用这些 API):
-```java
-Recipe.getId()                     // 1.20.2 移除,id 归 RecipeHolder.id()(单测匿名配方覆写它会编译失败)
-NbtIo.readCompressed(File)         // 1.20.3 移除:走 Path + NbtAccounter.unlimitedHeap()(原版读结构模板同款额度);writeCompressed 同步只收 Path
-Blocks.GRASS → Blocks.SHORT_GRASS  // 1.20.3 改名(TALL_GRASS/GRASS_BLOCK 不变)
-FlowerPotBlock.getContent() → getPotted()   // 仅 1.20.3/1.20.4 这一窗口叫 getPotted,1.20.2- 与 1.20.5+ 都叫 getContent
-```
-
-**④ ChunkMap 的同伴静默 mixin 换注入点**(1.20.2 合并了逐 chunk 跟踪):
-`updateChunkTracking` → `applyChunkTrackingView`,取消前先
-`player.setChunkTrackingView(ChunkTrackingView.EMPTY)`,恢复跟踪时才不会整圈重放。
-
 ## 1.20.4 → 1.20.2 ✓（纯旋钮档）
 
 老 tag 之间 **零源码差异**,只有 `gradle.properties`:MC `1.20.2` / range `[1.20.2, 1.21)` /
@@ -292,6 +248,7 @@ minecraft.runs.configureEach {
 }
 ```
 ```groovy
+// ①c mixin AP 与增量编译不相容：增量轮次不重跑 AP，refmap 丢失且 jar 静默不带；开发期全程 disableRefMap 照不出，生产 SRG 直接拒启。修法：api/forge、core/forge 两处 compileJava options.incremental=false + jar doLast 绞索（有 mixins.json 必有 refmap，缺了判死）。
 // ①b FG6 双输出共目录的任务竞态：api/forge 把 classes+resources 重定向进同一个
 //    build/sourcesSets/main，跨项目 classpath 的 builtBy 只挂 compileJava →
 //    :core:forge:compileJava 与 :api:forge:processResources 写/读同目录无依赖边，
@@ -313,109 +270,139 @@ stack.putByte("Count", (byte) 1);
 
 ---
 
-## 对齐 1.21.1(7a3d3e251)之后的 Java 17 一代(1.20.1 先做,1.20.4 / 1.20.2 同一套写法)
+## 对齐 1.21.1 之后的 Java 17 一代(1.20.1 先做,1.20.4 / 1.20.2 同一套写法)
 
-整树换成 1.21.1 的新架构(Lua 程序整段在服务端跑、客户端函数反向请求、载荷层分片、回执三管道、SDK `@Fn` 登记、`agent/`、`lua/`、
-`pathing/`、`bench/`、五个联动),再把这一代的平台差异逐处回放。1.20.1 上要改的东西,按类别:
+0.1.5 这一轮对齐到 1.21.1 的 19c8710b0:整树换成 1.21.1(模块按模组 id 分:`numen-api/`、`numen/`、`numen/pathing`、纯 JVM 模块、
+`plugins/`),再把这一代的平台差异逐处回放。每处 API 差异只在一个地方适配。1.20.1 上要改的东西,按类别:
+
+### 构建
+- 加载器是 Forge 47(ForgeGradle 6,`numen-api/forge`、`numen/forge`)与 Fabric(Loom 1.6,官方映射);common 与只写原版的联动(ysm、jei)用
+  VanillaGradle。Forge 的成品是 SRG 名:`compileJava` 关增量(mixin 注解处理器在增量轮次不重跑,refmap 会静默丢掉),jar 里查 refmap。
+- Numen API 在 Forge 上随 Numen 的 `jarJar` 发;它与内嵌库(commonmark、mcp 的第三方库)都挂在 `numen/forge` 的 jarJar 上(ForgeGradle 的 jarJar
+  只认坐标,嵌不进别的项目的 -all)。
+- 联动的 GameTest 跑批共用 `buildSrc/numen-plugin-gametest-forge.gradle`:运行类路径同本体一样带上 mcp 的重定位 jar;
+  `forge.enabledGameTestNamespaces` 设成套件名(我们用例的模板命名空间),目标模组自带的 GameTest(车万女仆有一条)不跑。
+- 端到端起服层是 `numen-e2e-forge.gradle`(ForgeGradle 的 `e2e` 运行配置)。ForgeGradle 6 在自己的 afterEvaluate 里把 userdev 的
+  server 配置挂成 `server` 的父配置并当场按名字顺序只并一层,`e2e` 挂 `server` 当父配置拿不到主类(还会带上 GameTest 的东西),
+  所以在那之后把 userdev 那份直接并进 `e2e`;运行任务的参数、类路径在任务动作里才拼,起服任务用 `RunConfigGenerator` 的同几个方法拼出同一条命令放到后台。
+- 这一代没有的:`:bench:game`(只在 NeoForge 分支)、KubeJS 联动(KubeJS 6 没有 1.21 那套插件接口)、Paper 端(Paper 1.20.x 没有
+  插件引导阶段装标签的接口)。
+- mcp 的重定位 jar 用 Shadow 8.3.9(Shadow 9 要 Gradle 9,ForgeGradle 6 与 Loom 1.6 只到 Gradle 8),任务写法与 1.21.1 相同;8.3 这一线
+  合成的清单不加 `Multi-Release`,不需要 `addMultiReleaseAttribute`。Forge 47 读声明了 Multi-Release 却没有多版本目录的 jar 直接起不来
+  (snakeyaml-engine 就是这样),所以它也打进重定位 jar。
+- Gson、slf4j 对着这一代游戏自带的版本编译与单测(1.20.1:Gson 2.10、slf4j 2.0.1)。
+- 开发运行(游戏、数据生成、GameTest)也用 Java 17:Loom 的运行任务不跟着工具链走,`numen-common`/`numen-api-common` 给所有
+  `JavaExec` 指定这一代的工具链。
+- 根项目一处写齐 ForgeGradle、MixinGradle、VanillaGradle 的版本:子项目继承父项目的构建脚本类路径(`:plugins:ysm` 用 VanillaGradle、
+  它的子项目 `:plugins:ysm:gametest` 用 ForgeGradle),各写各的话 srgutils 有两份,子项目里 ForgeGradle 初始化就崩。
+- Forge 47 的事件总线变换器给每个新加载的类按线程上下文加载器查父类。外接大脑端点的内嵌 Tomcat 默认另建一个上级是系统加载器的
+  应用类加载器、处理请求时换成线程上下文加载器,在模组加载器下它找不到类,专用服一起端点就刷几十行 EVENTBUS 错误;端点停了
+  Reactor 的工作线程还带着作废的它。`McpEndpoint` 给上下文的加载器就是加载端点的那个(各版本同一写法)。
 
 ### 语言 / 线程(Java 17)
 ```java
 switch (x) { case A a -> … }          →  if (x instanceof A a) { … } else if …   // 模式 switch、record 解构
+x instanceof T t   // x 的静态类型就是 T  →  先判空再用            // Java 17 不许
 Math.clamp(v, lo, hi)                  →  Mth.clamp(v, lo, hi)
-list.getFirst() / getLast()            →  list.get(0) / get(list.size() - 1)
-Thread.ofVirtual().name(n).start(r)    →  守护平台线程:new Thread(r, n) + setDaemon(true)
+list.getFirst()                        →  list.get(0)
+Thread.ofVirtual().name(n).start(r)    →  守护平台线程(缓存线程池)
 ```
-没有虚拟线程时语义不变:服务端主线程永远不等 Lua;一段程序的执行体占一条守护线程(`numen-program-N`,`ServerPrograms`),脚本虚拟机占
-一条(`lua-<块名>`,`LuaSandbox.start`);阻塞的宿主函数就在脚本自己的线程上等。单测 `LuaSandboxTest`、`SerialExecutorTest` 查的是同一条语义
-(线程是守护的、不是调用方的线程)。写进了 `docs/shell.md` 的"运行"一节。
+没有虚拟线程时语义不变:服务端主线程永远不等 Lua;一段程序的执行体占一条守护线程(`ServerPrograms`),阻塞的宿主函数就在脚本自己的线程上等。
 
 ### 网络(没有 `CustomPacketPayload` 与配置阶段)
-- 载荷实现 `NumenPayload`(`id()` + `write(FriendlyByteBuf)`,静态 `read`);程序上行/结果/停止、反向请求/结果、分片包都是这一套。
-- 分片一份通用实现(`Fragments`/`Wire`),上限仍是 32767;Forge 47 只有一条 `SimpleChannel`(`numen_api:main`),所有载荷装进
-  `Envelope(ResourceLocation id, byte[] data)` 多路复用,多出的包头开销记在 `Wire.FRAMING = 64`。Fabric 直接用 id + `FriendlyByteBuf`。
-- GameTest 里扮主人客户端的连接不经真网线,下行的包经 `ForgeNetworkChannel.payloadOf` 读回,与客户端收包走同一张解码表。
+- 载荷实现 `NumenPayload`(`id()` + `write(FriendlyByteBuf)`,静态 `read`);`INetworkChannel` 按 `ResourceLocation` 登记解码器。
+- Forge 47 只有一条 `SimpleChannel`(`numen_api:main`),所有载荷装进 `Envelope(id, bytes)` 多路复用,包头开销记在 `Wire.FRAMING = 64`;
+  `canSend` 问 `isRemotePresent`。Fabric 一种载荷一条频道,客户端进游戏后才发 `minecraft:register`,开场在频道登记那一刻发。
+- 客户端报语言(`ServerboundClientInformationPacket`)在进游戏之后,原版服务端不记它:平台服务 `IClientLanguage`,模组上由
+  `ServerPlayerLanguageMixin` 在 `updateOptions` 记下。
+- GameTest 里扮主人客户端的连接:Forge 用 `NetworkHooks.appendConnectionData` 挂上与服务端同一张频道表(`ForgeMockConnection`),
+  Fabric 替他发 `minecraft:register`(`FabricMockConnection`);下行的包经各自通道的解码表读回。
 
 ### 身体与世界 API
-- 没有属性的:方块/实体交互距离、潜行速度、重力、安全落差 → `pathing` 的 `BodyCompat`(数值与后来的属性默认值一致,算法照这一代原版);
-  `EntityDimensions` 没有眼高 → `BodyStats` 单独带 `standingEye`/`crouchingEye`。
-- **迈步高度**:这一代 `ServerPlayer` 构造时 `maxUpStep = 1.0`,一格高的台阶与门板不跳也不开门就迈上去了;真玩家客户端是 0.6。身体(`NumenPlayer`、
-  GameTest 的 `TestBody`)构造后经 `BodyCompat.walkLikeAPlayer` 设回 0.6,规划与执行读同一个值。
-- `SavedData` 老式工厂(`computeIfAbsent(load, new, name)`)、`ResourceLocation` 公开构造、物品 NBT 而不是组件(`Count` 是 byte、附魔 `Enchantments`)、
-  `Recipe<?>.getId()`(没有 `RecipeHolder`)、`ServerGamePacketListenerImpl.send(Packet, PacketSendListener)`、`broadcastBreakEvent(EquipmentSlot)`
-  代替 `onEquippedItemBroken`、Brigadier 1.0.18 的 `ResultConsumer` 与 `CommandSourceStack.withCallback`。
-- DFU 6.0.8 的 `optionalFieldOf` 遇到一个坏元素就丢掉整张表:`PermissionStore` 用逐行容错的 `TABLE` 编解码,一行写坏只丢那一行。
+- 没有属性的:方块/实体交互距离、潜行速度、重力 → `numen-api` 的 `BodyCompat`(数值与后来的属性默认值一致,算法照这一代原版);
+  `EntityDimensions` 没有眼高 → `BodyStats` 带 `standingEye`。迈步高度:身体构造后 `BodyCompat.walkLikeAPlayer` 设回 0.6。
+- 物品 NBT 而不是组件:成书的字(`WrittenBookItem.TAG_*`)、潜影盒里的东西(`BlockEntityTag.Items`)、旗帜花纹(`BannerBlockEntity.getPatternCount`)、
+  附魔表(`EnchantmentHelper.deserializeEnchantments`)、自定义名(`hasCustomHoverName`)。放置时物品带给方块实体的只有 `BlockEntityTag`
+  (`BlockItem.updateCustomBlockEntityTag`),自定义名由方块的 `setPlacedBy` 接。
+- 配方:`Recipe<?>.getId()`,没有 `RecipeHolder`;食物 `Item.getFoodProperties()`,一口的饱和度 = 营养 × 系数 × 2。
+- 信标:`BEACON_EFFECTS` 是 `MobEffect[][]`,效果是 `MobEffect` 不是 `Holder`。
+- 盔甲架:`getScale()` 已含小号的 0.5,没有 `getAgeScale`。
+- 跨维度:`changeDimension(ServerLevel)`(落点由目的维度定)与 `/tp` 走的 `teleportTo(ServerLevel, …)`,没有 `DimensionTransition`。
+- 合成器(crafter)这一代没有:它的窗口与 `numen.gui.toggle` 不在。
+- 聊天栏流式行:私有 `addMessage(内容, 签名, 刻, 标签, 只重排)` 不记日志地入栏(没有 `addMessageToDisplayQueue`)。
 
 ### mixin
-- MixinExtras 0.3.5(Forge 47 自带)没有 `@WrapMethod`(要 ≥ 0.4,**更旧的版本不报错、静默不生效**)。1.21.1 上用到它的四处在这一代都改成不依赖 MixinExtras 的
-  `@Inject` HEAD/RETURN 成对写法(HEAD 记下、RETURN 报出):`PlayerAdvancementsRewardMixin`、`ItemEntityDropsMixin`、`ServerPlayerGameModeDropsMixin`、
-  tlm 的 `TaskFeedOwnerMixin`。源码里一处 `@WrapMethod` 都不留,所以成品不必内嵌 MixinExtras。
-- 保留 `MixinPlayerInfo`(authlib 4 的验签,`@ModifyArg`)。Forge 的 mixin 配置靠 jar 清单的 `MixinConfigs`(api 的在 api jar 里,core 的与 `numen_tlm.mixins.json`
-  在 core 的 `jar`/`jarJar` 清单里);车万女仆那份是 `@Pseudo`,目标模组不在场静默跳过。
+- Forge 47 不带 MixinExtras(开发运行实测缺 `Operation` 类;Fabric 的加载器带)。1.21.1 上用到它的地方在这一代都只用 Mixin 自己的注入:
+  `@WrapMethod` 改成 `@Inject` HEAD/RETURN 成对写法,测试夹具 `GameTestServerWorldMixin` 的 `@WrapOperation`/`@ModifyExpressionValue`
+  改成带被注入方法参数的 `@Redirect`。编译期也不放 MixinExtras,用到它就编译不过;成品不内嵌它。
+- 玩家连接唯一的下行出口是 `ServerGamePacketListenerImpl.send(Packet, PacketSendListener)`(`MixinServerGamePacketListener`)。
 
-### GameTest(Forge 47 的无头服务器是原版 `GameTestServer`,与 NeoForge 21.1 不同)
-- 用例由 `@GameTestHolder` 扫描登记(`ForgeGameTestHooks`),命名空间由 `-Dforge.enabledGameTestNamespaces` 定;结构模板是 SNBT(`DataVersion` 3465),
-  运行前把本模组与寻路模块两处模板同步进 `core/forge/build/gameteststructures`;FG 按名字找 mods 里每个源码集的 `classes` 任务,所以 core/forge 里有一个同名替身
-  `gametestClasses` 指向寻路模块的那一个。
-- 这一代原版 GameTest 缺两样高版本有的东西,寻路用例的"场地是孤岛"靠它们:场地外围的**屏障围栏**与**整块场地的区块都钉住**
-  (原版只钉起点周围固定几格,一百多格长的场地后半截没人加载)。补在 `pathing/src/gametest` 的 `StructureFenceMixin`(只在 GameTest 运行里经
-  `--mixin.config numen_gametest.mixins.json` 挂,不进发行物)。寻路批次另关随机刻与火刻(耕地不会自己变干、火不会自己变老)。
-- 不适用于这一代、没有搬的用例:`TickRateGameTests` 的 3 条(没有 `TickRateManager`);`does_not_place_on_the_world_border`(这一代原版世界边界对"方块在不在界内"
-  的口径是只要有一部分在界内就算——身体站得进、方块却不在界内的那种场地造不出来);游戏里那一半的 bench(`:bench:game`,只在 NeoForge 分支)。
-- 因这一代的差异改过的断言:`an_advancement_reward_arrives_as_an_event` 换成 1.20.1 里存在的进度 `minecraft:adventure/bullseye`(奖励经验 50);
-  `an_outmatched_body_with_no_way_out_fights_back` 开头多等一步"钉住的区块开始刻实体"(区块异步升级,没等就加进去的僵尸既不动也查不到)。
+### 数据与目录
+- 这一代数据包的目录是复数:标签 `tags/blocks`、`tags/items`;Fabric 的 GameTest 结构模板放在 `data/<命名空间>/gametest/structures/`。
+  写成 1.21 的单数,编译、打包都不报,开服读不到(natural 标签读不到,挖地形方块一律成了"来历不明")。
+
+### GameTest
+- 套件经原版 `@GameTestGenerator`(`GameTestSuites`)报到,Forge 经 `RegisterGameTestsEvent`、Fabric 经 `fabric-gametest` 入口登记;
+  `TestFunction` 是这一代的类与构造。结构模板 SNBT 的 `DataVersion` 是 3465。
+- 这一代原版只钉场地起点周围几格区块、不围栏:`StructureChunksMixin` 在 `GameTestInfo.spawnStructure` 之后钉住整块场地、就地生成周围两圈,
+  并照高版本围上屏障;这一代 `@GameTest` 没有 `skyAccess`,要去顶的用例标 `@SkyAccess`。
+- 原版写死的不同:场地起点写死 `(0, -60, 0)`(改的是交给 `runTestBatches` 的参数);区块刻洗牌用的是 `Collections.shuffle(List)`(进程级、
+  种子不定的随机数);开批是 `GameTestBatchRunner.runBatch`;测试服的固定规则只关了刷怪与天气,`GameTestServerRulesMixin` 补上随机刻 0
+  与关火刻(1.21.1 原版自带)。
+- Forge 47 的服务端入口在 GameTest 模式下拿 `server.properties` 建好的世界直接 `new GameTestServer(...)`,不经 `GameTestServer.create`:
+  测试世界成了普通地形,夹具挂在 `create` 上的清空世界目录、数据包维度、种子都不生效。numen-api/forge 的开发期小模组里
+  `ForgeGameTestWorldMixin`(只在 Forge 跑批的运行配置里挂)把那一处换回 `create`。
+- 这一代原版给新玩家挑出生点(`ServerPlayer.fudgeSpawnLocation`)用当场新建、种子不定的随机数,扮主人的玩家每次开服落脚不同,
+  身边走刻的区块跟着变、世界随机数就错开:测试夹具 `ServerPlayerSpawnMixin` 按玩家在这一批里的编号定种子。
+- 这一代原版的 `GameTestInfo` 每次按坐标去世界里取场地的结构方块(它就在场地原点那一格),用例在原点铺地面后范围成了 null,
+  收场时清场空指针、服务器崩;`GameTestStructureBlockMixin` 照 1.21.1 用 `spawnStructure` 记下的那个。
+- Forge 的 `StructureUtils` 补丁按模板名的路径(不带命名空间)在模板目录里找 SNBT;原版与 Fabric 开发期找不到时拿整个名字(带冒号)
+  拼路径,Windows 上直接抛 `InvalidPathException`,所以 Fabric 的模板一定要放进数据包。
+- 因这一代的差异改过的用例场景:`an_advancement_reward_arrives_as_an_event` 用 bullseye(这一代没有 blowback,奖励 50 点经验);
+  `a_dimension_change_is_acknowledged` 去末地(去下界会落在传送门里,站在门里冷却每刻重置);
+  `a_body_alone_in_a_dimension_keeps_ticking_and_moving` 用 `teleportTo` 去下界的指定落点;成书、潜影盒、旗帜、信标、村民交易的场景数据换成 NBT 写法;
+  `a_rotated_shape_is_built_as_vanilla_rotates_it` 的六向朝向格用发射器(这一代没有合成器,唯一带 `orientation` 的拼图方块不可建造)。
 
 ### 联动
-- tlm:她穿的模型(`Outfit`)是 Forge 能力(随玩家数据存盘),同步靠自己的 `SimpleChannel`(换装时发给看着她的人,新进入视野由 `StartTracking` 补发,
-  频道对端缺席也接受);养女仆的动作(`Maids`)把车万女仆的 `*Message` 包经她自己的连接交给 `ServerGamePacketListenerImpl.handleCustomPayload`(Forge 这个入口不看
-  连接有没有协商过频道);P 点与女仆数读车万女仆的 `PowerCapability`/`MaidNumCapability`。这一代车万女仆没有按坐标播语音的口,联动不做受伤/死亡的模型语音。
-  开发运行里车万女仆要走 `fg.deobf`(它的发行 jar 是 SRG 名),仓库要用普通 `maven{}` 而不是 `exclusiveContent`。
-- curios(Forge,Curios 5.14.1)、kaleidoscope(Forge,森罗厨房 1.5.0,cursemaven 文件号 8910014)、ftbquests(Forge,FTB Quests 2001.4.22 + Architectury 9.2.14):
-  都只在 Forge 上接,与 1.21.1 的 NeoForge-only 一致。Fabric 上 Curios 不存在(对应的是 Trinkets/Accessories)、森罗厨房 1.1.0 起停发 Fabric、
-  FTB Quests 联动 1.21.1 本身只接 NeoForge。Architectury 9.2.14 在 Forge 上的 `PlayerHooks.isFake` 是 `instanceof FakePlayer`,同伴不是,所以 Forge 不需要
-  `ArchitecturyPlayerHooksMixin`;Fabric 上它按 `ServerPlayer` 子类判假,Fabric 的那份配置(`numen_api.fabric.architectury.mixins.json`)照旧在。
+- tlm、curios、kaleidoscope、ftbquests:只在 Forge 上接(同前)。jei:Forge 与 Fabric 都接(JEI 15)。litematica:Fabric 上对着
+  Litematica 0.15.4(只发在 Modrinth)编译,Forge 上的目标模组是 Forgematica(模组 id `forgematica`,包与类同 Litematica),
+  目标模组 id 由宿主交给联动。
+- ftbquests(FTB Quests 2001):书没有 `getTeamData(玩家)`,队伍进度经 `TeamProgress` 问 FTB Teams;Forge 的专用服务器把 FTB 标了
+  `OnlyIn` 的取名方法删掉,服务端那本书的名字由 `QuestNames` 照 FTB 的规则自己算(物品任务项、物品奖励、类型显示名)。
+- tlm:这一代车万女仆没有按坐标播语音的口,不做模型语音(没有 `MaidVoice`);外观同步走自己的 `SimpleChannel`(`Outfit`/`OutfitClient`)。
+  它的祭坛配方类型叫 `altar_crafting`,由 `RecipeType.simple` 造出、没进注册表:配方书的类别取注册表名,没登记的取类型自己报的名字(`RecipeBook.categoryOf`)。
+- 端到端的协议客户端是 MCProtocolLib 1.20-2(1.20.1 的协议;它依赖的认证库与 NBT 库在 JitPack)。
 
 ### 1.20.4(Forge 49 / Fabric 0.15.3):在 1.20.1 一代写法之上,这一代自己的差异
-
-- **网络**:`CustomPacketPayload`(`write(FriendlyByteBuf)` + `id()`)是原版的,载荷直接实现它;Forge 49 仍只有一条 `SimpleChannel`
-  (`ChannelBuilder.named(numen_api:main)`),所有载荷装进 `Envelope` 多路复用,`Wire.FRAMING = 64` 照旧。GameTest 里读下行包:`ForgeNetworkChannel.payloadOf`
-  从 `ClientboundCustomPayloadPacket` 里的 `DiscardedPayload` 取字节(先读掉 SimpleChannel 的 varint 消息序号)。
-- **配置阶段**:`placeNewPlayer` 多一个 `CommonListenerCookie`(`createInitial(profile)` 单参);`ServerPlayer` 构造多一个 `ClientInformation`。连接的协议编解码挂在
-  channel 属性(`ATTRIBUTE_*_PROTOCOL`)上,`ServerGamePacketListenerImpl` 一建就读——假连接(`FakeConnection`、GameTest 的 `OwnerLine`、`TestBody` 的 `Wire`)
-  必须自己种,不种直接空指针。`ServerCommonPacketListenerImpl.send(Packet)` 单参(`MixinServerCommonPacketListener`)。
-- **世界 API**:`SavedData.Factory`(`computeIfAbsent(FACTORY, name)`,`load(CompoundTag)` 单参)、`AdvancementHolder`、`RecipeHolder`(`byKey` 给 `Optional<RecipeHolder<?>>`;
-  合成台重算的 `slotChangedCraftingGrid` 没有"配方提示"参数)、`NbtIo.readCompressed(Path, NbtAccounter)`、`CommandResultCallback`、`TickRateManager`(`TickRateGameTests` 与寻路日志的刻速在)、
-  `GuiGraphics.blitSprite` 与 GUI 精灵(心与鸡腿用 `hud/heart/*`、`hud/food_*`)、`mouseScrolled` 带横向滚动、`Blocks.SHORT_GRASS`(1.20.3 起改名)、
-  `ServerPacksSource.createVanillaPackSource()`。没有:`CriteriaTriggers.ANY_BLOCK_USE`、`EntityDimensions` 眼高、方块/实体交互距离与摔落等属性(仍走 `BodyCompat`)。
-- **GameTest(Forge 49 的 `GameTestServer`)**:
-  - 用例类标 `@GameTestHolder(value = …, namespace = …)` 加 `@GameTestDontPrefix`:Forge 49 把持有者的值前缀到用例名、批次名与模板名上,而 `@BeforeBatch` 的批次名是原样的,
-    不去掉前缀就对不上、开场设定(难度、时刻、晴天)悄悄不生效;命名空间让没有冒号的模板名落到 `numen:<名>`。`forge.enabledGameTestNamespaces` 按批次名前缀筛用例,
-    我们的批次名不带前缀,所以运行配置不设它(登记进来的本来就只有我们自己的类)。
-  - 无头跑批不登记"测试模板目录",`GameTestKit` 的静态块把 SNBT 转成结构 NBT 写进存档的 `generated/numen/structures/`(`numen.gametest.generated`)。
-  - **结构方块就在 rel(0,0,0)**(1.20.1 不在):用例把 rel(0,0,0) 当地板盖掉,原版收场时找不到它(`GameTestInfo.succeed` 空指针);`longFloor` 跳过那一格。
-  - 原版已经钉住整块场地的区块,只缺屏障围栏:`StructureFenceMixin` 注入 `StructureUtils.prepareTestStructure` 的返回处,围栏顶比包围盒顶高一层(寻路的"顶到屋顶翻不过去"用例靠它)。
-  - 不适用于这一代、没有搬的用例:`does_not_place_on_the_world_border`(这一代的世界边界对"方块在不在界内"的口径是只要有一部分在界内就算,造不出那种场地)。
-- **Forge 49 的开发运行**(`gradle/forge-run-classpath.gradle`、`api/forge/build.gradle` 的 `devJar`、`pathing/build.gradle`):dev 运行只把"自带 `META-INF/mods.toml` 的类路径条目"当模组,
-  mods 块里合并多个源码集不再生效;别的目录由应用类加载器加载,碰到原版类就是两份 `ServerPlayer`(`LinkageError`),jar 则作为自动模块与 api 共有的包(`agent.llm`、`agent.memory`、`client.ui`)冲突
-  而拒启。所以:兄弟模块的 jar 不上运行 classpath;core 的运行把 api 打成 `devJar`(内容同发行 jar,official 名)当模组;寻路的 GameTest 是一个自己的模组
-  (`lowcodefml`,类、资源与 `mods.toml` 同处 `pathing/build/gametest-mod`)。api 自己的 Client/Server/Data 运行只做数据生成与冒烟,兄弟模块的类仍走源码集目录,
-  不能在里面跑真实游戏逻辑。
-- **mixin**:这一代 Fabric Loader 0.15.3 自带的 MixinExtras 没有 `@WrapMethod`(要 ≥ 0.4,更旧的静默不生效);同 1.20.1,四处都是 `@Inject` 成对写法,源码里没有 `@WrapMethod`,
-  成品不内嵌 MixinExtras。`MixinPlayerInfo` 在仓库任何分支的历史里都不存在,没有可保留的。`numen_api.fabric.architectury.mixins.json` 的 Fabric 一份照旧。
-- **联动**:YSM 没有 1.20.4 的构建(Modrinth 只有 1.20/1.20.1/1.21/1.21.1/26.1.2),不带;Fabric 侧的联动只有它,`core/fabric` 的 `Builtin` 一并去掉。curios(Forge,Curios 7.4.3+1.20.4)与 ftbquests(Forge,FTB Quests 2004.2.3、Library 2004.2.5、Teams 2004.1.2、Architectury 11.1.17)只在 Forge。
-  这一代的 FTB Quests 没有 `Quest.isSearchable` 与 `TeamData.getCannotStartReason`:看不看得见改用 `Quest.isVisible(team)`,"为什么还不能开始"由插件自己点名还没完成的前置任务
-  (`QuestBook.cannotStartReason`)。车万女仆、森罗厨房没有这一版(只有 1.20.1 与 1.21.1),不接;Fabric 上 Curios/FTB Quests 同 1.21.1 不接。
-
-### 1.20.2(Forge 48.0.49 / Fabric 0.15.0):相对上一节 1.20.4 的差异
-
-源码与 1.20.4 几乎一样,只有这几处不同:
-- **NBT IO**:`NbtIo` 只有 `File` 形态(`readCompressed(File)`、`writeCompressed(CompoundTag, File)`);`Path` 加 `NbtAccounter` 是 1.20.3 起的。`readCompressed(File)` 内部不设限额,等同 `unlimitedHeap`。
-- **花盆**:`FlowerPotBlock.getContent()`(`getPotted()` 只在 1.20.3 / 1.20.4 这一窗口)。**草**:`Blocks.GRASS`(`SHORT_GRASS` 是 1.20.3 起)。
-- **没有 `TickRateManager`**(1.20.3 起才有):寻路日志不写刻速,`TickRateGameTests` 的 3 条没有搬。
-- **Brigadier 1.0.18**:没有 `ContextChain` 与 `CommandResultCallback`,命令回执用 `ResultConsumer` 与 `CommandSourceStack.withCallback`(`Echo`、`McApi`、`OnHer`);
-  `GameTestHelper.getBounds()` 是私有的,`Trial` 遍历场地里的格子量大小。
-- **GameTest**:结构模板 `DataVersion` 3578;注解、模板与批次的写法同 1.20.4(`@GameTestHolder(namespace)` + `@GameTestDontPrefix`、`GameTestKit` 把 SNBT 喂进存档 `generated`)。
-  `StructureUtils` 的形状同 1.20.1(`spawnStructure`,只钉起点周围几格区块),`StructureFenceMixin` 因此与 1.20.1 一样既围屏障又钉整块场地的区块。
-- **Forge 48 的开发运行**:`MOD_CLASSES`(mods 块合并多个源码集)仍然生效,所以与 1.20.1 一样,pathing 与兄弟模块经 mods 块并进 numen 的两个模组;
-  没有 1.20.4 那套 `devJar` / 寻路 GameTest 模组(那是 Forge 49 才需要的)。`:api:forge:Data` 不排除兄弟 jar 也能起,origin 里那段 ai/ui 的排除原样留着。
-- **联动**:YSM 没有 1.20.2 的构建(Modrinth 只有 1.20/1.20.1/1.21/1.21.1/26.1.2),不带;Fabric 侧的联动只有它,`core/fabric` 的 `Builtin` 一并去掉。curios(Forge,Curios 6.1.0+1.20.2:`CuriosApi.getSlots()` 无参、`getItemStackSlots(stack, entity)`)。FTB Quests 没有 1.20.2 的版本(只有 1.20.1 的 2001 与 1.20.4 的 2004),
-  不接;车万女仆、森罗厨房同 1.20.4,没有这一版。
+以对齐好的 1.20.1 为底,只改这一代与 1.20.1 不同的地方;1.20.1 那些差异里 1.20.2/1.20.3 起已经消失的,照回 1.21.1 的写法。
+- **构建(Forge 49 的开发运行)**:FML 只把"自带 `META-INF/mods.toml` 的类路径根"当模组,`MOD_CLASSES` 合并多个源码集的做法没有了;
+  一个模组的类不在同一个根里,就由应用类加载器加载(碰到原版类就是两份 `ServerPlayer`),兄弟模块的 jar 又以自动模块的身份与模组的同名包冲突。
+  所以开发运行里每个模组是一个 jar,官方名:`numen-api/forge` 的 `devJar`(内容同发行 jar)与 `gametestDevJar`,`numen/forge` 的 `devJar`/
+  `gametestDevJar`(本体、平铺的寻路模块,带 GameTest 的再加夹具与用例),联动跑批的 `gametestDevJar`(再加联动本身与它的用例)。
+  运行配置的类路径换成空源码集 `devRun`/`gameTestRun`(原版、Forge、库与这几个 jar),`numen-api/forge` 的运行时类路径里排除纯 JVM 模块的 jar;
+  mcp 的重定位 jar 已平铺在 Numen API 的 jar 里,不再另作库。
+- Gson 2.10.1、slf4j 2.0.7;插件:Curios 7.4.3、FTB Quests 2004.2.3(Library 2004.2.5、Teams 2004.1.2、Architectury 11.1.17)、JEI 17.3.1.5、
+  Litematica 0.17.4(MaLiLib 0.18.1);车万女仆、森罗厨房、YSM 没有 1.20.4 的构建,Forgematica 只有 NeoForge 1.20.4 的版本:这几个联动不带。
+- **网络**:`CustomPacketPayload`(`write` + `id()`)是原版的,载荷直接实现它,1.20.1 的 `NumenPayload` 删掉;还没有载荷类型与 `StreamCodec`,
+  手写 `write`/`read` 照旧。Forge 49 的频道是 `ChannelBuilder.named(numen_api:main).optional().simpleChannel()`,一条 `Envelope` 多路复用;
+  读下行包时 SimpleChannel 的消息序号是 varint,载荷是 `DiscardedPayload`。`canSend` 问 `player.connection.getConnection()`。
+- **配置阶段**:`ServerPlayer` 构造带 `ClientInformation`、`placeNewPlayer` 带 `CommonListenerCookie.createInitial(profile)`(单参);连接的协议
+  编解码挂在 channel 属性上,假连接(`FakeConnection`、`OwnerLine`、`TestBody` 的 `Wire`)自己种。客户端语言原版就记(`clientInformation().language()`),
+  `IClientLanguage` 一套删掉。玩家连接的下行出口与断开在 `ServerCommonPacketListenerImpl`(`MixinServerCommonPacketListener`,`disconnect(Component)`)。
+- **世界 API**:`SavedData.Factory(新建, 读, 数据修复类型)` 与 `save(CompoundTag)`;`AdvancementHolder`、`RecipeHolder`(配方输入仍是 `Container`,
+  合成台重算没有配方提示);`CommandResultCallback`、`Commands.validateParseResults`/`ContextChain`、`NbtIo.readCompressed(Path, NbtAccounter)`、
+  `ServerPacksSource.createVanillaPackSource()`;`Blocks.SHORT_GRASS`;`FlowerPotBlock.getPotted()`。
+- **客户端**:`GuiGraphics.blitSprite` 与 GUI 精灵在(`GuiCompat` 与 `GuiIconsAccessor` 删掉,心与鸡腿用 `hud/heart/*`、`hud/food_*`);`PlayerSkin`;
+  `mouseScrolled` 带横向滚动;`renderBackground(g, x, y, t)`;`MutableComponent.withColor`。
+- **GameTest**:原版取场地起点又是随机一处(y = -59),起点照 1.21.1 用 `@ModifyVariable` 换;区块刻洗牌是 `Util.shuffle(list, 世界随机数)`,
+  原版已经钉住整块场地的区块(`ChunkTickShuffleMixin`、`StructureChunksMixin` 照 1.21.1),只缺屏障:`StructureFenceMixin` 在
+  `GameTestInfo.prepareTestStructure` 之后照高版本 `encaseStructure` 围(包围盒从结构方块之上算,四周向外一格、顶比包围盒高一层);
+  `GameTestHelper.getBounds()` 是公开的(`TestBounds` 删掉),AABB 还没有 `getMinPosition`。场地的结构方块原版仍按坐标去世界里取
+  (`GameTestStructureBlockMixin` 照旧);出生点散布仍是 `RandomSource.create()`(`ServerPlayerSpawnMixin` 照旧);固定规则仍只关刷怪与天气
+  (`GameTestServerRulesMixin` 照旧);`@GameTest` 没有 `skyAccess`(`SkyAccess` 照旧)。模板一律经 `StructureTemplateManager` 取,
+  测试模板目录这个来源只在 `IS_RUNNING_IN_IDE` 时登记:`StructureTemplateTestDirMixin` 在测试服里照样登记。结构模板 SNBT 的 `DataVersion` 是 3700。
+- Forge 49 的 GameTest 用例过滤(`forge.enabledGameTestNamespaces`)按批次名(等于这个名字或以它加分隔符开头),联动跑批的批次名就是套件名。
+- 端到端的协议客户端是 MCProtocolLib 1.20.4-1(有配置阶段:品牌包到了报语言,ping 回 pong;它的 pom 指着已经没有的 Adventure 4.15.0 快照,
+  用 Adventure 的 BOM 取同版正式发行);JEI 17 没有 `getRecipeIngredients`,配方的格位由 `createRecipeLayoutDrawable` 排出来读;
+  Litematica 0.17 用 `getAreaSize`。FTB Quests 2004 没有 `Quest.isSearchable` 与 `TeamData.getCannotStartReason`(用 `isVisible`,
+  `QuestBook.cannotStartReason` 点名还没完成的前置任务),服务端那本书的 JSON 标题按 FTB 的顺序先试 `Component.Serializer`(`QuestNames`)。

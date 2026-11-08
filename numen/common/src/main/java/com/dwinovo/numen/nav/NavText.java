@@ -1,0 +1,676 @@
+package com.dwinovo.numen.nav;
+
+import com.dwinovo.numen.api.entity.Mouse;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.dwinovo.numen.api.sdk.Place;
+import com.dwinovo.numen.FailureType;
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.api.Outcome;
+import com.dwinovo.numen.pathing.api.Travel;
+import com.dwinovo.numen.api.entity.BodyAction;
+import com.dwinovo.numen.api.entity.StackLabel;
+import com.dwinovo.numen.api.entity.Hotbar;
+import com.dwinovo.numen.pathing.drive.Blockage;
+import com.dwinovo.numen.pathing.drive.Lack;
+import com.dwinovo.numen.pathing.drive.DiveLog;
+import com.dwinovo.numen.pathing.drive.EditLedger;
+import com.dwinovo.numen.pathing.plan.Edit;
+import com.dwinovo.numen.pathing.plan.MoveKind;
+import com.dwinovo.numen.pathing.plan.Permit;
+import com.dwinovo.numen.pathing.plan.Reason;
+import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.dwinovo.numen.api.permission.ConsentItem;
+import com.dwinovo.numen.api.permission.Listing;
+import com.dwinovo.numen.permission.Verdict;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+
+/**
+ * 寻路交出来的事实怎么对模型说,全在这里,只此一处:结局({@link Outcome})说成一句英文、归到哪一种 {@link FailureType};
+ * 路上真改了什么(实际账)与身体为走路做了什么({@link BodyAction});一份计划要动哪些格(预算账)。走路线、跟随与各件活的
+ * 回执说的都是这一份。方块按种类归堆,坐标点名的写法与征询清单同一种({@link Listing})。
+ */
+public final class NavText {
+
+    private NavText() {}
+
+    // ==================== 结局 ====================
+
+    /** 这个结局归到哪一种失败。 */
+    public static FailureType type(Outcome outcome) {
+        if (outcome instanceof Outcome.Arrived arrived) {
+            return FailureType.UNKNOWN;
+        } else if (outcome instanceof Outcome.NoRoute noRoute) {
+            // 诊断在许挖许放、设想有料时也没搜出路才给这个结局:这条规格下从这里就是过不去
+            return FailureType.NO_PATH;
+        } else if (outcome instanceof Outcome.OutOfBudget budget) {
+            return FailureType.NO_PATH;
+        } else if (outcome instanceof Outcome.Unloaded unloaded) {
+            return FailureType.NO_PATH;
+        } else if (outcome instanceof Outcome.OverAlterBudget over) {
+            return FailureType.NO_PATH;
+        } else if (outcome instanceof Outcome.Stranded stranded) {
+            return FailureType.BOXED_IN;
+        } else if (outcome instanceof Outcome.Blocked blocked) {
+            return FailureType.BOXED_IN;
+        } else if (outcome instanceof Outcome.NeedsChanges needs) {
+            return FailureType.TERRAIN_BLOCKED;
+        } else if (outcome instanceof Outcome.NoMaterials none) {
+            return FailureType.NO_MATERIAL;
+        } else if (outcome instanceof Outcome.Denied denied) {
+            return FailureType.REFUSED;
+        } else if (outcome instanceof Outcome.NoLineOfSight sight) {
+            return FailureType.OCCLUDED;
+        } else if (outcome instanceof Outcome.Breathless breathless) {
+            return FailureType.HAZARD;
+        } else {
+            Outcome.Grounded grounded = (Outcome.Grounded) outcome;
+            return type(grounded.lack());
+        }
+    }
+
+    /** 缺的是身上的东西(鞘翅、烟花、耐久),模型能补;别的是这一趟飞不起来。 */
+    public static FailureType type(Lack lack) {
+        return switch (lack.why()) {
+            case NO_WINGS, WORN, TOO_FEW_ROCKETS -> FailureType.NO_MATERIAL;
+            case NO_FLIGHT, NO_PLACE, TOO_NEAR, SHORT, NO_TAKEOFF, NO_ROUTE, NO_LANDING -> FailureType.NO_PATH;
+        };
+    }
+
+    /**
+     * 没走到时的那句话:从哪儿、朝哪儿、多远,为什么,下一步能试什么。每一种结局各说各的原因与下一步,走路与各件活
+     * (挖矿、建造……)没走到时都原样说这一句,不另写、不并成一句"到不了"。
+     *
+     * @param from      她此刻脚下那一格
+     * @param toward    要去的那一格(给人看的方向)
+     * @param materials 这一趟愿意垫的料(说"没料"时列出来)
+     */
+    public static String failure(Outcome outcome, NumenPlayer player, BlockPos from, BlockPos toward, RouteSpec spec,
+                                 List<Item> materials) {
+        String where = where(from, toward);
+        if (outcome instanceof Outcome.Arrived arrived) {
+            return "arrived";
+        } else if (outcome instanceof Outcome.NoRoute noRoute) {
+            return "found no path to target (" + where + "; every reachable cell was searched"
+                    + (spec.changes() ? ", digging, bridging and pillaring included" : "")
+                    + ")" + heldUp(noRoute.cause()) + ": there is no way there from here, pick another destination";
+        } else if (outcome instanceof Outcome.OutOfBudget budget) {
+            return "found no path to target (" + where + "; the search used up its budget"
+                    + " before finding one, so this is not proof there is none" + heldUp(budget.cause()) + "; going to a"
+                    + " nearer place in that direction first gets further)";
+        } else if (outcome instanceof Outcome.Unloaded unloaded) {
+            return "found no path to target (" + where + "; the search reached chunks that"
+                    + " are not loaded, so what lies past them is unknown; walk toward it and try again)";
+        } else if (outcome instanceof Outcome.OverAlterBudget over) {
+            return "found no path to target (" + where + "; "
+                    + overBudget(spec.alterBudget(), over.needed()) + ")";
+        } else if (outcome instanceof Outcome.NeedsChanges needs) {
+            return needsChanges(needs, where);
+        } else if (outcome instanceof Outcome.NoMaterials none) {
+            return "found no path to target (" + where + "; every way needs blocks to"
+                    + " pillar or bridge with, about " + none.needed() + " in all)."
+                    + ThrowawayBlocks.shortageAdvice(player, materials);
+        } else if (outcome instanceof Outcome.Denied denied) {
+            return "had to stop: changing " + Listing.coords(denied.cell()) + " is refused ("
+                    + reason(denied.reason()) + ") and no way around it was found; pick another destination, or ask "
+                    + "your owner to allow it";
+        } else if (outcome instanceof Outcome.Stranded stranded) {
+            return "can't set off: I can't stand where I am (" + name(stranded.block())
+                    + " at " + Listing.coords(stranded.cell()) + "); free me first (break that block: `numen.work.dig("
+                    + com.dwinovo.numen.api.sdk.LuaCodecs.literal(stranded.cell()) + ")`) or wait until I land";
+        } else if (outcome instanceof Outcome.Blocked blocked) {
+            return "gave up: " + blockage(blocked.blockage())
+                    + "; try again, and pick another destination if it keeps failing";
+        } else if (outcome instanceof Outcome.NoLineOfSight sight) {
+            return "arrived, but " + Listing.coords(sight.target())
+                    + " went out of sight after the walk was planned (something now stands in between): dig what is in"
+                    + " the way with `numen.work.dig`, or use it from another side";
+        } else if (outcome instanceof Outcome.Grounded grounded) {
+            return "stopped gliding " + where + ": " + lack(grounded.lack());
+        } else {
+            Outcome.Breathless b = (Outcome.Breathless) outcome;
+            return "found no path to target (" + where + "; the way there swims under water"
+                    + " from " + Listing.coords(b.from()) + " to " + Listing.coords(b.to()) + " with no air on the way,"
+                    + " about " + seconds(b.held()) + " without a breath, longer than I can safely hold mine now (about "
+                    + seconds(b.spare()) + "): with water breathing (a potion of water breathing, or a turtle shell on"
+                    + " my head) I could take it, otherwise pick another destination";
+        }
+    }
+
+    /**
+     * 这一趟不改地形走不到,改了才有路:那条路要改什么。不改地形的只有少数几件活(逃跑、追打),模型自己走的 {@code numen.move.walk}
+     * 可挖可搭;要问主人的格走到跟前才问。
+     */
+    private static String needsChanges(Outcome.NeedsChanges needs, String where) {
+        return "found no path to target without changing terrain (" + where + "; a way exists that changes "
+                + needs.alterations() + " block(s) — " + planned(needs.changes()) + "): this job walks without "
+                + "changing terrain, `numen.move.walk` takes such a way" + (needs.asks()
+                ? " and asks your owner when I get to each of the cells that need consent" : "");
+    }
+
+    /**
+     * 飞不起来(受理时当场拒绝)或飞到一半不能再飞了的缘由:缺什么、怎么补。受理时说的和飞到一半收工说的是同一句,都是"此刻从这里飞不起来"的事实。
+     * 创造飞行的缺是 {@code NO_FLIGHT},别的都是鞘翅滑翔的。
+     */
+    public static String lack(Lack lack) {
+        return switch (lack.why()) {
+            case NO_FLIGHT -> "I am not allowed to fly (creative flight is not available to me): `numen.move.walk` goes on foot"
+                    + (lack.have() > 0 ? ", and `numen.move.glide` crosses a long way on the elytra I wear" : "");
+            case NO_WINGS -> "I am not wearing a usable elytra. With an elytra on my chest (`numen.gear.wear`) and"
+                    + " firework rockets in my pack I can glide; `numen.move.walk` goes on foot";
+            case WORN -> "my elytra has " + lack.have() + " durability left and gliding needs at least " + lack.need()
+                    + ": wear another elytra (`numen.gear.wear`), or go on foot with `numen.move.walk`";
+            case TOO_FEW_ROCKETS -> "I have " + lack.have() + (lack.have() == 1 ? " firework rocket" : " firework rockets") + " and taking off needs at least " + lack.need()
+                    + ", and there is no ledge near me to glide down from: bring more rockets, stand on a ledge, or go on foot with `numen.move.walk`";
+            case NO_PLACE -> "gliding goes to a column: give `numen.move.glide` a column {x = …, z = …}, a Pos, a Block or an Entity";
+            case TOO_NEAR -> "it is only " + lack.have() + " blocks away, already inside the " + lack.need() + " blocks where a glide starts to come down: `numen.move.walk` goes there";
+            case SHORT -> "I had to come down early, " + lack.have() + " blocks short of there (horizontally); I take off again only when it is more than "
+                    + lack.need() + " blocks away: `numen.move.walk` goes the rest, or `numen.move.glide` again from here";
+            case NO_TAKEOFF -> "there is no spot with open sky within " + lack.need() + " blocks of me to take off from: `numen.move.walk` to an open"
+                    + " place, then `numen.move.glide`";
+            case NO_ROUTE -> "no flight line from the spots around me got past the terrain on the way there";
+            case NO_LANDING -> "I found no dry standable ground within " + lack.need() + " blocks of there to land on: pick a place on or near the ground";
+        };
+    }
+
+    /** 刻数说成秒:{@code 14 s},不足一秒说 {@code under 1 s}。憋气的几处(回执、结局、计划)都这么说。 */
+    public static String seconds(int ticks) {
+        return ticks < 20 ? "under 1 s" : Math.round(ticks / 20.0) + " s";
+    }
+
+    private static String where(BlockPos from, BlockPos toward) {
+        return String.format("from %s toward %s, about %.0f blocks away", from.toShortString(), toward.toShortString(),
+                Math.sqrt(from.distSqr(toward)));
+    }
+
+    /** 预算内无路:两处回执共用,数字口径一致。 */
+    public static String overBudget(int budget, int cheapest) {
+        return String.format("no route within a budget of %d changed blocks (the cheapest found would change %d)",
+                budget, cheapest);
+    }
+
+    /** 许可或动手时被拒的理由:权限层的裁决说它自己的话,别的(服务端退回)照实说。 */
+    static String reason(Object refusal) {
+        Verdict verdict = refusal instanceof Verdict v ? v
+                : refusal instanceof Mouse.Refusal r ? r.verdict() : null;
+        return verdict != null ? verdict.reason() : "the server would not let it happen";
+    }
+
+    /** 一格改不得的原因:许可拒绝的({@code detail} 是它的裁决)说权限层自己的话,别的按 {@link Reason} 说。 */
+    public static String refused(Reason reason, Object detail) {
+        return reason == Reason.DENIED ? reason(detail) : reason(reason);
+    }
+
+    /**
+     * 一趟路走到期限还没到:走了多久、离目标多远、停在哪,搜索里离目标最近处朝目标的一步被什么挡住了(有的话,与"没搜到路"
+     * 同一种说法),接下来能做什么。{@code checkIn} 是这一趟一直在推进、只是超过了一趟能走的最长时间;否则是租约到期前没有进展。
+     */
+    public static String timedOut(Travel travel, String tool, int workTicks, double distance, String here, Blockage nearest, boolean checkIn) {
+        return "timed out after " + seconds(workTicks) + " of " + (switch (travel) {
+            case WALK -> "walking";
+            case FLY -> "flying";
+            case GLIDE -> "gliding";
+        }) + ", " + String.format("%.1f", distance)
+                + " blocks from target (now at " + here + ")" + heldUp(nearest) + "; "
+                + (checkIn
+                        ? "the trip was still going and reached the longest a single trip runs; call `" + tool + "` again to"
+                        + " go on from here, or pick a destination closer to the way it was taking."
+                        : "it made no progress for the last stretch; `" + tool + "` again plans from here, or go to a point"
+                        + " on the way first.");
+    }
+
+    /** 搜索里离目标最近的地方,朝目标的一步被什么挡住了;没有是空串。 */
+    private static String heldUp(Blockage cause) {
+        return cause == null ? "" : "; nearest to the target, " + move(cause.move()) + " at " + Listing.coords(cause.cell())
+                + " (" + name(cause.block()) + ") was ruled out: " + reason(cause.reason());
+    }
+
+    /** 一步走不下去的那一句:哪一格、什么方块、哪种走法、为什么。 */
+    public static String blockage(Blockage b) {
+        String why = b.reason() != null ? reason(b.reason()) : hitch(b.hitch());
+        return move(b.move()) + " at " + Listing.coords(b.cell()) + " (" + name(b.block()) + ") kept failing: " + why;
+    }
+
+    private static String move(MoveKind kind) {
+        return switch (kind) {
+            case WALK -> "walking";
+            case DIAGONAL -> "stepping diagonally";
+            case ASCEND -> "stepping up";
+            case DESCEND -> "stepping down";
+            case FALL -> "dropping down";
+            case PARKOUR -> "a running jump";
+            case PILLAR -> "pillaring up";
+            case DOWNWARD -> "digging down";
+            case CLIMB -> "climbing";
+            case SWIM -> "swimming";
+            case TAKEOFF -> "taking off";
+            case FLY -> "flying";
+            case LAND -> "landing";
+        };
+    }
+
+    private static String reason(Reason reason) {
+        return switch (reason) {
+            case DISABLED -> "that kind of move is switched off for this walk";
+            case NOT_STANDING -> "there is nothing to stand on where the step starts";
+            case WRONG_STANCE -> "I am not in a position to make that move";
+            case NO_FOOTING -> "nothing to stand on where the step lands";
+            case NO_CLEARANCE -> "no room for my body there";
+            case TOO_HIGH -> "too high to step or jump up";
+            case TOO_FAR_TO_FALL -> "the drop is too far, or the landing would hurt too much";
+            case WRONG_DROP -> "the ground is not where the step expected it";
+            case NO_GAP -> "there is no gap to jump";
+            case NO_SPRINT -> "the jump needs a sprint and I can't sprint";
+            case EXCLUDED -> "this walk keeps out of that kind of cell";
+            case TRAMPLES -> "landing there would trample it";
+            case FORBIDDEN -> "this walk may not touch that cell";
+            case NO_DIGGING -> "it would dig, which this walk may not";
+            case NO_PLACING -> "it would place a block, which this walk may not";
+            case NO_MATERIALS -> "it needs a block to place and I carry none of the blocks this walk may spend";
+            case DENIED -> "changing it is refused";
+            case NEEDS_CONSENT -> "changing it needs the owner's consent, and this walk keeps out of such cells";
+            case EDIT_RESTRICTED -> "my game mode can't change blocks";
+            case UNBREAKABLE -> "it can't be broken";
+            case TOO_HARD -> "the best tool I carry would take over a minute to break it";
+            case WOULD_FLOOD -> "breaking it would let liquid in";
+            case WOULD_COLLAPSE -> "breaking it would bring loose blocks down";
+            case MELTS -> "breaking the ice would leave water";
+            case INFESTED -> "it is infested";
+            case OUT_OF_BOUNDS -> "it is outside the world border or build height";
+            case NOT_REPLACEABLE -> "a block can't go in there";
+            case NO_FACE -> "there is nothing to place against";
+            case OCCUPIED -> "my own body is in that cell";
+            case OUT_OF_REACH -> "it is out of my reach";
+            case OUT_OF_BREATH -> "with the air I have left I could not reach air before drowning";
+        };
+    }
+
+    private static String hitch(Blockage.Hitch hitch) {
+        return switch (hitch) {
+            case STUCK -> "the step took far longer than it should, I was stuck";
+            case OCCLUDED -> "I could not see the block I had to work on";
+            case NO_FACE -> "I could not point at a face to place against";
+            case NO_MATERIALS -> "I could not get the block into my hand";
+            case DIVERTED -> "the ground changed and the step would land somewhere else";
+            case FELL_BACK -> "I kept ending up back where the step before it started";
+            case LOST -> "I kept ending up beside the route instead of where the step lands";
+            case BOXED -> "in the air every way I could fly led into a block";
+            case PINNED -> "I was gliding and a block held me: for a second I did not get away from the spot, so I let go of the controls (`numen.work.dig` clears it)";
+        };
+    }
+
+    // ==================== 实际账与身体动作 ====================
+
+    /**
+     * 回执末尾那一段:路上挖了什么、放了什么(与倒下又收回的水),身体为走路做了什么,潜过几段水,飞了多远;什么都没有是空串。
+     * 例如 {@code En route I had to break 2 oak_planks (120,64,-33; 120,65,-33) and place 1 cobblestone (121,64,-33).
+     * I also stepped off the boat. I went under water once: 12 s without a breath from 10,40,5 to 20,40,5, air down to
+     * 60/300. I flew 31 blocks (took off at 1,64,5; landed at 30,64,5).}
+     */
+    public static String journey(List<EditLedger.Entry> entries, List<BodyAction> actions, List<DiveLog.Dive> dives,
+                                 List<Ruling> rulings, Flights flights) {
+        String edits = edits(entries);
+        String done = actions(actions);
+        String under = dives(dives);
+        String flight = flight(flights);
+        String refused = refusals(rulings);
+        StringBuilder sb = new StringBuilder();
+        if (!edits.isEmpty()) {
+            sb.append("En route I had to ").append(edits).append('.');
+        }
+        if (!done.isEmpty()) {
+            sb.append(sb.length() > 0 ? " I also " : "En route I ").append(done).append('.');
+        }
+        if (!under.isEmpty()) {
+            sb.append(sb.length() > 0 ? " " : "").append(under);
+        }
+        if (!flight.isEmpty()) {
+            sb.append(sb.length() > 0 ? " " : "").append(flight);
+        }
+        if (!refused.isEmpty()) {
+            sb.append(sb.length() > 0 ? " " : "").append(refused);
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 路上飞过的(创造飞行):飞了多远、从哪儿起飞、在哪儿降落,收场时还在空中就说还在飞;走路开始时身体在飞,说先落了地。没飞过且没在飞是空串。例如
+     * {@code I flew 31 blocks (took off at 1,64,5; landed at 30,64,5).} 或
+     * {@code I flew 12 blocks (took off at 1,64,5). I am still flying, hovering in the air.}
+     */
+    static String flight(Flights flights) {
+        StringBuilder sb = new StringBuilder();
+        if (!flights.alighted().isEmpty()) {
+            sb.append("I was flying when the walk began, so I came down to the ground first (at ").append(coordsList(flights.alighted())).append(").");
+        }
+        if (flights.blocks() >= 0.5) {
+            long flown = Math.round(flights.blocks());
+            sb.append(sb.length() > 0 ? " " : "").append("I flew ").append(flown).append(flown == 1 ? " block" : " blocks");
+            List<String> where = new ArrayList<>();
+            if (!flights.launches().isEmpty()) {
+                where.add("took off at " + coordsList(flights.launches()));
+            }
+            if (!flights.landings().isEmpty()) {
+                where.add("landed at " + coordsList(flights.landings()));
+            }
+            if (!where.isEmpty()) {
+                sb.append(" (").append(String.join("; ", where)).append(')');
+            }
+            sb.append('.');
+        }
+        for (EditLedger.Glided glide : flights.glides()) {
+            sb.append(sb.length() > 0 ? " " : "").append(glide(glide));
+        }
+        if (flights.flying()) {
+            sb.append(sb.length() > 0 ? " " : "").append("I am still flying, hovering in the air.");
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 一段鞘翅滑翔的细账:用了几支烟花、鞘翅耐久前后、落地掉了几点血、是不是迫降、是不是被方块顶住、收场时是不是还在空中。例如
+     * {@code Gliding used 2 firework rockets and wore the elytra from 0 to 3 damage; I lost no health.}
+     */
+    static String glide(EditLedger.Glided glide) {
+        StringBuilder sb = new StringBuilder("Gliding used ").append(glide.rockets()).append(glide.rockets() == 1 ? " firework rocket" : " firework rockets")
+                .append(" and wore the elytra from ").append(glide.wearBefore())
+                .append(" to ").append(glide.wearAfter()).append(" damage; ");
+        sb.append(glide.damage() < 0.5F ? "I lost no health" : "I lost " + Math.round(glide.damage()) + " health");
+        if (glide.emergency()) {
+            sb.append(" and had to land early where the ground was within reach");
+        }
+        sb.append('.');
+        if (glide.fellOut() > 0) {
+            sb.append(" I dropped below the ground of ").append(glide.fellOut() == 1 ? "a landing spot" : glide.fellOut() + " landing spots")
+                    .append(" before touching down and picked another.");
+        }
+        if (glide.trapped()) {
+            sb.append(" I got stuck against blocks in the air and let go of the controls there.");
+        }
+        if (glide.airborne()) {
+            sb.append(" I am still in the air.");
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 路上飞过的账:飞了几格、起飞与降落的地方,和收场时身体还在不在飞;其中鞘翅滑翔的每一段另有细账({@code glides})。
+     */
+    public record Flights(double blocks, List<BlockPos> launches, List<BlockPos> landings, boolean flying, List<EditLedger.Glided> glides,
+                          List<BlockPos> alighted) {
+
+        /** 没飞过、也没在飞。 */
+        public static final Flights NONE = new Flights(0, List.of(), List.of(), false, List.of(), List.of());
+
+        public Flights {
+            launches = List.copyOf(launches);
+            landings = List.copyOf(landings);
+            glides = List.copyOf(glides);
+            alighted = List.copyOf(alighted);
+        }
+    }
+
+    private static String coordsList(List<BlockPos> cells) {
+        return String.join(", ", cells.stream().map(Listing::coords).toList());
+    }
+
+    /**
+     * 路上被拒的:要改而没让改的格与谁怎么说的。例如 {@code Refused on the way: break oak_planks at 4,5,6 (your owner: no).}
+     * 没有被拒的是空串;答应了的另在主人点头的那一句里。
+     */
+    static String refusals(List<Ruling> rulings) {
+        List<String> parts = new ArrayList<>();
+        for (Ruling ruling : rulings) {
+            if (!ruling.allowed()) {
+                parts.add(ruling.what() + " at " + Listing.coords(ruling.pos()) + " (" + ruling.by() + ")");
+            }
+        }
+        return parts.isEmpty() ? "" : "Refused on the way: " + String.join("; ", parts) + ".";
+    }
+
+    /**
+     * 路上潜过的水:几段,憋得最久的那一段从哪儿到哪儿、憋了多久、氧气最低到多少。没潜过是空串。例如
+     * {@code I went under water 2 times; the longest: 12 s without a breath from 10,40,5 to 20,40,5, air down to 60/300.}
+     */
+    static String dives(List<DiveLog.Dive> dives) {
+        if (dives.isEmpty()) {
+            return "";
+        }
+        DiveLog.Dive longest = dives.get(0);
+        for (DiveLog.Dive dive : dives) {
+            if (dive.ticks() > longest.ticks()) {
+                longest = dive;
+            }
+        }
+        return "I went under water " + (dives.size() == 1 ? "once: " : dives.size() + " times; the longest: ")
+                + seconds(longest.ticks()) + " without a breath from " + Listing.coords(longest.from()) + " to "
+                + Listing.coords(longest.to()) + ", air down to " + Math.max(0, longest.lowestAir()) + "/"
+                + longest.maxAir() + ".";
+    }
+
+    /** 实际账按方块归堆:挖掉的、放下的、倒下的液体、收回的。 */
+    record Tally(Map<Block, List<BlockPos>> broke, Map<Block, List<BlockPos>> placed, Map<Block, List<BlockPos>> poured,
+                 Map<Block, List<BlockPos>> scooped) {
+
+        /** 挖了几格。 */
+        int dugCount() {
+            return count(broke);
+        }
+
+        /** 放下几格(倒下又收回的水不算)。 */
+        int placedCount() {
+            return count(placed);
+        }
+
+        /** 挖掉的每一格,按账上的先后。 */
+        List<BlockPos> dugCells() {
+            return cells(broke);
+        }
+
+        /** 放下的每一格(倒下又收回的水不算),按账上的先后。 */
+        List<BlockPos> placedCells() {
+            return cells(placed);
+        }
+
+        private static int count(Map<Block, List<BlockPos>> heaps) {
+            return heaps.values().stream().mapToInt(List::size).sum();
+        }
+
+        private static List<BlockPos> cells(Map<Block, List<BlockPos>> heaps) {
+            return heaps.values().stream().flatMap(List::stream).toList();
+        }
+    }
+
+    /** 把实际账归堆。 */
+    static Tally tally(List<EditLedger.Entry> entries) {
+        Map<Block, List<BlockPos>> broke = new LinkedHashMap<>();
+        Map<Block, List<BlockPos>> placed = new LinkedHashMap<>();
+        Map<Block, List<BlockPos>> poured = new LinkedHashMap<>();
+        Map<Block, List<BlockPos>> scooped = new LinkedHashMap<>();
+        for (EditLedger.Entry entry : entries) {
+            if (entry instanceof EditLedger.Dug dug) {
+                heap(broke, dug.before().getBlock(), dug.pos());
+            } else if (entry instanceof EditLedger.Placed p && (!p.after().getFluidState().isEmpty())) {
+                heap(poured, p.after().getBlock(), p.pos());
+            } else if (entry instanceof EditLedger.Placed p && (p.after().isAir())) {
+                heap(scooped, p.before().getBlock(), p.pos());
+            } else if (entry instanceof EditLedger.Placed p) {
+                heap(placed, p.after().getBlock(), p.pos());
+            } else if (entry instanceof EditLedger.Toggled) {
+            }
+        }
+        return new Tally(broke, placed, poured, scooped);
+    }
+
+    /** 实际账的正文:挖掉的、放下的、倒下的液体与收回的,各按方块归堆。空账是空串。 */
+    static String edits(List<EditLedger.Entry> entries) {
+        Tally tally = tally(entries);
+        List<String> parts = new ArrayList<>();
+        if (!tally.broke().isEmpty()) {
+            parts.add("break " + heaps(tally.broke()));
+        }
+        if (!tally.placed().isEmpty()) {
+            parts.add("place " + heaps(tally.placed()));
+        }
+        if (!tally.poured().isEmpty()) {
+            parts.add("pour " + heaps(tally.poured()) + " to break a fall");
+        }
+        if (!tally.scooped().isEmpty()) {
+            parts.add("scoop " + heaps(tally.scooped()) + " back into the bucket");
+        }
+        return andJoined(parts);
+    }
+
+    /** 身体动作的正文,同样的动作归成一条,例如 {@code stepped off the boat and took cobblestone into my hand (3 times)}。 */
+    public static String actions(List<BodyAction> actions) {
+        Map<String, Integer> counted = new LinkedHashMap<>();
+        for (BodyAction action : actions) {
+            counted.merge(action(action), 1, Integer::sum);
+        }
+        List<String> parts = new ArrayList<>();
+        counted.forEach((text, n) -> parts.add(n == 1 ? text : text + " (" + n + " times)"));
+        return andJoined(parts);
+    }
+
+    private static String action(BodyAction action) {
+        if (action instanceof BodyAction.Held h && (h.item() == Items.AIR)) {
+            return "put away what was in my hand";
+        } else if (action instanceof BodyAction.Held h && (h.from() == Hotbar.OFFHAND)) {
+            return "swapped " + StackLabel.brief(h.stack())
+                    + " from my offhand into my hand";
+        } else if (action instanceof BodyAction.Held h && (h.from() == h.to())) {
+            return "switched to " + StackLabel.brief(h.stack())
+                    + " in my hotbar";
+        } else if (action instanceof BodyAction.Held h) {
+            return "took " + StackLabel.brief(h.stack()) + " from my inventory into my hand";
+        } else {
+            BodyAction.Conjured c = (BodyAction.Conjured) action;
+            return "took a stack of " + item(c.item()) + " from the creative inventory";
+        }
+    }
+
+    // ==================== 预算账 ====================
+
+
+    /**
+     * 计划要动什么(预算账),与实际账同一种写法:要挖的格按方块归堆,要问主人的缀上为什么问;要放的格按方块归堆。例如
+     * {@code break 2 oak_planks (120,64,-33; 120,65,-33) needing consent (placed by a player); place 1 cobblestone (121,64,-33)}。
+     * 一格都不动是 {@code no terrain change}。
+     *
+     * @param digs   要挖的格 → 那里规划时的方块,按先后
+     * @param places 要放的格 → 打算放下的方块,按先后
+     * @param asks   其中要问主人的格 → 为什么要问
+     */
+    public static String planned(Map<BlockPos, Block> digs, Map<BlockPos, Block> places, Map<BlockPos, String> asks) {
+        if (digs.isEmpty() && places.isEmpty()) {
+            return "no terrain change";
+        }
+        List<String> parts = new ArrayList<>();
+        if (!digs.isEmpty()) {
+            parts.add("break " + consented(digs, asks));
+        }
+        if (!places.isEmpty()) {
+            parts.add("place " + consented(places, asks));
+        }
+        return String.join("; ", parts);
+    }
+
+    /**
+     * 一条路要改的格,读成三张表:要挖的格 → 那里原来的方块,要放的格 → 放的方块(倒水接坠落记水),其中要问主人的格 → 许可给的
+     * 为什么问。规划写计划、回执说要改什么,读的都是这一份。
+     */
+    public record Changes(Map<BlockPos, Block> digs, Map<BlockPos, Block> places, Map<BlockPos, String> asks) {
+
+        public static Changes of(List<Edit> edits) {
+            Map<BlockPos, Block> digs = new LinkedHashMap<>();
+            Map<BlockPos, Block> places = new LinkedHashMap<>();
+            Map<BlockPos, String> asks = new LinkedHashMap<>();
+            for (Edit edit : edits) {
+                if (edit instanceof Edit.Dig dig) {
+                    digs.put(dig.pos(), dig.state().getBlock());
+                } else if (edit instanceof Edit.Place place) {
+                    places.put(place.pos(), place.block());
+                } else if (edit instanceof Edit.Catch caught) {
+                    places.put(caught.pos(), net.minecraft.world.level.block.Blocks.WATER);
+                } else {
+                    Edit.Door door = (Edit.Door) edit; }
+                if (edit.permit() instanceof Permit.Ask ask && ask.credential() instanceof ConsentItem item) {
+                    asks.put(edit.pos(), item.cause());
+                }
+            }
+            return new Changes(digs, places, asks);
+        }
+    }
+
+    /** 一条路要改的格,与 {@link #planned(Map, Map, Map)} 同一种写法。 */
+    static String planned(List<Edit> edits) {
+        Changes changes = Changes.of(edits);
+        return planned(changes.digs(), changes.places(), changes.asks());
+    }
+
+    /** 按方块归堆,同一种方块里要问主人的按为什么问再分一堆,缀上 {@code needing consent (…)}。 */
+    private static String consented(Map<BlockPos, Block> cells, Map<BlockPos, String> asks) {
+        Map<String, List<BlockPos>> heaps = new LinkedHashMap<>();
+        Map<String, String> labels = new LinkedHashMap<>();
+        cells.forEach((pos, block) -> {
+            String cause = asks.getOrDefault(pos, "");
+            String key = name(block) + '|' + cause;
+            heaps.computeIfAbsent(key, k -> new ArrayList<>()).add(pos);
+            labels.putIfAbsent(key, cause.isEmpty() ? "" : " needing consent (" + cause + ")");
+        });
+        List<String> parts = new ArrayList<>();
+        heaps.forEach((key, at) -> parts.add(Listing.part(key.substring(0, key.indexOf('|')), at.size(), at)
+                + labels.get(key)));
+        return andJoined(parts);
+    }
+
+    // ==================== 小工具 ====================
+
+    private static void heap(Map<Block, List<BlockPos>> heaps, Block block, BlockPos pos) {
+        heaps.computeIfAbsent(block, k -> new ArrayList<>()).add(pos);
+    }
+
+    private static String heaps(Map<Block, List<BlockPos>> heaps) {
+        List<String> parts = new ArrayList<>();
+        heaps.forEach((block, cells) -> parts.add(Listing.part(name(block), cells.size(), cells)));
+        return andJoined(parts);
+    }
+
+    private static String andJoined(List<String> parts) {
+        if (parts.size() <= 1) {
+            return parts.isEmpty() ? "" : parts.get(0);
+        }
+        return String.join(", ", parts.subList(0, parts.size() - 1)) + " and " + parts.get(parts.size() - 1);
+    }
+
+    /** 一句能照抄的去一处,带反引号:{@code `numen.move.walk({x = 1, y = 2, z = 3})`}。 */
+    public static String gotoCall(Place to) {
+        return "`" + com.dwinovo.numen.api.sdk.Call.of("numen.move.walk", to) + "`";
+    }
+
+    /** 一句能照抄的走到离一处不超过 {@code distance} 格:{@code `numen.move.walk({x = 1, y = 2, z = 3}, 2)`}。 */
+    public static String gotoCall(Place to, int distance) {
+        return "`" + com.dwinovo.numen.api.sdk.Call.of("numen.move.walk", to, distance) + "`";
+    }
+
+    public static String name(BlockState state) {
+        return name(state.getBlock());
+    }
+
+    public static String name(Block block) {
+        return BuiltInRegistries.BLOCK.getKey(block).getPath();
+    }
+
+    private static String item(Item item) {
+        return BuiltInRegistries.ITEM.getKey(item).getPath();
+    }
+}

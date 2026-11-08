@@ -1,6 +1,6 @@
 name: Build
 
-# 只回答一个问题:git 里的东西能不能编译。
+# 只回答一个问题:git 里的东西能不能编译、测试过不过(单测与各加载器的 GameTest)。
 #
 # 发版(publish.yml)认的就是这里对被发那个提交的结论,自己不再跑一遍。
 #
@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # 目标 JDK 逐分支不同(1.20.x -> 17,1.21.x -> 21,26.1.2 -> 25),从 gradle.properties
       # 读,以后放开别的分支时这一步不用改。
@@ -41,33 +41,34 @@ jobs:
           echo "java_version=$(grep -E '^java_version=' gradle.properties | head -n1 | cut -d= -f2-)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Java ${{ steps.props.outputs.java_version }}
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: ${{ steps.props.outputs.java_version }}
           distribution: temurin
 
+      # 停在 v5:v6 起缓存组件改为闭源商业许可(gradle-actions-caching),v5 是 MIT 且已跑 Node 24。
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v5
 
       # assemble = 全部模块出 jar,不点名 loader 模块——Forge/NeoForge 分支同一份步骤。
       - name: Assemble all loaders
         run: ./gradlew assemble --no-daemon -x javadoc
 
-      # 纯 JVM 测试,不起游戏,几十秒。GameTest 要拉整个客户端,不进 CI。
+      # 纯 JVM 测试,不起游戏,几十秒。GameTest 起的是无头测试服务器,不跟着推送跑,要跑时手动触发 gametest.yml。
       # 数据生成:语言文件、方块标签都是生成出来的,不跑就发现不了"provider 改了但
       # 生成任务炸了"这类问题——发版流水线曾经因此在 Forge 分支上整步失败,而这里
       # 一路绿灯。datagenAll 由构建自己按分支挑 loader,CI 不做探测。
       - name: Run data generation
         run: ./gradlew datagenAll --no-daemon -x javadoc
 
-      # 全模块测试。只跑 :api:common:test 的话,ai(provider/用量核算)、ui(控件)、
-      # core(寻路/战斗/任务)三家的用例一个都不会跑——那是一多半的测试。
+      # 全模块测试。只跑 :numen-api:common:test 的话,ai(provider/用量核算)、ui(控件)、
+      # Numen(寻路/战斗/任务)三家的用例一个都不会跑——那是一多半的测试。
       - name: Run JVM tests
         run: ./gradlew test --no-daemon -x javadoc
 
       - name: Upload test report on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-report
           path: "**/build/reports/tests/test/"

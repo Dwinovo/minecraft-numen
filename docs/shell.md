@@ -43,16 +43,21 @@
 | 函数 | 只管 | 不管 |
 |---|---|---|
 | `scan.*` | 读世界:`scan.blocks` 交回相连的团(Cluster)、`scan.map`、`scan.container`、`scan.sight` | 不存任何东西 |
-| `route.plan` | 寻路:照一张描述(去处、途经点、旋钮、避开)只搜不走,交回计划(Plan),写明要改的格、要问谁(§十一) | 不动、不存 |
-| `move.go` | 移动:照这一段程序里的计划走,只改承诺里的格,走到要问的格跟前才问 | 不挖目标、不捡 |
-| `move.dismount` | 从坐着的东西上下来 | — |
-| `move.follow` | 跟着一个实体走,它走远了、没了、超时收尾 | 不打、不捡 |
-| `work.dig` | 挖**站在原地手够得着**的格:挡在前面的格一并挖开(要问/被禁的不挖,如实说),换工具 | 不走动、不捡 |
-| `build.place` | 把给的格(Cells 或蓝图句柄)里**站在原地手够得着**的放一遍 | 不走动、不挖、不重来 |
-| `build.diff` | 查:还差什么,够得着的、要先挖的、够不着的与最低最近的那一格 | 不动 |
+| `move.walk` | 去一处:Pos、方块、实体、团、Cells、一列、一个高度;可选一个距离。只走(游、挖、搭),从不飞;身体在飞先落地。默认可挖可搭、只看价钱,能不能动哪一格由权限层在动手那一刻定(§十一) | 不捡、不用 |
+| `move.fly` | 同样的去处与距离(可以是半空的一格),只用创造飞行:到点悬停;不许飞当场拒绝,下一步是 `move.walk`,穿着鞘翅的再给 `move.glide` | 不碰鞘翅 |
+| `move.glide` | 去一列 `{x, z}`(给格、方块、实体取它所在的那一列,y 不参与;只有高度没有列,拒绝),只用鞘翅:走到起飞点、起飞、巡航,水平进入目标 16 格就降落,落在最近的安全落点(天然实心方块、头顶是空柱、不在边沿、不在液体里),落地就是这一趟的结束;回执说落在哪一格、离目标水平多远、烟花与耐久;缺鞘翅、烟花(少于 5 支)、耐久(少于 5 点)、起飞的地方当场拒绝,目标已在 16 格内也拒绝 | 不走最后一截;没进 16 格就落了地:离目标超过 96 格且烟花耐久够就再起飞,否则收工并说离目标多远,不改成走路 |
+| `move.away` | 离某物至少几格,走法同 `move.walk`(只走) | — |
+| `move.follow` | 跟着一个实体走,它走远了、没了、超时收尾;走法同 `move.walk`(只走) | 不打、不捡 |
+| `use.dismount` | 从坐着的东西上下来 | — |
+| `use.wake` / `use.glide` | 起床(与 `use.sleep` 成对);鞘翅起飞,飞行中放烟花是 `use.item` | 条件(在空中、鞘翅没坏……)原版判 |
+| `use.sign` | 写告示牌的一面(刚放下的直接写,别的没涂蜡的先右键);发 `SignUpdate`,读回牌上的字 | 涂蜡、别人在写由原版拒,如实报 |
+| `work.dig` | 挖点名的格:手够得着的先挖,够不着的走到够得着剩下最多格的地方再挖;挡在前面的格一并挖开(要问/被禁的不挖,如实说),换工具 | 不捡 |
+| `build.place` | 把给的格(Cells)放一遍:够得着的放,够不着的走到够得着最低一层剩下的格的地方再放 | 不挖、不重来 |
+| `build.diff` | 查:还差什么,够得着的、要先挖的、够不着的与最低最近的那一格,剩下的格要花的全部料(`materials`)与生存模式下还缺多少(`short_of`) | 只读,不走 |
 | `fight.attack` | 打**一只**:追、转头、等冷却、出手,死了/丢了/超时收尾 | 不挑下一只、不跑(跑是逃跑本能) |
-| `use.*` | 按一下键:右键一格/一只实体/前方,左键一下 `use.hit` | 不挖(挖是 `work.dig`) |
-| `gui.*` | 开着的界面(Window):看、按种类放进拿出、挪一格、整叠挪、关 | 不开界面(开是 `use.block`) |
+| `use.*` | 按一下键:右键一格/一只实体/前方,左键一下 `use.hit`;够不着先走到能按的地方 | 不挖(挖是 `work.dig`) |
+| `gui.*` | 开着的界面(Window):看(有名堂的界面 `screen` 按种类说话,选项编号从 1 起)、按种类放进拿出、挪一格、整叠挪、选一项(`choose`:附魔台、切石机、织布机、交易、信标)、改名(铁砧)、翻页(讲台)、开关一格(合成器)、按 E(`open`)、关 | 不开界面(开是 `use.block`) |
+| `inv.read` / `inv.write` | 读背包里书的标题作者各页;往书与笔里写页并可署名(发 `EditBook`,读回) | 不合成书 |
 | `inv.craft` | 在开着的合成格里照一条配方合一次 | 不挑配方、不找工作台 |
 | `work.fish` | 抛一竿,钓上来或如实失败 | 不再抛 |
 | `time.wait` | 站着等几秒,主人一喊停就停 | — |
@@ -61,33 +66,30 @@
 
 | 模块函数 | 由哪几个原子函数组成 |
 |---|---|
-| `move.to(target, spec)` | `route.plan`(描述的其余几项加 `to = target`)+ `move.go`;走不通抛 `no_path` |
-| `move.flee(from, opts)` | `move.to` 的 `arrive = "away"`,离它至少 `distance` 格 |
-| `move.explore(dir, opts)` | 一跳一跳 `route.plan` + `move.go`,每跳之后问 `until_`,返回真就停 |
-| `work.collect(opts)` | `scan.entities("item")` + 一件件 `move.to` 走上去(原版玩家走过去就捡起) |
-| `work.mine(cluster)` | 先走后挖:`move.to(cluster, {arrive = "dig", costs = …})` 走到够得着最多格的地方 → `work.dig(cluster)` 挖够得着的 → `work.collect` 捡,那一团挖完为止,返回挖了几格 |
+| `move.explore(dir, opts)` | 一跳一跳 `move.walk` 到前面一列的 4 格内,每跳之后问 `until_`,返回真就停 |
+| `work.collect(opts)` | `scan.entities("item")` + 一件件 `move.walk` 走上去(原版玩家走过去就捡起) |
+| `work.mine(cluster)` | `work.dig(cluster)` 自己走到够得着、挖 → `work.collect` 捡,那一团挖完为止,返回挖了几格 |
 | `fight.clear(radius)` | `scan.entities("hostile")` + 一只一只 `fight.attack` |
-| `build.raise(building, opts)` | `build.diff` 问还差什么 → `build.place` 放够得着的 / `move.to … arrive "dig"` + `work.dig` 挖开挡路的 / `move.to … arrive "place"` 走到够得着最低最近那格的地方 |
-| `inv.make(item, count)` | `inv.recipes` 挑一条料够的合成配方 → 2x2 在自己的格里、3x3 开工作台(开着的、16 格内走过去的、或把带着的放在身边)→ `inv.craft` 到够数 → 关上它开的台 |
+| `inv.make(item, count)` | `inv.make` 读原版来源挑一条料够的合成配方 → 2x2 在自己的格里、3x3 开工作台(开着的、16 格内走过去的、或把带着的放在身边)→ `inv.craft` 到够数 → 关上它开的台 |
 | `inv.store` / `inv.fetch` / `inv.smelt` / `inv.give` | 走过去 `use.block` 开箱子(熔炉)、`Window:put`/`take`、关上;烧炼中间 `time.wait_until` 等烧完;给人是走到身边 `inv.drop` |
 | `time.wait_until(ready, opts)` | 看一眼,不成就 `time.wait` 一会儿再看,超时抛 `timeout` |
-| `shape.*` | 画格子:`box`、`line`、`cylinder`、`sphere`、`layer`,交回 Cells |
+| `shape.*` | 画格子,叫法与操作对齐 WorldEdit(设计稿 `docs/shape-worldedit.md`):选区 `cuboid`、`cyl`、`sphere`、`poly`、`convex` 与 `set`、`walls`、`faces`、`expand`…;`cyl`/`hcyl`、`sphere`/`hsphere`、`cone`、`pyramid`、`line`、`curve`、`generate` 画形状;`layer` 画字符网格;`copy`、`cut`、`fill`、`drain`、`snow`、`gravity`、`morph` 等读世界的操作(只读已加载区块,不写,交回 Cells);`feature`、`structure`、`forest`、`forestgen`、`flora`、`pumpkins` 让原版的生成器跑在记录用的世界上(真实世界一格不动),`feature`、`structure`、`forest` 交回 `{cells, lost}`(`lost` 是 Cells 装不下的实体与方块实体数据);交回 Cells |
 
-- **"挖"的到达**(`arrive = "dig"`)= 手够得着目标区域里任意一格,不要求看得见。同样划算的站位里,优先一次能够到
-  最多目标格的(定价只在寻路模块 `Goals.dig` 一处)。**"放"的到达**(`arrive = "place"`)= 手够得着往那一格里放方块,
-  不站进那一格(`Goals.place`,和 `Goals.dig` 同一套够得着的格,只多禁站进目标)。
-- `work.dig` 挖完回执说:挖了几格、还剩几格够不着、下一步能照抄的 `move.to(…, {arrive = "dig"})`。给的是扫描交回的
+- **"挖"的到达**(`Arrival.dig`,`work.dig` 够不着时走过去用)= 手够得着目标区域里任意一格,不要求看得见。同样划算的站位里,优先一次能够到
+  最多目标格的(定价只在寻路模块 `Goals.dig` 一处)。**"放"的到达**(`Arrival.place`,`build.place` 用)= 手够得着往那一格里放方块,
+  不站进那一格(`Goals.place`,和 `Goals.dig` 同一套够得着的格,只多禁站进目标)。"用"的到达(`Arrival.use`,`use.*` 用)= 看得见、点得到。
+- `work.dig` 挖完回执说:挖了几格、还剩几格够不着(走不到的才有)。给的是扫描交回的
   Block 时,那一格还是那种方块才挖,挖掉的下一次自动不算。
 - **没有不可拆的行为,只有循环快慢之分**:秒级的决策循环(打哪只、按什么顺序、何时撤、打完捡东西)进脚本;每刻都要转
-  的控制(盯着转头、追着保持在够得着处、等冷却出手、举盾)进原子函数内部。例如 `fight.attack(27)` 只管"打这一只"
+  的控制(盯着转头、追着保持在够得着处、等冷却出手、举盾)进原子函数内部。例如 `fight.attack("zombie@3f9a1c")` 只管"打这一只"
   (追、转头、等冷却、出手,目标死了/丢了/超时收尾),"打哪几只"由程序决定(`fight.clear` 就是这样一段);安全兜底
   (打不过就跑的逃跑本能、岩浆自救)由反射打断程序。
 
 ## 四、脚本:Lua
 
-组合语言是 Lua 5.2(10-01 定),只有这一套组合语言。语言只经 `agent.script.ScriptEngine` 一处认:工具名、扩展名、注释写法、
+组合语言是 Lua 5.2(10-01 定),只有这一套组合语言。语言只经 `script.ScriptEngine` 一处认:工具名、扩展名、注释写法、
 "命令怎么调"那段说明、函数名的改写、读与跑;派发、等待、上限、打断、回执、脚本名词、命令函数的目录与参数换算都与语言
-无关(`ScriptRun` 的调用请求、结局、命令结果不带任何虚拟机类型)。实现在 `agent.script.lua.LuaEngine`,虚拟机的类型只在
+无关(`ScriptRun` 的调用请求、结局、命令结果不带任何虚拟机类型)。实现在 `script.lua.LuaEngine`,虚拟机的类型只在
 这个类里;换语言只改 `ScriptEngine.IN_USE` 与它的实现。
 
 虚拟机是本仓自己的纯 JVM 模块 `lua`(不碰 Minecraft 与 Numen 的类型):LuaJ 主干最后一次提交 `daf3da9`(2020-04-01)
@@ -124,13 +126,13 @@
   `In a script: 组.名字_(...).`,`lua` 工具的说明里也写了这一条。规则只在 `ScriptEngine.functionName` 一处,登记处的
   目录、回执里的函数名、帮助都从它来;沙箱不收撞名的宿主函数,登记时就抛出。
 
-### 放在哪:`agent` 模块,程序在服务端跑
+### 放在哪:`script` 模块,程序在服务端跑
 
-- 语言(`agent.script.ScriptEngine` 与实现)、一次运行(`ScriptRun`)、一次调用里的脚本(`ScriptCall`)、一段程序从头到回执
-  (`Program`)、上限(`ScriptLimits`)是纯 JVM,放在 `agent` 模块;`lua` 模块由 `agent` 依赖;发行 jar 里和 `ai`、`agent` 一样平铺进引擎
-  (`api-loader` 约定插件),许可随 jar 带 `LICENSE_numen-lua`。
-- **程序整段在服务端跑**(§十四):客户端只送程序文本、她的模块清单与服务端还没有的模块正文,服务端在身体与数据旁边跑完,回一张
-  回执。客户端的 `SerialCalls` 只管一批调用的顺序,不认识程序里的 API 调用。
+- 语言(`script.ScriptEngine` 与实现)、一次运行(`ScriptRun`)、一次调用里的脚本(`ScriptCall`)、上限(`ScriptLimits`)是纯 JVM,放在 `script` 模块;`lua` 模块由 `script` 依赖;
+  一段程序从头到回执(`Program`)要读收件箱的急件规则,放在 `agent` 模块的 `loop`;发行 jar 里和 `ai`、`agent` 一样平铺进 Numen API
+  (`numen-api-loader` 约定插件),许可随 jar 带 `LICENSE_numen-lua`。
+- **程序整段在服务端跑**(§十四):大脑把程序整段交给服务端入口,在身体与数据旁边跑完,回一张
+  回执。大脑的 `SerialCalls` 只管一批调用的顺序,不认识程序里的 API 调用。
 
 ### 运行:一个程序两条线程,服务端主线程不等脚本
 
@@ -164,12 +166,12 @@
 
 - 等某件身体活收尾时服务端发出了急件(她饿了、背包满了、主人挨打……):不再等,程序停,回执写 `an urgent hungry event arrived; t8 keeps running`
   (那件活照常跑)。一次调用在跑时来了急件:这一次的结果到了就停,停在调用之间。
-- 主人说话、按停止、外接大脑接管、断线这类客户端那边的事,客户端上行一个"停止程序"(`StopProgramPayload`):说话与急件是"停在调用之间"
-  (原因是 `your owner spoke`),切断(停止键、死亡、登出、接管)是"当场停下"(`this turn was cut off; t8 was stopped too` 或 `keeps running`,
-  身体叫停与否照实写)。停止键叫停身体另发 `CancelTasksPayload`。
-- 程序是被叫停的,服务端交回的结局里带**结构化的原因**(`Outcome.stoppedFor`):客户端据此给这一批里还没派的调用各写一条"没执行",
-  不去读回执的文字。切断时客户端不等回执,这一批的调用作废、切断点由内核记下;服务端照常为被切断的程序生成回执并下发,客户端的工具口
-（`CompanionToolPort`）认出它属于已作废的那一批,把它作为一条 `program_stopped` 事件放进她的收件箱——正文就是服务端写的那份有界回执
+- 主人说话、按停止、外接大脑接管、断线这类事,大脑经 `ProgramHost` 叫停程序:说话与急件是"停在调用之间" (`interrupt`,
+  原因是 `your owner spoke`),切断(停止键、死亡、登出、接管)是"当场停下"(`cutOff`;`this turn was cut off; t8 was stopped too` 或 `keeps running`,
+  身体叫停与否照实写)。停止键叫停身体另调 `stopBody`。
+- 程序是被叫停的,交回的结局里带**结构化的原因**(`Outcome.stoppedFor`):工具口据此给这一批里还没派的调用各写一条"没执行",
+  不去读回执的文字。切断时这一批的调用作废、切断点由内核记下;程序照常停下、生成回执,工具口
+（`CompanionToolPort`）认出它属于已作废的那一批,把它作为一条 `program_stopped` 事件放进她的收件箱——正文就是程序写的那份有界回执
 本身，写明切断前做了什么、停在哪。投递档是捎带（`AMBIENT`）：她没要求这份回执，但身体做了的事必须让她知道，随下一次调模型交出；不叫醒她——
 切断本来是主人的决定，停止键之后停牌要等主人再开口，为这份回执多开一轮没有意义；也不进聊天流。主人断线导致的切断，回执无处可送，不下发。
 - 程序被停下,它用到的每个模块也记一次战绩(没跑完、停在哪一行、为什么)。
@@ -192,7 +194,7 @@
 
 框架不判断哪个函数是只读的、哪个是动作:一个函数有没有话要说,是它自己的事(§十三)。
 
-**工具结果只有文字**:回执是 `{success, message}`,`message` 就是交给模型的全部(成败在第一行),同 Bash 的输出。规则只在 `ToolOutcome.modelText` 一处,所有工具(`lua`、`skill`、`todo`、`memory`、远端 MCP 工具)和所有出口(对话历史变成请求的 `ProtocolView`、压缩估算、外接智能体经 `McpServer` 拿到的结果)都问它;不是信封的(技能正文)原样。对话历史里存的就是这个信封,界面据 `success` 画成败、从成功的 `todo` 画清单。**没有 `data`**:此前回执带一个 `data`(`status`、`calls`、`returned` 原值、`error`),模型会把它连同文字一起读进去(`return` 一个大值时原值要读两遍),产品里却没有任何代码读它。现在结构化的结局只在程序结果那一层(`Program.Outcome`):`ending`(`status` ok / error / stopped,出错时错误值的种类)、每次调用的记录(`ScriptCall.Called`,评测按函数统计和调试日志读)、用到的模块、`stopped_for`,这些上网线(`RunResult`);程序 `return` 的值原样与完整的错误值(`returned`、`failure`)**不上网线**,只在服务端进程里的结局对象上,同进程的 GameTest 与 `ApiTester` 经 `CallObserver.ended` 读。评测的 `Meter` 经循环事件 `ProgramEnded` 读 `ending` 与调用数。历史文件格式不变:新写的工具结果就是 `{success, message}`;旧档里带 `data` 的程序结果照旧读得进,送给模型时同样只剩 `message`。
+**工具结果只有文字**:回执是 `{success, message}`,`message` 就是交给模型的全部(成败在第一行),同 Bash 的输出。规则只在 `ToolOutcome.modelText` 一处,所有工具(`lua`、`skill`、`todo`、`memory`、远端 MCP 工具)和所有出口(对话历史变成请求的 `ProtocolView`、压缩估算、外接智能体经 `McpEndpoint` 拿到的结果)都问它;不是信封的(技能正文)原样。对话历史里存的就是这个信封,界面据 `success` 画成败、从成功的 `todo` 画清单。**没有 `data`**:此前回执带一个 `data`(`status`、`calls`、`returned` 原值、`error`),模型会把它连同文字一起读进去(`return` 一个大值时原值要读两遍),产品里却没有任何代码读它。现在结构化的结局只在程序结果那一层(`Program.Outcome`):`ending`(`status` ok / error / stopped,出错时错误值的种类)、每次调用的记录(`ScriptCall.Called`,评测按函数统计和调试日志读)、用到的模块、`stopped_for`,这些都交给大脑的工具口;程序 `return` 的值原样与完整的错误值(`returned`、`failure`)**不进回执**,只在结局对象上,GameTest 与 `ApiTester` 经 `CallObserver.ended` 读。评测的 `Meter` 经循环事件 `ProgramEnded` 读 `ending` 与调用数。历史文件格式不变:新写的工具结果就是 `{success, message}`;旧档里带 `data` 的程序结果照旧读得进,送给模型时同样只剩 `message`。
 
 **有界,缩略从不静默**(数值都在 `ScriptLimits`):stderr 一条至多 `STDERR_RECORD_CHARS`,整栏至多 `STDERR_CHARS`,超出的写明还有多少字、
 多少条没显示;stdout 至多 `PRINTED_CHARS`,超出的写明少了多少字。`print`、`return`、错误值里出现的表都经同一个渲染器
@@ -212,13 +214,13 @@ line 3 work.dig: bad_argument — argument 'place': a position is one table with
 ```
 ok · 3 calls · 12 s
 stderr:
-line 2 numen.move.go: walked to {x = 120, y = 64, z = -35} … broke 2 minecraft:stone on the way
+line 2 numen.move.walk: reached 120,64,-35 … En route I had to break 2 stone
 line 3 numen.work.dig: dug 4 minecraft:iron_ore …
 returned: 4
 ```
 
 ```
-The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keeps running. Nothing after that ran.
+The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 keeps running. Nothing after that ran.
 ```
 
 (停在第 1 行时那件活还没收尾,回执里没有它的 stderr 条目。)
@@ -239,7 +241,7 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
 
 ### 命令层(10-01)
 
-细节与新旧对照表在 `docs/cli.md` 附录 J。
+细节与新旧对照表在已删除的 `docs/cli.md` 附录 J(`git show 8bc2fa7f9:docs/cli.md`)。
 
 - 十条里的 2、4、5、6、10 写进登记处(`CommandGroup.checkParams`、`Param`、`FlagsArgument`):位置参数只有一类对象,可以不写的
   参数都写明默认,开关不收值,标志名 `_`/`-` 同一,时长是秒;违反的在登记时抛出,插件同样。
@@ -279,10 +281,10 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
   可选),技能正文就是这次调用的结果;系统提示的 `<available_skills>` 是索引。`numen.skill.load` 删了:程序回执里每次调用只露
   结果的第一行,正文没 `return` 出来她就读不到,真机上她连着三轮在程序里装同一份技能。外接大脑调的是同一个工具。
 - **计划也是另一个工具,不是 API**(10-04):判据是工具只放管大脑自己的事、不碰世界的(技能、计划),作用于世界的一律是
-  Lua API。照 Claude Code 的 TodoWrite,`todo` 工具收整份计划(`items`,一项一个带记号的字符串),每次替换上一份,主人客户端
+  Lua API。照 Claude Code 的 TodoWrite,`todo` 工具收整份计划(`items`,一项一个带记号的字符串),每次替换上一份,大脑
   当场答;聊天里的清单从成功的这次调用的参数读(`PlanChecklist`,一项的写法只在 `TodoTool.Item.parse`)。`numen.todo.write`
   与只为它存在的回执回显(`data.echoed`)删了。模型的工具表是 `[lua, skill, todo, memory]`,外接大脑经 `ToolRegistry` 拿到同一套。
-- **札记也是另一个工具,不是 API**(10-04):同一判据,札记本落在主人客户端、管她自己的事。照 Anthropic 的 memory 工具,一个
+- **札记也是另一个工具,不是 API**(10-04):同一判据,札记本落在她的家里(服务器)、管她自己的事。照 Anthropic 的 memory 工具,一个
   `memory` 工具带 `command`(`remember`、`recall`、`forget`),三件事作用于同一本札记、参数大半共用,不拆成三个工具。札记索引照旧
   每轮作为 `<memory>` 注入。`numen.memory.*` 删了。
 - **测试**:GameTest 全部从 Lua 入口调(`GameTestKit.lua`);库函数各有端到端的 GameTest(`mine`、`work.collect`、
@@ -295,7 +297,7 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
 | 借的 | 出处 | 我们的落点 |
 |---|---|---|
 | 位置是一种带名字字段的值,方块带着它的 `position`,`bot.dig(block)` 收方块本身 | mineflayer 的 `Vec3`、`Block.position`、`bot.dig` | `Pos {x, y, z}`(`LuaCodecs.POS`),Block/Entity/Item 都带 `pos`;收位置的参数收任何带 `pos` 的表(`Positions.cell`、`Place` 的读法) |
-| 查到的东西直接交给下一步,在代码里筛,不让模型抄数 | Anthropic《Code execution with MCP》、Cloudflare Code Mode | `scan.blocks(...).groups[1].nearest` → `work.dig`;`scan.entities()[1]` → `fight.attack`、`move.to`;`route.plan(...)` 的计划 → `move.go` |
+| 查到的东西直接交给下一步,在代码里筛,不让模型抄数 | Anthropic《Code execution with MCP》、Cloudflare Code Mode | `scan.blocks(...).groups[1].nearest` → `work.dig`;`scan.entities()[1]` → `fight.attack`、`move.walk`;`route.plan(...)` 的计划 → `move.go` |
 | 函数签名写成类型,模型照签名写代码;只给一个写代码的工具 | Cloudflare Code Mode(TS 接口)、smolagents `CodeAgent`(带类型的函数签名) | `api.help` 给 LuaLS 注释:`---@class 组` 加每个函数一行 `---@field f fun(…): 返回`(`LuaEngine.groupText`、`functionText`) |
 | 先看索引,要用哪组再展开 | Anthropic 的渐进披露(`search_tools`) | 系统提示只放 `<api>` 索引(组名、一句话、函数名与共用的类);`api.help("组")` 展开一组,`api.help("组.函数")` 展开一个 |
 | 失败是一个值,带能拿来改正的信息,程序自己接住再改 | CodeAct(报错回给代码自纠)、Voyager 技能库抛 `Error` 再由技能接住 | 错误值 `{kind, message, hint, fn, data}`,`pcall` 接住按 `err.kind` 分支;库函数 `raise(kind, …)` |
@@ -322,7 +324,7 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
 
 - 错误值是一张表:`kind`(`bad_argument`、`no_function`、`not_found`、`out_of_reach`、`no_path`、`no_material`、
   `needs_consent`、`denied`、`interrupted`、`timeout`、`failed`;只在回执里的 `syntax`、`runtime`、`limit`)、`message`、
-  `hint`(能照抄的下一行程序,如 `move.to({x = …}, {arrive = "dig"})`)、`fn`、`data`。种类只在 `ErrorKind` 一处。
+  `hint`(能照抄的下一行程序,如 `move.walk({x = …}, {arrive = "dig"})`)、`fn`、`data`。种类只在 `ErrorKind` 一处。
 - `tostring(err)` 与 `"…" .. err` 都是 `work.dig: out_of_reach — 原因` 加一行 `hint: …`(元表的 `__tostring`、`__concat`)。
 - 参数错说是哪个参数、要什么样子、给了什么(`argument 'at': expected a Pos {x = …, y = …, z = …} …; got {x = 1, z = 3},
   which has no y`)。
@@ -336,7 +338,7 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
   `---@param`/`---@return`、选项表与结果写成 `组.函数.opts`、`组.函数.result` 两个类、例子与说明。都由登记处与库的注释生成,
   没有手写的第二份。
 
-## 九、模块统一成库,存在主人客户端(10-04)
+## 九、模块统一成库,存在服务器上主人名下(10-04)
 
 ### 五层
 
@@ -344,8 +346,8 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
 |---|---|---|
 | ⓪ 身体控制 | 寻路执行、瞄准、换工具、追着转头、等冷却、憋气;模型看不见 | Java,任务与身体 |
 | ① 原子 API | 对一个名词做一种意图;每刻控制在里面;过权限层;做的事报告给模型 | Java,登记处生成 Lua 函数 |
-| ② 出厂模块 | 常见的组合(`numen.move.to`、`numen.move.flee`、`numen.move.explore`、`numen.work.mine`、`numen.build.raise`、`numen.inv.make`、`numen.shape` …) | Lua,随模组或插件发布,装进主人客户端的模块目录 |
-| ③ 她的模块 | 她存下来或改过的函数表 | Lua,主人客户端 `config/numen/lua/<主人>/<名字空间>/<组>.lua` |
+| ② 内置模块 | 常见的组合(`numen.move.explore`、`numen.work.mine`、`numen.inv.make`、`numen.shape` …) | Lua,随模组或插件发布(jar 里 `numen/modules/<名字空间>/<组>.lua`),服务器起来时同步进服务器目录 `server/modules/` |
+| ③ 她的模块 | 她存下来或改过的函数表 | Lua,主人的"我的":`players/<uuid>/modules/<名字空间>/<组>.lua` |
 | ④ 这一轮的程序 | `lua` 工具的 `code` | Lua |
 
 权限层只守在 ①;反射独立于各层,能打断程序。判据:**秒级的决策进 Lua;每刻的控制、重计算(寻路搜索、大范围扫描)、权限、
@@ -364,22 +366,25 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
 
 ### 存在哪、怎么升级、怎么还原
 
-规矩只在 `api` 的 `Modules` 一处:
+规矩只在 Numen API 的 `Modules` 一处:
 
-- **名字就是路径。** 主人客户端上一个目录 `config/numen/lua/<主人 UUID>/`,同一主人的同伴共用,主人能拿编辑器改。模块名两段
+- **名字就是路径,库是内置加我的。** 模块是一种库(`docs/input-pipeline.md` §六"库:内置与我的"):服务器目录里的是内置(管理员管),
+  主人目录里的是他的"我的",同一主人的同伴共用,主人能拿编辑器改(单人游戏就是本机文件;改了 `/reload` 才读到)。模块名两段
   `名字空间.组`,文件在 `<名字空间>/<组>.lua`:`numen/work.lua` 是 `numen.work`,`tlm/skin.lua` 是 `tlm.skin`,`my/lumber.lua`
-  是 `my.lumber`——`my` 只是她习惯放自己模块的名字空间,没有别的特殊规则。程序运行时只读这个目录这一个来源。
-- **出厂的只是安装包,升级照 dpkg 的 conffile。** core 与插件经 `NumenApi.bundleModules` 交来的目录(core 是 jar 里的 `modules/`,
-  插件挨着它的技能放在 `plugins/<插件>/modules/`)第一次用到目录时装进对应的文件,账本 `modules.json` 记下每个文件上次装进去的
-  出厂指纹:没改过的换成这一版出厂的;改过的留着她的、出厂变了就标"出厂有新版";删了的尊重删除、不再装回;她新建的撞上新出厂的
-  同名一份当作改过;出厂不再发的,没改过的删掉、改过的留给她。`numen.module.reset(name)` 还原成这一版出厂的。
-- `numen.module.save(code, {name = …})` 存(不写名字存成下一个空着的 `my.module_N`),`numen.module.delete(name)` 删,
-  `numen.module.list()` 标出每一份是出厂的、改过的还是她的,`numen.module.show(name, {factory = true})` 看出厂原文。
+  是 `my.lumber`——`my` 只是她习惯放自己模块的名字空间,没有别的特殊规则。程序运行时只读这两个目录,同名时她的优先。
+- **jar 只把内置放进去,升级照 dpkg 的 conffile。** Numen 与插件经 `NumenApi.bundleContent` 交来 jar 里的 `numen/` 目录(模块在
+  `numen/modules/<名字空间>/`,Numen 自己也这样,没有特殊待遇),服务器起来时同步进服务器目录,清单 `.shipped.json` 记每个文件
+  的来源与指纹:没改过的换成这一版;管理员改过的留着、新版写在旁边的 `.new` 并提示;删了的不再放回;来源卸载了,没改过的一起删、改过的
+  留下标"来源已卸载"。她不碰服务器目录:存一份和内置同名的,写进主人的"我的"(复制再改),盖着内置的;账本 `modules/modules.json`
+  记下她改它时那份内置的指纹,内置后来变了就标"内置有新版"。
+- `numen.module.save(code, {name = …})` 存(不写名字存成下一个空着的 `my.module_N`),`numen.module.delete(name)` 删(她自己的删掉;
+  内置的对她关掉,开关记在主人的偏好里,文件原样在服务器上),`numen.module.reset(name)` 删掉她盖着的那份、打开关着的,还原成内置的,
+  `numen.module.list()` 标出每一份是内置的、改过的还是她的,`numen.module.show(name, {factory = true})` 看内置原文。
 - 存前和运行时同一个解释器装一次(`ScriptEngine.checkModule`):读不通、不返回表、给第 ① 层的名字赋值都拒,回执说哪一行、
   给 hint。主人拿编辑器绕过存直接改的文件,运行时同一条规则照样拦着。
-- 改模块不问主人(权限层只管世界与身体);存、改、删都写进回执与客户端日志。
-- 战绩(用到它的程序跑了几段、跑完几段、最近一次没跑完停在哪一行为什么)记在同一本账里;`numen.module.*` 都是客户端动作,
-  外接大脑(MCP)同在客户端,走同一处。
+- 改模块不问主人(权限层只管世界与身体);存、改、删都写进回执与服务端日志。
+- 战绩(用到它的程序跑了几段、跑完几段、最近一次没跑完停在哪一行为什么)记在同一本账里;`numen.module.*` 都是服务端函数,
+  外接大脑(MCP)走同一处。
 
 ### 第 ① 层不可覆盖
 
@@ -389,13 +394,13 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
 
 ### 评测与 GameTest
 
-评测每次运行、GameTest 每次启动,模块目录指向这一次专用的空目录,装进去的是没改过的出厂一套,不读主人目录里的改动。
+评测每次运行、GameTest 每次启动,库指向这一次专用的空目录(`LibraryHub.headless`),同步下来的是没改过的内置一套,不读主人目录里的改动。
 
 ## 十、API 第二版(10-04)
 
 ### 全名与名字空间
 
-- 脚本里一律写全名:引擎与 core 的是 `numen.<组>.<函数>`(`numen.work.dig`),插件的是 `<模组 id>.<组>.<函数>`
+- 脚本里一律写全名:Numen API 与 Numen 的是 `numen.<组>.<函数>`(`numen.work.dig`),插件的是 `<模组 id>.<组>.<函数>`
   (`tlm.maid.task`、`kaleidoscope.pot.fill`)。名字空间由登记者定(`NumenPlugins.register(名字空间, …)`),路线、移动等组
   不改登记代码就落在 `numen.*` 下。模块按名字空间与组放(§九),和同名的组合在一起。
 - 没有名词的增删改查。Lua 不留状态,世界就是状态:区域、设计、存下来的扫描结果都删了;要记住的东西只走 memory 工具。
@@ -405,23 +410,26 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
 - **Pos**(`numen.shape.pos(x, y, z)`):`p:offset(dx, dy, dz)`、`p:dist(q)`、`p + q`、`p - q`、`p == q`。
 - **Block、Entity、Item**:带 `pos` 的数据;身体动作永远是 `numen.*` 的函数,收这些对象(`numen.work.dig(b)`、
   `numen.fight.attack(e)`)。
-- **Cells**(`numen.shape.*` 画出来的):`rotate(quarters, origin)`、`shift(dx, dy, dz)`、`union(other)`、`minus(other)`。
+- **Cells**(`numen.shape.*` 画出来的):`shift(dx, dy, dz)`、`union(other)`、`minus(other)`,和 WorldEdit 的剪贴板一样带原点(画在哪、粘贴落在哪):
+  `rotate(y, x, z)`(度数)、`flip(dir)`、`stack(count, dir, opts)`、`move(count, dir, leave)`、`paste(at)`、`revolve(count)`;当一块任意形状的选区时还有
+  `set`、`walls`、`faces`、`center`(图案 pattern 的写法见 `numen.shape.pattern`)。
+- **Region**(`numen.shape.cuboid`、`cyl`…不给图案时交回的选区,记着自己的形状参数):`cells()`、`set`、`walls`、`faces`、`center`,
+  `expand`、`contract`、`shift`、`outset`、`inset`(照形状改,返回改过的选区);读世界的(只读已加载区块,交回 Cells):`replace(mask, pattern)`、
+  `overlay`、`hollow`、`naturalize`、`smooth`、`snowsmooth`、`deform(fn)`、`forest(tree, density)`、`flora(density)`,`trim(mask)` 交回选区;选区信息 `size()`、`count(mask)`、`distr(opts)`。Cells 也收这些方法(当任意形状的选区)。
 - **Cluster**(`numen.scan.blocks` 交回的一团):`filter(keep)`、`minus(other)`。
 - **Window**(`numen.use.block` 打开界面时交回、`numen.gui.view()` 读到的):`put(item, count?)`、`take(item, count?)`、
-  `move(from, to, opts?)`、`quick(slot)`、`close()`,就是 `numen.gui` 的函数。
-- **Recipe**(`numen.inv.recipes`、`numen.inv.craftable`):编号、工位、合出几件、每格的料;合成配方带最小的格和还缺什么。
-- **蓝图句柄** `numen.build.blueprint(name, origin, {rotation})`:数据里有尺寸、格子、材料与缺什么;`numen.build.diff`、
-  `numen.build.place` 与模块都收句柄或一串格。
+  `move(from, to, opts?)`、`quick(slot)`、`choose(option, second?)`、`rename(name)`、`page(n)`、`toggle(slot)`、`close()`,就是 `numen.gui` 的函数。
+- **Recipe**(`numen.inv.recipes`、`numen.inv.uses`、`numen.inv.craftable`):编号、类别(配方类型的 id,模组机器也有)、合出几件、每格的料;合成配方带最小的格和还缺什么;`recipes`、`uses` 外包一层 `{recipes, omitted, sources}`:合并各知识来源(原版配方表、JEI、脚本)的答复,条数按来源封顶,超出的数如实说,没答上的来源写明原因(control 0016)。
 - 查不到交 nil 或空表;失败抛 `{kind, message, hint, data}`。数打印成十进制原样,不出科学计数法。
-- 方法写在类所在的模块里(`Pos`、`Cells` 在 `numen.shape`,`Cluster` 在 `numen.scan`,`Window` 在 `numen.gui`),登记的类用
+- 方法写在类所在的模块里(`Pos`、`Cells`、`Region` 在 `numen.shape`,`Cluster` 在 `numen.scan`,`Window` 在 `numen.gui`),登记的类用
   `methodsIn` 指过去;帮助里类的方法从模块的注释读出来。
 
 ### 原子与组合各归其位
 
 | 删掉或改原子的 | 组合去了哪 |
 |---|---|
-| `build.new/drop/delete/show/designs/built`、原语 `set/place/line/layer/cylinder/sphere/copy` | 几何是模块 `numen.shape`;放格子是 `numen.build.place(cells)` 一遍 |
-| `build.at` 放到放完 | `build.place` 一遍即止,反复是 `numen.build.raise` |
+| `build.new/drop/delete/show/designs/built`、原语 `set/place/line/layer/cylinder/sphere/copy` | 几何是模块 `numen.shape`(`cyl`、`sphere`、`line`、`layer`…);放格子是 `numen.build.place(cells)` 一遍 |
+| `build.at` 放到放完 | `build.place` 整份走一遍、每格试一次,没放好的在回执里报剩余;要不要再来一轮由模型自己定 |
 | `scan.blocks` 的 `into` 与区域 | `scan.blocks` 交回团,`work.mine(cluster)` 先走后挖(§十二) |
 | `use.block` 的左键、`use.gui/transfer/shift/close` | 左键一下 `use.hit`,挖是 `work.dig`;界面是 `numen.gui` 与 Window |
 | `inv.craft` 找配方、找台、走开合关 | `inv.craft` 在开着的格里合一次,`numen.inv.make` 挑配方与工作台 |
@@ -430,121 +438,68 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
 | `fight.attack` 里的逃跑(DISENGAGE) | 逃跑本能 `FleeChain`(反射层):打不过且有东西在追就跑,跑不掉让出身体接着打 |
 | 森罗 `kaleidoscope.pot.cook` 一口气做完 | 锅上的一步一个函数(`oil/base/fill/lid/stir/plate`),`kaleidoscope.pot.cook` 是模块;翻炒那段时间窗留在 Java |
 
-新增的原子:`scan.sight`、`use.hit`、`gui.put/take`、`inv.recipes/items/count/craftable`、`gear.hold`、`time.wait`。
+新增的原子:`scan.sight`、`use.hit`、`gui.put/take`、`inv.recipes/items/count/craftable`、`gear.hold`、`time.wait`、
+`gui.choose/rename/page/toggle/open`、`use.sign/wake/glide`、`inv.read/write`,以及 `use.entity` 的 `at` 选项(盔甲架的哪一截)。
+
+### 替她发客户端的包
+
+界面里的钮、写字、选交易、起床起飞这些,真客户端发的是一个包,校验和落地都是原版服务端收包时做的。她没有客户端,`NumenPlayer#packets()`(`ClientPackets`)把同一个包交给她连接上原版的 `handleXxx`,一处入口,各函数组合着用,不各写一套。原版拒绝时什么也不说,所以每个函数发完都**读回来**界面、物品、方块真的变了没有,再如实报成或没成;校验不另写一套(附魔的等级与青金石、交易的材料与次数、告示牌要是 `playerWhoMayEdit` 且没涂蜡、书的页数、界面要 `stillValid`)。写告示牌和写书原版先过文字过滤再排进服务端任务队列,读回来的活排在它后面(`afterHandled`)。动到别人东西的(告示牌、讲台翻页、信标、合成器开关)落在 `use_block`,交易落在 `use_entity`,取成品/取书照旧是 `take`,都由权限层在动手那一刻裁决。
+
+界面按种类读与做,每种一个小接口(`tools/menu/MenuKind`:`Chooses`/`Renames`/`Pages`/`Toggles`/`Takes`),列在 `MenuKinds`,加一种界面不改别处。信标按层数能选哪些效果与真客户端的按钮是同一张表(原版服务端收 `SetBeacon` 时不查层数)。
 
 ### 保护只有"玩家放的"
 
 权限层不再认区域:出厂规则里要问的是"玩家放的"(`break(placed)`),主人要护一片地方,护的是他放下的方块。测试与评测原先靠区域
 造的场景,改成由玩家放下方块。
 
-## 十一、路线是一张描述,权限走到那一格才问(10-03)
+## 十一、模型只说去哪,权限走到那一格才问(10-03 起,10-11 瘦身)
 
-照导航软件的样子:一个引擎,一趟路一张描述(去处与途经点、移动方式、偏好旋钮、避开),交出一份计划;没有备选路线。Lua 不存状态,
-`route` 组只剩 `numen.route.plan`,`throwaway` 组整组删了。
+给模型的寻路只有三个函数,走法是整只身体的配置(默认可挖可搭,只看价钱),不是每次的旋钮:
 
-### 描述:`numen.route.plan` 收的那张表
-
-| 项 | 写法 | 不写时 |
-|---|---|---|
-| `to` | 终点:Pos、Block、Entity(规划时它在哪)、一团(`numen.scan.blocks` 交回的 Cluster)或一串格(Cells):其中任意一格、一列 `{x, z}`、一个高度 `{y}` | 用 `stops` 的最后一站作终点 |
-| `arrive` | `at` 站进去;`near` 在 `range` 格内;`use` 看得见、够得着、能用;`dig` 手够得着(一团时一次够得着最多的),挡着的可以挖开;`place` 手够得着那一格、不站进去;`away` 离它至少 `range` 格 | `at` |
-| `range` | `near` 多近算到、`away` 多远算到,1–64 | `near` 3,`away` 8 |
-| `stops` | 终点之前的途经点 `{{to = …, type = "through" \| "stop", arrive = …, range = …}, …}`;`through` 路过不停,`stop` 先停稳 | 直接去终点 |
-| `mode` | `walk` 走路;`boat` 坐在船上驾到离每一站最近的水格(每一站是 Pos 或一列,`at`/`near`) | `walk` |
-| `costs` | 偏好旋钮 `{dig, place, consent, jump, swim, fall, parkour, max_changes}`,见下 | 不挖不放;许挖或许放时要问的格贵十倍 |
-| `avoid` | 整个不进:格子种类名(`"water"`、`"door"`、`"climbable"`……)、一格(Pos 或 Block)、一个盒子(两个 Pos 写成一项)、一团(Cluster)或一串格(Cells) | 只避开出厂避开的(岩浆、危险、流水、机关、易碎) |
-| `allow` | 放开出厂避开的几种:`flowing_water`、`trigger`、`fragile` | 照出厂避开 |
-| `avoid_break` / `avoid_place` / `avoid_step` | 不挖 / 不往里放 / 不站上:方块 id 或 `#标签`,或一格、盒子、一团、一串格 | 不按名字禁 |
-| `materials` | 这一趟可以垫掉的方块,好的在前(id 或 `#标签`) | 标签 `#numen:throwaway` 里的普通方块 |
-
-`costs` 的每一项:`dig`、`place` 是 `false`(不许,默认)、`true`(许,原价)或一个数(许,每挖/放一格另加这么多);`consent` 是
-`true`(许走要问主人的格,价钱乘 10,默认)、`false`(要问的格当墙,绕开)或一个不小于 1 的倍数;`jump`、`swim` 是每跳一下、每过一格
-水另加的价;`fall` 是脚下没水时最多跳多高;`parkour` 许不许疾跑跳过 2–4 格的空隙;`max_changes` 是整趟最多改几格。读法与翻成寻路
-规格(`RouteSpec`)只在 `core/route/Description` 一处;一格、一团(Cluster)、一串格(Cells)的读法借 `Positions.cells`,
-和动作收一串格的参数(`@Rest`,经 `Positions.items`:一项是一团就展开成它的每一格)同一处。
-
-权限不是描述的一项。规划时每一格自动问权限层(`GateTerrain`,与执行同一个 `Gate` 判定):拒绝的当墙,要问的照 `costs.consent`
-算贵、列进计划的 `asks`,允许的照常。
-
-### 计划:`numen.route.plan` 返回的那份
-
-只规划不动,走不通也不抛(`ok = false` 加 `why`);只有参数写错才抛 `bad_argument`。计划只在这一段程序里有效(按程序记在她身上,
-下一段程序 `numen.move.go` 它是 `not_found`)。
-
-| 字段 | 是什么 |
+| 函数 | 说什么 |
 |---|---|
-| `ok` | 没有走不到的段,`numen.move.go` 走得了 |
-| `why` | 走不通(或只看清一截)的那一段为什么 |
-| `id` | 这份计划,`numen.move.go` 认它 |
-| `spec` | 交进来的描述原样带回,改一项再 `numen.route.plan` 一次 |
-| `from` | 从哪一格规划的 |
-| `steps`、`seconds` | 看清的那部分一共几步、大约几秒 |
-| `legs` | 一站一段,终点最后:`to`(这一站)、`reach`(`reached` / `partial` 只看清开头一截 / `unreachable` / `unplanned` 前一段没走到)、`finish`(停在哪一格)、`steps`、`seconds`、`path`、`breaks`、`places`、`asks`、`dives`(憋气潜过的水下)、`why` |
-| `path` | 一步一项 `{pos, move}`,`move` 是 `walk`、`jump`、`fall`、`swim`、`climb`、`dig`、`place`、`sail`;取得到,不进回执、不进 `print` |
-| `breaks`、`places` | 要挖、要放的 Block |
-| `asks` | 其中要问主人的格:Block 加 `why` |
+| `numen.move.walk(目标, 距离?)` | 去一处。目标:Pos、Block、Entity(它此刻在哪)、一团(Cluster)或一串格(Cells)、一列 `{x, z}`、一个高度 `{y}`。不写距离:Pos/列/高度站进去(Pos 在岩石里就挖进去),Block/实体/一团站不进去,走到旁边(2 格内);写了距离:不超过那么远 |
+| `numen.move.away(某物, 距离)` | 离它至少多远 |
+| `numen.move.follow(谁?, {distance, seconds})` | 跟着(不给就是主人),总有结束:`seconds` 不写是 60 秒;走法同 `to` |
 
-例子:
-
-```lua
-local plan = numen.route.plan({to = {x = 120, y = 64, z = -35}, costs = {dig = true, place = true}})
-if not plan.ok then return plan.why end
-print(plan.steps, #plan.legs[1].asks)
-numen.move.go(plan)
-```
-
-```lua
--- 最近那块铁矿,先路过桥头,站到手够得着它的地方;不问主人,要问的格绕开
-local ore = numen.scan.blocks("iron_ore", {radius = 16})[1].nearest
-local plan = numen.route.plan({stops = {{to = {x = 10, y = 64, z = 5}, type = "through"}}, to = ore, arrive = "dig",
-  costs = {dig = true, place = true, consent = false}, materials = {"minecraft:cobblestone"}})
-```
-
-### 走:`numen.move.go`、`numen.move.follow`、`numen.move.dismount`
-
-- `numen.move.go(plan)`:照这份计划走,只改计划里列的格(承诺,`Plan.bind`);从当前位置重新规划,超出计划就不走、说多出哪几格。
-  路上走到一格要问主人的,停在它跟前问(卡片上连同剩下的路里这一声答应同样放行的同种格):答应了接着走;拒绝了在那里失败,`kind = "denied"`,说为什么,`hint` 是把那一格加进
-  `avoid` 再规划的那一行。走不通是 `no_path`。不出发前整条再裁决一次——什么时候问只看走到了哪儿。
-- `numen.move.follow(entity?, {distance, seconds})`:跟着(不给就是主人),总有结束:`seconds` 不写是 60 秒。
-- `numen.move.dismount()`:从坐着的东西上下来,当场返回 `{vehicle, pos}`。
-- 坐船是描述里的 `mode = "boat"`,不另设动作。
-
-### 库:`numen.move.lua`
-
-- `numen.move.to(target, spec)`:`numen.route.plan` 加 `numen.move.go`,`spec` 是描述的其余几项;规划走不通时以 `no_path` 抛出,带 `why`。
-- `numen.move.flee(from, {distance})`:离开一处(Pos、Block、Entity),就是 `arrive = "away"`,默认 8 格。
-- `numen.move.explore(dir, {until_, seconds})`:朝一个方向(`"north"` 这样的方位或一个 Pos)一跳一跳地走,`until_` 是每跳之后问的
-  函数(`until` 是 Lua 关键字),返回真就停;`seconds` 封顶。
-- 模块不吞错:`numen.move.go` 的 `denied`、`no_path` 原样抛给程序。
+- **走法**(`Walking.spec`):能走就不挖,绕太远才挖;垫路料是出厂的 `numen:throwaway`。她盖好的房子不挖。物理安全留在寻路:不挖脚下、
+  头顶落沙、会放出流体的格,摔落按血量。
+- **能不能动哪一格只归权限层**:规划时禁止的格是墙,要问的格价钱乘 10;走到那一格动手那一刻才问主人。主人不答应,那几格这一趟里当墙,
+  从她当时的位置重新规划绕开;同一行规则问出来的同一种东西不再问第二遍;绕不开才以 `denied` 收场。观察模式下权限层拒一切改动,她自然只走。
+- **没有计划**:一截一截规划、走、从当时位置按同一份规格接着规划;不比对路上动了哪些格。
+- **载具**:坐在船上去一处位置就把船开到离目标最近的水面(目标在岸上停岸边、仍坐着);别的载具、`away`、`follow` 受理就拒绝并指
+  `numen.use.dismount()`;走路的一趟从不自己下车。
+- **回执**(`Walked`,`to`/`away`/`follow` 共用,失败时是错误的 `data`):`pos`、`distance_left`、`dug`、`placed`、`rulings`(问过主人的格与
+  答复、规则当场不许的格);回执末尾那一句另说挖了什么、放了什么、被拒了什么、潜了几段水。
+- 动手的工具自己走过去:`use.block/entity/hit` 够不着先走到能按的地方;`work.dig` 走到够得着剩下最多格的地方再挖;`build.place` 走到够得着
+  最低一层剩下的格的地方再放;`build.diff` 只读。判据只在动作那一处(`Arrival.use/dig/place`)。
+- 库:`numen.move.explore(dir, {until_, seconds, hop})` 一跳一跳 `move.walk` 到前面一列的 4 格内。
+- 登记:`numen.codec(Where.class, …)`;读法在 `task/move/Where`,怎样算到在 `Arrival`,编成目标在 `Destination`,任务是 `MoveToCompanionTask`。
 
 ### 删掉的
 
-`route.new/via/drop/spec/show/list/delete/reverse`、`move.goto_`、`throwaway` 组(垫路料清单不再挂在她身上、不落盘,写在每一趟的
-`materials` 里)、`alter`(拆成 `costs` 的 `dig`/`place`/`consent`)、路线存档(`Itinerary`、`Routes`)与路线标志的翻译
-(`RouteFlags`、`RouteSpecFlags`、`RouteOps`)、`area.add` 的 `route` 选项、`Trip` 开走前整条规划并一次问完要问的格。
+`numen.route` 整组、`numen.move.go`、计划对象(`Plan`/`Plans`/`RouteText`)、`move.flee`、描述里除去处与距离的一切(`arrive`、`stops`、
+`mode`、`costs`、`avoid*`、`allow`、`materials`);早先的 `route.new/via/…`、`move.goto_`、`throwaway` 组、`alter`、路线存档。
 
 ## 十二、两版合在一起(10-04)
 
 §十(全名、值带方法、删名词)与 §十一(路线描述、计划、越界才问)合到同一条线上:命名空间、各组的形状、模块目录、删区域与设计
 按 §十;路线、移动、垫路料、寻路、征询卡片、计划与描述按 §十一。两边都碰到的几处:
 
-- **一团与一串格进描述**:`to`、`avoid`、`avoid_break/place/step` 收扫描交回的 Cluster 与 `numen.shape` 画的 Cells,读法见上;
-  §十一里"带 `cells` 的表"那种写法没有了。两个 Pos 写成一项仍是一个盒子(整片交给寻路、不逐格展开),两个 Block 是两格。
-- **`numen.work.mine(cluster)` 先走后挖**:`numen.move.to(cluster, {arrive = "dig", costs = {dig, place, consent = false}})`
-  走到够得着那一团最多格的地方,`numen.work.dig(cluster)` 挖手边的,`numen.work.collect({items = r.drops})` 捡这一挖还落在地上
-  的,一轮一轮直到那一团不剩(`left == 0`);一轮一格也没挖到抛 `failed`。`numen.work.dig` 收一团就是收它的每一格。GameTest 的挖矿
-  辅助(`GameTestKit.mine`)与评测 `mine_iron` 的标准解是同一个流程拆成原子调用。
+- **一团与一串格进目标**:`numen.move.walk`、`away` 收扫描交回的 Cluster 与 `numen.shape` 画的 Cells。
+- **`numen.work.mine(cluster)`**:`numen.work.dig(cluster)` 自己走到够得着那一团最多格的地方挖,`numen.work.collect({items = r.drops})` 捡
+  这一挖还落在地上的,一轮一轮直到那一团不剩(`left == 0`);一轮一格也没挖到抛 `failed`。`numen.work.dig` 收一团就是收它的每一格。
+  GameTest 的挖矿辅助(`GameTestKit.mine`)与评测 `mine_iron` 的标准解是同一个流程拆成原子调用。
 - **挖的结果写明掉落物去了哪**(10-04):真机上她挖了岩浆上方的黑曜石,掉落物掉进岩浆烧掉,没有一句话告诉她。`numen.work.dig`
   收工前等这一挖的掉落物落定,最多 40 刻(2 秒:从被挖那一格弹起再落到底下约 10 刻、在地上滑停约 7 刻,岩浆两刻、火与仙人掌五刻
   毁掉一件,四十刻自由落体能掉二十来格;漂在水里的永远不着地,到上限就照此刻在哪说)。认领在生成那一刻:她的手挖掉一格
   (`ServerPlayerGameMode.destroyBlock`)那一段里进世界的掉落物记进这一挖的账,连带碎掉的(火把、箱子里的东西)也算;去向只在
-  `core/act/Drops` 一处判——落地(原版判"不在动"的那条线)、被谁捡起(`LivingEntity.take`)、被什么毁掉(`ItemEntity.hurt`)、
+  `numen/act/Drops` 一处判——落地(原版判"不在动"的那条线)、被谁捡起(`LivingEntity.take`)、被什么毁掉(`ItemEntity.hurt`)、
   掉进虚空、被别的收走、到上限还在动;并堆跟着件数走。落定之后的事不归它。回执那一句(`Drops: 1 obsidian fell into lava and
   burned up at {x = …}`)与数据 `drops`(一笔一项 `{item, count, fate, pos, by?, cause?, id?}`)出自同一份记录。
   `numen.work.collect({items = …})` 只追给它的那几件(按 `id`),`numen.work.mine` 把挖的 `drops` 交给它,不再挖完另扫一遍。
-- `numen.inv.*`、`numen.build.raise`、`numen.work.collect` 等模块里的走路一律是 `numen.move.to`,`alter` 换成
-  `costs = {dig = true, place = true, consent = false}`(只改自然地形,要问的格绕开),`near` 换成 `range`、`arrive = "reach"`
-  换成 `"place"`;`throwaway` 清单删了,垫路料用每一趟的 `materials`(不写是标签 `#numen:throwaway`)。
+- `numen.work.collect` 等模块里的走路一律是 `numen.move.walk`;`numen.inv.*` 开箱子、`numen.build.place` 放方块的走路由 `use.block`、
+  `build.place` 自己做;垫路料只有标签 `#numen:throwaway` 一份。
 - **登记不合规矩当场抛出**:`NumenPlugins.register` 不再接住插件登记块里的异常记一行日志——那样一组会悄悄缺席(例子读不通、
   没声明返回……),模型看到的 API 少了一块却没人知道。现在异常原样抛出、启动失败,那句话写着名字空间、组、动作与哪条规矩。
 
@@ -553,7 +508,7 @@ local plan = numen.route.plan({stops = {{to = {x = 10, y = 64, z = 5}, type = "t
 照主流的写法(Python 的类型注解生成工具 schema、Cloudflare Code Mode 的 TS 接口、Spring 的注解方法):**一个函数就是一个带 `@Fn`
 的静态方法,它的签名就是契约**——名字、在哪执行、怎么交回、参数(位置与选项)、返回的类型、帮助,全从签名读出来,不另写一份。命令行
 前端(Brigadier 树、把一行字读成调用)删了,脚本是唯一的入口;Numen 自己的各组与每个插件走同一扇门
-(`NumenPlugins.register(名字空间, numen -> numen.api(组, 一句话, XxxApi.class))`)。包在 `api` 的 `com.dwinovo.numen.sdk`。
+(`NumenPlugins.register(名字空间, numen -> numen.api(组, 一句话, XxxApi.class))`)。包在 Numen API 的 `com.dwinovo.numen.api.sdk`。
 
 ### 写法
 
@@ -584,16 +539,18 @@ public final class LocateApi {                         // 一组:一个公开类
   不占任务槽;`Job<R>` 占身体、进任务槽,受理回活的编号,程序等它的 task_finished;要的样子此刻已经是了(`build.place` 的格都对了)
   是 `Job.done(值)`,不派活。`R` 是 record、枚举、`List`、`Map<String, T>`、Minecraft 的值(`BlockPos`、`Item`、`Block`……)或
   `void`;只有一个字段的结果直接交那个值(`inv.count` 是整数、`work.fish` 是一串字)。
+  活的记录是 `TaskRecord<R>`,`R` 是它成功时交回的值:`call.sync(record)`、`Job.of(record)` 按它定函数的返回类型,对不上编译不过;
+  Numen 的任务基类 `AbstractCompanionTask<记录, R>` 的 `value()` 也按同一个 `R` 写。
 - **客户端函数的约定**(指导,登记时不检查;好写法由评测的分数说话):① 只读查询、不产生副作用——主人的客户端在
   `ProgramLimits.CLIENT_ANSWER_TICKS` 内没答复,这次调用以 `timeout` 失败,失败或超时后原样再调一次必须安全;② 客户端的答复不可信,
-  权限层与任何裁决不读客户端函数的返回值;③ 只是通知主人的事走单向事件(`NumenApi.emit`,服务端发 `NumenEventPayload`),不走反向请求;
+  权限层与任何裁决不读客户端函数的返回值;③ 只是通知主人的事走单向事件(`NumenApi.emit`,进她的收件箱),不走反向请求;
   ④ 一次收一批键、在客户端就地过滤只回小结果,别在循环里逐条问(N+1)。`ClientCall` 的 Javadoc 是这条的全文。
-- **失败只抛 `ApiError(kind, message, hint, data)`**;`hint` 是能照抄的下一行程序,用 `Call.of("numen.move.to", pos,
+- **失败只抛 `ApiError(kind, message, hint, data)`**;`hint` 是能照抄的下一行程序,用 `Call.of("numen.move.walk", pos,
   Map.of("arrive", "dig"))` 写,不手拼。查不到不是失败:交回空表或 nil。函数说参数此刻不成立抛 `IllegalArgumentException`,和读不成
   同一种 `bad_argument`(附用法与帮助的写法)。
 - **值转换**(`LuaCodecs`):record 是一张表(字段说明来自 `@Doc`,`@Folded` 的字段收起来,`@Flatten` 的第一个组件摊进这张表并成为
   父类,`@Methods("numen.scan")` 说值带的方法写在哪个模块),枚举是小写的名字,内置 `Pos`、`Block`、`Entity`、`Item`、`EntityRef`、
-  `Place`、`Target`……;一种自己的类型登记一次 `numen.codec(X.class, codec)`(读、写与签名里写成什么在同一个对象上)。类名:引擎自己的
+  `Place`、`Target`……;一种自己的类型登记一次 `numen.codec(X.class, codec)`(读、写与签名里写成什么在同一个对象上)。类名:Numen API 自己的
   不带前缀(`Plan`、`Window`),插件的带名字空间(`tlm.Maid`)。
 - **够不着、用一只实体、过权限是原语**:`call.entity(ref)` 认出点名的实体(不在了是 `not_found`),`call.reach(entity, Reach.hand())`
   量够不够得着(够不着是 `out_of_reach`,`hint` 是走过去的那一行),`call.use(entity, reach, deed)` 是这三样加上权限层的
@@ -616,24 +573,49 @@ public final class LocateApi {                         // 一组:一个公开类
 - 两个类型争同一个类名。
 
 写法上的问题不拦,交给 `ApiTester.lint()` 的报告:没写说明、参数没写 `@Doc`、没写例子、例子读不通或没调到自己或参数读不成、
-`@SeeAlso` 指的函数不存在、随模组发的模块开头没写说明或函数上面没写注释;`ApiTester.lint(texts)` 读技能与提示词里写着的调用。core 与
-各插件的单测各写一份报告到 `build/reports/api-lint.txt`(不让构建失败),core 的那份旁边还有整份 API 的 LuaLS 存根 `numen-api.lua`
+`@SeeAlso` 指的函数不存在、随模组发的模块开头没写说明或函数上面没写注释;`ApiTester.lint(texts)` 读技能与提示词里写着的调用。Numen 与
+各插件的 Gradle 任务 `apiLintReport` 各写一份报告到 `build/reports/api-lint.txt`(不是测试,不让构建失败),Numen 的那份旁边还有整份 API 的 LuaLS 存根 `numen-api.lua`
 与机器可读的元数据 `numen-api.json`。好写法好不好用,由评测的分数说话(见下)。
 
 ### 组成
 
 | 部件 | 做什么 |
 |---|---|
-| `Binder` | 从签名推出 `ApiFunction`(参数、种类、返回的值转换、例子、注意、相关),只抛上面那几条硬错误 |
-| `ApiRegistry` | 登记表:组、函数、名字空间;给脚本的目录(`ScriptCatalog`) |
+| `ApiFunction` | 一个函数的描述:名字、参数(类型、说明、位置还是选项)、返回、在哪执行、怎么交回、例子,以及执行它的 `Handler`。登记、派发、帮助、体检只认它 |
+| `Binder` | 描述的反射生产者:从 `@Fn` 签名推出 `ApiFunction`,只抛上面那几条硬错误 |
+| `FunctionBuilder` | 描述的代码生产者(`ApiFunction.builder(名字)…server(体)`),出来的描述和反射读的分不出来;脚本插件的函数这样写 |
+| `ApiRegistry` | 登记表:组、函数、名字空间;给脚本的目录(`ScriptCatalog`);登记交回撤回它的句柄 |
 | `LuaCodecs` / `Codec` | 值转换,连同签名里写成什么;record、枚举、列表、表现造,别的登记 |
 | `Dispatcher` | 一次调用:脚本里的调用读成参数(读不成当场 `bad_argument`)、服务端或客户端执行、按种类交回(`ApiReply`)、受理活并记下重启后再跑的那一行 |
 | `ApiDocs` | `<api>` 索引、`numen.api.help`、用法、LuaLS 存根、元数据,全从登记表生成 |
 | `ApiTester` | 进程里跑一段程序看回执(`run`)、lint 报告 |
-| `program.ServerPrograms` | 服务端跑程序的唯一入口(§十四):客户端送来的程序、`/numen drive`、重启后再跑、GameTest、评测与单测都经它 |
+| `program.ServerPrograms` | 服务端跑程序的唯一入口(§十四):她的大脑、`/numen drive`、重启后再跑、GameTest、评测与单测都经它 |
 
 线上的样子只在 `agent` 的 `ApiReply` 一处:`{"ok": true, "value": …}`、`{"ok": true, "job": "t12"}`、
 `{"ok": false, "error": {kind, message, hint, data}}`,等到的值另带 `stderr`(API 报告的话)。
+
+### 登记归在插件名下:句柄、作用域、重登(control 0014)
+
+照主流的"登记即句柄、按作用域撤销"(VS Code 的 `Disposable`、Guava 的 `Closer`、IntelliJ 的动态插件;撤回之后旧的上下文再用就报错,照
+pi-mono 扩展运行时重载的做法)。每张登记表——函数组(`ApiRegistry`)、值转换(`LuaCodecs`)、同伴事件订阅(`CompanionEvents`)、事件类型
+(`EventTypes`)、身体状态片段与穿戴来源、随附的内容目录与 Lua 模块(`Shipped`、`BuiltinModules`)、`/numen` 下的指令(`NumenCommands`)、
+还没跑的客户端块——登记时交回一个 `Handle`,`close()` 只撤这一条;一个插件的门把拿到的全部句柄收进一个 `Scope`。
+
+- **撤回 = 关掉作用域,重登 = 撤回后再跑一遍 setup**(`PluginRoster.reload`);服主的开关、脚本重载、单测都是这同一对操作。
+  同一个插件 id 登记几次是一个插件,setup 都留着。
+- **撤回之后旧门作废**:拿着上一次登记的门再登记、订阅、发事件,抛 `IllegalStateException` 点名是哪个插件。
+- **门外的东西撤不回**(Mixin、直接挂在加载器上的监听、已经跑过的客户端块):登记时声明 `Unloading.NEEDS_RESTART`
+  (`NumenPlugins.register(id, Unloading.NEEDS_RESTART, setup)`),开关对它仍是"重启后生效"。内嵌的 Numen、车万女仆、YSM、FTB Quests
+  声明了;森罗厨房、Curios、Litematica 与脚本插件是动态的。
+- **"登记变了"只一个信号**(`Registrations`):花名册装上或撤回一个插件后发一次。系统提示、帮助、脚本目录每次从当前的表现算,不缓存,
+  不听它;已经发给玩家的 `/numen` 指令树是拷贝,听它在服务器线程上重发(`/numen` 根每次被读按当前挂的几格现算,撤回即时生效)。
+  MCP 端点只有四个固定工具,函数清单在 `guide` 的文本里、每次现取,所以没有 `tools/list_changed` 可发。
+
+### 受权的动作是一块积木
+
+"提出这几个动作 → 权限层判 允许/拒绝/要问 → 要问就发问并等答复 → 结论与主人的准许交回"是 `permission.GatedAct`:按刻推进的活**持有**它
+(`gate().permit(action)`、`gate().permitAll(actions)`、`gate().consult(items)`,收场时接上 `allowanceNote()`),不继承。Numen 的任务基类、
+森罗厨房的 `PotActTask` 用的是同一块。一次函数调用里(`Pending`)的对应原语是 `ServerCall.authorize`。
 
 ### 三个例子
 
@@ -650,17 +632,17 @@ public static Pending<Located> biome(ServerCall call, Biome args) {
 }
 ```
 
-**占身体的活**(进任务槽,程序等它收尾;重启后再跑的那一行写目标的 UUID,不写只在这一次开服有效的运行期编号):
+**占身体的活**(进任务槽,程序等它收尾;重启后再跑的那一行就是这次调用写成的那一行,点名的实体写的是它的身份——种类@UUID 前六位,重启后认的还是同一只):
 
 ```java
-public record Attack(@Doc("The entity to fight: an Entity from numen.scan.entities, or its id.") EntityRef entity) {}
+public record Attack(@Doc("The entity to fight: an Entity from numen.scan.entities, or its id (zombie@3f9a1c).") EntityRef entity) {}
 
 @Fn("Attack one entity until it is dead, lost or out of reach.")
-@Example("numen.fight.attack(184)")
+@Example("numen.fight.attack(\"zombie@3f9a1c\")")
 public static Job<Fought> attack(ServerCall call, Attack args) {
     Entity target = call.entity(args.entity());
     AttackTaskRecord record = new AttackTaskRecord(call.fn(), call.callId(), ..., List.of(target.getId()), false);
-    return Job.<Fought>of(record).replayedAs(new Attack(EntityRef.of(target)));
+    return Job.of(record);
 }
 ```
 
@@ -670,7 +652,7 @@ public static Job<Fought> attack(ServerCall call, Attack args) {
 NumenPlugins.register("tlm", numen -> numen.api("maid", "Touhou Little Maid: the maids you keep.", MaidApi.class));
 
 @Fn("Switch one of your maids to another work mode, like a click in her task list.")
-@Example("tlm.maid.task(\"touhou_little_maid:farm\", {maid = 812})")
+@Example("tlm.maid.task(\"touhou_little_maid:farm\", {maid = \"maid@3f9a1c\"})")
 public static Pending<Switched> task(ServerCall call, Task args) {
     Entity maid = args.maid().isPresent() ? maid(call, args.maid().get()) : yoursWithinReach(call);
     return call.use(maid, GUI, still -> {
@@ -684,12 +666,12 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 }
 ```
 
-脚本里:`tlm.maid.task("touhou_little_maid:farm", {maid = m})` 交回 `{maid = 812, task = "touhou_little_maid:farm"}`;离得远是
-`out_of_reach`,`err.hint` 是 `numen.move.to({x = …}, {arrive = "near", range = 2})`。
+脚本里:`tlm.maid.task("touhou_little_maid:farm", {maid = m})` 交回 `{maid = "maid@3f9a1c", task = "touhou_little_maid:farm"}`;离得远是
+`out_of_reach`,`err.hint` 是 `numen.move.walk({x = …}, 2)`。
 
 ### 重启后接着做、`/numen drive`
 
-- 受理一件活时,把这次调用写成一行 Lua 记下(`Call.of`,活换过参数的用 `Job.replayedAs` 那一份);重启后经 `ServerPrograms` 再跑这一行,
+- 受理一件活时,把这次调用写成一行 Lua 记下(`Call.of`);重启后经 `ServerPrograms` 再跑这一行,
   和她写的程序同一个入口。没受理(读不通、当场失败、准备没过)就是没接回来,她收到一条 task_finished 说为什么。**旧存档不兼容**:旧版本
   按一行命令记下的活读进来只为说清它没接回来(日志与 task_finished 都说这一版不再跑它),不做转接。
 - `/numen drive <同伴> <程序>`(OP)是一段 Lua 程序,经同一个入口跑,整张回执说给发令人。`/numen permission …`、`/numen consent …`
@@ -706,15 +688,15 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 一张表,`Compare` 把前后两份按函数并排(调用、失败率、参数错率、查帮助/调用)。插件作者给自己的函数打分:用 `Bench.suite` 登记自己的
 场景,看这张表。
 
-## 十四、程序整段在服务端跑,客户端想、服务端做(10-05)
+## 十四、程序整段在服务端跑,大脑也在服务端(10-05 起)
 
-此前模型写的 Lua 在主人客户端跑,程序里每调一次服务端函数就经网络往返一次(一轮评测 36 次运行共 4469 次调用,98% 是服务端函数)。
-现在倒过来:**程序整段在服务端、身体与数据旁边执行**,客户端只把"程序文本 + 她的模块清单 + 这个连接还没送过的模块正文"发上去,
-服务端跑完回一份回执。函数仍然两端都有(`ServerCall` 在服务端、`ClientCall` 在主人客户端,按第一个参数定端):程序在服务端遇到
+最早模型写的 Lua 在主人客户端跑,程序里每调一次服务端函数就经网络往返一次(一轮评测 36 次运行共 4469 次调用,98% 是服务端函数)。
+后来**程序整段在服务端、身体与数据旁边执行**,再后来大脑本身也搬到了服务端(`input-pipeline.md` §十四):大脑把程序整段交给本进程里的
+服务端入口,跑完得到一份回执,不过网络。函数仍然两端都有(`ServerCall` 在服务端、`ClientCall` 在主人客户端,按第一个参数定端):程序在服务端遇到
 服务端函数就进程内执行,遇到客户端函数就向主人客户端发**反向请求**,Lua 线程挂着等客户端用 `Dispatcher.client` 执行完答回来
 (同 MCP 的 sampling、LSP 的 workspace/configuration);对 API 作者完全透明。
 
-### 部件(`api/common/.../program` 与 `agent.script`)
+### 部件(`numen-api/common/.../program`、`script` 模块与 `agent.loop`)
 
 | 部件 | 做什么 |
 |---|---|
@@ -723,15 +705,13 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 | `ProgramCalls`:`ServerCalls` / `ClientCalls` / `RoutedCalls` / `ObservedCalls` | 一次调用在哪一端执行:进程内排进主线程车道、向客户端发反向请求、按函数的端分流、套一层给 GameTest 看每次调用;分流的逻辑只在 `RoutedCalls` |
 | `MainQueue` | 程序的服务端调用排队等主线程。每段程序一条车道,每刻开头 `ServerPrograms.tick()` 在预算里取:全部 10 ms、每段 5 ms(取 CC: Tweaked 的 `max_main_global_time` / `max_main_computer_time`),起点每刻轮一段;主线程只执行,从不等程序 |
 | `ClientTransport`:`NetworkTransport` / `LoopbackTransport` | 反向请求的传输端口。产品是网络;没有真客户端的地方(GameTest、单测)是同样过一遍包编解码的回环 |
-| `ModuleSet` / `ModuleSync` / `ModuleCache` / `RunModules` | 她的模块:清单(名字 → `Modules.fingerprint`)加没送过的正文。客户端 `ModuleSync` 记这个连接送过哪些;服务端 `ModuleCache` 按主人按指纹缓存(每位主人 4 MB,最久没用的先丢,主人断线清掉,不落盘);`RunModules` 是一段程序握着的那份 |
-| `ProgramUplink` / `ClientEndpoint` | 客户端:送程序、停止、收回执(服务端说缺正文就带上重发)、记模块战绩;替服务端执行客户端函数并答回 |
-| `LoopbackClient` | 在本进程里扮主人客户端(GameTest、评测之外的单测),用的就是上面那些部件 |
+| `ProgramHost`:`LocalPrograms` | 大脑的工具口把程序交给谁跑:整段交出、结局(`Program.Outcome`)恰好交回一次;叫停在调用之间、当场切断、叫停身体。产品是 `LocalPrograms`,直调 `ServerPrograms` |
+| `ClientEndpoint` | 主人客户端:替服务端执行客户端函数(`ClientCall`)并答回;没有真客户端的地方由 `LoopbackTransport` 同样过一遍包编解码后交给它 |
 
 ### 包
 
-`RunProgramPayload`(上行:程序编号、程序、`ModuleSet`)→ `ProgramResultPayload`(下行:一段 JSON,要么 `{missing:[指纹]}`,要么 `{receipt, status, error_kind, calls, used, stopped_for}`,回执只有成败与文字,`return` 的值原样不在里面);
-`StopProgramPayload`(上行:停在调用之间或当场停下);`ClientCallPayload` / `ClientCallResultPayload`(反向请求与它的答复,答复里在函数改了
-她的模块时带上新清单与新正文)。单包上限上行 32767 字节、下行 1 MB,超过的程序、反向请求与答复在载荷层分片,对端拼回(整条消息至多 8 MiB,`Wire` 与 `Fragments`,见 `docs/cli.md` 附录 H)。
+程序与它的回执不过网络。过网络的只有反向请求:`ClientCallPayload`(下行:调哪个客户端函数、参数)与 `ClientCallResultPayload`(上行:这次调用的结果)。
+单包上限上行 32767 字节、下行 1 MB,超过的反向请求与答复在载荷层分片,对端拼回(整条消息至多 8 MiB,见下一节)。
 
 ### 反向请求有时限,程序结束即撤销
 
@@ -748,18 +728,31 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 
 ### 她的模块:真源只有一个
 
-真源仍是主人客户端 `config/numen/lua/<主人>/` 里的文件。服务端缓存只是内容的副本(指纹就是内容的名字,存入时核对),一段程序开跑时
-就把清单里每个指纹的正文握在手里。程序里 `numen.module.save/delete/reset` 是客户端函数:`Modules.revision()` 变了,说明这次调用改了文件,
-答复里带上客户端此刻的全清单和新正文,服务端先换进这段程序的 `RunModules` 再让程序往下走,所以同一段程序往后用到的就是新的;
-已经装进虚拟机的那份不变。服务端缺某些正文(缓存丢了)时回 `Missing`,客户端清掉"已送过"、带上重发一次。
+真源是服务器上主人名下的 `lua/` 目录里的文件。`Modules` 就是程序的模块来源:程序用到一个模块才去读那个文件(只读正文,不查能不能编译),
+读与存、删、还原、记战绩都在同一把锁里(Windows 上正被读的文件换不掉)。程序里 `numen.module.save/delete/reset` 与 `numen.api.help` 是普通服务端函数
+(`ServerCall.companion()` 给出她是谁),改了文件之后同一段程序往后用到的就是新的;已经装进虚拟机的那份不变。战绩在程序结束时由 `ServerPrograms` 一处记。
 
 ### 回执:给模型读的,按构造有界
 
 回执在生成它的地方就有界(`ScriptLimits`):stderr 一条至多 `STDERR_RECORD_CHARS`(超出的整行省略并写明还有多少字)、整栏至多 `STDERR_CHARS`(超出的写明
 另外几条、几个字),`return` 的值在回执文字里至多 `RETURNED_CHARS`(写明原来多长),stdout 至多 `PRINTED_CHARS`(写明少了
 多少字);大表在进这些栏之前先经渲染器缩略(§四"回执");每次调用的结局只带写成的文字(超长的头部加摘要)。
-所以一张回执远小于下行 1 MB,`ProgramResultPayload` 是内容有界的包:装不下就是代码错,当场抛,不再有"装不下缩成失败"。
+所以一张回执不会撑爆模型的上下文,也不会在哪里"装不下"。
 身体活的账本身在生成处也已归堆计数(`NavText`:同类方块合并成"N 个 + 几处例子")。
+
+### 线上的上限与分片
+
+- **唯一来源** `network.Wire`,按方向的单包上限:下行 1048576 字节,上行 32767 字节;整条消息至多 `Wire.MESSAGE_BYTES`(8 MiB),每个连接同时拼装的消息至多
+  `Wire.ASSEMBLING`(8 条)。下行的数是原版 `ClientboundCustomPayloadPacket` 的 `MAX_PAYLOAD_SIZE`(`WireTest` 反射读它,改了版本先红);上行的 32767 是
+  NeoForge(`GenericPacketSplitter`)、Fabric(`registerLarge`)与 CC: Tweaked 共同当作客户端到服务端一个包的安全线。真正的硬顶是帧:三字节长度前缀,一帧至多
+  2097151 字节(`Wire.FRAME_BYTES`);判据是每个方向的单包上限加包头仍在一帧以内。
+- **超过单包上限就在自己的载荷层分片**(`network.Fragments`、`FragmentPayload`):随数据变长的包(程序上行、反向请求与答复)实现 `Wire.Fragmentable`,
+  编码后的字节切成带编号的片连续发出,对端每个连接一个收件箱,收齐拼回原包交给原来的处理器。不用加载器的分片器(三个加载器行为不一、Forge 1.20.1 没有),
+  也不碰 Netty 流水线(要 mixin `Connection`,各分支写法不同);先例是 CC: Tweaked 的 `UploadFileMessage`。
+- **防滥用**:拼装中的消息超过整条上限、片数或编号不对、除最后一片外不是满的,当场丢弃;同一连接同时拼装多过 8 条拒收新的;断线清掉残片。拒收只写一行警告,不答复。
+- **送出只有一条路** `NumenNetwork.sendToPlayer` / `sendToServer`:先用包自己的编解码器量字节。装得下照发;可分片的分片;内容随数据长、装不下就缩的包实现
+  `Wire.Oversized`,缩成如实说明的样子;别的包内容本来有界,装不下是代码错,当场抛,不交给 Netty 去断开连接。
+- 反向请求与它的答复连整条消息的上限都装不下才不送,当场给程序一条失败;回执不过网络,在生成处有界(见上一节)。
 
 ### 线程
 

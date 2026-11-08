@@ -1,0 +1,156 @@
+import com.dwinovo.numen.build.Modules
+
+plugins {
+    id 'numen-api-loader'
+    id 'net.minecraftforge.gradle'
+    id 'org.spongepowered.mixin'
+}
+
+// 要读 Numen API 的测试夹具源码集,它得先配置好
+evaluationDependsOn(':numen-api:common')
+// mcp 的依赖要先解析好,下面才能列出要嵌套的库
+evaluationDependsOn(':mcp')
+
+// Forge 1.20.2 运行期是 SRG 名,而 mixin 源码按官方名写——必须生成 refmap 把
+// 字符串引用翻译过去,否则运行期找不到字段直接崩。
+mixin {
+    add(sourceSets.main, "${mod_id}.refmap.json")
+    config("${mod_id}.mixins.json")
+    config("${mod_id}.forge.mixins.json")
+}
+
+/*
+ * GameTest 在加载器这一层的支持(src/gametest,开发期的小模组 numen_api_gametest,不进发行 jar):把套件入口 GameTestSuites
+ * 登记给原版的 GameTest 框架,和给模拟主人的连接配频道。用 Numen API 的都用得上(Numen、联动、第三方插件),所以归 Numen API;
+ * 各运行配置把它和 Numen API 的测试夹具声明成模组 numen_api_gametest(见 numen/forge/build.gradle)。
+ */
+sourceSets {
+    gametest {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+}
+
+minecraft {
+    mappings channel: 'official', version: minecraft_version
+    copyIdeResources = true // Calls processResources when in dev
+
+    // Automatically enable forge AccessTransformers if the file exists.
+    // This location is hardcoded in Forge and can not be changed.
+    def at = file('src/main/resources/META-INF/accesstransformer.cfg')
+    if (at.exists()) {
+        accessTransformer = at
+    }
+
+    runs {
+        client {
+            workingDirectory file('runs/client')
+            ideaModule "${rootProject.name}.numen-api.${project.name}.main"
+            taskName 'Client'
+        }
+        server {
+            workingDirectory file('runs/server')
+            ideaModule "${rootProject.name}.numen-api.${project.name}.main"
+            taskName 'Server'
+        }
+        data {
+            workingDirectory file('runs/data')
+            ideaModule "${rootProject.name}.numen-api.${project.name}.main"
+            args '--mod', mod_id, '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
+            taskName 'Data'
+        }
+    }
+}
+
+// 发行 jar 把纯 JVM 模块的类平铺进来(见 numen-api-loader.gradle 的 jar 块),运行时它们就是本模组的一部分。
+// 开发期的 run 不走那个 jar,所以每个运行配置都把它们声明进同一个模组(要读它们的源码集,它们得先配置好)。
+Modules.ALL.each { evaluationDependsOn(it) }
+minecraft.runs.configureEach { run ->
+    run.mods {
+        "${mod_id}" {
+            source sourceSets.main
+            Modules.ALL.each { path -> source project(path).sourceSets.main }
+        }
+    }
+}
+
+sourceSets.main.resources.srcDir 'src/generated/resources'
+sourceSets.main.resources.exclude '.cache/**'
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+    // refmap 由 mixin 注解处理器在编译期生成——AP 必须显式挂上,否则 mixin 照样编译
+    // 通过、jar 照样打出来,只是里面没有 refmap,运行期才炸。
+    annotationProcessor 'org.spongepowered:mixin:0.8.5-SNAPSHOT:processor'
+
+    // 聊天气泡的 Markdown 解析库(ui 模块用它)与 mcp 模块的其余第三方库(Reactor、Tomcat……)是内嵌的库,
+    // 不是平铺进来的类。发行物是 Numen 的 -all,它把本模块与这些库并排嵌在 META-INF/jarjar/ 里(见 numen/forge/build.gradle);
+    // 开发运行不读 jarJar,这里让它们进运行类路径。清单从 mcp 的依赖解析出来。官方 SDK 与重定位过的 Jackson、Nimbus 是 mcp 产出的一份 jar,
+    // 发行 jar 平铺它的类(见 numen-api-loader.gradle);开发运行里它也只能以库的身份进运行类路径。
+    minecraftLibrary "org.commonmark:commonmark:${commonmark_version}"
+    minecraftLibrary "org.commonmark:commonmark-ext-gfm-strikethrough:${commonmark_version}"
+    Modules.nestedLibraries(project(':mcp')).each { coordinate ->
+        minecraftLibrary(coordinate) { transitive = false }
+    }
+    minecraftLibrary files(project(':mcp').relocatedSdk)
+
+    gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
+}
+
+processGametestResources {
+    var expandProps = ['forge_loader_version_range': forge_loader_version_range]
+    filesMatching('META-INF/mods.toml') {
+        expand expandProps
+    }
+    inputs.properties(expandProps)
+}
+
+jar.finalizedBy('reobfJar')
+
+// Implement mcgradleconventions loader attribute
+def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements'].each { variant ->
+    configurations.named("$variant") {
+        attributes {
+            attribute(loaderAttribute, 'forge')
+        }
+    }
+}
+sourceSets.configureEach {
+    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant ->
+        configurations.named("$variant") {
+            attributes {
+                attribute(loaderAttribute, 'forge')
+            }
+        }
+    }
+}
+
+// ForgeGradle quirk: classes + resources share one output dir so the dev launcher and the
+// mixin refmap see them together.
+sourceSets.each {
+    def dir = layout.buildDirectory.dir("sourcesSets/$it.name")
+    it.output.resourcesDir = dir
+    it.java.destinationDirectory = dir
+}
+// 共目录之后,跨项目 classpath 的 builtBy 只挂着 compileJava:把资源拷贝排在编译前,
+// 消费方(如 :numen:forge:compileJava)拿到目录时两类内容都已就位,不再竞态。
+tasks.named('compileJava') { dependsOn tasks.named('processResources') }
+tasks.named('compileGametestJava') { dependsOn tasks.named('processGametestResources') }
+
+// mixin AP 与增量编译不相容：增量轮次 AP 不重跑，refmap 丢失且 jar 静默不带，
+// 生产环境 SRG 运行时 mixin 按官方名找不到目标直接拒启（开发期 disableRefMap 照不出）。
+tasks.named('compileJava', JavaCompile) { options.incremental = false }
+// 绞索：包里有 mixins.json 就必须有 refmap，缺了当场把构建判死，不给静默坏包出门。
+tasks.named('jar', Jar) {
+    doLast {
+        def zf = new java.util.zip.ZipFile(archiveFile.get().asFile)
+        try {
+            boolean hasMixins = zf.entries().any { it.name.endsWith('.mixins.json') }
+            boolean hasRefmap = zf.entries().any { it.name.endsWith('.refmap.json') }
+            if (hasMixins && !hasRefmap) {
+                throw new GradleException("mixin refmap missing from ${archiveFile.get().asFile.name}")
+            }
+        } finally { zf.close() }
+    }
+}

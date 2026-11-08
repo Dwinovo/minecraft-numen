@@ -1,0 +1,74 @@
+import com.dwinovo.numen.build.Modules
+
+plugins {
+    id 'numen-common'
+}
+
+// 要读 Numen API 的 apiJar 任务与寻路模块的源码集,它们得先配置好(寻路是 numen/ 的子项目,排在加载器之后)
+evaluationDependsOn(':numen-api:common')
+evaluationDependsOn(':numen:pathing')
+
+configurations {
+    commonJava{
+        canBeResolved = true
+    }
+    commonClientJava{
+        canBeResolved = true
+    }
+    commonResources{
+        canBeResolved = true
+    }
+}
+
+dependencies {
+    // Numen 是 Numen API 的插件:编译期只看得见瘦 api jar 里公开的那部分(见 numen/common/build.gradle)。瘦 jar 取 common 那份
+    // (Mojang 名),Fabric 的 intermediary 成品另有重映射,编译期用不着。
+    compileOnly files(project(':numen-api:common').tasks.named('apiJar'))
+    Modules.PLUGIN_VISIBLE.each { compileOnly project(it) }
+    // common 的主源码与客户端源码由下面的 compileJava 并进本模块一起编:编译类路径上不再放 :numen:common 编好的类。同一个类名既在
+    // 源码里又在类路径上,Gradle 的增量编译认不出——Numen API 的公开签名变了(返回类型之类),本模块里调用它的 common 类(NumenContent)
+    // 不会重编,留着旧字节码,运行时 NoSuchMethodError。
+    // 寻路(只依赖原版)是 Numen 的内容,不是 Numen API 的:编译期看得见,发行 jar 里由下方 jar 块平铺进来、不作为依赖进 POM
+    // (它不发布)。Loom 的开发运行类路径上另外补一份(localRuntime 不进 POM);NeoForge 的开发运行靠模组的 sourceSet。
+    compileOnly project(':numen:pathing')
+    commonJava project(path: ':numen:common', configuration: 'commonJava')
+    commonClientJava project(path: ':numen:common', configuration: 'commonClientJava')
+    commonResources project(path: ':numen:common', configuration: 'commonResources')
+}
+
+// 加载器把 common 的主源码与客户端源码一起编进自己的 jar:分源码集的保护发生在 common 的编译期(主源码集看不见客户端类),
+// 发行 jar 照旧全量——服务端不会去加载客户端类,因为主源码集里已经没有任何引用。
+tasks.named('compileJava', JavaCompile) {
+    dependsOn(configurations.commonJava)
+    source(configurations.commonJava)
+    dependsOn(configurations.commonClientJava)
+    source(configurations.commonClientJava)
+}
+
+processResources {
+    dependsOn(configurations.commonResources)
+    from(configurations.commonResources)
+}
+
+tasks.named('javadoc', Javadoc).configure {
+    dependsOn(configurations.commonJava)
+    source(configurations.commonJava)
+    dependsOn(configurations.commonClientJava)
+    source(configurations.commonClientJava)
+}
+
+tasks.named('sourcesJar', Jar) {
+    dependsOn(configurations.commonJava)
+    from(configurations.commonJava)
+    dependsOn(configurations.commonClientJava)
+    from(configurations.commonClientJava)
+    dependsOn(configurations.commonResources)
+    from(configurations.commonResources)
+    from({ project(':numen:pathing').sourceSets.main.allSource })
+}
+
+// 寻路模块对着原版的 Mojang 名编译,与本模块同一套命名:Fabric 上随后由 remapJar 连同本模块的类一起换成
+// intermediary 名,NeoForge 上原样发出。
+tasks.named('jar', Jar) {
+    from({ project(':numen:pathing').sourceSets.main.output })
+}
