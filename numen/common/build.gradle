@@ -81,7 +81,7 @@ repositories {
 
 dependencies {
     e2eImplementation 'com.github.steveice10:mcprotocollib:1.20-2'
-    e2eImplementation 'com.google.code.gson:gson:2.10.1'
+    e2eImplementation 'com.google.code.gson:gson:2.10'
     e2eImplementation platform('org.junit:junit-bom:5.11.4')
     e2eImplementation 'org.junit.jupiter:junit-jupiter'
     e2eRuntimeOnly 'org.junit.platform:junit-platform-launcher'

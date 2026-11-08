@@ -49,8 +49,8 @@ repositories {
 dependencies {
     // 落盘的基础件(令牌库、审计日志):api 让消费方透视得到 Io 等类型。
     api project(':store')
-    api 'org.slf4j:slf4j-api:2.0.9'
-    api 'com.google.code.gson:gson:2.10.1'
+    api 'org.slf4j:slf4j-api:2.0.1'
+    api 'com.google.code.gson:gson:2.10'
     // 官方 MCP Java SDK(规范 2025-11-25,旧版客户端它自己协商)与 OAuth 用的 Nimbus 经下面的 relocatedSdk 交给编译与运行,不直接依赖。
     // 服务端的 HTTP:SDK 的 Streamable HTTP 传输是个 Servlet,挂在内嵌 Tomcat 上(SDK 自己的测试也这样用)。
     implementation "org.apache.tomcat.embed:tomcat-embed-core:${tomcat_version}"

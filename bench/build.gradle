@@ -22,7 +22,7 @@ repositories {
 
 dependencies {
     // 与游戏运行时同版(同 ai 模块):评测在游戏进程里写记录,用的就是那一份
-    implementation 'com.google.code.gson:gson:2.10.1'
+    implementation 'com.google.code.gson:gson:2.10'
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
