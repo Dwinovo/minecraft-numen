@@ -49,7 +49,7 @@ public final class RecipeBook {
 
     /**
      * 配方类型的名字,即 {@link com.dwinovo.numen.api.knowledge.Recipe#category}:登记了的是它在注册表里的名字;模组也可以不登记
-     * (车万女仆这一代的祭坛配方类型由 {@code RecipeType.simple} 造出、没进注册表),那就是类型自己报的名字,{@code simple} 造的类型报的就是它的 id。
+     * (比如用 {@code RecipeType.simple} 造出、没进注册表),那就是类型自己报的名字,{@code simple} 造的类型报的就是它的 id。
      */
     public static String categoryOf(Recipe<?> recipe) {
         net.minecraft.resources.ResourceLocation key = BuiltInRegistries.RECIPE_TYPE.getKey(recipe.getType());
