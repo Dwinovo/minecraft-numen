@@ -142,7 +142,7 @@ Paper、Leaves、spark、WorldEdit、PacketEvents、ProtocolLib 是 GPL,Citizens
 
 ## 附:第 2 步落地时的出入
 
-- **run-paper 用 3.0.2**,不是 2.3.1:2.x 走已下线的 `api.papermc.io/v2`(410),找不到 Paper 版本;3.x 走 `fill.papermc.io`。本仓库 Gradle 是 9.2,paperweight-userdev 1.7.2 照常工作。
+- **run-paper 用 3.1.0**(要 Gradle 9.7 以上,本仓库是 9.7.1),不是 2.x:2.x 走已下线的 `api.papermc.io/v2`(410),找不到 Paper 版本;3.x 走 `fill.papermc.io`。paperweight-userdev 1.7.2 照常工作。
 - **配置根是 `plugins/numen/`(小写)**,不是 `plugins/Numen/`:`NumenPaths.config()` 是"配置目录 + `Constants.CONFIG_ROOT`(`numen`)",Linux 区分大小写,
   只有小写是同一个答案。插件名也用模组 id(`numen_api`、`numen`),`modIds()` 因此直接等于资源命名空间;`modIds()` 列的是 Numen API 自己和声明依赖它的插件。
 - **纯 JVM 模块不用 shadow 插件**,和 NeoForge / Fabric 的发行 jar 一样把各模块的输出平铺进 jar(Gson、slf4j 等用 Paper 自带的,本来就不该打进去),少一个构建插件。

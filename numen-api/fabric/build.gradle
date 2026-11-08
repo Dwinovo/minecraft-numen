@@ -19,7 +19,7 @@ dependencies {
     include "org.commonmark:commonmark-ext-gfm-strikethrough:${commonmark_version}"
     // mcp 模块的其余第三方库(Reactor、Tomcat……)同理嵌套带上;清单从 mcp 的依赖解析出来。官方 SDK 与重定位过的 Jackson、Nimbus
     // 不在其中,它们的类平铺进发行 jar(见 numen-api-loader.gradle)。
-    Modules.nestedLibraries(project(':mcp')).each { include(it) { transitive = false } }
+    Modules.nestedLibraries(rootProject.project(':mcp')).each { include(it) { transitive = false } }
 }
 
 // 要读 Numen API 的测试夹具源码集,它得先配置好
@@ -37,7 +37,7 @@ sourceSets {
     }
 }
 dependencies {
-    gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
+    gametestCompileOnly rootProject.project(':numen-api:common').sourceSets.testFixtures.output
 }
 
 loom {
