@@ -15,13 +15,12 @@ import java.util.function.Consumer;
 
 /**
  * GameTest 里让她进世界的几个写法:走的是生产里同一条带回调的路({@link CompanionFactory#spawn} 等),只是把结果收下来。
- * 模组上平台当场接纳,回调在调用里就跑完了,直接交回身体。平台在异步接纳的(Paper 的登录事件在异步线程上发)回调晚一点才来,
- * 由 {@link GameTestWorld#await} 在主线程上推着等它来,用例写法与模组上一样,拿到手就是身体。
+ * 模组上平台当场接纳,回调在调用里就跑完了,直接交回身体;排给主线程的答复由 {@link MinecraftServer#managedBlock} 推着做完。
  * 等到时限还没来、或被拒,用例就失败并说清楚,不会悄悄拿到 {@code null}。
  */
 public final class Bodies {
 
-    /** 异步接纳最多等多久。 */
+    /** 接纳的答复最多等多久。 */
     private static final long WAIT_NANOS = 10_000_000_000L;
 
     private Bodies() {}
@@ -37,7 +36,7 @@ public final class Bodies {
 
     /**
      * 用例给身体起的名字是写给人看的标签(如 {@code gametest_cartographer}),常常超过产品的名字规则(3 到 16 位字母、数字、下划线,
-     * {@link MojangSkins#validName})。真身体的名字走的是真玩家的登录规矩,Paper 上超长的名字连登录事件都造不出来,
+     * {@link MojangSkins#validName})。真身体的名字走的是真玩家的登录规矩,
      * 所以造身体的这一处把不合规的标签收成合规的名字:同一个标签永远得到同一个名字,用例要名字就从身体上取。
      */
     public static String compliant(String label) {
@@ -78,8 +77,7 @@ public final class Bodies {
      */
     public static ServerPlayer awaitPlayer(MinecraftServer server, String name) {
         long deadline = System.nanoTime() + WAIT_NANOS;
-        GameTestWorld.INSTANCE.await(server,
-                () -> server.getPlayerList().getPlayerByName(name) != null || System.nanoTime() > deadline);
+        server.managedBlock(() -> server.getPlayerList().getPlayerByName(name) != null || System.nanoTime() > deadline);
         return server.getPlayerList().getPlayerByName(name);
     }
 
@@ -93,7 +91,7 @@ public final class Bodies {
     @SuppressWarnings("unchecked")
     private static <T> T awaited(MinecraftServer server, Object[] result) {
         long deadline = System.nanoTime() + WAIT_NANOS;
-        GameTestWorld.INSTANCE.await(server, () -> result[0] != null || System.nanoTime() > deadline);
+        server.managedBlock(() -> result[0] != null || System.nanoTime() > deadline);
         return (T) result[0];
     }
 

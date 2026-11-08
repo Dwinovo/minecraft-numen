@@ -29,12 +29,11 @@ public record NumenTestEnvironment(String batch) implements TestEnvironmentDefin
 
     @Override
     public void setup(ServerLevel level) {
-        GameTestWorld world = GameTestWorld.INSTANCE;
         GameRules rules = level.getGameRules();
-        world.setRule(level, rules.getRule(GameRules.RULE_DOMOBSPAWNING), false);
-        world.setRule(level, rules.getRule(GameRules.RULE_WEATHER_CYCLE), false);
-        world.setRule(level, rules.getRule(GameRules.RULE_RANDOMTICKING), 0);
-        world.setRule(level, rules.getRule(GameRules.RULE_DOFIRETICK), false);
+        GameTestWorld.setRule(level, rules.getRule(GameRules.RULE_DOMOBSPAWNING), false);
+        GameTestWorld.setRule(level, rules.getRule(GameRules.RULE_WEATHER_CYCLE), false);
+        GameTestWorld.setRule(level, rules.getRule(GameRules.RULE_RANDOMTICKING), 0);
+        GameTestWorld.setRule(level, rules.getRule(GameRules.RULE_DOFIRETICK), false);
         level.setWeatherParameters(CLEAR_WEATHER_TICKS, CLEAR_WEATHER_TICKS, false, false);
         GameTestSuites.beforeBatch(batch, level);
     }
