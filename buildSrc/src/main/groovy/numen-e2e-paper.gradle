@@ -35,6 +35,8 @@ tasks.register('e2eServerStart') {
                 'online-mode'               : 'false',
                 // 不签名的客户端(MCProtocolLib)进得来、私聊指令的参数不带签名也收
                 'enforce-secure-profile'    : 'false',
+                // 26.3 起白名单默认开着;测试客户端的名字不在名单上
+                'white-list'                : 'false',
                 'server-ip'                 : spec.host,
                 'server-port'               : spec.port,
                 'enable-rcon'               : 'true',

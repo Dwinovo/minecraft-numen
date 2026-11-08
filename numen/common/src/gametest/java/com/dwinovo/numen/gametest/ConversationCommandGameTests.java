@@ -82,7 +82,7 @@ public class ConversationCommandGameTests {
     }
 
     private static void typeInChatBar(ServerPlayer player, String line) {
-        player.connection.handleChat(new ServerboundChatPacket(line, Instant.now(), 0L, null,
+        player.connection.handleChat(new ServerboundChatPacket(line, Instant.now(), 0L, java.util.Optional.empty(),
                 new LastSeenMessages.Update(0, new BitSet(), (byte) 0)));
     }
 

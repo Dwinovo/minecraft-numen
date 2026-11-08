@@ -8,6 +8,7 @@ import java.util.function.IntBinaryOperator;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LeavesBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -195,7 +196,7 @@ final class Land implements Terrain {
         int from = Math.max(ground(x, z), above == null || above.isEmpty() ? Integer.MIN_VALUE : above.lastKey());
         for (int y = from; y >= getMinY(); y--) {
             BlockState state = getBlockState(new BlockPos(x, y, z));
-            if (state.blocksMotion() || !state.getFluidState().isEmpty()) {
+            if (state.is(BlockTags.BLOCKS_MOTION_IN_HEIGHTMAP) || !state.getFluidState().isEmpty()) {
                 return y + 1;
             }
         }

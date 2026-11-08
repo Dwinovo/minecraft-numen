@@ -43,7 +43,7 @@ public class TerminationGameTests {
         Shulker shulker = EntityTypes.SHULKER.create(t.level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         BlockPos at = t.at(x, y, z);
         shulker.setNoAi(true);
-        shulker.setInvulnerable(true);
+        shulker.setPermanentlyInvulnerable(true);
         shulker.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
         t.level.addFreshEntity(shulker);
     }

@@ -38,7 +38,7 @@ class VanillaCommandTreeTest {
         net.minecraft.SharedConstants.tryDetectVersion();
         net.minecraft.server.Bootstrap.bootStrap();
         vanilla = new Commands(Commands.CommandSelection.DEDICATED,
-                Commands.createValidationContext(VanillaRegistries.createLookup())).getDispatcher();
+                Commands.createValidationContext(VanillaRegistries.createWorldLookup())).getDispatcher();
     }
 
     /** 引导时 Brigadier 的内置报错被换成了 MC 的说法;换回去,同一个 JVM 里别的命令测试读的是 Brigadier 的原话。 */
@@ -50,8 +50,8 @@ class VanillaCommandTreeTest {
     /** 她的来源;没有服务器,补全里的在线玩家名是空的(选择器照常补)。 */
     private static CommandSourceStack her(int level) {
         return new CommandSourceStack(CommandSource.NULL, Vec3.ZERO, Vec2.ZERO, null,
-                net.minecraft.server.permissions.LevelBasedPermissionSet.forLevel(net.minecraft.server.permissions.PermissionLevel.byId(level)), "her",
-                Component.literal("her"), null, null) {
+                net.minecraft.server.permissions.LevelBasedPermissionSet.forLevel(net.minecraft.server.permissions.PermissionLevel.byId(level)),
+                Component.literal("her"), null) {
             @Override
             public java.util.Collection<String> getOnlinePlayerNames() {
                 return List.of();

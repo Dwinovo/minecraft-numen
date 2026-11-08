@@ -162,8 +162,8 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
         loadTemplates(level, functions);
         List<GameTestInfo> tests = register(level, functions).stream()
                 .map(test -> new GameTestInfo(test, Rotation.NONE, level, RetryOptions.noRetries())).toList();
-        GameTestRunner runner = GameTestRunner.Builder.fromInfo(tests, level)
-                .newStructureSpawner(new StructureGridSpawner(ORIGIN, GameTestRunner.DEFAULT_TESTS_PER_ROW, false))
+        GameTestRunner runner = GameTestRunner.Builder.fromInfo(tests, server)
+                .newStructureSpawner(new StructureGridSpawner(dimension -> ORIGIN, GameTestRunner.DEFAULT_TESTS_PER_ROW, false))
                 .build();
         infos = runner.getTestInfos();
         tracker = new MultipleTestTracker(infos);
@@ -229,7 +229,7 @@ public final class PaperGameTestPlugin extends JavaPlugin implements Listener {
         if (directory == null) {
             return;
         }
-        StructureTemplateManager manager = server.getStructureManager();
+        StructureTemplateManager manager = server.getStructureTemplateManager();
         for (String name : functions.stream().map(TestFunction::structureName).distinct().toList()) {
             Identifier id = Identifier.parse(name);
             Path file = Path.of(directory, id.getPath() + ".snbt");

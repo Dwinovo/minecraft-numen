@@ -208,9 +208,9 @@ final class RegionWorld implements WorldSnapshot.Sections {
 
     private static RegistryAccess loadWorldgen() {
         try (MultiPackResourceManager data = new MultiPackResourceManager(PackType.SERVER_DATA,
-                List.of(ServerPacksSource.createVanillaPackSource()))) {
+                List.of(ServerPacksSource.createVanillaPackSource().fullResources()))) {
             return RegistryDataLoader.load(data, RegistryAccess.fromRegistryOfRegistries(BuiltInRegistries.REGISTRY).listRegistries().toList(),
-                    RegistryDataLoader.WORLDGEN_REGISTRIES, Runnable::run).join();
+                    RegistryDataLoader.WORLD_REGISTRIES, Runnable::run).join();
         }
     }
 }

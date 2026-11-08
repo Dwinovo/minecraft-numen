@@ -61,8 +61,8 @@ class NumenCommandsTest {
     }
 
     private static CommandSourceStack source(NumenPlayer entity) {
-        return new CommandSourceStack(CommandSource.NULL, Vec3.ZERO, Vec2.ZERO, null, net.minecraft.server.permissions.LevelBasedPermissionSet.OWNER, "test",
-                Component.literal("test"), null, entity);
+        return new CommandSourceStack(CommandSource.NULL, Vec3.ZERO, Vec2.ZERO, null, net.minecraft.server.permissions.LevelBasedPermissionSet.OWNER,
+                Component.literal("test"), null).withEntity(entity);
     }
 
     /**

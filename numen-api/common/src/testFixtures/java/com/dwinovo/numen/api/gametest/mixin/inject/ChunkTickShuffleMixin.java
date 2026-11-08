@@ -20,7 +20,7 @@ public abstract class ChunkTickShuffleMixin {
     @Unique
     private final RandomSource numen$shuffle = RandomSource.create(0);
 
-    @Redirect(method = "tickChunks(Lnet/minecraft/util/profiling/ProfilerFiller;J)V",
+    @Redirect(method = "tickChunks(Lnet/minecraft/util/profiling/ProfilerFiller;)V",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/util/Util;shuffle(Ljava/util/List;Lnet/minecraft/util/RandomSource;)V"))
     private void numen$ownShuffle(List<?> chunks, RandomSource levelRandom) {
         Util.shuffle(chunks, numen$shuffle);

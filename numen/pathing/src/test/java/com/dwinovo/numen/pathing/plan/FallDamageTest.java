@@ -85,7 +85,7 @@ class FallDamageTest {
 
     @Test
     void aBedHalvesTheDrop() {
-        // BedBlock.fallOn:按落差的一半交给默认的 fallOn
+        // 床的 fallDistanceReduction 是 0.5:默认的 fallOn 把落差减半
         BlockState bed = Blocks.BED.red().defaultBlockState().setValue(BedBlock.PART, BedPart.FOOT);
         assertEquals(0, body.fallDamage(6, bed));
         assertEquals(1, body.fallDamage(7, bed), "ceil(3.5 - 3)");

@@ -13,6 +13,7 @@ import net.minecraft.gametest.framework.TestData;
 import net.minecraft.gametest.framework.TestEnvironmentDefinition;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.level.Level;
 
 /**
  * 把 {@link GameTestSuites#functions()} 登记进原版的两个数据注册表:每个批次一个测试环境({@link NumenTestEnvironment}),每条用例一个
@@ -62,7 +63,7 @@ public final class GameTestRegistration {
         List<Holder.Reference<GameTestInstance>> out = new java.util.ArrayList<>();
         for (TestFunction function : functions) {
             TestData<Holder<TestEnvironmentDefinition<?>>> data = new TestData<>(ENVIRONMENTS.get(function.batchName()),
-                    Identifier.parse(function.structureName()), function.maxTicks(), (int) function.setupTicks(),
+                    Level.OVERWORLD, Identifier.parse(function.structureName()), function.maxTicks(), (int) function.setupTicks(),
                     function.required(), function.rotation(), false, 1, 1, function.skyAccess(), 0);
             out.add(registry.register(ResourceKey.create(Registries.TEST_INSTANCE, id(function.testName())),
                     new NumenTestInstance(function, data), RegistrationInfo.BUILT_IN));

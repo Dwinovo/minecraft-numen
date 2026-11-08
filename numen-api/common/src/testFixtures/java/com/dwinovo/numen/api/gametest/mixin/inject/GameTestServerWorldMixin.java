@@ -9,11 +9,14 @@ import java.util.Optional;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestServer;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.packs.repository.PackRepository;
 import net.minecraft.server.WorldLoader;
 import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.WorldDimensions;
 import net.minecraft.world.level.levelgen.WorldOptions;
+import net.minecraft.world.level.levelgen.presets.WorldPreset;
+import net.minecraft.world.level.levelgen.presets.WorldPresets;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.storage.LevelStorageSource;
 import org.spongepowered.asm.mixin.Mixin;
@@ -54,6 +57,18 @@ public abstract class GameTestServerWorldMixin {
     private static WorldDimensions.Complete numen$withDatapackDimensions(WorldDimensions preset, Registry<LevelStem> empty,
             Operation<WorldDimensions.Complete> bake, @Local(argsOnly = true) WorldLoader.DataLoadContext context) {
         return bake.call(preset, context.datapackDimensions().lookupOrThrow(Registries.LEVEL_STEM));
+    }
+
+    /**
+     * 主世界用经典超平坦(平原、草方块),用例的场地、群系与落点都按它写。26.3 的原版 GameTest 服务器换成了
+     * {@code flat_all_dimensions}(沙漠群系、67 层砂岩),这里换回原来的那个预设。
+     */
+    @ModifyExpressionValue(
+            method = LOAD,
+            at = @At(value = "FIELD",
+                    target = "Lnet/minecraft/world/level/levelgen/presets/WorldPresets;FLAT_ALL_DIMENSIONS:Lnet/minecraft/resources/ResourceKey;"))
+    private static ResourceKey<WorldPreset> numen$classicFlat(ResourceKey<WorldPreset> original) {
+        return WorldPresets.FLAT;
     }
 
     @ModifyExpressionValue(

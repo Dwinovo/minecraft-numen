@@ -982,8 +982,8 @@ public class BuildGameTests {
                     Checks.assertTrue(helper, build.succeeded(), "build failed: " + build.outcome());
                     var wire = level.getBlockState(o.offset(2, 0, 0));
                     Checks.assertTrue(helper, wire.is(Blocks.REDSTONE_WIRE), "the wire is not there: " + wire);
-                    var east = wire.getValue(net.minecraft.world.level.block.RedStoneWireBlock.EAST);
-                    var west = wire.getValue(net.minecraft.world.level.block.RedStoneWireBlock.WEST);
+                    var east = wire.getValue(net.minecraft.world.level.block.RedstoneWireBlock.EAST);
+                    var west = wire.getValue(net.minecraft.world.level.block.RedstoneWireBlock.WEST);
                     Checks.assertTrue(helper, 
                             east == net.minecraft.world.level.block.state.properties.RedstoneSide.SIDE
                                     && west == net.minecraft.world.level.block.state.properties.RedstoneSide.SIDE,
@@ -1137,8 +1137,8 @@ public class BuildGameTests {
                     var level = helper.getLevel();
                     for (int x = 6; x <= 9; x++) {
                         var wire = level.getBlockState(helper.absolutePos(new BlockPos(x, 2, 6)));
-                        var east = wire.getValue(net.minecraft.world.level.block.RedStoneWireBlock.EAST);
-                        var west = wire.getValue(net.minecraft.world.level.block.RedStoneWireBlock.WEST);
+                        var east = wire.getValue(net.minecraft.world.level.block.RedstoneWireBlock.EAST);
+                        var west = wire.getValue(net.minecraft.world.level.block.RedstoneWireBlock.WEST);
                         Checks.assertTrue(helper, x == 9 || east == side, "the wire at x=" + x + " is not joined to the east: " + wire);
                         Checks.assertTrue(helper, x == 6 || west == side, "the wire at x=" + x + " is not joined to the west: " + wire);
                         var pane = level.getBlockState(helper.absolutePos(new BlockPos(x, 2, 10)));

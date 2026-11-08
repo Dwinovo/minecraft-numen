@@ -48,7 +48,7 @@ public class DynamicGameTests {
                     if (Double.isNaN(pushedAt[0]) && x >= 12) {
                         pushedAt[0] = x;
                         r.body.setDeltaMovement(r.body.getDeltaMovement().add(0, 0.2, 0.9));
-                        r.body.hurtMarked = true;
+                        r.body.syncVelocity = true;
                     } else if (!Double.isNaN(pushedAt[0]) && x > pushedAt[0] + 10 && x < 29
                             && Math.floor(relZ(t, r)) != 5) {
                         throw Checks.failure("被推开之后十格还没回到原来那一排:z = " + relZ(t, r));

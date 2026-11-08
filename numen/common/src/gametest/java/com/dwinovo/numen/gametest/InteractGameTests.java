@@ -476,16 +476,16 @@ public class InteractGameTests {
                 "numen.use.sign(" + xyz(sign) + ", {\"Hello\", \"World\"})");
         steps = steps.thenWaitUntil(() -> {
             var text = (net.minecraft.world.level.block.entity.SignBlockEntity) helper.getLevel().getBlockEntity(sign);
-            Checks.assertTrue(helper, text != null && com.dwinovo.numen.tools.Signs.lines(text.getFrontText())
+            Checks.assertTrue(helper, text != null && com.dwinovo.numen.tools.Signs.lines(text.getText(net.minecraft.world.level.block.entity.SignTextSlot.FRONT))
                             .equals(java.util.List.of("Hello", "World", "", "")), "the front of the sign is not written");
         });
         steps = call(helper, steps, companion,
                 "numen.use.sign(" + xyz(sign) + ", {\"Behind\"}, {back = true})");
         steps.thenWaitUntil(() -> {
             var text = (net.minecraft.world.level.block.entity.SignBlockEntity) helper.getLevel().getBlockEntity(sign);
-            Checks.assertTrue(helper, com.dwinovo.numen.tools.Signs.lines(text.getBackText())
+            Checks.assertTrue(helper, com.dwinovo.numen.tools.Signs.lines(text.getText(net.minecraft.world.level.block.entity.SignTextSlot.BACK))
                             .equals(java.util.List.of("Behind", "", "", "")), "the back of the sign is not written");
-            Checks.assertTrue(helper, com.dwinovo.numen.tools.Signs.lines(text.getFrontText()).get(0).equals("Hello"),
+            Checks.assertTrue(helper, com.dwinovo.numen.tools.Signs.lines(text.getText(net.minecraft.world.level.block.entity.SignTextSlot.FRONT)).get(0).equals("Hello"),
                     "writing the back changed the front");
         }).thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion)).thenSucceed();
     }
@@ -496,7 +496,8 @@ public class InteractGameTests {
         BlockPos sign = helper.absolutePos(new BlockPos(5, 2, 4));
         helper.getLevel().setBlockAndUpdate(sign, Blocks.OAK_SIGN.defaultBlockState());
         var entity = (net.minecraft.world.level.block.entity.SignBlockEntity) helper.getLevel().getBlockEntity(sign);
-        entity.updateText(t -> t.setMessage(0, net.minecraft.network.chat.Component.literal("Keep")), true);
+        entity.updateText(t -> t.asMutable().setLine(0, net.minecraft.network.chat.Component.literal("Keep")).asImmutable(),
+                net.minecraft.world.level.block.entity.SignTextSlot.FRONT);
         entity.setWaxed(true);
         NumenPlayer companion = spawnAt(helper, "gametest_vandal", new BlockPos(3, 2, 4), false);
         ToolRun write = lua(companion, "numen.use.sign(" + xyz(sign) + ", {\"Vandalised\"})");
@@ -504,7 +505,7 @@ public class InteractGameTests {
         succeedWhen(helper, () -> {
             Checks.assertTrue(helper, write.done() && !write.succeeded() && write.outcome().contains("waxed"),
                     "the refusal does not say the sign is waxed: " + write.outcome());
-            Checks.assertTrue(helper, com.dwinovo.numen.tools.Signs.lines(entity.getFrontText()).get(0).equals("Keep"),
+            Checks.assertTrue(helper, com.dwinovo.numen.tools.Signs.lines(entity.getText(net.minecraft.world.level.block.entity.SignTextSlot.FRONT)).get(0).equals("Keep"),
                     "the waxed sign's text changed");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
