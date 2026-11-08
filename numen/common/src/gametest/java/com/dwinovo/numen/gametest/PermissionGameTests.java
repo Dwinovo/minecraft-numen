@@ -753,8 +753,8 @@ public class PermissionGameTests {
 
     /**
      * 服务端退回了挖掘(快捷栏塞满调试棒,空不出手来;原版不许调试棒破坏方块,{@code Item.canAttackBlock}):权限层放行了(自然方块),挖掘落点照真客户端挖下去,
-     * 服务端退回来——以 refused 收场,理由写明服务器没让挖掉,方块一块不少。生存的身体用 numen.work.dig 挖(STOP 那一下被退),
-     * 创造的用 numen.use.hit 点(START 那一下被退)。
+     * 服务端退回来——以 refused 收场,理由写明服务器没让挖掉,方块一块不少。生存的身体用 numen.work.dig 挖:STOP 之后方块弹回,
+     * 照原版客户端同一格再挖一轮,第二次 STOP 之后还在才算没让挖;创造的用 numen.use.hit 点(START 那一下被退)。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void a_bounced_dig_is_reported_as_refused(GameTestHelper helper) {
