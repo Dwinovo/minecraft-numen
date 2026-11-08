@@ -2,7 +2,7 @@ name: GameTest
 
 # 无头的测试服务器跑 GameTest,各平台并行:NeoForge 那一路带上车万女仆与 YSM 的两批(各要单开一次跑批,见 plugins/tlm/build.gradle
 # 与 plugins/ysm/gametest/build.gradle)。不跟着每次推送跑(推送只跑 build.yml 的编译与单测),要跑时在 Actions 页手动触发。
-# 测试服务器每刻开头等后台工作停下再往下走,所以结果不看 runner 的快慢。端到端和 Paper 的 GameTest 见 slow-tests.yml。
+# 测试服务器每刻开头等后台工作停下再往下走,所以结果不看 runner 的快慢。端到端见 slow-tests.yml。
 on:
   workflow_dispatch:
 
