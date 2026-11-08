@@ -164,13 +164,16 @@ public class DigGameTests {
      * 服务端挖掘状态机里"正在挖一格方块"的私有字段:挖掘器照真客户端发 START/STOP,服务端收没收下这一下只记在它上面,
      * 读它区分"服务端还在挖"与"服务端把这一下退回来了"。GameTest 里的名字是 Mojang 名,各平台一致。
      */
-    private static final java.lang.invoke.VarHandle DESTROYING_BLOCK = destroyingBlock();
+    private static final java.lang.invoke.VarHandle DESTROYING_BLOCK = gameModeField("isDestroyingBlock");
 
-    private static java.lang.invoke.VarHandle destroyingBlock() {
+    /** 服务端挖掘状态机里"挂着一格延迟破坏"的私有字段:用例读它确认场景搭对了(鼠标不读)。 */
+    private static final java.lang.invoke.VarHandle DELAYED_DESTROY = gameModeField("hasDelayedDestroy");
+
+    private static java.lang.invoke.VarHandle gameModeField(String name) {
         try {
             return java.lang.invoke.MethodHandles
                     .privateLookupIn(net.minecraft.server.level.ServerPlayerGameMode.class, java.lang.invoke.MethodHandles.lookup())
-                    .findVarHandle(net.minecraft.server.level.ServerPlayerGameMode.class, "isDestroyingBlock", boolean.class);
+                    .findVarHandle(net.minecraft.server.level.ServerPlayerGameMode.class, name, boolean.class);
         } catch (ReflectiveOperationException e) {
             throw new ExceptionInInitializerError(e);
         }
@@ -381,8 +384,8 @@ public class DigGameTests {
 
     /**
      * 服务端把挖到一半的一格挂成延迟破坏:她这头在一个游戏刻里连按,累满 1 就送 STOP,服务端那头才过了零刻、进度远不够,
-     * 黑曜石要它自己走一百多刻才破。她不能在服务端还挂着它时报"被退回":等服务端自己挖掉,报挖掉了,掉落物对得上。
-     * (判据读服务端的记账,不数刻;固定等几刻的写法在这里 20 刻就判退回。)
+     * 黑曜石还在。她照原版客户端,方块还在、键还按着就缓过手同一格再挖一轮,方块没了就是挖掉了:中途不报"没让挖",最后报挖掉了,
+     * 掉落物对得上。(场景的前提——第一次 STOP 之后服务端确实挂着延迟破坏——由用例读服务端的记账确认,鼠标不读。)
      */
     @GameTest(template = "floor16", timeoutTicks = 561, batch = ON_FOOT)
     public static void the_mouse_waits_for_the_delayed_destroy_the_server_still_holds(GameTestHelper helper) {
@@ -393,24 +396,27 @@ public class DigGameTests {
         companion.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(Items.DIAMOND_PICKAXE));
         com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
         var mouse = companion.mouse();
+        com.dwinovo.numen.api.entity.Mouse.Strike[] refused = {null};
 
         steps(helper)
                 .thenExecute(() -> companion.look().at(Vec3.atCenterOf(obsidian)))
                 .thenExecute(() -> {
-                    // 一个刻里连按到她这头送出 STOP(进度清零)为止
-                    for (int presses = 0; presses < 400; presses++) {
+                    // 一个刻里连按到她这头送出 STOP 为止
+                    for (int presses = 0; presses < 2000 && !mouse.stopSent(); presses++) {
                         mouse.dig();
-                        if (presses > 0 && mouse.progress() == 0f) {
-                            break;
-                        }
                     }
-                    Checks.assertTrue(helper, level.getBlockState(obsidian).is(Blocks.OBSIDIAN) && mouse.pressing() != null,
+                    Checks.assertTrue(helper, level.getBlockState(obsidian).is(Blocks.OBSIDIAN) && mouse.stopSent()
+                                    && (boolean) DELAYED_DESTROY.get(companion.gameMode),
                             "the server did not hold the block as a delayed destroy: " + level.getBlockState(obsidian));
                 })
                 .thenWaitUntil(() -> {
                     var strike = mouse.dig();
+                    if (strike instanceof com.dwinovo.numen.api.entity.Mouse.Strike.Refused && refused[0] == null) {
+                        refused[0] = strike;
+                    }
+                    Checks.assertTrue(helper, refused[0] == null, "the mouse gave up on a block that was still there: " + refused[0]);
                     Checks.assertTrue(helper, strike instanceof com.dwinovo.numen.api.entity.Mouse.Strike.Broke,
-                            "the mouse gave up on a block the server still held: " + strike);
+                            "the obsidian has not broken yet: " + strike);
                     Checks.assertTrue(helper, level.getBlockState(obsidian).isAir(), "the block is still there");
                     boolean dropped = !level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
                             new net.minecraft.world.phys.AABB(obsidian).inflate(4),
