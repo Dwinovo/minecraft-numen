@@ -12,6 +12,7 @@
     "GameTestServerTickMixin",
     "GameTestServerWorldMixin",
     "GameTestHelperBoundsInvoker",
+    "GameTestStructureBlockMixin",
     "GameTestTickOrderMixin",
     "ServerPlayerSpawnMixin",
     "StructureChunksMixin",
