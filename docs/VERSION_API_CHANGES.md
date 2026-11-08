@@ -251,7 +251,7 @@ registryAccess().registryOrThrow(Registries.STRUCTURE)  → registryAccess().loo
 
 **JEI 20(1.21.4)**:类别的类型是 `IRecipeType`(`RecipeType` 标了待删);配方的工作台查 `createCraftingStationLookup`(`createRecipeCatalystLookup` 待删)。
 
-**GameTest 坐标**:1.21.2 起 `GameTestHelper.absolutePos` 从内容原点起算(1.21.1 从内容下面那一格的结构方块起算),场地本身的摆法(内容从网格点起、结构方块在它下面一格、`clearSpaceForStructure` 在内容底下一格以下填石头)没变。上两节的做法是给模板垫一层(复刻原 y0 层),坐标对上了,场地却多了一层实心:地板变两层、地板下面的空格没了。这一轮实测两种垫法都和 1.21.1 不等价——复刻垫层让 `a_walk_refused_at_the_owners_wall_stops_there` 里她踩着多出来的实心从墙底下爬过去、又问了一遍地板;垫空层则让地板下面空出两格(1.21.1 是一格空、再往下是石头),`interact_own_vehicle_ends_immediately` 的水漏下去、`look_around_draws_walls_steps_and_water` 的图变了。所以模板一律不动,改由 GameTest 夹具的 `GameTestHelperOriginMixin` 把 `GameTestHelper` 换算坐标的四处(`absolutePos`、`relativePos`、`absoluteVec`、`relativeVec`)起点换回结构方块,场地与坐标都与 1.21.1 一模一样。Paper 上没有 Mixin,Paper 的 GameTest 在这一版上坐标差一格(见遗留)。
+**GameTest 坐标**:1.21.2 起 `GameTestHelper.absolutePos` 从内容原点起算(1.21.1 从内容下面那一格的结构方块起算),场地本身的摆法(内容从网格点起、结构方块在它下面一格、`clearSpaceForStructure` 在内容底下一格以下填石头)没变。上两节的做法是给模板垫一层(复刻原 y0 层),坐标对上了,场地却多了一层实心:地板变两层、地板下面的空格没了。这一轮实测两种垫法都和 1.21.1 不等价——复刻垫层让 `a_walk_refused_at_the_owners_wall_stops_there` 里她踩着多出来的实心从墙底下爬过去、又问了一遍地板;垫空层则让地板下面空出两格(1.21.1 是一格空、再往下是石头),`interact_own_vehicle_ends_immediately` 的水漏下去、`look_around_draws_walls_steps_and_water` 的图变了。所以模板一律不动,改由 GameTest 夹具的 `GameTestHelperOriginMixin` 把 `GameTestHelper` 换算坐标的四处(`absolutePos`、`relativePos`、`absoluteVec`、`relativeVec`)起点换回结构方块,场地与坐标都与 1.21.1 一模一样。
 
 **插件**:Curios(NeoForge,`10.0.1+1.21.4`)、Litematica(Fabric `0.21.7`/MaLiLib `0.23.5`;NeoForge 上是 Forgematica)、JEI(`20.0.0.4`,只有 NeoForge 构建,所以只接 NeoForge,Fabric 的 Builtin 与依赖去掉)。车万女仆、YSM、森罗物语没有 1.21.4 版;FTB Quests 的 maven 没有 2104;KubeJS 的 maven 从 2101 直接到 26.1:都不带。
 
