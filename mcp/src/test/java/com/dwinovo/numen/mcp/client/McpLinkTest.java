@@ -3,6 +3,9 @@ package com.dwinovo.numen.mcp.client;
 import com.dwinovo.numen.api.store.Io;
 import com.dwinovo.numen.mcp.client.auth.CredentialStore;
 import com.dwinovo.numen.mcp.client.auth.McpOAuth;
+import com.dwinovo.numen.mcp.protocol.CallToolResult;
+import com.dwinovo.numen.mcp.protocol.Content;
+import com.dwinovo.numen.mcp.protocol.Tool;
 import com.dwinovo.numen.mcp.server.McpAudit;
 import com.dwinovo.numen.mcp.server.McpConfig;
 import com.dwinovo.numen.mcp.server.McpEndpoint;
@@ -12,7 +15,7 @@ import com.dwinovo.numen.mcp.server.McpPresence;
 import com.dwinovo.numen.mcp.server.McpStrangers;
 import com.dwinovo.numen.mcp.server.McpToken;
 import com.dwinovo.numen.mcp.server.McpTokens;
-import io.modelcontextprotocol.spec.McpSchema;
+import com.google.gson.JsonObject;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 到一台服务器的连接:HTTP 的对着我们自己的端点(官方 SDK 的两头对接),stdio 的对着一个子进程里的 echo 服务器。
+ * 到一台服务器的连接:HTTP 的对着我们自己的端点(两头都是这个模块),stdio 的对着一个子进程里的 echo 服务器。
  * 请求头的优先顺序、工具表、调用的文字、工具表变了的通知、子进程收干净。
  */
 class McpLinkTest {
@@ -117,7 +120,7 @@ class McpLinkTest {
                 Map.of(), service, "", true, 5, 10);
     }
 
-    private McpLink open(McpServerSpec spec, Supplier<String> serviceKey, List<List<McpSchema.Tool>> changes) {
+    private McpLink open(McpServerSpec spec, Supplier<String> serviceKey, List<List<Tool>> changes) throws Exception {
         McpLink link = McpLink.open(spec, serviceKey, oauth(), "9.9.9",
                 new McpLink.Hooks(url -> { }, () -> { }, changes::add));
         links.add(link);
@@ -131,12 +134,12 @@ class McpLinkTest {
     // ---- HTTP ----
 
     @Test
-    void theServiceKeyFromTheKeychainIsTheBearerAndAHeaderInTheEntryBeatsIt() {
+    void theServiceKeyFromTheKeychainIsTheBearerAndAHeaderInTheEntryBeatsIt() throws Exception {
         String good = secret();
-        List<List<McpSchema.Tool>> changes = new CopyOnWriteArrayList<>();
+        List<List<Tool>> changes = new CopyOnWriteArrayList<>();
 
         McpLink viaKey = open(http(Map.of(), "svc"), () -> good, changes);
-        assertEquals(List.of("echo"), viaKey.tools().stream().map(McpSchema.Tool::name).toList());
+        assertEquals(List.of("echo"), viaKey.tools().stream().map(Tool::name).toList());
 
         McpLink viaHeader = open(http(Map.of("Authorization", "Bearer " + good), "svc"), () -> "numen_wrong", changes);
         assertEquals(1, viaHeader.tools().size(), "条目里写的头盖过钥匙串的 key");
@@ -144,21 +147,23 @@ class McpLinkTest {
 
     @Test
     void aWrongBearerFailsToConnectAndOpenLeavesNothingBehind() {
-        assertThrows(RuntimeException.class,
+        assertThrows(Exception.class,
                 () -> open(http(Map.of(), "svc"), () -> "numen_wrong", new CopyOnWriteArrayList<>()));
     }
 
     @Test
-    void aCallIsRenderedAsOneTextAndAnErrorResultIsAnError() {
+    void aCallIsRenderedAsOneTextAndAnErrorResultIsAnError() throws Exception {
         hostTools = List.of(tool("echo"), tool("broken"));
         String key = secret();
         McpLink link = open(http(Map.of(), "svc"), () -> key, new CopyOnWriteArrayList<>());
         link.tools();
+        JsonObject x = new JsonObject();
+        x.addProperty("x", 1);
 
-        McpCaller.Reply ok = link.call("echo", Map.of("x", 1));
-        McpCaller.Reply broken = link.call("broken", Map.of());
+        McpCaller.Reply ok = link.call("echo", x);
+        McpCaller.Reply broken = link.call("broken", new JsonObject());
 
-        assertEquals("a:echo\nb:{\"x\":1}", ok.text());
+        assertEquals("a:echo\nb:{\"x\":1}", ok.text(), "整数参数原样送到,不变成 1.0");
         assertFalse(ok.error());
         assertEquals("it broke", broken.text());
         assertTrue(broken.error());
@@ -167,7 +172,7 @@ class McpLinkTest {
     @Test
     void theClientIsToldWhenTheServersToolsChange() throws Exception {
         String key = secret();
-        List<List<McpSchema.Tool>> changes = new CopyOnWriteArrayList<>();
+        List<List<Tool>> changes = new CopyOnWriteArrayList<>();
         McpLink watcher = open(http(Map.of(), "svc"), () -> key, changes);
         watcher.tools();
 
@@ -177,30 +182,33 @@ class McpLinkTest {
         List<String> latest = List.of();
         for (int i = 0; i < 100 && !latest.equals(List.of("echo", "more")); i++) {
             Thread.sleep(50);
-            latest = changes.isEmpty() ? List.of()
-                    : changes.get(changes.size() - 1).stream().map(McpSchema.Tool::name).toList();
+            latest = changes.isEmpty() ? List.of() : changes.get(changes.size() - 1).stream().map(Tool::name).toList();
         }
-        assertEquals(List.of("echo", "more"), latest, "对方说工具表变了");
+        assertEquals(List.of("echo", "more"), latest, "对方说工具表变了,重列的全量交给宿主");
     }
 
     // ---- 渲染 ----
 
     @Test
     void everyKindOfContentBlockBecomesAReadableLine() {
-        McpSchema.CallToolResult result = McpSchema.CallToolResult.builder().content(List.of(
-                new McpSchema.TextContent("hello"),
-                new McpSchema.EmbeddedResource(null, new McpSchema.TextResourceContents("file:///a", "text/plain", "contents"), null),
-                new McpSchema.EmbeddedResource(null, new McpSchema.BlobResourceContents("file:///b", "image/png", "AAAA"), null),
-                new McpSchema.ImageContent(null, "AAAA", "image/png"))).isError(false).build();
+        CallToolResult result = new CallToolResult(List.of(
+                new Content.Text("hello"),
+                new Content.Resource("file:///a", "text/plain", "contents", null),
+                new Content.Resource("file:///b", "image/png", null, "AAAA"),
+                new Content.Image("AAAA", "image/png"),
+                new Content.Audio("AAAA", "audio/wav"),
+                new Content.ResourceLink("file:///c", "c", null)), null, false);
 
-        assertEquals("hello\ncontents\n[resource file:///b image/png]\n[image image/png]", McpLink.render(result).text());
+        assertEquals("hello\ncontents\n[resource file:///b image/png]\n[image image/png]\n[audio audio/wav]\n[resource file:///c]",
+                McpLink.render(result).text());
     }
 
     @Test
     void anEmptyResultSaysSoAndStructuredContentIsHandedBackVerbatim() {
-        assertEquals("(no content)", McpLink.render(McpSchema.CallToolResult.builder().content(List.of()).build()).text());
-        assertEquals("{a=1}", McpLink.render(McpSchema.CallToolResult.builder().content(List.of())
-                .structuredContent(Map.of("a", 1)).build()).text());
+        assertEquals("(no content)", McpLink.render(new CallToolResult(List.of(), null, false)).text());
+        JsonObject structured = new JsonObject();
+        structured.addProperty("a", 1);
+        assertEquals("{\"a\":1}", McpLink.render(new CallToolResult(List.of(), structured, false)).text());
     }
 
     // ---- stdio ----
@@ -214,8 +222,10 @@ class McpLinkTest {
 
         java.util.Set<Long> before = children();
         McpLink link = open(spec, () -> null, new CopyOnWriteArrayList<>());
-        assertEquals(List.of("echo"), link.tools().stream().map(McpSchema.Tool::name).toList());
-        assertEquals("echo:hi", link.call("echo", Map.of("word", "hi")).text());
+        assertEquals(List.of("echo"), link.tools().stream().map(Tool::name).toList());
+        JsonObject word = new JsonObject();
+        word.addProperty("word", "hi");
+        assertEquals("echo:hi", link.call("echo", word).text());
         java.util.Set<Long> started = new java.util.HashSet<>(children());
         started.removeAll(before);
         assertFalse(started.isEmpty(), "子进程在跑");

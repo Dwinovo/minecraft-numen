@@ -7,7 +7,7 @@ import com.dwinovo.numen.api.library.Library;
 import com.dwinovo.numen.api.library.LibraryHub;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.mcp.client.McpCaller;
-import io.modelcontextprotocol.spec.McpSchema;
+import com.dwinovo.numen.mcp.protocol.Tool;
 import com.dwinovo.numen.api.mcp.client.RemoteMcpTool;
 import com.google.gson.JsonObject;
 import org.junit.jupiter.api.AfterEach;
@@ -50,7 +50,9 @@ class OwnerToolsTest {
     }
 
     private static RemoteMcpTool tool(String server, String entry, Library.Group group, String remoteName) {
-        McpSchema.Tool def = McpSchema.Tool.builder(remoteName, java.util.Map.<String, Object>of("type", "object")).build();
+        com.google.gson.JsonObject schema = new com.google.gson.JsonObject();
+        schema.addProperty("type", "object");
+        Tool def = new Tool(remoteName, null, null, schema, null, java.util.List.of());
         return new RemoteMcpTool(server, entry, group, (name, args) -> new McpCaller.Reply("", false), def, Runnable::run,
                 new HashSet<>());
     }
