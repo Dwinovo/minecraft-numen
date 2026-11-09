@@ -21,7 +21,7 @@ import java.util.List;
  * <ol>
  *   <li>受保护资源元数据(RFC 9728):先读 401 的 {@code WWW-Authenticate} 里的 {@code resource_metadata},没有就探
  *       {@code /.well-known/oauth-protected-resource} 加上服务器路径、再不行去掉路径;里面写着授权服务器和能用的权限;</li>
- *   <li>授权服务器元数据(RFC 8414,OpenID Connect 的发现作后备):端点、PKCE、注册方式——这一步 Nimbus 做。</li>
+ *   <li>授权服务器元数据(RFC 8414,OpenID Connect 的发现作后备):端点、PKCE、注册方式——按规范的顺序取,解析交给 Nimbus。</li>
  * </ol>
  */
 final class Discovery {
@@ -86,7 +86,8 @@ final class Discovery {
         Exception last = null;
         for (String url : urls) {
             try {
-                AuthorizationServerMetadata metadata = AuthorizationServerMetadata.resolve(issuer, URI.create(url).toURL());
+                // 按这个地址原样取:Nimbus 的 resolve(issuer, url) 会在给的地址后面再接一段 well-known,地址就错了
+                AuthorizationServerMetadata metadata = AuthorizationServerMetadata.parse(getJson(url).toString());
                 if (!issuer.equals(metadata.getIssuer())) {
                     throw new IllegalStateException("the authorization server calls itself " + metadata.getIssuer()
                             + ", not " + issuer);
