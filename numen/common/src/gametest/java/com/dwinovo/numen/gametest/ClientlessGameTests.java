@@ -53,7 +53,7 @@ public class ClientlessGameTests {
 
     /** 这位玩家敲一条指令,指令回给他的话收进 {@code heard}(在送上线之前,还是带着语言键的 Component)。 */
     static void run(ServerPlayer player, String command, List<Component> heard) {
-        CommandSourceStack source = player.createCommandSourceStack().withSource(GameTestWorld.INSTANCE.hearing(heard::add));
+        CommandSourceStack source = player.createCommandSourceStack().withSource(GameTestWorld.hearing(heard::add));
         player.getServer().getCommands().performPrefixedCommand(source, command);
     }
 
