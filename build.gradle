@@ -5,7 +5,7 @@ plugins {
     id 'net.fabricmc.fabric-loom-remap' version '1.14.10' apply false
     // see https://projects.neoforged.net/neoforged/moddevgradle for new versions
     id 'net.neoforged.moddev' version '2.0.141' apply false
-    // mcp 模块把官方 MCP SDK 用的 Jackson 重定位进自己的产物(见 mcp/build.gradle),用它的 ShadowJar 任务类型
+    // mcp 模块把 OAuth 用的 Nimbus 重定位进自己的产物(见 mcp/build.gradle),用它的 ShadowJar 任务类型
     id 'com.gradleup.shadow' version '9.6.1' apply false
 }
 
