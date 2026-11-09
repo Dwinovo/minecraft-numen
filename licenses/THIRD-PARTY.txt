@@ -6,8 +6,9 @@ The `mcp` module implements the MCP server and client itself. Its OAuth client
 Nimbus libraries below: oauth2-oidc-sdk, nimbus-jose-jwt, content-type, lang-tag,
 json-smart, accessors-smart and jcip-annotations. They are merged into the Numen API
 jars on both loaders, with the packages `com.nimbusds`, `net.minidev` and `net.jcip`
-relocated under `com.dwinovo.numen.mcp.shaded`, so that they cannot clash with the
-older copies of these libraries that the game ships. The code is otherwise unchanged.
+relocated under `com.dwinovo.numen.mcp.shaded`, so that they cannot clash with other
+copies of these libraries: Minecraft 1.21.4 to 1.21.10 ship older ones (through msal4j),
+and other mods may ship their own. The code is otherwise unchanged.
 The texts below travel in every Numen API jar under `META-INF/third-party/` (this file
 and the `third-party/` folder of `licenses/`).
 
