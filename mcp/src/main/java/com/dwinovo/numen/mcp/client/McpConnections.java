@@ -1,7 +1,7 @@
 package com.dwinovo.numen.mcp.client;
 
 import com.dwinovo.numen.mcp.client.auth.McpOAuth;
-import io.modelcontextprotocol.spec.McpSchema;
+import com.dwinovo.numen.mcp.protocol.Tool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +39,7 @@ public final class McpConnections {
          *
          * @return 真登记上的名字;一个进不去不该带走其余的
          */
-        List<String> register(ServerHandle server, McpLink link, List<McpSchema.Tool> tools);
+        List<String> register(ServerHandle server, McpLink link, List<Tool> tools);
 
         /** 撤掉这些名字的工具。 */
         void remove(List<String> names);
@@ -199,7 +199,7 @@ public final class McpConnections {
         t.start();
     }
 
-    /** 连接,临时的失败重试几次;要登录的那一圈由 SDK 的授权钩子在握手里完成,登录失败不重试。 */
+    /** 连接,临时的失败重试几次;要登录的那一圈在握手里由传输的授权补救完成,登录失败不重试。 */
     private void connectServer(String id, McpServerSpec spec) {
         ServerHandle handle = handles.get(id);
         Exception last = null;
@@ -226,7 +226,7 @@ public final class McpConnections {
     }
 
     /** One connect attempt: open the link, register its tools. Throws on any failure. */
-    private void connectOnce(McpServerSpec spec, ServerHandle handle) {
+    private void connectOnce(McpServerSpec spec, ServerHandle handle) throws Exception {
         McpLink link = McpLink.open(spec, () -> keys.apply(spec.service()), oauth, clientVersion,
                 new McpLink.Hooks(url -> {
                     handle.authUrl = url;
@@ -238,18 +238,18 @@ public final class McpConnections {
                     if (handle.status == Status.AUTHORIZING) handle.status = Status.CONNECTING;
                 }, tools -> onToolsChanged(handle, tools)));
         try {
-            List<McpSchema.Tool> tools = link.tools();
+            List<Tool> tools = link.tools();
             handle.link = link;
             registerOnMain(link, handle, tools);
             LOG.info("[numen-mcp-client] '{}' connected — {} tool(s)", spec.name(), tools.size());
-        } catch (RuntimeException ex) {
+        } catch (Exception ex) {
             link.close();
             throw ex;
         }
     }
 
-    /** 对方说工具表变了(SDK 已经重新列过):换掉登记的。 */
-    private void onToolsChanged(ServerHandle handle, List<McpSchema.Tool> tools) {
+    /** 对方说工具表变了(连接已经重新列过):换掉登记的。 */
+    private void onToolsChanged(ServerHandle handle, List<Tool> tools) {
         McpLink link = handle.link;
         if (link == null) return;   // 还没连完:连完时会取全量
         runOnMain(() -> {
@@ -261,7 +261,7 @@ public final class McpConnections {
         });
     }
 
-    private void registerOnMain(McpLink link, ServerHandle handle, List<McpSchema.Tool> tools) {
+    private void registerOnMain(McpLink link, ServerHandle handle, List<Tool> tools) {
         runOnMain(() -> {
             // Disabled while this connect was in flight → tear the fresh connection back down.
             if (handle.status == Status.DISABLED) {

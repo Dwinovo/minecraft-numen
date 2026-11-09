@@ -1,40 +1,28 @@
 package com.dwinovo.numen.gametest;
 
 import com.dwinovo.numen.api.mcp.server.McpMode;
-import com.dwinovo.numen.mcp.McpJson;
+import com.dwinovo.numen.mcp.client.HttpClientTransport;
+import com.dwinovo.numen.mcp.client.McpClient;
+import com.dwinovo.numen.mcp.protocol.CallToolResult;
+import com.dwinovo.numen.mcp.protocol.Content;
+import com.dwinovo.numen.mcp.protocol.ElicitRequest;
+import com.dwinovo.numen.mcp.protocol.ElicitResult;
+import com.dwinovo.numen.mcp.protocol.Implementation;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import io.modelcontextprotocol.client.McpClient;
 import net.minecraft.gametest.framework.GameTestHelper;
-import io.modelcontextprotocol.client.McpSyncClient;
-import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
-import io.modelcontextprotocol.spec.McpSchema;
-
-import java.io.IOException;
-import java.net.Authenticator;
-import java.net.CookieHandler;
-import java.net.InetAddress;
-import java.net.ProxySelector;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Supplier;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLParameters;
 import net.minecraft.server.MinecraftServer;
+
+import java.net.URI;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 
 /**
- * 一个 MCP 客户端:官方 SDK 的客户端,进程内 HTTP,带令牌接入。用例里扮外部大脑(或渠道)。和真客户端一样接入后先列一次工具
- * (端点据此登记这张令牌看得到的工具),征询经 SDK 的回调答。
+ * 一个 MCP 客户端:mcp 模块自己的客户端,进程内 HTTP,带令牌接入。用例里扮外部大脑(或渠道)。和真客户端一样接入后先列一次工具
+ * (端点据此登记这张令牌看得到的工具),征询经它开的 GET 流到达、由 {@link McpClient.Elicitor} 答。
  */
 final class McpTestClient {
 
@@ -48,49 +36,46 @@ final class McpTestClient {
 
     private final int port;
     private final String secret;
-    /** 这个客户端发出、答复还没回来的 HTTP 请求:它自己调的,和 SDK 替它自动发的(收到工具表变了的通知后补发的 tools/list)。 */
-    private final AtomicInteger inFlight = new AtomicInteger();
-    private volatile McpSyncClient client;
+    private volatile McpClient client;
     private volatile Throwable failure;
     /** 端点向这个客户端弹的征询(表单请求),按到达顺序。 */
-    final List<McpSchema.ElicitFormRequest> asked = new CopyOnWriteArrayList<>();
+    final List<ElicitRequest> asked = new CopyOnWriteArrayList<>();
 
     McpTestClient(int port, String secret) {
         this.port = port;
         this.secret = secret;
     }
 
-    private McpClient.SyncSpec spec() {
-        HttpClientStreamableHttpTransport transport = HttpClientStreamableHttpTransport
-                .builder("http://127.0.0.1:" + port).jsonMapper(McpJson.MAPPER).endpoint("/mcp").openConnectionOnStartup(true)
-                .clientBuilder(new CountingClient.Builder(inFlight))
-                .addHttpRequestCustomizer((builder, method, uri, body, context) ->
-                        builder.header("Authorization", "Bearer " + secret))
-                .build();
-        return McpClient.sync(transport).jsonSchemaValidator(McpJson.SCHEMA_VALIDATOR).requestTimeout(Duration.ofSeconds(60))
-                .clientInfo(new McpSchema.Implementation("gametest-client", "1"));
-    }
-
     /** 接入:initialize,再列一次工具。列工具要服务端主线程办事,所以只能在别的线程上调;主线程上用 {@link #connectLater}。 */
-    void connect() {
-        connect(spec());
+    void connect() throws Exception {
+        connect((McpClient.Elicitor) null);
     }
 
     /** 接入,并声明自己会答 elicitation:{@code decision} 是人在弹窗里选的那一项的值。 */
-    void connect(String decision) {
-        connect(spec().capabilities(McpSchema.ClientCapabilities.builder()
-                        .elicitation(McpSchema.ClientCapabilities.Elicitation.builder()
-                                .form(new McpSchema.ClientCapabilities.Elicitation.Form()).build()).build())
-                .elicitation(request -> {
-                    asked.add(request);
-                    return new McpSchema.ElicitResult(McpSchema.ElicitResult.Action.ACCEPT,
-                            Map.of("decision", decision), null);
-                }));
+    void connect(String decision) throws Exception {
+        connect(request -> {
+            asked.add(request);
+            JsonObject content = new JsonObject();
+            content.addProperty("decision", decision);
+            return new ElicitResult(ElicitResult.Action.ACCEPT, content);
+        });
     }
 
-    private void connect(McpClient.SyncSpec spec) {
-        McpSyncClient opened = spec.build();
-        opened.initialize();
+    private void connect(McpClient.Elicitor elicitor) throws Exception {
+        HttpClientTransport transport = new HttpClientTransport(URI.create("http://127.0.0.1:" + port + "/mcp"),
+                Duration.ofSeconds(10), new HttpClientTransport.Authorization() {
+                    @Override
+                    public Map<String, String> headers() {
+                        return Map.of("Authorization", "Bearer " + secret);
+                    }
+
+                    @Override
+                    public boolean remedy(int status, List<String> wwwAuthenticate) {
+                        return false;
+                    }
+                });
+        McpClient opened = McpClient.connect(transport, new Implementation("gametest-client", null, "1", null, List.of()),
+                elicitor, () -> { }, Duration.ofSeconds(60), Duration.ofSeconds(60));
         opened.listTools();
         client = opened;
     }
@@ -105,7 +90,7 @@ final class McpTestClient {
         later(() -> connect(decision));
     }
 
-    private void later(Runnable connecting) {
+    private void later(ThrowingRunnable connecting) {
         CONNECTING.incrementAndGet();
         Thread handshake = new Thread(() -> {
             try {
@@ -179,233 +164,46 @@ final class McpTestClient {
     }
 
     /** 一次 tools/call,返回结果:{@code content} 是文本块数组,{@code isError} 是成败。 */
-    JsonObject callResult(String tool, JsonObject args) {
-        McpSchema.CallToolRequest.Builder request = McpSchema.CallToolRequest.builder().name(tool);
-        request.arguments(new com.google.gson.Gson().fromJson(args, Map.class));
-        McpSchema.CallToolResult result = client.callTool(request.build());
+    JsonObject callResult(String tool, JsonObject args) throws Exception {
+        CallToolResult result = client.callTool(tool, args);
         JsonArray content = new JsonArray();
-        for (McpSchema.Content block : result.content()) {
+        for (Content block : result.content()) {
             JsonObject text = new JsonObject();
             text.addProperty("type", "text");
-            text.addProperty("text", ((McpSchema.TextContent) block).text());
+            text.addProperty("text", ((Content.Text) block).text());
             content.add(text);
         }
         JsonObject out = new JsonObject();
         out.add("content", content);
-        out.addProperty("isError", Boolean.TRUE.equals(result.isError()));
+        out.addProperty("isError", result.isError());
         return out;
     }
 
     /** 一次 tools/call,返回回执的第一段文本。 */
-    String call(String tool, JsonObject args) {
+    String call(String tool, JsonObject args) throws Exception {
         return callResult(tool, args).getAsJsonArray("content").get(0).getAsJsonObject().get("text").getAsString();
     }
 
     /**
-     * 结束会话:先等自己发出的请求都收场,再 DELETE。守规矩的客户端就是这样走的;不等的话,结束之后才到服务端的请求得到 404,
-     * SDK 客户端会因此另开一个会话,她的驾驶席又被占上。等的请求可能要服务端主线程替它办事(列工具),所以等的时候主线程照常执行
-     * 排给它的任务。
+     * 结束会话:先等自己发出的请求都收场,再 DELETE。守规矩的客户端就是这样走的。等的请求可能要服务端主线程替它办事(列工具),
+     * 所以等的时候主线程照常执行排给它的任务。
      */
     void disconnect(MinecraftServer server) {
+        McpClient opened = client;
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(SETTLE_SECONDS);
-        server.managedBlock(() -> inFlight.get() == 0 || System.nanoTime() > deadline);
-        if (inFlight.get() != 0) {
-            throw new IllegalStateException(inFlight.get() + " request(s) of the gametest mcp client did not finish within "
+        server.managedBlock(() -> opened.pending() == 0 || System.nanoTime() > deadline);
+        if (opened.pending() != 0) {
+            throw new IllegalStateException(opened.pending() + " request(s) of the gametest mcp client did not finish within "
                     + SETTLE_SECONDS + " s");
         }
-        client.closeGracefully();
+        opened.close();
     }
 
     /** 用例收场:不等服务端,当场关掉;还在等回执的调用随之失败,扮外部大脑的脚本跟着跑完({@link #drive})。 */
     void close() {
-        McpSyncClient opened = client;
+        McpClient opened = client;
         if (opened != null) {
             opened.close();
-        }
-    }
-
-    /**
-     * 数在飞请求的 HTTP 客户端:请求交出去加一,答复头回来(或请求失败、被取消)减一。答复头回来时服务端已经收下这个请求、处理到
-     * 开始答复;开着的 GET 流也只数到它的答复头。其余原样交给 JDK 的客户端。
-     */
-    private static final class CountingClient extends HttpClient {
-        private final HttpClient delegate;
-        private final AtomicInteger inFlight;
-
-        private CountingClient(HttpClient delegate, AtomicInteger inFlight) {
-            this.delegate = delegate;
-            this.inFlight = inFlight;
-        }
-
-        @Override
-        public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request, HttpResponse.BodyHandler<T> handler) {
-            return counted(() -> delegate.sendAsync(request, handler));
-        }
-
-        @Override
-        public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request, HttpResponse.BodyHandler<T> handler,
-                                                                HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
-            return counted(() -> delegate.sendAsync(request, handler, pushPromiseHandler));
-        }
-
-        @Override
-        public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> handler)
-                throws IOException, InterruptedException {
-            inFlight.incrementAndGet();
-            try {
-                return delegate.send(request, handler);
-            } finally {
-                inFlight.decrementAndGet();
-            }
-        }
-
-        private <T> CompletableFuture<T> counted(Supplier<CompletableFuture<T>> send) {
-            inFlight.incrementAndGet();
-            CompletableFuture<T> sent;
-            try {
-                sent = send.get();
-            } catch (RuntimeException e) {
-                inFlight.decrementAndGet();
-                throw e;
-            }
-            sent.whenComplete((response, error) -> inFlight.decrementAndGet());
-            return sent;
-        }
-
-        @Override
-        public Optional<CookieHandler> cookieHandler() {
-            return delegate.cookieHandler();
-        }
-
-        @Override
-        public Optional<Duration> connectTimeout() {
-            return delegate.connectTimeout();
-        }
-
-        @Override
-        public Redirect followRedirects() {
-            return delegate.followRedirects();
-        }
-
-        @Override
-        public Optional<ProxySelector> proxy() {
-            return delegate.proxy();
-        }
-
-        @Override
-        public SSLContext sslContext() {
-            return delegate.sslContext();
-        }
-
-        @Override
-        public SSLParameters sslParameters() {
-            return delegate.sslParameters();
-        }
-
-        @Override
-        public Optional<Authenticator> authenticator() {
-            return delegate.authenticator();
-        }
-
-        @Override
-        public Version version() {
-            return delegate.version();
-        }
-
-        @Override
-        public Optional<Executor> executor() {
-            return delegate.executor();
-        }
-
-        @Override
-        public void shutdownNow() {
-            delegate.shutdownNow();
-        }
-
-        @Override
-        public void close() {
-            delegate.close();
-        }
-
-        /** SDK 的传输用它造客户端:设置原样交给 JDK 的 builder(默认同 SDK 的 HTTP/1.1),造出来的客户端套上计数。 */
-        private static final class Builder implements HttpClient.Builder {
-            private final HttpClient.Builder delegate = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1);
-            private final AtomicInteger inFlight;
-
-            Builder(AtomicInteger inFlight) {
-                this.inFlight = inFlight;
-            }
-
-            @Override
-            public Builder cookieHandler(CookieHandler cookieHandler) {
-                delegate.cookieHandler(cookieHandler);
-                return this;
-            }
-
-            @Override
-            public Builder connectTimeout(Duration duration) {
-                delegate.connectTimeout(duration);
-                return this;
-            }
-
-            @Override
-            public Builder sslContext(SSLContext sslContext) {
-                delegate.sslContext(sslContext);
-                return this;
-            }
-
-            @Override
-            public Builder sslParameters(SSLParameters sslParameters) {
-                delegate.sslParameters(sslParameters);
-                return this;
-            }
-
-            @Override
-            public Builder executor(Executor executor) {
-                delegate.executor(executor);
-                return this;
-            }
-
-            @Override
-            public Builder followRedirects(Redirect policy) {
-                delegate.followRedirects(policy);
-                return this;
-            }
-
-            @Override
-            public Builder version(Version version) {
-                delegate.version(version);
-                return this;
-            }
-
-            @Override
-            public Builder priority(int priority) {
-                delegate.priority(priority);
-                return this;
-            }
-
-            @Override
-            public Builder proxy(ProxySelector proxySelector) {
-                delegate.proxy(proxySelector);
-                return this;
-            }
-
-            @Override
-            public Builder authenticator(Authenticator authenticator) {
-                delegate.authenticator(authenticator);
-                return this;
-            }
-
-            @Override
-            public Builder localAddress(InetAddress localAddr) {
-                delegate.localAddress(localAddr);
-                return this;
-            }
-
-            @Override
-            public HttpClient build() {
-                return new CountingClient(delegate.build(), inFlight);
-            }
         }
     }
 }
