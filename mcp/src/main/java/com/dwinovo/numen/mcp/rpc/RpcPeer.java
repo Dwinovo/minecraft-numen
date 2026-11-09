@@ -68,6 +68,8 @@ public final class RpcPeer {
         private final Outbound replyTo;
         private final Thread thread;
         private volatile boolean cancelled;
+        /** 处理已经收场(由本对象的锁守着):此后撤回不再打断那条线程——它可能已经在执行器上跑别的任务了。 */
+        private boolean finished;
 
         private Incoming(RpcMessage.Request request, Outbound replyTo, Thread thread) {
             this.request = request;
@@ -173,10 +175,14 @@ public final class RpcPeer {
             response = incoming.cancelled ? null
                     : RpcMessage.Response.failed(request.id(), new RpcError(RpcError.INTERNAL_ERROR, String.valueOf(failed.getMessage())));
         } finally {
+            synchronized (incoming) {
+                incoming.finished = true;
+            }
             running.remove(request.id(), incoming);
         }
         if (incoming.cancelled) {
-            Thread.interrupted();   // 打断是冲着已经撤回的那个请求来的,线程回到执行器时不带着它
+            // 打断只会在收场之前、和 cancelled 一起落下(见 cancelled 方法),这里清掉它,线程回到执行器时不带着
+            Thread.interrupted();
             replyTo.dropped(request.id());
             return;
         }
@@ -193,9 +199,14 @@ public final class RpcPeer {
             return;   // 格式不对的撤回照规范不理
         }
         Incoming incoming = running.get(RpcMessage.canonicalId(id));
-        if (incoming != null && !incoming.request.method().equals("initialize")) {
-            incoming.cancelled = true;
-            incoming.thread.interrupt();
+        if (incoming == null || incoming.request.method().equals("initialize")) {
+            return;
+        }
+        synchronized (incoming) {
+            if (!incoming.finished) {
+                incoming.cancelled = true;
+                incoming.thread.interrupt();
+            }
         }
     }
 
