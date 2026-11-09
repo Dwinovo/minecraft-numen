@@ -10,8 +10,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * 交给外接大脑的正文,与传输无关:输入是同伴和这次调用,输出是几段文本。MCP 端点(不论手写还是将来换成官方 SDK、
- * 不论哪一代线路)只调这里,再把文本装进自己的结果信封。
+ * 交给外接大脑的正文,与传输无关:输入是同伴和这次调用,输出是几段文本。MCP 端点(不论哪个协议版本、哪种传输)只调这里,
+ * 再把文本装进自己的结果信封。
  *
  * <p>外接大脑看到的与内置大脑看到的是同一份、同一处生成:事件是 {@code EventQueue.render} 渲染的那一份(取件的口也是
  * 内脑用的那个),程序的结果是 {@link ToolOutcome#modelText}(内脑读的那句,不含结构化数据),她此刻的
