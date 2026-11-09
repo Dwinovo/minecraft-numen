@@ -26,7 +26,7 @@ Paper 子项目编译 common 时整包排除 `mixin`,这条规矩由编译本身
 
 - 两个插件,和模组一样分:`numen-api`(引擎)与 `numen`(内容,依赖前者)。第三方 Paper 插件可以像第三方模组一样只依赖 Numen API 给她加工具。
   `paper-plugin.yml`,`numen` 对 `numen-api` 声明 `join-classpath`,两者共用引擎的静态登记。
-- 构建:paperweight-userdev 1.7.2 + `paperDevBundle("1.21.1-R0.1-SNAPSHOT")`,Java 21,输出 Mojang 名(`MOJANG_PRODUCTION`),Paper 加载时不重映射。
+- 构建:paperweight-userdev 2.0.0-beta.22 + `paperDevBundle("1.21.4-R0.1-SNAPSHOT")`(1.21.2 起的开发包是新格式,要 paperweight 2.x 才认得),Java 21,输出 Mojang 名(`MOJANG_PRODUCTION`),Paper 加载时不重映射。
 - **common 对着 Paper 的开发包重新编译源码**,不直接打包对着原版编出来的字节码。Paper 改过不少原版方法的签名(例:`PlayerList.remove` 从 `void` 改成返回 `Component`),
   对着原版编的字节码在 Paper 上会 `NoSuchMethodError`,覆写会悄悄失效。重编解决调用;另做一个链接检查任务(ASM 扫 Paper 产物里每一处对服务端类的引用与覆写),进 CI,专抓"覆写失效"这类编得过但不对的。
 - 纯 JVM 模块(store、ai、agent、script、lua、permission)用 shadow 打进 `numen-api` 插件。`ui` 和 commonmark 只给客户端,不带。Gson、slf4j、Brigadier、netty 用 Paper 自带的。
@@ -142,7 +142,7 @@ Paper、Leaves、spark、WorldEdit、PacketEvents、ProtocolLib 是 GPL,Citizens
 
 ## 附:第 2 步落地时的出入
 
-- **run-paper 用 3.1.0**(要 Gradle 9.7 以上,本仓库是 9.7.1),不是 2.x:2.x 走已下线的 `api.papermc.io/v2`(410),找不到 Paper 版本;3.x 走 `fill.papermc.io`。paperweight-userdev 1.7.2 照常工作。
+- **run-paper 用 3.1.0**(要 Gradle 9.7 以上,本仓库是 9.7.1),不是 2.x:2.x 走已下线的 `api.papermc.io/v2`(410),找不到 Paper 版本;3.x 走 `fill.papermc.io`。paperweight-userdev 2.0.0-beta.22 照常工作。
 - **配置根是 `plugins/numen/`(小写)**,不是 `plugins/Numen/`:`NumenPaths.config()` 是"配置目录 + `Constants.CONFIG_ROOT`(`numen`)",Linux 区分大小写,
   只有小写是同一个答案。插件名也用模组 id(`numen_api`、`numen`),`modIds()` 因此直接等于资源命名空间;`modIds()` 列的是 Numen API 自己和声明依赖它的插件。
 - **纯 JVM 模块不用 shadow 插件**,和 NeoForge / Fabric 的发行 jar 一样把各模块的输出平铺进 jar(Gson、slf4j 等用 Paper 自带的,本来就不该打进去),少一个构建插件。
