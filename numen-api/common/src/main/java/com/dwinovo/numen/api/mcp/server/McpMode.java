@@ -73,9 +73,9 @@ public final class McpMode {
 
     /**
      * 外部大脑客户端上的人:经 elicitation 问。服务器在跑才有;跟着服务器起停。
-     * 外部大脑驾驶时,要问主人的事问的是坐在电脑前的人,不是驾驶席上的模型:借大脑令牌的客户端正在进行的调用去问
-     * ({@link McpEndpoint#ask}),人的选择走和游戏里答复框同一个 {@code ConsentDesk.reply}。客户端没声明会答 elicitation 的,
-     * 征询就挂到主人进游戏答,到期按拒绝。服务端没有任何让模型自己答的口。
+     * 外部大脑驾驶时,要问主人的事问的是坐在电脑前的人,不是驾驶席上的模型:经大脑令牌的客户端开着的流去问
+     * ({@link McpEndpoint#ask}),主人在别处答了或到期就撤回;人的选择走和游戏里答复框同一个 {@code ConsentDesk.reply}。
+     * 客户端没声明会答 elicitation 的,征询就挂到主人进游戏答,到期按拒绝。服务端没有任何让模型自己答的口。
      */
     private final ConsentVenues.Venue elicitation = new ConsentVenues.Venue() {
         @Override
