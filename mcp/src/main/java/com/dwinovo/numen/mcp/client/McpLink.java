@@ -1,5 +1,6 @@
 package com.dwinovo.numen.mcp.client;
 
+import com.dwinovo.numen.mcp.McpThreads;
 import com.dwinovo.numen.mcp.client.auth.McpOAuth;
 import com.dwinovo.numen.mcp.protocol.CallToolResult;
 import com.dwinovo.numen.mcp.protocol.Content;
@@ -104,7 +105,7 @@ public final class McpLink implements McpCaller, AutoCloseable {
         if (client == null) {
             return;   // 还在握手:连上后宿主会取全量
         }
-        Thread.ofVirtual().name("numen-mcp-relist-" + spec.name()).start(() -> {
+        McpThreads.start("numen-mcp-relist-" + spec.name(), () -> {
             try {
                 changed.accept(tools());
             } catch (Exception failed) {

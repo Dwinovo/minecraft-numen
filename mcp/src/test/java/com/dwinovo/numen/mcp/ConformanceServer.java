@@ -24,7 +24,6 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.Executors;
 
 /**
  * 给官方一致性测试({@code npx @modelcontextprotocol/conformance server --url ...})用的入口,不是产品代码:起一个真的
@@ -61,7 +60,7 @@ public final class ConformanceServer {
 
         HttpClient http = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
         HttpServer proxy = HttpServer.create(new InetSocketAddress("127.0.0.1", proxyPort), 0);
-        proxy.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
+        proxy.setExecutor(McpThreads.perTask("conformance-proxy-"));
         proxy.createContext("/mcp", exchange -> {
             try {
                 byte[] body = exchange.getRequestBody().readAllBytes();

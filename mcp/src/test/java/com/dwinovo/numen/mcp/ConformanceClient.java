@@ -48,7 +48,7 @@ public final class ConformanceClient {
         HttpClient browser = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.ALWAYS).build();
         McpServerSpec spec = new McpServerSpec("conformance", "http", url, Map.of(), "", List.of(), Map.of(), "", "", true, 10, 30);
         McpLink link = McpLink.open(spec, () -> null, oauth, "0.0.0", new McpLink.Hooks(
-                authUrl -> Thread.ofVirtual().start(() -> {
+                authUrl -> McpThreads.start("conformance-browser", () -> {
                     try {
                         browser.send(HttpRequest.newBuilder(URI.create(authUrl)).GET().build(),
                                 HttpResponse.BodyHandlers.discarding());

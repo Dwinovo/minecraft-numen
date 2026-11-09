@@ -1,5 +1,6 @@
 package com.dwinovo.numen.mcp.client;
 
+import com.dwinovo.numen.mcp.McpThreads;
 import com.dwinovo.numen.mcp.protocol.ProtocolVersion;
 import com.dwinovo.numen.mcp.rpc.RpcException;
 import com.dwinovo.numen.mcp.rpc.RpcMessage;
@@ -20,7 +21,7 @@ import java.util.concurrent.TimeUnit;
  * 它的标准错误是日志,记到调试日志里。关的时候照规范先关标准输入等它自己退出,不退再收掉它和它起的子孙进程
  * (Windows 上 {@code cmd /c npx …} 真正跑的是孙进程)。
  *
- * <p>线程:标准输出与标准错误各一条虚拟线程读;写在调用方线程上,一次一条。
+ * <p>线程:标准输出与标准错误各一条线程读;写在调用方线程上,一次一条。
  */
 public final class StdioClientTransport implements ClientTransport {
 
@@ -50,7 +51,7 @@ public final class StdioClientTransport implements ClientTransport {
         process = builder.start();
         stdin = process.getOutputStream();
         Process started = process;
-        Thread.ofVirtual().name("numen-mcp-stdio-out").start(() -> {
+        McpThreads.start("numen-mcp-stdio-out", () -> {
             try (BufferedReader out = new BufferedReader(new InputStreamReader(started.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = out.readLine()) != null) {
@@ -68,7 +69,7 @@ public final class StdioClientTransport implements ClientTransport {
             }
             inbound.closed(new IOException("the stdio server " + command.get(0) + " exited"));
         });
-        Thread.ofVirtual().name("numen-mcp-stdio-err").start(() -> {
+        McpThreads.start("numen-mcp-stdio-err", () -> {
             try (BufferedReader err = new BufferedReader(new InputStreamReader(started.getErrorStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = err.readLine()) != null) {

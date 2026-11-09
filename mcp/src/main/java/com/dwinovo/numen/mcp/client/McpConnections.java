@@ -1,5 +1,6 @@
 package com.dwinovo.numen.mcp.client;
 
+import com.dwinovo.numen.mcp.McpThreads;
 import com.dwinovo.numen.mcp.client.auth.McpOAuth;
 import com.dwinovo.numen.mcp.protocol.Tool;
 import org.slf4j.Logger;
@@ -194,9 +195,7 @@ public final class McpConnections {
     }
 
     private void spawnConnect(String id, McpServerSpec spec) {
-        Thread t = new Thread(() -> connectServer(id, spec), "numen-mcp-connect-" + spec.name());
-        t.setDaemon(true);
-        t.start();
+        McpThreads.start("numen-mcp-connect-" + spec.name(), () -> connectServer(id, spec));
     }
 
     /** 连接,临时的失败重试几次;要登录的那一圈在握手里由传输的授权补救完成,登录失败不重试。 */

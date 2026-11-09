@@ -1,5 +1,6 @@
 package com.dwinovo.numen.mcp.server;
 
+import com.dwinovo.numen.mcp.McpThreads;
 import com.sun.net.httpserver.HttpServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,7 +11,6 @@ import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
@@ -27,7 +27,7 @@ import java.util.function.LongSupplier;
  *   <li><b>问人</b>({@link Questions}):{@link #ask} 经这位主人某个会答 elicitation 的客户端开的流弹给坐在电脑前的人,{@link #withdraw} 撤回。</li>
  * </ul>
  *
- * <p>线程:每个 HTTP 请求与每个请求的处理各一条虚拟线程(都在这里的执行器上);{@link McpHost} 的调用占着一条等到做完。HTTP 服务器的
+ * <p>线程:每个 HTTP 请求与每个请求的处理各一条线程(都在这里的执行器上);{@link McpHost} 的调用占着一条等到做完。HTTP 服务器的
  * 分派线程是守护线程:崩溃、被强杀时 {@link #stop} 到不了,也不会拖住 JVM 退出。{@link #stop} 先结束所有会话(流随之收场),再关监听,
  * 最后打断还在等宿主的处理线程并等它们散完。
  */
@@ -70,7 +70,7 @@ public final class McpEndpoint {
      * 绑到配置的地址与端口并开始接请求。端口被占用时抛 {@link BindException},原因写明哪个端口、去哪改;不换别的端口。
      */
     public void start() throws IOException, InterruptedException {
-        ExecutorService pool = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("numen-mcp-", 0).factory());
+        ExecutorService pool = McpThreads.perTask("numen-mcp-");
         ToolTable table = new ToolTable(host, config, tokenId -> sessions.toolsChanged(tokenId));
         SessionRegistry registry = new SessionRegistry(new ServerMethods(host, config, table, limits, audit, presence),
                 presence, pool, clock);
@@ -113,8 +113,8 @@ public final class McpEndpoint {
         this.sessions = registry;
         this.questions = asked;
         this.server = http;
-        // 分派线程的守护属性随起它的线程:从一条守护线程上起
-        Thread starter = Thread.ofPlatform().daemon().name("numen-mcp-start").start(http::start);
+        // 分派线程的守护属性随起它的线程:从 McpThreads 起的(守护)线程上起
+        Thread starter = McpThreads.start("numen-mcp-start", http::start);
         starter.join();
     }
 
