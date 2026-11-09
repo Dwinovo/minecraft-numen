@@ -1,5 +1,3 @@
-import com.dwinovo.numen.build.Modules
-
 plugins {
     id 'numen-loader'
     id 'net.minecraftforge.gradle'
@@ -9,7 +7,6 @@ plugins {
 // 要读 Numen 的 gametest 与 testFixtures 源码集、Numen API 的开发期 gametest 源码集,它们得先配置好
 evaluationDependsOn(':numen:common')
 evaluationDependsOn(':numen-api:forge')
-evaluationDependsOn(':mcp')
 
 // ForgeGradle 把开发期的 Forge(版本带 _mapped_,只在本机的 FG 缓存里有)记成依赖,原样发出去第三方解析不了:
 // fg.component 把它从 POM 里去掉,并且不发 Gradle 模块元数据(第三方与 fg.deobf 都按 POM 解析)。
@@ -182,7 +179,7 @@ tasks.matching { it.name == 'runGameTestServer' }.configureEach {
 sourceSets.main.resources.srcDir 'src/generated/resources'
 sourceSets.main.resources.exclude '.cache/**'
 
-// 发行物是 jarJar 产的 -all:Numen API 与它的内嵌库(聊天气泡的 Markdown 解析库、mcp 模块的其余第三方库)并排嵌在 META-INF/jarjar/ 里。
+// 发行物是 jarJar 产的 -all:Numen API 与它的内嵌库(聊天气泡的 Markdown 解析库)并排嵌在 META-INF/jarjar/ 里。
 // 内嵌库挂在这里而不是 Numen API 的 jar 里:Numen API 在 Forge 上随 Numen 发,ForgeGradle 的 jarJar 只认坐标,嵌不进别的项目的 -all。
 jarJar.enable()
 
@@ -201,10 +198,7 @@ dependencies {
     // 单元测试之外的开发运行要 Numen API 在类路径上的内嵌库(运行配置里 Numen API 是源码集,不读 jarJar)
     minecraftLibrary "org.commonmark:commonmark:${commonmark_version}"
     minecraftLibrary "org.commonmark:commonmark-ext-gfm-strikethrough:${commonmark_version}"
-    Modules.nestedLibraries(project(':mcp')).each { coordinate ->
-        minecraftLibrary(coordinate) { transitive = false }
-    }
-    // mcp 产出的官方 SDK 与重定位过的库平铺在 Numen API 的 jar 里,开发运行用的 devJar 也一样(见 numen-api/forge/build.gradle)
+    // mcp 产出的重定位过的 Nimbus 平铺在 Numen API 的 jar 里,开发运行用的 devJar 也一样(见 numen-api/forge/build.gradle)
 
     // Numen API 在发行物里由下面的 jarJar 带进来;开发运行里是同仓的源码集(上面的 mods 块)。编译期看不见它的内部类
     // (见 numen-loader.gradle 的瘦 api jar)。transitive=false:只嵌 Numen API 的 jar,Forge/MC 依赖由加载器提供。
@@ -219,13 +213,6 @@ dependencies {
     jarJar("org.commonmark:commonmark-ext-gfm-strikethrough:${commonmark_version}") {
         transitive = false
         jarJar.ranged(it, "[${commonmark_version},0.31)")
-    }
-    Modules.nestedLibraries(project(':mcp')).each { coordinate ->
-        def libVersion = coordinate.split(':')[2]
-        jarJar(coordinate) {
-            transitive = false
-            jarJar.ranged(it, "[${libVersion},)")
-        }
     }
 }
 

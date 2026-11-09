@@ -11,7 +11,6 @@
  *   <li>{@code mixins}:成品里由本体 jar 清单挂上、开发运行要显式挂的联动 mixin 配置(没有就空表)。</li>
  * </ul>
  */
-import com.dwinovo.numen.build.Modules
 
 evaluationDependsOn(':numen:forge')
 evaluationDependsOn(':numen-api:forge')
@@ -75,10 +74,7 @@ dependencies {
     // 运行里 Numen API 是开发期打的 jar,不读 jarJar:它的内嵌库在这里进运行类路径
     minecraftLibrary "org.commonmark:commonmark:${commonmark_version}"
     minecraftLibrary "org.commonmark:commonmark-ext-gfm-strikethrough:${commonmark_version}"
-    Modules.nestedLibraries(project(':mcp')).each { coordinate ->
-        minecraftLibrary(coordinate) { transitive = false }
-    }
-    // mcp 产出的官方 SDK 与重定位过的库平铺在 Numen API 的 devJar 里
+    // mcp 产出的重定位过的 Nimbus 平铺在 Numen API 的 devJar 里
     gameTestRunRuntimeOnly files(numenDev.flatMap { it.archiveFile }, apiForge.tasks.named('devJar', Zip).flatMap { it.archiveFile },
             apiForge.tasks.named('gametestDevJar', Zip).flatMap { it.archiveFile })
 }
