@@ -136,7 +136,7 @@ public final class McpOAuth {
         store.remove(keyOf(spec.name()));
     }
 
-    // ---- SDK 的授权错误钩子 ----
+    // ---- 请求被拒时的补救(传输的授权补救调它) ----
 
     /**
      * 请求被 401/403 拒了:能补救就补救,返回要不要重发。
