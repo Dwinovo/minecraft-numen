@@ -1,5 +1,6 @@
 package com.dwinovo.numen.mcp.client;
 
+import com.dwinovo.numen.mcp.McpThreads;
 import com.dwinovo.numen.mcp.protocol.CallToolResult;
 import com.dwinovo.numen.mcp.protocol.ElicitRequest;
 import com.dwinovo.numen.mcp.protocol.ElicitResult;
@@ -20,7 +21,6 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -36,7 +36,7 @@ import java.util.concurrent.TimeoutException;
  *   <li>{@link #close} 了就是关了:之后的请求一律失败,不会因为关之后到的 404 又去开会话。</li>
  * </ul>
  *
- * <p>线程:任何线程;请求阻塞到答复或时限。对方的请求在虚拟线程上答。
+ * <p>线程:任何线程;请求阻塞到答复或时限。对方的请求各在一条线程上答。
  */
 public final class McpClient implements AutoCloseable {
 
@@ -57,8 +57,7 @@ public final class McpClient implements AutoCloseable {
     private final Elicitor elicitor;
     private final Duration requestTimeout;
     private final Duration initializeTimeout;
-    private final RpcPeer peer = new RpcPeer(Executors.newThreadPerTaskExecutor(
-            Thread.ofVirtual().name("numen-mcp-client-", 0).factory()));
+    private final RpcPeer peer = new RpcPeer(McpThreads.perTask("numen-mcp-client-"));
     private final ClientTransport.Inbound inbound = new ClientTransport.Inbound() {
         @Override
         public void message(RpcMessage message) {

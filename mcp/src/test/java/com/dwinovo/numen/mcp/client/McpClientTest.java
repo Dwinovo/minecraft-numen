@@ -1,5 +1,6 @@
 package com.dwinovo.numen.mcp.client;
 
+import com.dwinovo.numen.mcp.McpThreads;
 import com.dwinovo.numen.mcp.protocol.Content;
 import com.dwinovo.numen.mcp.protocol.Implementation;
 import com.dwinovo.numen.mcp.protocol.ProtocolVersion;
@@ -21,7 +22,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -44,7 +44,7 @@ class McpClientTest {
         Server(Script script) throws IOException {
             this.script = script;
             http = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-            http.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
+            http.setExecutor(McpThreads.perTask("test-server-"));
             http.createContext("/mcp", exchange -> {
                 String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
                 JsonObject message = body.isBlank() ? null : JsonParser.parseString(body).getAsJsonObject();
@@ -224,7 +224,7 @@ class McpClientTest {
         });
         connect(Duration.ofSeconds(10), () -> { });
         AtomicInteger failed = new AtomicInteger();
-        Thread list = Thread.ofVirtual().start(() -> {
+        Thread list = McpThreads.start("test-list", () -> {
             try {
                 client.listTools();
             } catch (Exception expected) {

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.mcp.rpc;
 
+import com.dwinovo.numen.mcp.McpThreads;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import org.junit.jupiter.api.Test;
@@ -9,7 +10,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -44,7 +44,7 @@ class RpcPeerTest {
     }
 
     private static RpcPeer peer() {
-        return new RpcPeer(Executors.newVirtualThreadPerTaskExecutor());
+        return new RpcPeer(McpThreads.perTask("test-peer-"));
     }
 
     @Test
