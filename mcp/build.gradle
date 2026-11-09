@@ -64,6 +64,8 @@ dependencies {
 
 test {
     useJUnitPlatform()
+    // 网络用例出了缺陷会干等(握手等授权最长五分钟):每条最多一分钟,卡住的当场红
+    systemProperty 'junit.jupiter.execution.timeout.default', '60 s'
 }
 
 /*
