@@ -67,8 +67,8 @@ test {
 
 /*
  * OAuth 的通用部分(PKCE、令牌端点、元数据、动态注册、JWT/issuer 校验)用 Nimbus:oauth2-oidc-sdk 与它带的 nimbus-jose-jwt、
- * content-type、lang-tag、json-smart、accessors-smart、jcip-annotations。同一段版本里游戏也自带这一族(oauth2-oidc-sdk 11.18、
- * nimbus-jose-jwt 9.40、json-smart 2.5.1,客户端钉死),比我们要的旧;同名的包只会有一份赢,输的一方缺类缺方法。
+ * content-type、lang-tag、json-smart、accessors-smart、jcip-annotations。1.20.1 的游戏本身不带这一族(客户端与服务端的库表里都没有,
+ * Forge、Fabric 加载器也不带),但整合包里的别的模组可能带着别的版本;同名的包只会有一份赢,输的一方缺类缺方法。
  * (逐版核对过 1.20.1 到 26.3 的客户端 json 与服务端 libraries.list、NeoForge/Forge/Fabric 加载器的库,撞的只有这一族。)
  *
  * 所以这一族打成一份 jar(下面的 relocatedNimbus),com.nimbusds、net.minidev、net.jcip 重定位到 com.dwinovo.numen.mcp.shaded 下,
