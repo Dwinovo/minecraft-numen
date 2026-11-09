@@ -1,6 +1,7 @@
 package com.dwinovo.numen.mcp.server;
 
 import com.dwinovo.numen.api.store.Io;
+import com.dwinovo.numen.mcp.McpThreads;
 import com.dwinovo.numen.mcp.client.HttpClientTransport;
 import com.dwinovo.numen.mcp.client.McpClient;
 import com.dwinovo.numen.mcp.protocol.CallToolResult;
@@ -554,7 +555,7 @@ class McpEndpointTest {
         String session = rawSession(secret, INIT);
         post(secret, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}", "Mcp-Session-Id", session);
         AtomicReference<HttpResponse<String>> held = new AtomicReference<>();
-        Thread call = Thread.ofVirtual().start(() -> {
+        Thread call = McpThreads.start("test-call", () -> {
             try {
                 held.set(post(secret, "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"hold\"}}",
                         "Mcp-Session-Id", session));
