@@ -5,7 +5,7 @@ import com.dwinovo.numen.api.agent.tool.NumenTool;
 import com.dwinovo.numen.api.library.Library;
 import com.dwinovo.numen.mcp.client.McpConnections;
 import com.dwinovo.numen.mcp.client.McpLink;
-import io.modelcontextprotocol.spec.McpSchema;
+import com.dwinovo.numen.mcp.protocol.Tool;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -46,10 +46,10 @@ public final class RemoteTools implements McpConnections.Registry {
      * 少一个是少一个能力,全没了是这台服务器白接。
      */
     @Override
-    public List<String> register(McpConnections.ServerHandle server, McpLink link, List<McpSchema.Tool> tools) {
+    public List<String> register(McpConnections.ServerHandle server, McpLink link, List<Tool> tools) {
         List<String> registered = new ArrayList<>();
         Set<String> taken = new HashSet<>();
-        for (McpSchema.Tool tool : tools) {
+        for (Tool tool : tools) {
             RemoteMcpTool wrapped = new RemoteMcpTool(server.name(), server.id(), group, link, tool, main, taken);
             try {
                 register.accept(wrapped);
