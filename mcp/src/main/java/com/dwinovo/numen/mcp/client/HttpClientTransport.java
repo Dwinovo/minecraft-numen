@@ -1,5 +1,6 @@
 package com.dwinovo.numen.mcp.client;
 
+import com.dwinovo.numen.mcp.McpThreads;
 import com.dwinovo.numen.mcp.protocol.McpMethods;
 import com.dwinovo.numen.mcp.protocol.ProtocolVersion;
 import com.dwinovo.numen.mcp.rpc.RpcException;
@@ -38,7 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   <li><b>关</b>:DELETE 结束会话,开着的流断开。关了就是关了。</li>
  * </ul>
  *
- * <p>线程:请求在各自的虚拟线程上送出与读答复;GET 流一条虚拟线程读。
+ * <p>线程:请求在各自的线程上送出与读答复;GET 流一条线程读。
  */
 public final class HttpClientTransport implements ClientTransport {
 
@@ -104,7 +105,7 @@ public final class HttpClientTransport implements ClientTransport {
             throw new IOException("the transport is closed");
         }
         if (message instanceof RpcMessage.Request request) {
-            Thread.ofVirtual().name("numen-mcp-client-post").start(() -> {
+            McpThreads.start("numen-mcp-client-post", () -> {
                 try {
                     post(message, request.id());
                 } catch (IOException failed) {
@@ -242,7 +243,7 @@ public final class HttpClientTransport implements ClientTransport {
             return;
         }
         int session = generation.get();
-        Thread.ofVirtual().name("numen-mcp-client-listen").start(() -> listen(response.body(), session));
+        McpThreads.start("numen-mcp-client-listen", () -> listen(response.body(), session));
     }
 
     /** 读 GET 流;服务端关了它就隔一会儿再开(带上最后的事件编号),直到这个会话不在了或开不了。 */
