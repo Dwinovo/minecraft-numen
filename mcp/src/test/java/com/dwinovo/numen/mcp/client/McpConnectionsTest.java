@@ -3,7 +3,7 @@ package com.dwinovo.numen.mcp.client;
 import com.dwinovo.numen.mcp.client.auth.McpOAuth;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import io.modelcontextprotocol.spec.McpSchema;
+import com.dwinovo.numen.mcp.protocol.Tool;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -45,7 +45,7 @@ class McpConnectionsTest {
         }, System::currentTimeMillis);
         return new McpConnections(Runnable::run, () -> changes.add(1), oauth, new McpConnections.Registry() {
             @Override
-            public List<String> register(McpConnections.ServerHandle server, McpLink link, List<McpSchema.Tool> tools) {
+            public List<String> register(McpConnections.ServerHandle server, McpLink link, List<Tool> tools) {
                 return List.of();
             }
 
