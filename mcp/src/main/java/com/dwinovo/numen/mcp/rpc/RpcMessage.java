@@ -52,31 +52,30 @@ public sealed interface RpcMessage {
     default JsonObject toJson() {
         JsonObject o = new JsonObject();
         o.addProperty("jsonrpc", VERSION);
-        switch (this) {
-            case Request r -> {
-                o.add("id", r.id());
-                o.addProperty("method", r.method());
-                o.add("params", r.params());
+        // Java 17 没有 switch 的类型模式:按密封的三种逐个判断,剩下的只能是答复
+        if (this instanceof Request r) {
+            o.add("id", r.id());
+            o.addProperty("method", r.method());
+            o.add("params", r.params());
+        } else if (this instanceof Notification n) {
+            o.addProperty("method", n.method());
+            // 这一代游戏带的 Gson 是 2.10,JsonObject 还没有 isEmpty(2.10.1 才有)
+            if (n.params().size() != 0) {
+                o.add("params", n.params());
             }
-            case Notification n -> {
-                o.addProperty("method", n.method());
-                if (!n.params().isEmpty()) {
-                    o.add("params", n.params());
+        } else {
+            Response r = (Response) this;
+            o.add("id", r.id() == null ? JsonNull.INSTANCE : r.id());
+            if (r.error() != null) {
+                JsonObject e = new JsonObject();
+                e.addProperty("code", r.error().code());
+                e.addProperty("message", r.error().message());
+                if (r.error().data() != null) {
+                    e.add("data", r.error().data());
                 }
-            }
-            case Response r -> {
-                o.add("id", r.id() == null ? JsonNull.INSTANCE : r.id());
-                if (r.error() != null) {
-                    JsonObject e = new JsonObject();
-                    e.addProperty("code", r.error().code());
-                    e.addProperty("message", r.error().message());
-                    if (r.error().data() != null) {
-                        e.add("data", r.error().data());
-                    }
-                    o.add("error", e);
-                } else {
-                    o.add("result", r.result() == null ? new JsonObject() : r.result());
-                }
+                o.add("error", e);
+            } else {
+                o.add("result", r.result() == null ? new JsonObject() : r.result());
             }
         }
         return o;

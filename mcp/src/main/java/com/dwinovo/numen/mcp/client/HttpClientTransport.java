@@ -23,7 +23,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -78,6 +81,11 @@ public final class HttpClientTransport implements ClientTransport {
     private final HttpClient http;
     /** 开着的流:关的时候一起断开。 */
     private final Set<InputStream> streams = ConcurrentHashMap.newKeySet();
+    /**
+     * 在等答复头的交换:关的时候撤掉。Java 17 的 HttpClient 没有 shutdownNow(Java 21 才有);这一代停下在途请求的做法是对
+     * sendAsync 交回的 future 调 cancel(true)(JDK 16 起会断开这次交换)。客户端自己的选择器线程在没人引用它之后自己退出。
+     */
+    private final Set<CompletableFuture<?>> exchanges = ConcurrentHashMap.newKeySet();
     /** 第几个会话:旧会话的 GET 流发现换了会话就不再接。 */
     private final AtomicInteger generation = new AtomicInteger();
     private volatile Inbound inbound;
@@ -315,7 +323,8 @@ public final class HttpClientTransport implements ClientTransport {
                 Thread.currentThread().interrupt();
             }
         }
-        http.shutdownNow();
+        // 在途的交换撤掉(Java 17 没有 shutdownNow,见 exchanges)
+        exchanges.forEach(exchange -> exchange.cancel(true));
     }
 
     // ---- 零件 ----
@@ -343,13 +352,7 @@ public final class HttpClientTransport implements ClientTransport {
     /** 发一个 HTTP 请求;401/403 交给授权补救,补救成了照新的授权头重发。 */
     private HttpResponse<InputStream> exchange(RequestFactory factory) throws IOException {
         for (int remedies = 0; ; remedies++) {
-            HttpResponse<InputStream> response;
-            try {
-                response = http.send(factory.build().build(), HttpResponse.BodyHandlers.ofInputStream());
-            } catch (InterruptedException interrupted) {
-                Thread.currentThread().interrupt();
-                throw new InterruptedIOException("interrupted while talking to " + endpoint);
-            }
+            HttpResponse<InputStream> response = send(factory.build().build());
             int status = response.statusCode();
             if (status != 401 && status != 403) {
                 return response;
@@ -367,6 +370,36 @@ public final class HttpClientTransport implements ClientTransport {
             if (!retry) {
                 throw new IOException("HTTP " + status + ": the server refused the authorization");
             }
+        }
+    }
+
+    /** 发出去、等到答复头。登记在 {@link #exchanges} 里,关的时候撤掉;关了之后发的当场撤掉。 */
+    private HttpResponse<InputStream> send(HttpRequest request) throws IOException {
+        CompletableFuture<HttpResponse<InputStream>> pending = http.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream());
+        exchanges.add(pending);
+        try {
+            if (closed) {
+                pending.cancel(true);
+            }
+            return pending.get();
+        } catch (InterruptedException interrupted) {
+            pending.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new InterruptedIOException("interrupted while talking to " + endpoint);
+        } catch (CancellationException cancelled) {
+            throw new IOException("the transport is closed");
+        } catch (ExecutionException failed) {
+            // 照 HttpClient.send 的样子交出原因:I/O 失败原样抛,未受检的原样抛
+            Throwable cause = failed.getCause();
+            if (cause instanceof IOException io) {
+                throw io;
+            }
+            if (cause instanceof RuntimeException unchecked) {
+                throw unchecked;
+            }
+            throw new IOException(cause);
+        } finally {
+            exchanges.remove(pending);
         }
     }
 

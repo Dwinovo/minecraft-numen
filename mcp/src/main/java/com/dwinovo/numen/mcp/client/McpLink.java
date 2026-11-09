@@ -137,14 +137,20 @@ public final class McpLink implements McpCaller, AutoCloseable {
     static Reply render(CallToolResult result) {
         StringBuilder sb = new StringBuilder();
         for (Content block : result.content()) {
-            switch (block) {
-                case Content.Text text -> sb.append(text.text());
+            // Java 17 没有 switch 的类型模式:按密封的五种逐个判断,剩下的只能是音频
+            if (block instanceof Content.Text text) {
+                sb.append(text.text());
+            } else if (block instanceof Content.Resource resource) {
                 // 内嵌的资源常带着文本(一个文件的内容):交给模型的是文本本身,不是一个占位;二进制的退回网址与类型
-                case Content.Resource resource -> sb.append(resource.text() != null ? resource.text()
+                sb.append(resource.text() != null ? resource.text()
                         : "[resource " + resource.uri() + (resource.mimeType() == null ? "" : " " + resource.mimeType()) + "]");
-                case Content.ResourceLink link -> sb.append("[resource ").append(link.uri()).append(']');
-                case Content.Image image -> sb.append("[image ").append(image.mimeType()).append(']');
-                case Content.Audio audio -> sb.append("[audio ").append(audio.mimeType()).append(']');
+            } else if (block instanceof Content.ResourceLink link) {
+                sb.append("[resource ").append(link.uri()).append(']');
+            } else if (block instanceof Content.Image image) {
+                sb.append("[image ").append(image.mimeType()).append(']');
+            } else {
+                Content.Audio audio = (Content.Audio) block;
+                sb.append("[audio ").append(audio.mimeType()).append(']');
             }
             sb.append('\n');
         }
