@@ -30,7 +30,10 @@ dependencies {
     // 类与资源由下面的 jar 块平铺进发行 jar,不作为独立依赖出现在 POM 里。
     // Loom 项目的默认变体是重映射成 intermediary 的 jar;要的是 Mojang 名的那份,与本模块同命名
     compileOnly project(path: ':plugins:litematica', configuration: 'namedElements')
-    // JEI 联动只写原版与 JEI 的公共 API,Mojang 名,同一份类原样可用;它要加载器答的流体数量,Fabric 的答案对着 JEI 的 Fabric API 编译(只编译期;它是用更新的 Loom 构建的,不能走 modCompileOnly 的重映射,只读它的一个接口,按普通 jar 引用)
+    // JEI 联动只写原版与 JEI 的公共 API,Mojang 名,同一份类原样可用;它要加载器答的流体数量,Fabric 的答案对着 JEI 的 Fabric API 编译(只编译期)。
+    // 这份 jar 是 intermediary 名(清单 Fabric-Mapping-Namespace: intermediary),按普通 jar 引用、不经 modCompileOnly 重映射也对:
+    // 只用到它的 IJeiFluidIngredient 一个接口(强转后读 getAmount),接口签名里只有 JEI 与 Fabric API 自己的类型、没有 Minecraft 的类,
+    // 两种命名下字节一样
     compileOnly project(':plugins:jei')
     compileOnly "mezz.jei:jei-${minecraft_version}-fabric-api:${jei_version}"
     localRuntime project(':numen:pathing')
