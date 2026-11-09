@@ -1,6 +1,6 @@
 # 0013 MCP 端点与客户端建在官方库上,独立成纯 JVM 模块 `mcp`
 
-- 状态:已接受;在分支上已做完
+- 状态:被 [0019](0019-own-mcp-implementation.md) 取代
 - 日期:2026-10-20
 - 另见:`docs/input-pipeline.md` §五,`licenses/THIRD-PARTY.txt`
 
