@@ -243,43 +243,39 @@ public final class McpCodec {
 
     private static JsonObject content(Content block) {
         JsonObject o = new JsonObject();
-        switch (block) {
-            case Content.Text t -> {
-                o.addProperty("type", "text");
-                o.addProperty("text", t.text());
+        // Java 17 没有 switch 的类型模式:按密封的五种逐个判断,剩下的只能是内嵌资源
+        if (block instanceof Content.Text t) {
+            o.addProperty("type", "text");
+            o.addProperty("text", t.text());
+        } else if (block instanceof Content.Image i) {
+            o.addProperty("type", "image");
+            o.addProperty("data", i.data());
+            o.addProperty("mimeType", i.mimeType());
+        } else if (block instanceof Content.Audio a) {
+            o.addProperty("type", "audio");
+            o.addProperty("data", a.data());
+            o.addProperty("mimeType", a.mimeType());
+        } else if (block instanceof Content.ResourceLink l) {
+            o.addProperty("type", "resource_link");
+            o.addProperty("uri", l.uri());
+            o.addProperty("name", l.name());
+            if (l.mimeType() != null) {
+                o.addProperty("mimeType", l.mimeType());
             }
-            case Content.Image i -> {
-                o.addProperty("type", "image");
-                o.addProperty("data", i.data());
-                o.addProperty("mimeType", i.mimeType());
+        } else {
+            Content.Resource r = (Content.Resource) block;
+            JsonObject resource = new JsonObject();
+            resource.addProperty("uri", r.uri());
+            if (r.mimeType() != null) {
+                resource.addProperty("mimeType", r.mimeType());
             }
-            case Content.Audio a -> {
-                o.addProperty("type", "audio");
-                o.addProperty("data", a.data());
-                o.addProperty("mimeType", a.mimeType());
+            if (r.text() != null) {
+                resource.addProperty("text", r.text());
+            } else {
+                resource.addProperty("blob", r.blob());
             }
-            case Content.ResourceLink l -> {
-                o.addProperty("type", "resource_link");
-                o.addProperty("uri", l.uri());
-                o.addProperty("name", l.name());
-                if (l.mimeType() != null) {
-                    o.addProperty("mimeType", l.mimeType());
-                }
-            }
-            case Content.Resource r -> {
-                JsonObject resource = new JsonObject();
-                resource.addProperty("uri", r.uri());
-                if (r.mimeType() != null) {
-                    resource.addProperty("mimeType", r.mimeType());
-                }
-                if (r.text() != null) {
-                    resource.addProperty("text", r.text());
-                } else {
-                    resource.addProperty("blob", r.blob());
-                }
-                o.addProperty("type", "resource");
-                o.add("resource", resource);
-            }
+            o.addProperty("type", "resource");
+            o.add("resource", resource);
         }
         return o;
     }

@@ -128,28 +128,28 @@ public final class RpcPeer {
      * 多半是已经撤回或等过期的)。
      */
     public void receive(RpcMessage message, Outbound replyTo) {
-        switch (message) {
-            case RpcMessage.Request request -> executor.execute(() -> run(request, replyTo));
-            case RpcMessage.Notification notification -> {
-                if (notification.method().equals(CANCELLED)) {
-                    cancelled(notification.params());
-                } else {
-                    NotificationHandler handler = notificationHandlers.get(notification.method());
-                    if (handler != null) {
-                        handler.handle(notification.params());
-                    }
+        // Java 17 没有 switch 的类型模式:按密封的三种逐个判断,剩下的只能是答复
+        if (message instanceof RpcMessage.Request request) {
+            executor.execute(() -> run(request, replyTo));
+        } else if (message instanceof RpcMessage.Notification notification) {
+            if (notification.method().equals(CANCELLED)) {
+                cancelled(notification.params());
+            } else {
+                NotificationHandler handler = notificationHandlers.get(notification.method());
+                if (handler != null) {
+                    handler.handle(notification.params());
                 }
             }
-            case RpcMessage.Response response -> {
-                Outgoing waiting = response.id() == null ? null : pending.remove(response.id());
-                if (waiting == null) {
-                    return;
-                }
-                if (response.error() != null) {
-                    waiting.result().completeExceptionally(new RpcException(response.error()));
-                } else {
-                    waiting.result().complete(response.result());
-                }
+        } else {
+            RpcMessage.Response response = (RpcMessage.Response) message;
+            Outgoing waiting = response.id() == null ? null : pending.remove(response.id());
+            if (waiting == null) {
+                return;
+            }
+            if (response.error() != null) {
+                waiting.result().completeExceptionally(new RpcException(response.error()));
+            } else {
+                waiting.result().complete(response.result());
             }
         }
     }
@@ -233,11 +233,16 @@ public final class RpcPeer {
             cancel(outgoing, "the caller stopped waiting", via);
             throw interrupted;
         } catch (ExecutionException failed) {
-            switch (failed.getCause()) {
-                case RpcException e -> throw e;
-                case IOException e -> throw e;
-                case CancellationException e -> throw new IOException(method + " was withdrawn", e);
-                case Throwable other -> throw new IOException(method + " failed: " + other, other);
+            // Java 17 没有 switch 的类型模式:逐个判断
+            Throwable cause = failed.getCause();
+            if (cause instanceof RpcException e) {
+                throw e;
+            } else if (cause instanceof IOException e) {
+                throw e;
+            } else if (cause instanceof CancellationException e) {
+                throw new IOException(method + " was withdrawn", e);
+            } else {
+                throw new IOException(method + " failed: " + cause, cause);
             }
         }
     }
