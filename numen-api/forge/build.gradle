@@ -8,7 +8,7 @@ plugins {
 
 // 要读 Numen API 的测试夹具源码集,它得先配置好
 evaluationDependsOn(':numen-api:common')
-// mcp 的依赖要先解析好,下面才能列出要嵌套的库
+// mcp 要先配置好,下面取它产出的重定位 jar(relocatedNimbus)
 evaluationDependsOn(':mcp')
 
 // ForgeGradle 把开发期的 Forge(版本带 _mapped_,只在本机的 FG 缓存里有)记成依赖,原样发出去第三方解析不了:
@@ -87,16 +87,12 @@ dependencies {
     // 通过、jar 照样打出来,只是里面没有 refmap,运行期才炸。
     annotationProcessor 'org.spongepowered:mixin:0.8.5-SNAPSHOT:processor'
 
-    // 聊天气泡的 Markdown 解析库(ui 模块用它)与 mcp 模块的其余第三方库(Reactor、Tomcat……)是内嵌的库,
-    // 不是平铺进来的类。发行物是 Numen 的 -all,它把本模块与这些库并排嵌在 META-INF/jarjar/ 里(见 numen/forge/build.gradle);
-    // 开发运行不读 jarJar,这里让它们进运行类路径。清单从 mcp 的依赖解析出来。官方 SDK 与重定位过的 Jackson、Nimbus 是 mcp 产出的一份 jar,
-    // 发行 jar 平铺它的类(见 numen-api-loader.gradle);开发运行里它也只能以库的身份进运行类路径。
+    // 聊天气泡的 Markdown 解析库(ui 模块用它)是内嵌的库,不是平铺进来的类。发行物是 Numen 的 -all,它把本模块与这个库
+    // 并排嵌在 META-INF/jarjar/ 里(见 numen/forge/build.gradle);开发运行不读 jarJar,这里让它进运行类路径。mcp 产出的
+    // 重定位过的 Nimbus 是一份 jar,发行 jar 平铺它的类(见 numen-api-loader.gradle);开发运行里它也只能以库的身份进运行类路径。
     minecraftLibrary "org.commonmark:commonmark:${commonmark_version}"
     minecraftLibrary "org.commonmark:commonmark-ext-gfm-strikethrough:${commonmark_version}"
-    Modules.nestedLibraries(project(':mcp')).each { coordinate ->
-        minecraftLibrary(coordinate) { transitive = false }
-    }
-    minecraftLibrary files(project(':mcp').relocatedSdk)
+    minecraftLibrary files(project(':mcp').relocatedNimbus)
 
     gametestCompileOnly project(':numen-api:common').sourceSets.testFixtures.output
 }

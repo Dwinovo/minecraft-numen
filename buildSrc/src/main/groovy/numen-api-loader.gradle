@@ -65,10 +65,10 @@ tasks.named('sourcesJar', Jar) {
 // numen-agent 同理:队列与目标从 common 迁去 agent 模块,类在这里平铺回来。
 tasks.named('jar', Jar) {
     Modules.ALL.each { path -> from({ project(path).sourceSets.main.output }) }
-    // mcp 的官方 SDK 连同重定位过的 Jackson、Nimbus 是 mcp 产出的一份 jar(见 mcp/build.gradle),它的类同样平铺进来;
+    // mcp 的 OAuth 用的 Nimbus 重定位后是 mcp 产出的一份 jar(见 mcp/build.gradle),它的类同样平铺进来;
     // 各库的清单与协议文本不收,以 META-INF/third-party 为准
-    dependsOn(':mcp:relocatedSdk')
-    from({ zipTree(project(':mcp').relocatedSdk.get().archiveFile) }) {
+    dependsOn(':mcp:relocatedNimbus')
+    from({ zipTree(project(':mcp').relocatedNimbus.get().archiveFile) }) {
         exclude 'META-INF/MANIFEST.MF', 'META-INF/LICENSE*', 'META-INF/NOTICE*'
     }
     // 沙箱 Lua 的底子是 LuaJ(MIT):它的许可证随平铺进来的类一起发
