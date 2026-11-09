@@ -9,7 +9,7 @@ plugins {
     // 1.21.2 起的开发包是新格式(带多份产物),要 paperweight 2.x 才认得,1.7.x 解析时报"不止一个文件"。
     id 'io.papermc.paperweight.userdev' version '2.0.0-beta.22' apply false
     id 'xyz.jpenilla.run-paper' version '3.1.0' apply false
-    // mcp 模块把官方 MCP SDK 用的 Jackson 重定位进自己的产物(见 mcp/build.gradle),用它的 ShadowJar 任务类型
+    // mcp 模块把 OAuth 用的 Nimbus 重定位进自己的产物(见 mcp/build.gradle),用它的 ShadowJar 任务类型
     id 'com.gradleup.shadow' version '9.6.1' apply false
 }
 
