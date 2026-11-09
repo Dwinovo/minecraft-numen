@@ -53,7 +53,7 @@ public class PermissionGameTests {
 
     /**
      * 让一个<b>真玩家</b>(不是同伴)把一个方块物品放在 {@code rel} 上:从 {@code ItemStack.useOn} 进去,走
-     * 真实放置路径(模组上放置记录挂在 {@code BlockItem.place},Paper 上挂在它在 {@code useOn} 里发的方块放置事件)——
+     * 真实放置路径(放置记录挂在 {@code BlockItem.place})——
      * 测的是真机上会发生的那条链,不是手工写记录。放的人是谁,这一格对她就是谁的:
      * 她的主人放的是主人的,别的玩家放的是别人的。
      */
@@ -498,7 +498,7 @@ public class PermissionGameTests {
     private static List<String> runAs(ServerPlayer who, String command) {
         List<String> said = new ArrayList<>();
         net.minecraft.commands.CommandSource capture =
-                com.dwinovo.numen.api.gametest.GameTestWorld.INSTANCE.hearing(message -> said.add(com.dwinovo.numen.api.gametest.GameTestWorld.INSTANCE.text(message)));
+                com.dwinovo.numen.api.gametest.GameTestWorld.hearing(message -> said.add(com.dwinovo.numen.api.gametest.GameTestWorld.text(message)));
         who.getServer().getCommands().performPrefixedCommand(who.createCommandSourceStack().withSource(capture),
                 command);
         return said;

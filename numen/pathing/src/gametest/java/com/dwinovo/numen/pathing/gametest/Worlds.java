@@ -14,9 +14,9 @@ final class Worlds {
     private Worlds() {}
 
     static void settle(ServerLevel level) {
-        GameTestWorld.INSTANCE.setDifficulty(level, Difficulty.PEACEFUL);
+        GameTestWorld.setDifficulty(level, Difficulty.PEACEFUL);
         level.setDayTime(6000);
-        GameTestWorld.INSTANCE.setRule(level, level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING), false);
+        GameTestWorld.setRule(level, level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING), false);
         level.setWeatherParameters(24000, 0, false, false);
     }
 }

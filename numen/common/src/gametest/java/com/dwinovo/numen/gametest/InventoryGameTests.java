@@ -648,8 +648,7 @@ public class InventoryGameTests {
         companion.getInventory().add(new ItemStack(Items.WRITABLE_BOOK));
         java.util.concurrent.atomic.AtomicReference<ToolRun> read = new java.util.concurrent.atomic.AtomicReference<>();
 
-        // Paper(CraftBukkit)不收加入后一秒内的编辑书("Book edited too quickly"),等过了再写
-        Steps steps = steps(helper).thenIdle(25);
+        Steps steps = steps(helper);
         steps = call(helper, steps, companion,
                 "numen.inv.write({\"Day 1: iron.\", \"Day 2: a house.\"}, {title = \"Diary\"})");
         steps = steps.thenExecute(() -> read.set(lua(companion, "numen.inv.read(\"minecraft:written_book\")")))

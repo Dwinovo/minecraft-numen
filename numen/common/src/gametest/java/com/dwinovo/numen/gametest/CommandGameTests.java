@@ -213,7 +213,7 @@ public class CommandGameTests {
                 "her owner was not told");
         helper.assertTrue(com.dwinovo.numen.api.network.OwnedBody.of(server, owner.getUUID(), id, reason -> { }) == null,
                 "a packet pulled her back without a summon");
-        CompanionFactory.despawn(server, her);   // 已经被请出去的身体再移一次:什么也不做(Paper 上再移会抛"已经退役")
+        CompanionFactory.despawn(server, her);   // 已经被请出去的身体再移一次:什么也不做
 
         NumenPlayer back = com.dwinovo.numen.api.gametest.Bodies.summon(server, owner.getUUID(), "Kickable", level,
                 net.minecraft.world.phys.Vec3.atBottomCenterOf(at));
@@ -419,11 +419,7 @@ public class CommandGameTests {
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_viewed");
         var server = helper.getLevel().getServer();
         CommandNode<CommandSourceStack> root = server.getCommands().getDispatcher().getRoot();
-        // Paper 把插件注册的指令在服务端的树上挂成一个转向真树的节点(解析时 Brigadier 顺着转向走),要看有哪些格得看转向的目标
         CommandNode<CommandSourceStack> numen = root.getChild(NumenCommands.ROOT);
-        if (numen.getRedirect() != null) {
-            numen = numen.getRedirect();
-        }
         CommandSourceStack player = server.createCommandSourceStack()
                 .withEntity(helper.makeMockPlayer()).withPermission(4);
 
@@ -552,7 +548,7 @@ public class CommandGameTests {
 
     /** 控制台那样的发令人:她那一段的回执说给它听,一句一条记进 {@code heard}。 */
     private static CommandSourceStack console(net.minecraft.server.MinecraftServer server, List<String> heard) {
-        return server.createCommandSourceStack().withSource(GameTestWorld.INSTANCE.hearing(message -> heard.add(GameTestWorld.INSTANCE.text(message))));
+        return server.createCommandSourceStack().withSource(GameTestWorld.hearing(message -> heard.add(GameTestWorld.text(message))));
     }
 
     /**
