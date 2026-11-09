@@ -65,11 +65,8 @@ dependencies {
     // 运行配置里 Numen API 是源码集,不读 jarJar:它的内嵌库在这里进运行类路径
     minecraftLibrary "org.commonmark:commonmark:${commonmark_version}"
     minecraftLibrary "org.commonmark:commonmark-ext-gfm-strikethrough:${commonmark_version}"
-    Modules.nestedLibraries(project(':mcp')).each { coordinate ->
-        minecraftLibrary(coordinate) { transitive = false }
-    }
-    // mcp 产出的官方 SDK 与重定位过的库(发行物里平铺在 Numen API 的 jar 里)
-    minecraftLibrary files(project(':mcp').relocatedSdk)
+    // mcp 产出的重定位过的 Nimbus(发行物里平铺在 Numen API 的 jar 里)
+    minecraftLibrary files(project(':mcp').relocatedNimbus)
 }
 
 // ForgeGradle 在本项目里按名字找运行配置里每个源码集的 classes 任务;别的项目的源码集在这里放替身,指向真的那一个。
