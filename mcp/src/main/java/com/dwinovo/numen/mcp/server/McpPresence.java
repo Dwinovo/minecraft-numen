@@ -1,7 +1,6 @@
 package com.dwinovo.numen.mcp.server;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -12,16 +11,16 @@ import java.util.function.LongSupplier;
 import java.util.function.Predicate;
 
 /**
- * 谁在用这个端点:按令牌记。会话本身归官方 SDK 管;这里只回答宿主要问的"连着没有"。
+ * 谁在用这个端点:按令牌汇总。会话本身在 {@link SessionRegistry};这里只回答宿主要问的"连着没有"。
  *
  * <p><b>"连着"只在这一处算</b>({@link Entry#connected}):还有请求在飞(含客户端开着的那条 GET 流——它一直占着一个请求),
  * 或者最近 {@value #IDLE_MS} 毫秒内出过声。get_events 长轮询最长 50 秒,正常的外部大脑请求间隔远小于此;误报"断开"比漏报伤——
  * 错误的断开会让她的程序被收掉。
  *
- * <p><b>算数的请求只有两种</b>:开新会话的 initialize({@link #opening}),和带着一次活会话的会话号的({@link #begin})。会话活不活看
- * SDK 的答复:initialize 的答复里带回会话号就开了({@link #opened}),客户端 DELETE 成功、或 SDK 对这个会话号答 404 就结束了
- * ({@link #ended})。带着已结束或不存在的会话号的请求由 SDK 照 Streamable HTTP 的规定答 404、客户端重新 initialize,
- * 它不碰在场记录:否则客户端结束会话之后才到的请求(收到工具表变了的通知后补发的 tools/list)会把驾驶席重新占上 {@value #IDLE_MS} 毫秒。
+ * <p><b>算数的请求只有两种</b>:开新会话的 initialize({@link #opening}),和属于一个开着的会话的({@link #begin};会话开没开着由传输
+ * 问 {@link SessionRegistry})。会话开了({@link #opened})、结束了({@link #ended})由会话表告诉这里。带着已结束或不存在的会话号的
+ * 请求照 Streamable HTTP 的规定答 404、客户端重新 initialize,它不碰在场记录:否则客户端结束会话之后才到的请求会把驾驶席重新占上
+ * {@value #IDLE_MS} 毫秒。
  *
  * <p>线程:任何线程。
  */
@@ -37,9 +36,7 @@ public final class McpPresence {
         private volatile String client;
         private volatile long lastSeen;
         private int inFlight;
-        /** SDK 开给这张令牌、还没结束的会话号。 */
-        private final Set<String> sessions = new HashSet<>();
-        /** 最后一个活会话结束了,此后还没有开新的:安静的时间不再算"连着"。 */
+        /** 最后一个开着的会话结束了,此后还没有开新的:安静的时间不再算"连着"。 */
         private boolean closed;
 
         private Entry(McpToken token, String client, long now) {
@@ -84,22 +81,12 @@ public final class McpPresence {
         }
     }
 
-    /**
-     * 这张令牌来了一个带着会话号 {@code session} 的请求:会话活着才算数,返回 {@code true},配对 {@link #end};会话已结束、不存在
-     * 或没带会话号,不碰在场记录,返回 {@code false}。
-     */
-    public boolean begin(McpToken token, String session) {
-        Entry entry = session == null ? null : entries.get(token.id());
-        if (entry == null) {
-            return false;
-        }
+    /** 这张令牌开着的一个会话来了一个请求(或开了 GET 流);配对 {@link #end}。 */
+    public void begin(McpToken token) {
+        Entry entry = entries.computeIfAbsent(token.id(), id -> new Entry(token, "unknown client", clock.getAsLong()));
         synchronized (entry) {
-            if (!entry.sessions.contains(session)) {
-                return false;
-            }
             entry.inFlight++;
             entry.lastSeen = clock.getAsLong();
-            return true;
         }
     }
 
@@ -121,12 +108,11 @@ public final class McpPresence {
         }
     }
 
-    /** SDK 给这张令牌开了会话 {@code session}(initialize 的答复里带回的会话号)。 */
-    public void opened(McpToken token, String session) {
+    /** 这张令牌开了一个会话。 */
+    public void opened(McpToken token) {
         Entry entry = entries.get(token.id());
         if (entry != null) {
             synchronized (entry) {
-                entry.sessions.add(session);
                 entry.closed = false;
                 entry.lastSeen = clock.getAsLong();
             }
@@ -134,14 +120,14 @@ public final class McpPresence {
     }
 
     /**
-     * 会话 {@code session} 结束了:客户端 DELETE 成功,或 SDK 对它答 404(闲置太久被 SDK 清掉了)。这是最后一个活会话的话,
-     * 在飞的流一收场就算断开,不等安静满 {@link #IDLE_MS};再开新会话又算连着。
+     * 这张令牌的一个会话结束了(客户端 DELETE、闲置太久、令牌作废)。{@code last}:它没有别的开着的会话了——此后在飞的流一收场就算断开,
+     * 不等安静满 {@link #IDLE_MS};再开新会话又算连着。
      */
-    public void ended(McpToken token, String session) {
+    public void ended(McpToken token, boolean last) {
         Entry entry = entries.get(token.id());
         if (entry != null) {
             synchronized (entry) {
-                if (entry.sessions.remove(session) && entry.sessions.isEmpty()) {
+                if (last) {
                     entry.closed = true;
                 }
             }
