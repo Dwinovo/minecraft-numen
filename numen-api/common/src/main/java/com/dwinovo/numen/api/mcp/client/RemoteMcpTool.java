@@ -7,9 +7,10 @@ import com.dwinovo.numen.api.agent.tool.ToolHints;
 import com.dwinovo.numen.api.library.Library;
 import com.dwinovo.numen.mcp.client.McpCaller;
 import com.dwinovo.numen.mcp.client.McpToolName;
-import com.google.gson.Gson;
+import com.dwinovo.numen.mcp.protocol.Tool;
+import com.dwinovo.numen.mcp.protocol.ToolAnnotations;
+import com.dwinovo.numen.script.JsonValues;
 import com.google.gson.JsonObject;
-import io.modelcontextprotocol.spec.McpSchema;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -34,8 +35,6 @@ import java.util.concurrent.Executor;
  */
 public final class RemoteMcpTool implements NumenTool {
 
-    private static final Gson GSON = new Gson();
-
     private final String entryId;
     private final Library.Group group;
     private final McpCaller link;
@@ -52,7 +51,7 @@ public final class RemoteMcpTool implements NumenTool {
      * @param main       大脑所在的主线程:调用的结果经它回来
      * @param takenNames 本批已用掉的模型侧工具名;构造时会把自己这个加进去(见 {@link McpToolName}）
      */
-    public RemoteMcpTool(String serverName, String entryId, Library.Group group, McpCaller link, McpSchema.Tool tool,
+    public RemoteMcpTool(String serverName, String entryId, Library.Group group, McpCaller link, Tool tool,
                          Executor main, Set<String> takenNames) {
         this.entryId = entryId;
         this.group = group;
@@ -96,8 +95,8 @@ public final class RemoteMcpTool implements NumenTool {
         return hints;
     }
 
-    private static ToolHints hintsOf(McpSchema.Tool tool) {
-        McpSchema.ToolAnnotations a = tool.annotations();
+    private static ToolHints hintsOf(Tool tool) {
+        ToolAnnotations a = tool.annotations();
         if (a == null) {
             return new ToolHints(tool.title(), false, true, false, true);
         }
@@ -115,15 +114,13 @@ public final class RemoteMcpTool implements NumenTool {
             call.complete(ToolOutcome.failure(ex.getMessage()));
             return;
         }
-        @SuppressWarnings("unchecked")
-        Map<String, Object> arguments = GSON.fromJson(args, Map.class);
-        // SDK 的调用会阻塞到对方答复(或到点);另起一条线程等,别占着大脑的线程
+        // 调用阻塞到对方答复(或到点);另起一条线程等,别占着大脑的线程
         Thread waiter = new Thread(() -> {
             String out;
             try {
-                McpCaller.Reply reply = link.call(remoteName, arguments);
+                McpCaller.Reply reply = link.call(remoteName, args);
                 out = reply.error() ? ToolOutcome.failure(reply.text()) : reply.text();
-            } catch (RuntimeException err) {
+            } catch (Exception err) {
                 out = ToolOutcome.failure("mcp tool '" + qualifiedName + "' failed: " + rootMessage(err));
             }
             String result = out;
@@ -135,10 +132,10 @@ public final class RemoteMcpTool implements NumenTool {
         waiter.start();
     }
 
-    private static String buildDescription(McpSchema.Tool tool) {
+    private static String buildDescription(Tool tool) {
         String base = tool.description() == null ? "" : tool.description();
         List<String> hints = new ArrayList<>();
-        McpSchema.ToolAnnotations a = tool.annotations();
+        ToolAnnotations a = tool.annotations();
         if (a != null) {
             if (Boolean.TRUE.equals(a.readOnlyHint())) hints.add("read-only");
             if (Boolean.TRUE.equals(a.destructiveHint())) hints.add("destructive");
@@ -160,8 +157,9 @@ public final class RemoteMcpTool implements NumenTool {
      * 按白名单重建过一遍的话,一个纯 {@code $ref} 的子 schema 会变成空对象,工具就废了。
      * 宁可原样发上去让上游说不,也不要自作主张把它改坏。
      */
-    private static Map<String, Object> buildSchema(McpSchema.Tool tool) {
-        Map<String, Object> map = new LinkedHashMap<>(tool.inputSchema());
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> buildSchema(Tool tool) {
+        Map<String, Object> map = new LinkedHashMap<>((Map<String, Object>) JsonValues.toJava(tool.inputSchema()));
         if (!"object".equals(map.get("type"))) {
             map.put("type", "object");
         }
