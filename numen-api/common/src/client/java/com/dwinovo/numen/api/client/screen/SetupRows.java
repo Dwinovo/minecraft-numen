@@ -85,7 +85,7 @@ final class SetupRows {
         ry += ModalCard.ROW_H;
         row(card, null, Item.PROVIDER, ry);
         ry += ModalCard.ROW_H;
-        card.expandRow(ry, t(Keys.SETUP_MORE), this::summary, more);
+        card.expandRow(ry, t(Keys.SETUP_MORE), more);
         ry += ModalCard.ROW_H;
         wrap = card.slideWrap(ry, HIDDEN_ROWS * ModalCard.ROW_H, more);
         row(card, wrap, Item.VOICE, ry);
@@ -163,31 +163,6 @@ final class SetupRows {
 
     private static String label(Item item) {
         return item.slot() != null ? t(item.slot().label()) : t("numen.summon.mode");
-    }
-
-    /** "更多选项"收着时写在行上的:里面各项此刻的值。 */
-    private String summary() {
-        StringBuilder out = new StringBuilder();
-        for (Item item : new Item[]{Item.VOICE, Item.MODE}) {
-            if (!out.isEmpty()) {
-                out.append(" · ");
-            }
-            out.append(I18n.get(Keys.SETUP_SUMMARY_ITEM, label(item), shortValue(item)));
-        }
-        return out.toString();
-    }
-
-    /** 摘要里的值:"默认(X)"只写 X。 */
-    private String shortValue(Item item) {
-        Object value = draft.value(item);
-        if (item == Item.MODE) {
-            return t(Boolean.TRUE.equals(value) ? Keys.SUMMON_MODE_CREATIVE : Keys.SUMMON_MODE_SURVIVAL);
-        }
-        if (value == null) {
-            return defaultValue(item);
-        }
-        String name = choices(item).get(value);
-        return name == null ? String.valueOf(value) : name;
     }
 
     /** 悬停提示:行尾的 × 说它做什么;置灰的模式行说为什么。 */
