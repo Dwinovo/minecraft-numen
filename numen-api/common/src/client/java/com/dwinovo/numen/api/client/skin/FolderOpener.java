@@ -31,6 +31,10 @@ public final class FolderOpener {
             Constants.LOG.warn("[numen-skin] 建不了皮肤文件夹 {}: {}", dir, e.toString());
             return;
         }
+        // TODO 原版这一代的 openPath 在游戏进程里调 SDL 的打开接口,系统外壳的扩展(网盘的右键菜单、输入法组件)跟着进了游戏进程;
+        //  有的机器上点下去整个游戏卡住不回来,原版自己的"打开资源包文件夹"同样。眼下跟原版走;
+        //  别的机器也报卡住的话,改成另起系统的打开程序(Windows 上 rundll32 url.dll,FileProtocolHandler,更早的版本就是这样开的),
+        //  McpAuthPrompt 与 ChatView 里的 Blaze3D.openUri 一并改。
         Blaze3D.openPath(dir);
     }
 
