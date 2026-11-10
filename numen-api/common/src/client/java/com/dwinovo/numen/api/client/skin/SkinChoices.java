@@ -39,6 +39,15 @@ public final class SkinChoices {
         }
     }
 
+    /** 选定的一张和它的手臂粗细:召唤卡的草稿里记的就是它,随召唤请求发出。 */
+    public record Pick(Choice choice, String variant) {
+
+        /** 穿上之后在签名缓存里的名字。 */
+        public SkinRef ref() {
+            return choice.ref(variant);
+        }
+    }
+
     /** 哈希 → 手臂粗细:同一张图只解码一次。 */
     private static final Map<String, String> VARIANTS = new ConcurrentHashMap<>();
 
