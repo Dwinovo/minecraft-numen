@@ -25,7 +25,6 @@ import net.minecraft.resources.ResourceLocation;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.IntConsumer;
-import java.util.function.Supplier;
 
 /**
  * 面板里的居中卡:召唤({@link SummonPanel})、改她({@link CompanionEditPanel})、选皮肤({@link SkinPickerPanel})、改会话名
@@ -220,9 +219,9 @@ abstract class ModalCard {
         return d;
     }
 
-    /** 开合钮那一行:整卡宽,从 {@code ry} 起,收着时右边写 {@code summary}。 */
-    protected ExpandRow expandRow(int ry, String label, Supplier<String> summary, Reveal reveal) {
-        ExpandRow row = ui.add(new ExpandRow(label, summary, DialogBox.PAD_X - 1, reveal));
+    /** 开合钮那一行:整卡宽,从 {@code ry} 起。 */
+    protected ExpandRow expandRow(int ry, String label, Reveal reveal) {
+        ExpandRow row = ui.add(new ExpandRow(label, DialogBox.PAD_X - 1, reveal));
         row.setBounds(x + 1, ry, w - 2, ROW_H);
         return row;
     }
