@@ -119,6 +119,10 @@ jobs:
       - name: Build release jars and maven artifacts
         run: ./gradlew releaseJars publishAll -Plocal_maven_url=file://$PWD/maven-repo --no-daemon
 
+      # Paper 的包暂不发:后面几段只看 build/release 里有什么,这里拿走,上架与 GitHub Release 就都没有它。
+      - name: Hold back the Paper jars
+        run: rm -rf build/release/paper
+
       - name: List loaders
         id: jars
         shell: bash
