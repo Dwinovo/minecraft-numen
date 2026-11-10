@@ -10,7 +10,7 @@ import com.dwinovo.numen.api.client.ui.widget.TextField;
 import com.dwinovo.numen.api.data.ModLanguageData;
 import com.dwinovo.numen.api.entity.SummonSetup;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.PlayerFaceRenderer;
+import net.minecraft.client.gui.components.PlayerFaceExtractor;
 import net.minecraft.client.resources.language.I18n;
 
 /**
@@ -100,8 +100,7 @@ public final class SummonPanel extends ModalCard {
         var face = pick == null ? null
                 : SkinTextures.faceOf(pick.choice().where() + ":" + pick.choice().name(), pick.choice().png());
         if (face != null) {
-            PlayerFaceRenderer.draw(s.graphics(), face, px, py, PHOTO);
-            s.graphics().setColor(1f, 1f, 1f, alpha);
+            PlayerFaceExtractor.extractRenderState(s.graphics(), face, px, py, PHOTO, true, false, -1);
         } else {
             NumenStyle.box(s, px, py, PHOTO, PHOTO, c.sectionBg(), c.inputBorder());
             int size = Sprites.SIZE * 2;   // 整数倍放大,像素图才不糊
