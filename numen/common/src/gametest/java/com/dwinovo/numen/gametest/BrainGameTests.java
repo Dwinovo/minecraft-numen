@@ -933,12 +933,12 @@ public class BrainGameTests {
                         new com.dwinovo.numen.api.entity.SummonSetup(entries, true, null)), owner);
 
         var born = com.dwinovo.numen.api.gametest.Bodies.awaitPlayer(server, "gametest_setup");
-        helper.assertTrue(born instanceof NumenPlayer, "the companion was not summoned");
+        Checks.assertTrue(helper, born instanceof NumenPlayer, "the companion was not summoned");
         var brain = CompanionLoops.get(born.getUUID());
-        helper.assertTrue(brain.isPresent(), "she has no server brain");
+        Checks.assertTrue(helper, brain.isPresent(), "she has no server brain");
         entries.forEach((slot, entry) ->
-                helper.assertTrue(entry.equals(brain.get().bound(slot)), slot + " was not bound as she arrived"));
-        helper.assertTrue(born.isCreative(), "she did not arrive in the mode picked on the card");
+                Checks.assertTrue(helper, entry.equals(brain.get().bound(slot)), slot + " was not bound as she arrived"));
+        Checks.assertTrue(helper, born.isCreative(), "she did not arrive in the mode picked on the card");
 
         com.dwinovo.numen.api.entity.Companions.dismiss(server, owner.getUUID(), List.of(born.getUUID()));
         profiles.remove(profile.id());
@@ -961,11 +961,11 @@ public class BrainGameTests {
                                 java.util.Map.of(com.dwinovo.numen.api.brain.Slot.VOICE, "my:nowhere"), null, null)),
                 owner);
 
-        helper.assertTrue(server.getPlayerList().getPlayerByName("gametest_refused") == null, "she was summoned anyway");
-        helper.assertTrue(CompanionRegistry.get(server).ownedBy(owner.getUUID()).isEmpty(), "a refused summon left an entry");
+        Checks.assertTrue(helper, server.getPlayerList().getPlayerByName("gametest_refused") == null, "she was summoned anyway");
+        Checks.assertTrue(helper, CompanionRegistry.get(server).ownedBy(owner.getUUID()).isEmpty(), "a refused summon left an entry");
         var said = GameTestKit.said(owner);
         // 服务端按主人的语言翻好再发:看说没说是哪一只、哪一项
-        helper.assertTrue(said.stream().map(s -> s.text().getString())
+        Checks.assertTrue(helper, said.stream().map(s -> s.text().getString())
                         .anyMatch(text -> text.contains("gametest_refused") && text.contains("my:nowhere")),
                 "the owner was not told which item failed: " + said);
         GameTestKit.leave(owner);
