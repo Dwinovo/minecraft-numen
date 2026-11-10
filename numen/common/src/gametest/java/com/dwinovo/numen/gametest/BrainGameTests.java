@@ -840,8 +840,8 @@ public class BrainGameTests {
     }
 
     /**
-     * 召唤只要名字,不设前提:她有服务端大脑,可是还没绑档案,主人跟她说话时她停在 BLOCKED、原因是"还没配模型档案";
-     * 档案、人设、声线是召唤之后经同一个入口绑上的,三项都记进她的绑定。
+     * 召唤只要名字,不设前提:什么都没选的召唤,她有服务端大脑,可是还没绑档案,主人跟她说话时她停在 BLOCKED、原因是"还没配模型档案";
+     * 档案、人设、声线之后经同一个入口绑上,三项都记进她的绑定。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void summoning_takes_only_a_name_and_the_three_bindings_come_afterwards(GameTestHelper helper)
@@ -850,7 +850,8 @@ public class BrainGameTests {
         var owner = GameTestKit.presentPlayer(helper, null, "gametest_summoner");
 
         com.dwinovo.numen.api.network.payload.SummonRequestPayload.handle(
-                new com.dwinovo.numen.api.network.payload.SummonRequestPayload("gametest_born", false), owner);
+                new com.dwinovo.numen.api.network.payload.SummonRequestPayload("gametest_born",
+                        com.dwinovo.numen.api.entity.SummonSetup.NONE), owner);
 
         var born = com.dwinovo.numen.api.gametest.Bodies.awaitPlayer(server, "gametest_born");
         helper.assertTrue(born instanceof NumenPlayer, "the companion was not summoned");
@@ -899,6 +900,75 @@ public class BrainGameTests {
             GameTestKit.leave(owner);
             helper.succeed();
         });
+    }
+
+    /**
+     * 召唤卡上改过的配置随召唤请求一起来:她到达时三项绑定与模式已经落下,和事后在编辑卡上绑走的是同一条路。
+     * 主人在创造,创造的门是开的。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_brain")
+    public static void a_summon_request_with_a_setup_has_her_bound_as_she_arrives(GameTestHelper helper) {
+        var server = helper.getLevel().getServer();
+        var owner = GameTestKit.presentPlayer(helper, null, "gametest_setup_owner");
+        owner.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
+        var persona = com.dwinovo.numen.api.brain.PersonaLibraries.of(server, owner.getUUID())
+                .create("gametest_setup_persona", "你是测试员");
+        var profiles = com.dwinovo.numen.api.brain.ModelServices.of(server).providers(owner.getUUID());
+        var profile = profiles.create("gametest_setup_profile",
+                new com.dwinovo.numen.api.agent.llm.ConnectionProfile("deepseek", null, "deepseek-chat", null,
+                        "https://relay.example", null, null, 0, null, 0, null, 0, 0));
+        var hub = com.dwinovo.numen.api.library.LibraryHub.of(server);
+        var voiceId = com.dwinovo.numen.api.library.EntryId.mine("gametest_setup_voice");
+        hub.library(com.dwinovo.numen.api.voice.VoiceProfile.KIND, owner.getUUID()).mine().write(voiceId,
+                new com.dwinovo.numen.api.voice.VoiceProfile("", "openai", "", "", "m", "alex", "", "", "", 1f).write());
+        var entries = new java.util.EnumMap<com.dwinovo.numen.api.brain.Slot, String>(
+                com.dwinovo.numen.api.brain.Slot.class);
+        entries.put(com.dwinovo.numen.api.brain.Slot.PROVIDER, profile.id());
+        entries.put(com.dwinovo.numen.api.brain.Slot.PERSONA, persona.id());
+        entries.put(com.dwinovo.numen.api.brain.Slot.VOICE, voiceId.toString());
+
+        com.dwinovo.numen.api.network.payload.SummonRequestPayload.handle(
+                new com.dwinovo.numen.api.network.payload.SummonRequestPayload("gametest_setup",
+                        new com.dwinovo.numen.api.entity.SummonSetup(entries, true, null)), owner);
+
+        var born = com.dwinovo.numen.api.gametest.Bodies.awaitPlayer(server, "gametest_setup");
+        helper.assertTrue(born instanceof NumenPlayer, "the companion was not summoned");
+        var brain = CompanionLoops.get(born.getUUID());
+        helper.assertTrue(brain.isPresent(), "she has no server brain");
+        entries.forEach((slot, entry) ->
+                helper.assertTrue(entry.equals(brain.get().bound(slot)), slot + " was not bound as she arrived"));
+        helper.assertTrue(born.isCreative(), "she did not arrive in the mode picked on the card");
+
+        com.dwinovo.numen.api.entity.Companions.dismiss(server, owner.getUUID(), List.of(born.getUUID()));
+        profiles.remove(profile.id());
+        com.dwinovo.numen.api.brain.PersonaLibraries.of(server, owner.getUUID()).remove(persona.id());
+        hub.library(com.dwinovo.numen.api.voice.VoiceProfile.KIND, owner.getUUID()).mine().delete(voiceId);
+        GameTestKit.leave(owner);
+        helper.succeed();
+    }
+
+    /** 召唤请求带的配置有一项不过门(库里没有这一条):整次不召唤,告诉主人是哪一项。 */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_brain")
+    public static void a_setup_item_that_fails_its_check_refuses_the_summon_and_says_why(GameTestHelper helper) {
+        var server = helper.getLevel().getServer();
+        var owner = GameTestKit.presentPlayer(helper, null, "gametest_refused_owner");
+        GameTestKit.said(owner);
+
+        com.dwinovo.numen.api.network.payload.SummonRequestPayload.handle(
+                new com.dwinovo.numen.api.network.payload.SummonRequestPayload("gametest_refused",
+                        new com.dwinovo.numen.api.entity.SummonSetup(
+                                java.util.Map.of(com.dwinovo.numen.api.brain.Slot.VOICE, "my:nowhere"), null, null)),
+                owner);
+
+        helper.assertTrue(server.getPlayerList().getPlayerByName("gametest_refused") == null, "she was summoned anyway");
+        helper.assertTrue(CompanionRegistry.get(server).ownedBy(owner.getUUID()).isEmpty(), "a refused summon left an entry");
+        var said = GameTestKit.said(owner);
+        // 服务端按主人的语言翻好再发:看说没说是哪一只、哪一项
+        helper.assertTrue(said.stream().map(s -> s.text().getString())
+                        .anyMatch(text -> text.contains("gametest_refused") && text.contains("my:nowhere")),
+                "the owner was not told which item failed: " + said);
+        GameTestKit.leave(owner);
+        helper.succeed();
     }
 
     /** 人设改名(文件名即身份):在用它的同伴改指新名字。 */

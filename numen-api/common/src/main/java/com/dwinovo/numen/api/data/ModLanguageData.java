@@ -187,20 +187,27 @@ public final class ModLanguageData {
         public static final String SUMMON_NAME             = "numen.summon.name";
         public static final String SUMMON_NAME_PLACEHOLDER = "numen.summon.name_placeholder";
         public static final String SUMMON_PERSONA_LABEL    = "numen.summon.persona_label";
-        public static final String SUMMON_PERSONA_NONE     = "numen.summon.persona_none";
         public static final String SUMMON_WARN_NAME_FORMAT = "numen.summon.warn_name_format";
-        public static final String SUMMON_SKIN             = "numen.summon.skin";
         public static final String SUMMON_SKIN_DEFAULT     = "numen.summon.skin_default";
         public static final String SUMMON_MODE_SURVIVAL    = "numen.summon.mode_survival";
         public static final String SUMMON_MODE_CREATIVE    = "numen.summon.mode_creative";
-        public static final String SUMMON_MODE_INHERITED   = "numen.summon.mode_inherited";
-        public static final String SUMMON_MODE_INHERIT_TIP = "numen.summon.mode_inherit_tip";
+
+        // 召唤卡与编辑卡共用的配置行:默认值、更多选项、恢复默认、模式门、皮肤入口。
+        public static final String SETUP_PROVIDER_LABEL   = "numen.setup.provider_label";
+        public static final String SETUP_DEFAULT          = "numen.setup.default";
+        public static final String SETUP_PERSONA_DEFAULT  = "numen.setup.persona_default";
+        public static final String SETUP_PROVIDER_DEFAULT = "numen.setup.provider_default";
+        public static final String SETUP_VOICE_DEFAULT    = "numen.setup.voice_default";
+        public static final String SETUP_MORE             = "numen.setup.more";
+        public static final String SETUP_SUMMARY_ITEM     = "numen.setup.summary_item";
+        public static final String SETUP_RESET            = "numen.setup.reset";
+        public static final String SETUP_REVERT           = "numen.setup.revert";
+        public static final String SETUP_MODE_LOCKED      = "numen.setup.mode_locked";
+        public static final String SETUP_SKIN_CHOOSE      = "numen.setup.skin_choose";
 
         // Edit card: click the active avatar to open; every pick applies immediately.
         public static final String EDIT_TITLE            = "numen.edit.title";
         public static final String EDIT_DISMISS          = "numen.edit.dismiss";
-        public static final String EDIT_PROVIDER_UNBOUND = "numen.edit.provider_unbound";
-        public static final String EDIT_MODE_LOCKED      = "numen.edit.mode_locked";
 
         // Conversation header: invite card, rename card, dissolve confirm.
         public static final String CONVO_INVITE           = "numen.convo.invite";
@@ -246,7 +253,7 @@ public final class ModLanguageData {
         public static final String SKIN_FOLDER_EMPTY    = "numen.skin.folder_empty";
         public static final String SKIN_ARM             = "numen.skin.arm";
         public static final String SKIN_WEAR            = "numen.skin.wear";
-        public static final String SKIN_CUSTOM          = "numen.skin.custom";
+        public static final String SKIN_PICK            = "numen.skin.pick";
         public static final String SKIN_PREPARING       = "numen.skin.preparing";
         public static final String SKIN_JOB_QUEUED      = "numen.skin.job_queued";
         public static final String SKIN_JOB_WAITING     = "numen.skin.job_waiting";
@@ -496,6 +503,9 @@ public final class ModLanguageData {
         public static final String VOICE_NO_KEY             = "numen.voice.no_key";
         public static final String NOTICE_NAME_INVALID    = "numen.notice.name_invalid";
         public static final String NOTICE_SUMMON_LIMIT    = "numen.notice.summon_limit";
+        public static final String NOTICE_SUMMON_ENTRY_MISSING  = "numen.notice.summon_entry_missing";
+        public static final String NOTICE_SUMMON_CREATIVE_DENIED = "numen.notice.summon_creative_denied";
+        public static final String NOTICE_SUMMON_SKIN_REFUSED   = "numen.notice.summon_skin_refused";
         public static final String NOTICE_COMPANION_REMOVED = "numen.notice.companion_removed";
         public static final String COMMAND_BOUND          = "numen.command.bound";
         public static final String COMMAND_UNBOUND        = "numen.command.unbound";
@@ -755,7 +765,7 @@ public final class ModLanguageData {
         adder.add("numen.skill.empty.host", "No skills yet.");
         adder.add("numen.skill.open_dir", "＋ Folder");
         adder.add("numen.skill.no_desc", "(no description)");
-        adder.add("numen.summon.title", "Summon a companion");
+        adder.add("numen.summon.title", "Summon companion");
         adder.add("numen.dismiss.delete", "Delete");
         adder.add("numen.dismiss.title", "Delete companion \"%s\"?");
         adder.add("numen.dismiss.warning", "Permanent · backpack, armor and accessories drop in place · cannot be undone");
@@ -777,18 +787,23 @@ public final class ModLanguageData {
         adder.add(Keys.SUMMON_NAME,             "Name");
         adder.add(Keys.SUMMON_NAME_PLACEHOLDER, "3-16 letters, digits or _");
         adder.add(Keys.SUMMON_PERSONA_LABEL,    "Persona");
-        adder.add(Keys.SUMMON_PERSONA_NONE,     "None");
         adder.add(Keys.SUMMON_WARN_NAME_FORMAT, "Needs 3-16 letters, digits or _");
-        adder.add(Keys.SUMMON_SKIN,             "Skin");
         adder.add(Keys.SUMMON_SKIN_DEFAULT,     "Default");
         adder.add(Keys.SUMMON_MODE_SURVIVAL,    "Survival");
         adder.add(Keys.SUMMON_MODE_CREATIVE,    "Creative");
-        adder.add(Keys.SUMMON_MODE_INHERITED,   "%s (inherited)");
-        adder.add(Keys.SUMMON_MODE_INHERIT_TIP, "No gamemode permission — she inherits your current mode");
+        adder.add(Keys.SETUP_PROVIDER_LABEL,    "Model config");
+        adder.add(Keys.SETUP_DEFAULT,           "Default (%s)");
+        adder.add(Keys.SETUP_PERSONA_DEFAULT,   "server setting");
+        adder.add(Keys.SETUP_PROVIDER_DEFAULT,  "not set");
+        adder.add(Keys.SETUP_VOICE_DEFAULT,     "none");
+        adder.add(Keys.SETUP_MORE,              "More options");
+        adder.add(Keys.SETUP_SUMMARY_ITEM,      "%s: %s");
+        adder.add(Keys.SETUP_RESET,             "Reset to default");
+        adder.add(Keys.SETUP_REVERT,            "Undo change");
+        adder.add(Keys.SETUP_MODE_LOCKED,       "Creative requires cheats, or you in Creative mode");
+        adder.add(Keys.SETUP_SKIN_CHOOSE,       "Choose skin");
         adder.add(Keys.EDIT_TITLE,            "Edit");
         adder.add(Keys.EDIT_DISMISS,          "Dismiss");
-        adder.add(Keys.EDIT_PROVIDER_UNBOUND, "(unbound)");
-        adder.add(Keys.EDIT_MODE_LOCKED,      "No cheat/OP permission — her mode can't be changed");
         adder.add(Keys.CONVO_INVITE,           "Invite");
         adder.add(Keys.CONVO_INVITE_TITLE,     "Invite companions");
         adder.add(Keys.CONVO_INVITE_CONFIRM,   "Invite");
@@ -826,7 +841,7 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_FOLDER_EMPTY,    "No png in the folder yet. Put a skin image in it, then tap Refresh.");
         adder.add(Keys.SKIN_ARM,             "Arms");
         adder.add(Keys.SKIN_WEAR,            "Wear");
-        adder.add(Keys.SKIN_CUSTOM,          "Custom");
+        adder.add(Keys.SKIN_PICK,            "Select");
         adder.add(Keys.SKIN_PREPARING,       "Getting the skin ready…");
         adder.add(Keys.SKIN_JOB_QUEUED,      "Getting the skin ready… number %s in line");
         adder.add(Keys.SKIN_JOB_WAITING,     "Getting the skin ready… the service is busy, trying again shortly");
@@ -886,7 +901,7 @@ public final class ModLanguageData {
         adder.add("numen.bubble.doing",      "▸ %s");
         adder.add("numen.gui.list.deleted",  "Deleted \"%s\"");
         adder.add("numen.gui.list.cloned",   "Copied to mine");
-        adder.add(Keys.SUMMON_CREATE,           "Create");
+        adder.add(Keys.SUMMON_CREATE,           "Summon");
         adder.add(Keys.SUMMON_WARN_NAME,        "Name is required");
 
         // Endpoint problems (chat warn line)
@@ -1229,6 +1244,9 @@ public final class ModLanguageData {
         adder.add(Keys.VOICE_NO_KEY,           "no %s key on this computer");
         adder.add(Keys.NOTICE_NAME_INVALID,    "[Numen] A companion's name is 3-16 letters, numbers or underscores");
         adder.add(Keys.NOTICE_SUMMON_LIMIT,    "[Numen] This server lets you have %s companions; dismiss one to summon another");
+        adder.add(Keys.NOTICE_SUMMON_ENTRY_MISSING,  "[Numen] %1$s was not summoned: %2$s \"%3$s\" is missing or turned off");
+        adder.add(Keys.NOTICE_SUMMON_CREATIVE_DENIED, "[Numen] %s was not summoned: Creative requires cheats, or you in Creative mode");
+        adder.add(Keys.NOTICE_SUMMON_SKIN_REFUSED,   "[Numen] %1$s was not summoned: skin \"%2$s\" is unusable (%3$s)");
         adder.add(Keys.NOTICE_COMPANION_REMOVED, "[Numen] %1$s was removed from the server (%2$s). Summon her again to bring her back");
         adder.add(Keys.COMMAND_BOUND,          "%1$s now uses the %2$s %3$s");
         adder.add(Keys.COMMAND_UNBOUND,        "%1$s no longer has a %2$s");
@@ -1517,7 +1535,7 @@ public final class ModLanguageData {
         adder.add("numen.skill.empty.host", "还没有技能。");
         adder.add("numen.skill.open_dir", "＋ 目录");
         adder.add("numen.skill.no_desc", "(无描述)");
-        adder.add("numen.summon.title", "召唤一个同伴");
+        adder.add("numen.summon.title", "召唤同伴");
         adder.add("numen.dismiss.delete", "删除");
         adder.add("numen.dismiss.title", "删除同伴 \"%s\"？");
         adder.add("numen.dismiss.warning", "永久删除 · 背包与身上的装备、饰品会掉落在原地 · 无法撤销");
@@ -1539,18 +1557,23 @@ public final class ModLanguageData {
         adder.add(Keys.SUMMON_NAME,             "名字");
         adder.add(Keys.SUMMON_NAME_PLACEHOLDER, "3~16 位英文/数字/下划线");
         adder.add(Keys.SUMMON_PERSONA_LABEL,    "人设");
-        adder.add(Keys.SUMMON_PERSONA_NONE,     "无");
         adder.add(Keys.SUMMON_WARN_NAME_FORMAT, "需 3~16 位英文/数字/下划线");
-        adder.add(Keys.SUMMON_SKIN,             "皮肤");
         adder.add(Keys.SUMMON_SKIN_DEFAULT,     "默认");
         adder.add(Keys.SUMMON_MODE_SURVIVAL,    "生存");
         adder.add(Keys.SUMMON_MODE_CREATIVE,    "创造");
-        adder.add(Keys.SUMMON_MODE_INHERITED,   "%s(继承)");
-        adder.add(Keys.SUMMON_MODE_INHERIT_TIP, "没有 gamemode 权限——同伴将继承你当前的模式");
+        adder.add(Keys.SETUP_PROVIDER_LABEL,    "模型配置");
+        adder.add(Keys.SETUP_DEFAULT,           "默认（%s）");
+        adder.add(Keys.SETUP_PERSONA_DEFAULT,   "服务器设定");
+        adder.add(Keys.SETUP_PROVIDER_DEFAULT,  "未配置");
+        adder.add(Keys.SETUP_VOICE_DEFAULT,     "无");
+        adder.add(Keys.SETUP_MORE,              "更多选项");
+        adder.add(Keys.SETUP_SUMMARY_ITEM,      "%s：%s");
+        adder.add(Keys.SETUP_RESET,             "恢复默认");
+        adder.add(Keys.SETUP_REVERT,            "撤销更改");
+        adder.add(Keys.SETUP_MODE_LOCKED,       "创造模式需要作弊权限，或你本人处于创造模式");
+        adder.add(Keys.SETUP_SKIN_CHOOSE,       "选择皮肤");
         adder.add(Keys.EDIT_TITLE,            "编辑");
         adder.add(Keys.EDIT_DISMISS,          "遣散");
-        adder.add(Keys.EDIT_PROVIDER_UNBOUND, "(未绑定)");
-        adder.add(Keys.EDIT_MODE_LOCKED,      "没有作弊/OP 权限,改不了同伴的模式");
         adder.add(Keys.CONVO_INVITE,           "邀请");
         adder.add(Keys.CONVO_INVITE_TITLE,     "邀请同伴");
         adder.add(Keys.CONVO_INVITE_CONFIRM,   "邀请");
@@ -1588,7 +1611,7 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_FOLDER_EMPTY,    "文件夹里还没有 png。把皮肤图放进去,再点「刷新」。");
         adder.add(Keys.SKIN_ARM,             "手臂");
         adder.add(Keys.SKIN_WEAR,            "穿上");
-        adder.add(Keys.SKIN_CUSTOM,          "自定义");
+        adder.add(Keys.SKIN_PICK,            "选择");
         adder.add(Keys.SKIN_PREPARING,       "正在准备皮肤…");
         adder.add(Keys.SKIN_JOB_QUEUED,      "正在准备皮肤…排第 %s 位");
         adder.add(Keys.SKIN_JOB_WAITING,     "正在准备皮肤…服务繁忙,稍后再试");
@@ -1648,7 +1671,7 @@ public final class ModLanguageData {
         adder.add("numen.bubble.doing",      "▸ 正在%s");
         adder.add("numen.gui.list.deleted",  "已删除「%s」");
         adder.add("numen.gui.list.cloned",   "已复制到我的");
-        adder.add(Keys.SUMMON_CREATE,           "创建");
+        adder.add(Keys.SUMMON_CREATE,           "召唤");
         adder.add(Keys.SUMMON_WARN_NAME,        "请填名字");
 
         // Endpoint problems (chat warn line)
@@ -1992,6 +2015,9 @@ public final class ModLanguageData {
         adder.add(Keys.VOICE_NO_KEY,           "这台电脑上没有 %s 的 key");
         adder.add(Keys.NOTICE_NAME_INVALID,    "[Numen] 同伴的名字是 3 到 16 位英文字母、数字或下划线");
         adder.add(Keys.NOTICE_SUMMON_LIMIT,    "[Numen] 这个服务器每人最多 %s 只同伴,先遣散一只再召唤吧");
+        adder.add(Keys.NOTICE_SUMMON_ENTRY_MISSING,  "[Numen] 未召唤 %1$s：%2$s「%3$s」不存在或已停用");
+        adder.add(Keys.NOTICE_SUMMON_CREATIVE_DENIED, "[Numen] 未召唤 %s：创造模式需要作弊权限，或你本人处于创造模式");
+        adder.add(Keys.NOTICE_SUMMON_SKIN_REFUSED,   "[Numen] 未召唤 %1$s：皮肤「%2$s」不可用（%3$s）");
         adder.add(Keys.NOTICE_COMPANION_REMOVED, "[Numen] %1$s 被请出了服务器(%2$s)。再召唤她一次就能回来");
         adder.add(Keys.COMMAND_BOUND,          "%1$s 的%2$s换成了 %3$s");
         adder.add(Keys.COMMAND_UNBOUND,        "%1$s 不再绑定%2$s了");
