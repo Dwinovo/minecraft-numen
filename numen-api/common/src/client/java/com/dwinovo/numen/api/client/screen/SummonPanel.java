@@ -100,8 +100,7 @@ public final class SummonPanel extends ModalCard {
         var face = pick == null ? null
                 : SkinTextures.faceOf(pick.choice().where() + ":" + pick.choice().name(), pick.choice().png());
         if (face != null) {
-            PlayerFaceRenderer.draw(s.graphics(), face, px, py, PHOTO);
-            s.graphics().setColor(1f, 1f, 1f, alpha);
+            PlayerFaceRenderer.draw(s.graphics(), face, px, py, PHOTO, true, false, -1);
         } else {
             NumenStyle.box(s, px, py, PHOTO, PHOTO, c.sectionBg(), c.inputBorder());
             int size = Sprites.SIZE * 2;   // 整数倍放大,像素图才不糊
