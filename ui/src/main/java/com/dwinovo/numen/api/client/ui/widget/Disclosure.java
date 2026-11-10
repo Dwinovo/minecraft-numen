@@ -15,8 +15,8 @@ import com.dwinovo.numen.api.client.ui.TextClip;
  */
 public final class Disclosure extends Widget {
 
-    /** 三角那一格的边长(朝右时宽 4 高 7,朝下时宽 7 高 4)。 */
-    private static final int ARROW = 7;
+    /** 三角那一格的边长(见 {@link TurnArrow})。 */
+    private static final int ARROW = TurnArrow.SIZE;
     /** 三角与标题之间。 */
     private static final int ARROW_GAP = 5;
     /** 标题与那道细线之间。 */
@@ -35,7 +35,7 @@ public final class Disclosure extends Widget {
         boolean hot = contains(mouseX, mouseY);
         int fg = hot ? c.textPrimary() : c.textSecondary();
 
-        arrow(s, fg, reveal.value());
+        TurnArrow.draw(s, x + ARROW / 2, y + h / 2, fg, reveal.value());
 
         int tx = x + ARROW + ARROW_GAP;
         int ty = y + (h - s.lineHeight()) / 2;
@@ -47,43 +47,6 @@ public final class Disclosure extends Widget {
         if (ruleX < x + w) {
             s.fillRect(ruleX, y + h / 2, x + w - ruleX, 1, c.divider());
         }
-    }
-
-    /**
-     * 三角:朝右的等腰三角绕自己的中心转 {@code turn}×90°(顺时针到朝下),逐像素判点在不在三角里。
-     * 两头(0 与 1)转出来就是整齐的像素三角,中间是转到一半的样子。
-     */
-    private void arrow(IDrawSurface s, int color, float turn) {
-        double a = Math.toRadians(90.0 * turn);
-        double cos = Math.cos(a), sin = Math.sin(a);
-        // 朝右三角,以包围盒中心为原点:底边在左(-1.5),尖在右(+2.5),高 7
-        double[][] v = {{-1.5, -3.5}, {-1.5, 3.5}, {2.5, 0}};
-        double[][] r = new double[3][2];
-        for (int i = 0; i < 3; i++) {
-            r[i][0] = v[i][0] * cos - v[i][1] * sin;
-            r[i][1] = v[i][0] * sin + v[i][1] * cos;
-        }
-        int cx = x + ARROW / 2, cy = y + h / 2;
-        for (int py = -4; py <= 4; py++) {
-            for (int px = -4; px <= 4; px++) {
-                if (inside(r, px + 0.5, py + 0.5)) {
-                    s.fillRect(cx + px, cy + py, 1, 1, color);
-                }
-            }
-        }
-    }
-
-    private static boolean inside(double[][] t, double px, double py) {
-        double d1 = sign(px, py, t[0], t[1]);
-        double d2 = sign(px, py, t[1], t[2]);
-        double d3 = sign(px, py, t[2], t[0]);
-        boolean neg = d1 < 0 || d2 < 0 || d3 < 0;
-        boolean pos = d1 > 0 || d2 > 0 || d3 > 0;
-        return !(neg && pos);
-    }
-
-    private static double sign(double px, double py, double[] a, double[] b) {
-        return (px - b[0]) * (a[1] - b[1]) - (a[0] - b[0]) * (py - b[1]);
     }
 
     @Override

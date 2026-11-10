@@ -7,6 +7,7 @@ import com.dwinovo.numen.api.client.ui.NumenTheme;
 import com.dwinovo.numen.api.client.ui.TextClip;
 
 import java.util.List;
+import java.util.function.BooleanSupplier;
 import java.util.function.IntConsumer;
 
 /**
@@ -79,6 +80,35 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
         return this;
     }
 
+    /** 改没改过(选择行形态);null = 这一行不分改没改过,值照常是强调色。 */
+    private BooleanSupplier changed;
+    private Runnable revert;
+    /** 行尾 × 那一格的宽。 */
+    private static final int REVERT_W = 9;
+    /** 值与 × 之间。 */
+    private static final int REVERT_GAP = 4;
+
+    /**
+     * 这一行分改没改过(选择行形态):没改过时值是次要色;改过了值是主色,行尾出一个 ×,点它做 {@code revert}(改回去)。
+     * 改没改过、改回去是什么都由宿主说了算,控件只问、只转告。置灰时不出 ×。
+     */
+    public Dropdown revertible(BooleanSupplier changed, Runnable revert) {
+        this.changed = changed;
+        this.revert = revert;
+        return this;
+    }
+
+    private boolean showsRevert() {
+        return rowLabel != null && changed != null && enabled && changed.getAsBoolean();
+    }
+
+    /** 指针在行尾的 × 上(只有改过、能改时才有 ×)。 */
+    public boolean overRevert(double mx, double my) {
+        if (!showsRevert() || !contains(mx, my)) return false;
+        int right = x + w - rowInset;
+        return mx >= right - REVERT_W - REVERT_GAP / 2 && mx < right + REVERT_GAP / 2;
+    }
+
     private int popupWidth() {
         if (popupW > 0) return popupW;
         return rowLabel != null && rowPopupW > 0 ? rowPopupW : w;
@@ -126,7 +156,7 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
         lastFrameMs = nowMs;
         hoverT = NumenStyle.hoverStep(hoverT, hovered || open, dt);
         if (rowLabel != null) {
-            renderRow(s, c);
+            renderRow(s, c, mouseX, mouseY);
             return;
         }
         // 一行字 + 右侧箭头 + 底线(和输入框同一种外观,不画框);下拉开着底线亮 accent(=聚焦态)。
@@ -142,24 +172,38 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
         s.drawText(open ? "▲" : "▼", x + w - 11, y + (h - s.lineHeight()) / 2 + 1, c.textSecondary(), false);
     }
 
-    /** 选择行:整行浅底随悬停收放,左标签、右当前值。 */
-    private void renderRow(IDrawSurface s, NumenTheme.Colors c) {
+    /** 选择行:整行浅底随悬停收放,左标签、右当前值;分改没改过的行改过时值后面跟一个 ×。 */
+    private void renderRow(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY) {
         if (enabled && hoverT > 0.01f) {
             int overlay = ((int) (((c.hover() >>> 24) & 0xFF) * hoverT) << 24) | (c.hover() & 0xFFFFFF);
             s.fillRect(x, y, w, h, overlay);
         }
         int ty = y + (h - s.lineHeight()) / 2 + 1;
         s.drawText(rowLabel, x + rowInset, ty, c.textPrimary(), false);
-        int room = w - rowInset * 2 - s.textWidth(rowLabel) - 8;
+        boolean revertShown = showsRevert();
+        int valueRight = x + w - rowInset - (revertShown ? REVERT_W + REVERT_GAP : 0);
+        if (revertShown) {
+            String cross = "×";
+            int cx = x + w - rowInset - REVERT_W + (REVERT_W - s.textWidth(cross)) / 2;
+            s.drawText(cross, cx, ty, overRevert(mouseX, mouseY) ? c.textPrimary() : c.textSecondary(), false);
+        }
+        int room = valueRight - (x + rowInset) - s.textWidth(rowLabel) - 8;
         boolean none = items.isEmpty() && emptyText != null;
         String value = com.dwinovo.numen.api.client.ui.TextClip.fit(s, none ? emptyText : selectedItem(), Math.max(0, room));
-        s.drawText(value, x + w - rowInset - s.textWidth(value), ty,
-                none ? c.warning() : enabled ? c.accent() : c.textMuted(), false);
+        int color = none ? c.warning()
+                : !enabled ? c.textMuted()
+                : changed == null ? c.accent()
+                : revertShown ? c.textPrimary() : c.textSecondary();
+        s.drawText(value, valueRight - s.textWidth(value), ty, color, false);
     }
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
         if (button != 0 || !contains(mx, my) || !enabled) return false;
+        if (overRevert(mx, my)) {
+            revert.run();
+            return true;
+        }
         line.press(mx);
         if (items.isEmpty()) {
             if (onEmpty == null) return false;
