@@ -9,8 +9,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * 给她换一项绑定({@link Slot}:档案、人设、声线)的唯一入口:面板的编辑卡({@link OwnerInput.Bind})和
- * {@code /numen companion} 命令都走这里。条目要在主人看得到、没被他关掉的库里({@link Library#find});绑的是哪一条记进她的
+ * 给她换一项绑定({@link Slot}:档案、人设、声线)的唯一入口:面板的编辑卡({@link OwnerInput.Bind})、
+ * {@code /numen companion} 命令和召唤时一并定下的绑定({@code SummonSetup})都走这里。条目要在主人看得到、没被他关掉的库里({@link Library#find});绑的是哪一条记进她的
  * 绑定({@link CompanionLoop#bind})。不绑({@code entry == null})是回到没配的样子:没有声线就不出声。皮肤不在这里——它不是库条目,
  * 换皮肤走 {@code Wardrobe}。
  *
@@ -32,11 +32,19 @@ public final class CompanionBinding {
             loop.get().bind(slot, null);
             return null;
         }
-        Library.Entry found = LibraryHub.of(server).library(slot.kind(), owner).find(EntryId.parse(entry));
+        Library.Entry found = find(server, owner, slot, entry);
         if (found == null) {
             return "no such entry: " + entry;
         }
         loop.get().bind(slot, found.id().toString());
         return null;
+    }
+
+    /**
+     * 主人能绑的这一条:在他看得到、没被他关掉的库里;没有是 {@code null}。改绑({@link #apply})和召唤前的检查
+     * ({@code SummonSetup})认的是同一条。
+     */
+    public static Library.Entry find(MinecraftServer server, UUID owner, Slot slot, String entry) {
+        return LibraryHub.of(server).library(slot.kind(), owner).find(EntryId.parse(entry));
     }
 }

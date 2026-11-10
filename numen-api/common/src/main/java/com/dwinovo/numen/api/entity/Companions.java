@@ -35,8 +35,8 @@ public final class Companions {
      * existing companion mints a fresh one. (The old "fresh random UUID every summon" minted same-name
      * duplicates that all respawned on login — that's the duplicate-companion bug.)
      *
-     * <p>她是什么样子(档案、人设、声线、皮肤)不在这里定:召唤之后再绑({@code CompanionBinding})。玩家的召唤走
-     * {@link #summonFor},这里是它和 GameTest 共用的那一步。
+     * <p>她是什么样子(档案、人设、声线、皮肤、模式)不在这里定:玩家的召唤走 {@link #summonFor},召唤卡上选了的那几项在她到达的那一刻
+     * 经编辑时同一条绑定代码落下({@link SummonSetup#apply});这里是它和 GameTest 共用的那一步。
      */
     public static void summon(MinecraftServer server, UUID ownerUuid, String name, ServerLevel level, Vec3 pos,
                               Consumer<Arrivals.Arrival<NumenPlayer>> then) {
@@ -101,14 +101,17 @@ public final class Companions {
      * 名字要合 Minecraft 的命名规则、不能撞上在线的别人;每人最多养几只是服主在 {@code server.json} 里设的(缺省不限)——
      * 再召唤自己已有的同名同伴是叫醒她,不占名额。召唤成了把新名册推给他。
      *
-     * <p>受理即能开始、能当场判断的当场拒绝:不合规矩的(名字、重名、名额)返回 {@code false},{@code then} 当场带着原因跑完;
+     * <p>召唤卡可以一并带上几项配置({@link SummonSetup}:三项库绑定、模式、皮肤),都不是必须的;命令与外接大脑只带名字
+     * ({@link SummonSetup#NONE})。带了的每一项照编辑时的规矩当场检查,有一项不行就整次不召唤、说明是哪一项;都行的在她到达时落下。
+     *
+     * <p>受理即能开始、能当场判断的当场拒绝:不合规矩的(名字、重名、名额、配置)返回 {@code false},{@code then} 当场带着原因跑完;
      * 受理了返回 {@code true},结果经 {@code then} 交回——平台的接纳可以是异步的(Paper 要给登录插件发事件),
      * {@code then} 在那时的主线程上跑;被平台拒了,{@code then} 里是平台给的原因。名字被在路上的别的身体占着、或她自己正在路上,
      * 也是当场拒绝,不另起一趟。
      *
-     * @param creative 玩家在召唤卡上选的模式;{@code null} = 不动她的模式(命令没有这一项)
+     * @param setup 召唤卡上改过的那几项;没改的不在里面,服务端照不指定时的规矩办
      */
-    public static boolean summonFor(ServerPlayer owner, String name, Boolean creative, Consumer<Summoned> then) {
+    public static boolean summonFor(ServerPlayer owner, String name, SummonSetup setup, Consumer<Summoned> then) {
         MinecraftServer server = owner.level().getServer();
         if (!MojangSkins.validName(name)) {
             then.accept(new Summoned(null, net.minecraft.network.chat.Component.translatable(
@@ -138,6 +141,11 @@ public final class Companions {
                     com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_SUMMON_LIMIT, limit)));
             return false;
         }
+        SummonSetup.Prepared prepared = setup.prepare(SummonSetup.checks(owner), name);
+        if (prepared.refusal() != null) {
+            then.accept(new Summoned(null, prepared.refusal()));
+            return false;
+        }
         ServerLevel level = (ServerLevel) owner.level();
         summon(server, owner.getUUID(), name, level, owner.position(), arrival -> {
             NumenPlayer body = arrival.body();
@@ -145,9 +153,7 @@ public final class Companions {
                 then.accept(new Summoned(null, arrival.refusal() == null ? null : refusedMessage(name, arrival.refusal())));
                 return;
             }
-            if (creative != null) {
-                applyGameMode(owner, body, creative);
-            }
+            prepared.apply(owner, body);
             syncRosterToOwner(server, owner);
             then.accept(new Summoned(body, null));
         });
@@ -522,19 +528,24 @@ public final class Companions {
     }
 
     /**
-     * 游戏模式落地,召唤表单和编辑卡同一道门。创造档过权限门:主人有 /gamemode
-     * 权限(等级 2)<b>或本人就在创造</b>(无权限时客户端继承主人档)都放行;
-     * 都不满足(伪造/竞态)按生存并说明——同伴的模式上限 = 主人的上限。
+     * 游戏模式落地,召唤和编辑卡同一道门({@link #mayChooseCreative})。召唤前已经当场拒绝过不过门的创造;到这里还不过门的
+     * (编辑卡上的伪造或竞态)按生存并说明——同伴的模式上限 = 主人的上限。
      */
     public static void applyGameMode(ServerPlayer owner, NumenPlayer body, boolean creative) {
         if (body == null) return;
-        if (creative && !com.dwinovo.numen.api.platform.Services.permissions().isGameMaster(owner.createCommandSourceStack()) && !owner.isCreative()) {
+        if (creative && !mayChooseCreative(owner)) {
             owner.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
                     com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_CREATIVE_NEEDS_OP));
             creative = false;
         }
         body.setGameMode(creative ? net.minecraft.world.level.GameType.CREATIVE
                 : net.minecraft.world.level.GameType.SURVIVAL);
+    }
+
+    /** 主人能不能让同伴进创造:有 /gamemode 权限(等级 2),或本人就在创造。客户端置灰模式那一行用的是同一判据。 */
+    public static boolean mayChooseCreative(ServerPlayer owner) {
+        return com.dwinovo.numen.api.platform.Services.permissions().isGameMaster(owner.createCommandSourceStack())
+                || owner.isCreative();
     }
 
     /**
