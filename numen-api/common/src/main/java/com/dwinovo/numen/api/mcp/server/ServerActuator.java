@@ -78,7 +78,8 @@ public final class ServerActuator implements ExternalHands {
 
     @Override
     public CompletableFuture<Boolean> create(String name) {
-        return asOwner(player -> Companions.summonFor(player, name == null ? "" : name.trim(), null, summoned -> {
+        return asOwner(player -> Companions.summonFor(player, name == null ? "" : name.trim(),
+                com.dwinovo.numen.api.entity.SummonSetup.NONE, summoned -> {
             if (summoned.problem() != null) {
                 player.sendSystemMessage(summoned.problem());
             }

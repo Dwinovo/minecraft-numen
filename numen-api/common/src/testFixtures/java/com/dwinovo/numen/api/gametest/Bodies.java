@@ -64,8 +64,9 @@ public final class Bodies {
     }
 
     /** 玩家召唤的入口;拒绝的话在 {@code problem} 里。 */
-    public static Companions.Summoned summonFor(ServerPlayer owner, String name, Boolean creative) {
-        Companions.Summoned summoned = await(owner.getServer(), then -> Companions.summonFor(owner, name, creative, then));
+    public static Companions.Summoned summonFor(ServerPlayer owner, String name,
+                                                com.dwinovo.numen.api.entity.SummonSetup setup) {
+        Companions.Summoned summoned = await(owner.getServer(), then -> Companions.summonFor(owner, name, setup, then));
         if (summoned == null) {
             throw new AssertionError("召唤 " + name + " 没有在时限内回来:平台的接纳没有答复");
         }

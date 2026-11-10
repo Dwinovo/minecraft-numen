@@ -1,29 +1,23 @@
 package com.dwinovo.numen.api.client.screen;
 
-import com.dwinovo.numen.api.brain.Libraries;
-import com.dwinovo.numen.api.brain.Slot;
-import com.dwinovo.numen.api.client.agent.RemoteCompanions;
-import com.dwinovo.numen.api.client.agent.ServerLibraries;
 import com.dwinovo.numen.api.client.agent.KnownSkins;
+import com.dwinovo.numen.api.client.agent.RemoteCompanion;
+import com.dwinovo.numen.api.client.agent.RemoteCompanions;
+import com.dwinovo.numen.api.client.screen.SetupDraft.Item;
 import com.dwinovo.numen.api.client.skin.CompanionFace;
 import com.dwinovo.numen.api.client.ui.NumenTheme;
 import com.dwinovo.numen.api.client.ui.mc.McDrawSurface;
-import com.dwinovo.numen.api.client.ui.widget.Dropdown;
 import com.dwinovo.numen.api.data.ModLanguageData;
-import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-
 /**
- * 编辑卡——改一只<b>已创建</b>同伴:人设/模式/模型配置/声线四个选择,外加一行皮肤(点开去选皮肤卡,见 {@link SkinPickerPanel})。
- * 版式照 Telegram 的"编辑联系人":标题下面是她的脸和名字,再往下一行一个选择,右下取消/保存。
- * 草稿制:选择行只改草稿,点保存才统一落地,且只发真正变过的项;取消丢弃草稿。草稿基线在开卡时从她的绑定取一次
- * ({@link #reset()},服务端推来的状态);三项绑定(档案、人设、声线)改的都是她存档里的绑定。皮肤不是库条目,不在草稿里——
- * 选皮肤卡里点"穿上"就是当场换。卡里只有"改","删"在头部菜单和资料页上,不在这张卡里。
+ * 编辑卡——改一只<b>已创建</b>同伴:她的脸头部 + 配置行({@link SetupRows},与召唤卡同一套:人设、模型配置摆出,声线、模式收进
+ * "更多选项")。版式照 Telegram 的"编辑联系人":标题下面是她的脸和名字,再往下是配置行,右下取消/保存。
+ *
+ * <p>草稿制:配置行只改草稿,点保存才统一落地,且只发真正变过的项;取消丢弃草稿。草稿基线在开卡时从她的绑定取一次
+ * ({@link #reset()},服务端推来的状态)。头部那张脸是皮肤的入口:点开选皮肤卡,选定就是当场换(换肤要原地刷新身体,不进草稿)。
+ * 卡里只有"改","删"在头部菜单和资料页上,不在这张卡里。
  */
 public final class CompanionEditPanel extends ModalCard {
 
@@ -35,7 +29,7 @@ public final class CompanionEditPanel extends ModalCard {
 
         void onClose();
 
-        /** 与服务端 applyGameMode 的门同一判据:有 gamemode 权限或主人在创造。 */
+        /** 与服务端模式门同一判据:有 gamemode 权限或主人本人在创造。 */
         boolean canChooseMode();
 
         /** 开选皮肤卡。 */
@@ -47,178 +41,83 @@ public final class CompanionEditPanel extends ModalCard {
         void setCreative(boolean creative);
     }
 
-    private static final String PERSONA_NONE = "__default__";
-    private static final String VOICE_NONE = "__none__";
-
-    /** 编辑草稿;开卡时从真源取基线,保存时与基线比对只落差异。 */
-    private static final class Draft {
-        String personaId;     // null = 默认人设
-        String providerId;    // null = 未绑定(只出现在老档,不许改回)
-        String voiceId;       // null = 无声
-        boolean creative;
-    }
-
     private final Host host;
-
-    private Draft draft = new Draft();
-    private String origPersona, origProvider, origVoice;
-    private boolean origCreative;
-
-    private List<String> personaIds = List.of();
-    private List<String> providerIds = List.of();
-    private List<String> voiceIds = List.of();
-    /** 没权限改模式时,模式那一行置灰(权限门在服务端也是同一道),悬停给解释。 */
-    private boolean modeLocked;
-    private Dropdown modePick;
-    /** 头部的顶边(layout 时定)。 */
-    private int coverTop;
+    private final SetupRows rows;
 
     public CompanionEditPanel(Host host) {
         this.host = host;
+        this.rows = new SetupRows(SetupRows.Context.EDIT, host::canChooseMode);
         Minecraft mc = Minecraft.getInstance();
         ui.setClipboard(() -> mc.keyboardHandler.getClipboard(),
                 s -> mc.keyboardHandler.setClipboard(s));
     }
 
-    /** 每次开卡:草稿从当下真相取一次基线。 */
+    /** 每次开卡:草稿从当下真相取一次基线,"更多选项"收起。 */
     @Override
     void reset() {
-        var uuid = host.uuid();
-        var loop = RemoteCompanions.getOrCreate(uuid);
-        origPersona = loop.personaId();
-        origProvider = loop.providerEntryId();
-        origVoice = loop.voiceId();
-        origCreative = host.currentCreative();
-        draft = new Draft();
-        draft.personaId = origPersona;
-        draft.providerId = origProvider;
-        draft.voiceId = origVoice;
-        draft.creative = origCreative;
+        RemoteCompanion her = RemoteCompanions.getOrCreate(host.uuid());
+        rows.reset(SetupDraft.current(her.personaId(), her.providerEntryId(), her.voiceId(), host.currentCreative()));
     }
 
-    /** 头部 + 五行选择。 */
+    /** 头部 + 配置行此刻的高。 */
     @Override
     int height() {
-        return heightFor(COVER_H + 5 * ROW_H);
+        return heightFor(COVER_H + rows.height());
+    }
+
+    @Override
+    void advance(long nowMs) {
+        rows.advance(nowMs);
     }
 
     @Override
     protected void layout(int top) {
-        // 人设目录可能刚被增删,和召唤卡一样让服务端重扫
-        RemoteCompanions.library().request(Libraries.PERSONA, Libraries.RELOAD, new JsonObject());
         title(t(ModLanguageData.Keys.EDIT_COMPANION_TITLE));
-        coverTop = top;
-        int ry = top + COVER_H;
-
-        List<String> personaNames = new ArrayList<>();
-        List<String> pIds = new ArrayList<>();
-        pIds.add(PERSONA_NONE);
-        personaNames.add(t(ModLanguageData.Keys.SUMMON_PERSONA_NONE));
-        for (ServerLibraries.Persona p : ServerLibraries.personasInUse()) {
-            pIds.add(p.id());
-            personaNames.add(p.name());
-        }
-        personaIds = pIds;
-        String curPersona = draft.personaId == null ? PERSONA_NONE : draft.personaId;
-        select(ry, t(ModLanguageData.Keys.SUMMON_PERSONA_LABEL), personaNames,
-                Math.max(0, personaIds.indexOf(curPersona)),
-                i -> {
-                    String id = personaIds.get(i);
-                    draft.personaId = PERSONA_NONE.equals(id) ? null : id;
-                });
-        ry += ROW_H;
-
-        modeLocked = !host.canChooseMode();
-        String survival = t(ModLanguageData.Keys.SUMMON_MODE_SURVIVAL);
-        String creative = t(ModLanguageData.Keys.SUMMON_MODE_CREATIVE);
-        // 改不了时只摆着当前档,置灰点不开(不是没有这一行:她此刻是什么模式照样要看得到)
-        modePick = select(ry, t("numen.summon.mode"),
-                modeLocked ? List.of(draft.creative ? creative : survival) : List.of(survival, creative),
-                modeLocked ? 0 : draft.creative ? 1 : 0,
-                i -> draft.creative = i == 1);
-        modePick.setEnabled(!modeLocked);
-        ry += ROW_H;
-
-        List<String> provNames = new ArrayList<>();
-        List<String> ids = new ArrayList<>();
-        if (draft.providerId == null) {
-            // 老档没绑过:占位首项如实显示,选中任一真档案即入草稿(不许改回"未绑定")。
-            ids.add("");
-            provNames.add(t(ModLanguageData.Keys.EDIT_PROVIDER_UNBOUND));
-        }
-        for (var e : ServerLibraries.providersInUse()) {
-            ids.add(e.id());
-            provNames.add(e.name());
-        }
-        providerIds = ids;
-        select(ry, t(ModLanguageData.Keys.PROVIDER_TITLE), provNames,
-                Math.max(0, providerIds.indexOf(draft.providerId == null ? "" : draft.providerId)),
-                i -> {
-                    String id = providerIds.get(i);
-                    if (!id.isEmpty()) draft.providerId = id;
-                });
-        ry += ROW_H;
-
-        List<String> voiceNames = new ArrayList<>();
-        List<String> vIds = new ArrayList<>();
-        vIds.add(VOICE_NONE);
-        voiceNames.add(t(ModLanguageData.Keys.VOICE_BIND_NONE));
-        for (var e : ServerLibraries.voicesInUse()) {
-            vIds.add(e.id());
-            voiceNames.add(e.name());
-        }
-        voiceIds = vIds;
-        String curVoice = draft.voiceId == null ? VOICE_NONE : draft.voiceId;
-        select(ry, t(ModLanguageData.Keys.VOICE_SUMMON_LABEL), voiceNames,
-                Math.max(0, voiceIds.indexOf(curVoice)),
-                i -> {
-                    String id = voiceIds.get(i);
-                    draft.voiceId = VOICE_NONE.equals(id) ? null : id;
-                });
-        ry += ROW_H;
-
-        // 皮肤:点开去选(穿上就是当场换,换肤要原地重建身体,所以不进草稿)
-        String wornNow = RemoteCompanions.getOrCreate(host.uuid()).skinId() == null
-                ? t(ModLanguageData.Keys.SUMMON_SKIN_DEFAULT) : t(ModLanguageData.Keys.SKIN_CUSTOM);
-        choice(ry, t(ModLanguageData.Keys.SUMMON_SKIN), wornNow, host::openSkins);
-
+        rows.layout(this, top + COVER_H);
         buttons(t(ModLanguageData.Keys.GUI_SETTINGS_CANCEL), host::onClose,
                 t(ModLanguageData.Keys.GUI_SETTINGS_SAVE), this::save);
     }
 
-    /** 保存:与开卡基线比对,只落真正变过的项,然后关卡。 */
+    /** 保存:只落与开卡基线不同的项,然后关卡。 */
     private void save() {
-        var uuid = host.uuid();
-        var her = RemoteCompanions.getOrCreate(uuid);
-        if (!Objects.equals(draft.personaId, origPersona)) {
-            her.bind(Slot.PERSONA, draft.personaId);
-        }
-        if (draft.providerId != null && !draft.providerId.equals(origProvider)) {
-            her.bind(Slot.PROVIDER, draft.providerId);
-        }
-        if (!Objects.equals(draft.voiceId, origVoice)) {
-            her.bind(Slot.VOICE, draft.voiceId);
-        }
-        if (!modeLocked && draft.creative != origCreative) {
-            host.setCreative(draft.creative);
+        SetupDraft draft = rows.draft();
+        RemoteCompanion her = RemoteCompanions.getOrCreate(host.uuid());
+        for (Item item : draft.changes()) {
+            if (item.slot() != null) {
+                her.bind(item.slot(), (String) draft.value(item));
+            } else if (item == Item.MODE) {
+                host.setCreative((Boolean) draft.value(item));
+            }
         }
         host.onClose();
     }
 
     // ---- 宿主转发面 ----
 
-    /** 头部:她的脸,旁边加粗的名字(脸是 MC 独有的东西,这一层可以画)。 */
+    /** 头部:她的脸,旁边加粗的名字(脸是 MC 独有的东西,这一层可以画);脸可以点,悬停描边。 */
     @Override
     protected void paint(McDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs, float alpha) {
-        CompanionFace.draw(s.graphics(), host.uuid(), KnownSkins.of(host.uuid()), photoX(), photoY(coverTop), PHOTO);
-        coverName(s, c, coverTop, host.name());
+        CompanionFace.draw(s.graphics(), host.uuid(), KnownSkins.of(host.uuid()), photoX(), photoY(coverTop()), PHOTO);
+        s.graphics().setColor(1f, 1f, 1f, alpha);
+        photoHover(s, c, mouseX, mouseY, alpha);
+        coverName(s, c, coverTop(), host.name());
     }
 
-    /** 悬停提示(宿主画 tooltip):置灰的模式行报锁因。 */
+    @Override
+    boolean mouseClicked(double mx, double my, int button) {
+        if (button == 0 && !ui.hasOverlay() && photoAt(mx, my)) {
+            host.openSkins();
+            return true;
+        }
+        return super.mouseClicked(mx, my, button);
+    }
+
     @Override
     String tooltipAt(double mx, double my) {
-        return modeLocked && modePick != null && modePick.contains(mx, my)
-                ? t(ModLanguageData.Keys.EDIT_MODE_LOCKED) : null;
+        if (photoAt(mx, my)) {
+            return t(ModLanguageData.Keys.SETUP_SKIN_CHOOSE);
+        }
+        return rows.tooltipAt(mx, my);
     }
 
     private static String t(String key) {
