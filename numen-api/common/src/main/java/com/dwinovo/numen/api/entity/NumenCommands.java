@@ -299,7 +299,8 @@ public final class NumenCommands {
             throws CommandSyntaxException {
         CommandSourceStack source = ctx.getSource();
         // 结果可能在以后的某一刻才到(平台的接纳是异步的):话说给发指令的人,指令本身的返回值只说受没受理
-        boolean accepted = Companions.summonFor(source.getPlayerOrException(), name, null, summoned -> {
+        boolean accepted = Companions.summonFor(source.getPlayerOrException(), name,
+                SummonSetup.NONE, summoned -> {
             if (summoned.problem() != null) {
                 source.sendFailure(summoned.problem());
             } else if (summoned.body() != null) {
