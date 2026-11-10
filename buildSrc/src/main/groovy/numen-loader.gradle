@@ -68,7 +68,7 @@ tasks.named('sourcesJar', Jar) {
 }
 
 // 寻路模块对着原版的 Mojang 名编译,与本模块同一套命名:Fabric 上随后由 remapJar 连同本模块的类一起换成
-// intermediary 名,NeoForge 上原样发出。
-tasks.named('jar', Jar) {
-    from({ project(':numen:pathing').sourceSets.main.output })
+// intermediary 名;Forge 上发给玩家的是 jarJar 产的 -all,它不取 jar 的内容,所以寻路也平铺进它,再由 reobfJarJar 换成 SRG 名。
+tasks.matching { it.name == 'jar' || it.name == 'jarJar' }.configureEach {
+    it.from({ project(':numen:pathing').sourceSets.main.output })
 }
