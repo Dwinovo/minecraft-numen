@@ -199,7 +199,6 @@ public final class ModLanguageData {
         public static final String SETUP_PROVIDER_DEFAULT = "numen.setup.provider_default";
         public static final String SETUP_VOICE_DEFAULT    = "numen.setup.voice_default";
         public static final String SETUP_MORE             = "numen.setup.more";
-        public static final String SETUP_SUMMARY_ITEM     = "numen.setup.summary_item";
         public static final String SETUP_RESET            = "numen.setup.reset";
         public static final String SETUP_REVERT           = "numen.setup.revert";
         public static final String SETUP_MODE_LOCKED      = "numen.setup.mode_locked";
@@ -797,7 +796,6 @@ public final class ModLanguageData {
         adder.add(Keys.SETUP_PROVIDER_DEFAULT,  "not set");
         adder.add(Keys.SETUP_VOICE_DEFAULT,     "none");
         adder.add(Keys.SETUP_MORE,              "More options");
-        adder.add(Keys.SETUP_SUMMARY_ITEM,      "%s: %s");
         adder.add(Keys.SETUP_RESET,             "Reset to default");
         adder.add(Keys.SETUP_REVERT,            "Undo change");
         adder.add(Keys.SETUP_MODE_LOCKED,       "Creative requires cheats, or you in Creative mode");
@@ -1567,7 +1565,6 @@ public final class ModLanguageData {
         adder.add(Keys.SETUP_PROVIDER_DEFAULT,  "未配置");
         adder.add(Keys.SETUP_VOICE_DEFAULT,     "无");
         adder.add(Keys.SETUP_MORE,              "更多选项");
-        adder.add(Keys.SETUP_SUMMARY_ITEM,      "%s：%s");
         adder.add(Keys.SETUP_RESET,             "恢复默认");
         adder.add(Keys.SETUP_REVERT,            "撤销更改");
         adder.add(Keys.SETUP_MODE_LOCKED,       "创造模式需要作弊权限，或你本人处于创造模式");
