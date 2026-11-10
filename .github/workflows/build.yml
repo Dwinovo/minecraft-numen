@@ -12,9 +12,9 @@ name: Build
 # 一条推送不该去跑另外十二条的构建。
 on:
   push:
-    branches: ["1.21.1"]
+    branches: ["1.21.5"]
   pull_request:
-    branches: ["1.21.1"]
+    branches: ["1.21.5"]
   workflow_dispatch:
 
 # 连着推几次时只留最后一次,前面的直接取消。
