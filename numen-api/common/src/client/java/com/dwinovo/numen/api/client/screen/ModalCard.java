@@ -6,11 +6,13 @@ import com.dwinovo.numen.api.client.ui.mc.GuiAlpha;
 import com.dwinovo.numen.api.client.ui.mc.McDrawSurface;
 import com.dwinovo.numen.api.client.ui.mc.Sprites;
 import com.dwinovo.numen.api.client.ui.widget.Button;
-import com.dwinovo.numen.api.client.ui.widget.ChoiceRow;
 import com.dwinovo.numen.api.client.ui.widget.DialogBox;
 import com.dwinovo.numen.api.client.ui.widget.Dropdown;
+import com.dwinovo.numen.api.client.ui.widget.ExpandRow;
 import com.dwinovo.numen.api.client.ui.widget.Label;
 import com.dwinovo.numen.api.client.ui.widget.MultilineTextField;
+import com.dwinovo.numen.api.client.ui.widget.Reveal;
+import com.dwinovo.numen.api.client.ui.widget.SlideWrap;
 import com.dwinovo.numen.api.client.ui.widget.TextField;
 import com.dwinovo.numen.api.client.ui.widget.UiRoot;
 import com.dwinovo.numen.api.client.ui.widget.Widget;
@@ -23,6 +25,7 @@ import net.minecraft.resources.Identifier;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.IntConsumer;
+import java.util.function.Supplier;
 
 /**
  * 面板里的居中卡:召唤({@link SummonPanel})、改她({@link CompanionEditPanel})、选皮肤({@link SkinPickerPanel})、改会话名
@@ -35,9 +38,13 @@ import java.util.function.IntConsumer;
  *   <li>头部({@link #COVER_H}):左边一张脸,右边是名字或一个输入框——Telegram 编辑联系人、新建联系人那一块;</li>
  *   <li>字段({@link #field}):淡色标签在上,下划线输入框在下;</li>
  *   <li>选择行({@link #select}):整行宽,左标签、右当前值,点开选;</li>
+ *   <li>可展开的一截({@link #expandRow} 加 {@link #slideWrap}):一行开合钮,下面那几行跟着它露出或收起;</li>
  *   <li>右下一排纯字钮({@link #buttons}):取消在左,主按钮在右。</li>
  * </ul>
  * 卡宽、边距、按钮行与确认卡共用 {@link DialogBox} 的那几个数;这里的几个数按同样的比例从 Telegram 折过来。
+ *
+ * <p>卡的高度可以随过渡逐帧变(可展开的一截在开合):屏幕每帧先让卡推进({@link #advance}),按新高度重新居中,再把新的外框交给卡
+ * ({@link #place}),卡把控件挪过去——顶上的跟着卡顶走,按钮行跟着卡底走,不重建控件。照 Telegram:box 长高时整张重新居中。
  *
  * <p>键盘也照 Telegram 的对话框,每张卡一样:Tab / Shift+Tab 在输入框之间走,回车 = 主按钮
  * (主按钮置灰时不动),Esc = 取消;下拉展开着时 Esc 先收下拉。
@@ -65,6 +72,8 @@ abstract class ModalCard {
     private final List<Widget> fields = new ArrayList<>();
     /** 回车按的主按钮与它的动作、Esc 走的取消(都由 {@link #buttons} 登记)。 */
     private Button primary;
+    /** 按钮行:贴着卡底,卡长高时跟着卡底走({@link #place})。 */
+    private final List<Widget> footer = new ArrayList<>();
     private Runnable primaryAction;
     private Runnable cancelAction;
 
@@ -94,7 +103,31 @@ abstract class ModalCard {
         ui.setViewportHeight(dropBottom);
         title = null;
         fields.clear();
+        footer.clear();
         layout(y + DialogBox.TITLE_H);
+    }
+
+    /** 每帧画之前推进卡里的过渡;卡高因此变了的,{@link #height} 返回新高。 */
+    void advance(long nowMs) {}
+
+    /**
+     * 每帧把屏幕此刻给卡的外框交给卡(宽与左缘只在重建时变,这里只管竖直方向):卡顶挪了多少,顶上的控件挪多少;卡底挪了多少,
+     * 按钮行挪多少。
+     */
+    final void place(int newY, int newH) {
+        int dTop = newY - y;
+        int dBottom = newY + newH - (y + h);
+        if (dTop == 0 && dBottom == 0) {
+            return;
+        }
+        for (Widget wd : ui.widgetsView()) {
+            int d = footer.contains(wd) ? dBottom : dTop;
+            if (d != 0) {
+                wd.setBounds(wd.x(), wd.y() + d, wd.w(), wd.h());
+            }
+        }
+        y = newY;
+        h = newH;
     }
 
     /** 从 {@code top} 往下排这张卡的行。 */
@@ -104,6 +137,30 @@ abstract class ModalCard {
 
     protected void title(String text) {
         title = text;
+    }
+
+    /** 头部的顶边:标题行下面。 */
+    protected int coverTop() {
+        return y + DialogBox.TITLE_H;
+    }
+
+    /** 指针在头部那张脸上。 */
+    protected boolean photoAt(double mx, double my) {
+        int px = photoX(), py = photoY(coverTop());
+        return mx >= px && mx < px + PHOTO && my >= py && my < py + PHOTO;
+    }
+
+    /** 头部那张脸可以点的时候,悬停在上面给它描一圈强调色的边。 */
+    protected void photoHover(McDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, float alpha) {
+        if (!photoAt(mouseX, mouseY)) {
+            return;
+        }
+        int px = photoX() - 1, py = photoY(coverTop()) - 1, side = PHOTO + 2;
+        int edge = DialogBox.fade(c.accent(), alpha);
+        s.fillRect(px, py, side, 1, edge);
+        s.fillRect(px, py + side - 1, side, 1, edge);
+        s.fillRect(px, py, 1, side, edge);
+        s.fillRect(px + side - 1, py, 1, side, edge);
     }
 
     /** 头部那张脸的左上角({@code top} 是头部的顶边)。 */
@@ -156,11 +213,25 @@ abstract class ModalCard {
         return d;
     }
 
-    /** 选择行,点了去别处选(开另一张卡):整卡宽,从 {@code ry} 起一行,右边写当前的值。 */
-    protected ChoiceRow choice(int ry, String label, String value, Runnable onClick) {
-        ChoiceRow row = ui.add(new ChoiceRow(label, value, DialogBox.PAD_X - 1, onClick));
+    /** 可展开那一截里的选择行:摆在 {@code in} 里,坐标照全开时给。 */
+    protected Dropdown select(SlideWrap in, int ry, String label, List<String> items, int selected, IntConsumer onSelect) {
+        Dropdown d = in.add(new Dropdown(items, selected, onSelect).row(label, DialogBox.PAD_X - 1));
+        d.setBounds(x + 1, ry, w - 2, ROW_H);
+        return d;
+    }
+
+    /** 开合钮那一行:整卡宽,从 {@code ry} 起,收着时右边写 {@code summary}。 */
+    protected ExpandRow expandRow(int ry, String label, Supplier<String> summary, Reveal reveal) {
+        ExpandRow row = ui.add(new ExpandRow(label, summary, DialogBox.PAD_X - 1, reveal));
         row.setBounds(x + 1, ry, w - 2, ROW_H);
         return row;
+    }
+
+    /** 可展开的那一截:从 {@code ry} 起、全开时高 {@code fullH};里面的行用 {@link #select(SlideWrap, int, String, List, int, IntConsumer)} 摆。 */
+    protected SlideWrap slideWrap(int ry, int fullH, Reveal reveal) {
+        SlideWrap wrap = ui.add(new SlideWrap(reveal));
+        wrap.setBounds(x + 1, ry, w - 2, fullH);
+        return wrap;
     }
 
     /** 右下一排纯字钮(摆法见 {@link DialogBox#placeButtons}):取消在左、主按钮在右。返回主按钮。 */
@@ -170,6 +241,8 @@ abstract class ModalCard {
         DialogBox.placeButtons(Minecraft.getInstance().font::width, x + w - DialogBox.BUTTON_RIGHT,
                 DialogBox.buttonTop(y, h), ok, cancel);
         primary = ok;
+        footer.add(ok);
+        footer.add(cancel);
         primaryAction = onOk;
         cancelAction = onCancel;
         return ok;
