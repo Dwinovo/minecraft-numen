@@ -61,7 +61,7 @@ final class GoTask implements Task {
                     + " blocks short, standing at " + her.blockPosition().toShortString();
             return TaskState.FAILED;
         }
-        BlockPos blocking = sinceBetter > STUCK ? blockingAhead(her, Direction.getNearest(dx, 0, dz)) : null;
+        BlockPos blocking = sinceBetter > STUCK ? blockingAhead(her, Direction.getApproximateNearest(dx, 0, dz)) : null;
         if (blocking != null) {
             return dig(her, blocking);
         }
