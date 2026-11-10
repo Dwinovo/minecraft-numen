@@ -165,7 +165,7 @@ Paper、Leaves、spark、WorldEdit、PacketEvents、ProtocolLib 是 GPL,Citizens
   登入里调一次,Paper 再在 `PlayerRegisterChannelEvent` 里调,Fabric 再在玩家实体进世界(`ServerEntityEvents.ENTITY_LOAD`,在玩家登记进玩家表之后;Fabric 的登入事件发在登记之前)时调。`canSend` 本身仍直接查 `getListeningPluginChannels()`,只管传输;发不发看报到(`Presence`)。
 - **`INumenConfig` 只留服务端的项**(代理、系统提示词,及管理员经客户端面板改它们的写入口,Paper 同样写回 `plugins/numen/config.json`);语音识别设置拆成客户端源码集里的服务
   `ISttSettings`(`ClientServices.STT`),NeoForge 与 Fabric 各实现,Paper 不需要。
-- **纯 JVM 模块清单只在 buildSrc 的 `Modules` 里有一份**;`releaseJars` 把 Paper 的两个 jar 收进 `paper/`,并核对 datagen 产出的每个文件都在 jar 里。
+- **纯 JVM 模块清单只在 buildSrc 的 `Modules` 里有一份**;Paper 的两个 jar 不进 `releaseJars`,这一端暂不发布。
 
 ## 附:第 3 步 Paper 部分落地时的出入
 
