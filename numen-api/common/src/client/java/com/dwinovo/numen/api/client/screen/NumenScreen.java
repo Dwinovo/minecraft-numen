@@ -268,8 +268,10 @@ public final class NumenScreen extends Screen {
     /** 重建输入行时带过去的引用(和 savedInput 一样只活过这一次重建)。 */
     private com.dwinovo.numen.api.client.screen.chat.ChatInputBar.QuoteState savedQuote;
 
-    /** 召唤卡(NumenUI):名字 + 模式,见 SummonPanel。 */
+    /** 召唤卡(NumenUI):名字 + 配置行,见 SummonPanel。 */
     private SummonPanel summonPanel;
+    /** 召唤卡上点头像开的选皮肤卡:选定进召唤卡的草稿,收卡回到召唤卡。 */
+    private SkinPickerPanel summonSkinPanel;
     /**
      * 模态卡的槽:召唤、编辑同伴、改会话名、邀请、分组同一时刻只开一张,当前 tab 内容照常渲染作背景。
      * 关卡时卡还留在槽里画完淡出({@link #cardBox}),淡没了才拆;这期间背景仍被挡着、卡也不接事件。
@@ -279,7 +281,7 @@ public final class NumenScreen extends Screen {
     private final com.dwinovo.numen.api.client.ui.widget.DialogBox cardBox =
             new com.dwinovo.numen.api.client.ui.widget.DialogBox();
     private CompanionEditPanel editPanel;
-    /** 选皮肤卡(NumenUI):从编辑卡的皮肤行点开,见 SkinPickerPanel。 */
+    /** 选皮肤卡(NumenUI):从编辑卡的头像点开,见 SkinPickerPanel。 */
     private SkinPickerPanel skinPanel;
     private ConversationEditPanel convEditPanel;
     private InvitePanel invitePanel;
@@ -740,13 +742,11 @@ public final class NumenScreen extends Screen {
         return summonPanel;
     }
 
-    /** 召唤卡的宿主面:发包留在屏幕这边。 */
+    /** 召唤卡的宿主面:发包与开选皮肤卡留在屏幕这边。 */
     private final class SummonHost implements SummonPanel.Host {
-        @Override public void onCreate(SummonPanel.Draft d) {
-            // 召唤只要名字和模式;档案、人设、声线、皮肤是召唤之后在编辑卡里绑的。
-            // 新同伴经 CompanionListPayload 到达——点它的头像即可开工
-            NumenNetwork.sendToServer(
-                    new com.dwinovo.numen.api.network.payload.SummonRequestPayload(d.name, d.creative));
+        @Override public void onCreate(String name, com.dwinovo.numen.api.entity.SummonSetup setup) {
+            // 名字和改过的配置一包发出,服务端在她到达时落下;新同伴经 CompanionListPayload 到达——点它的头像即可开工
+            NumenNetwork.sendToServer(new com.dwinovo.numen.api.network.payload.SummonRequestPayload(name, setup));
             closeCard();
         }
 
@@ -755,15 +755,34 @@ public final class NumenScreen extends Screen {
         }
 
         @Override public boolean canChooseMode() {
-            // 有 gamemode 权限(等级 2,原版已同步到客户端)才给下拉自选。
-            return minecraft != null && minecraft.player != null
-                    && minecraft.player.hasPermissions(2);
+            return mayChooseMode();
         }
 
-
-        @Override public boolean ownerCreative() {
-            return minecraft != null && minecraft.player != null && minecraft.player.isCreative();
+        @Override public void openSkins() {
+            openCard(summonSkinPanel());
         }
+    }
+
+    /** 召唤卡上的选皮肤卡:她还不存在,选定写进召唤卡的草稿;收卡回到召唤卡,草稿原样。 */
+    private final class SummonSkinHost implements SkinPickerPanel.Host {
+        @Override public UUID uuid() { return null; }
+
+        @Override public String name() { return summonPanel().draftName(); }
+
+        @Override public void onClose() {
+            backTo(summonPanel());
+        }
+
+        @Override public SetupDraft draft() { return summonPanel().draft(); }
+    }
+
+    /**
+     * 让同伴进创造的门,召唤卡与编辑卡的模式行都看它;与服务端 {@code Companions.mayChooseCreative} 同一判据:有 gamemode 权限
+     * (等级 2,原版已同步到客户端),或主人本人在创造。
+     */
+    private boolean mayChooseMode() {
+        return minecraft != null && minecraft.player != null
+                && (minecraft.player.hasPermissions(2) || minecraft.player.isCreative());
     }
 
     private CompanionEditPanel editPanel() {
@@ -778,6 +797,13 @@ public final class NumenScreen extends Screen {
             skinPanel = new SkinPickerPanel(new SkinHost());
         }
         return skinPanel;
+    }
+
+    private SkinPickerPanel summonSkinPanel() {
+        if (summonSkinPanel == null) {
+            summonSkinPanel = new SkinPickerPanel(new SummonSkinHost());
+        }
+        return summonSkinPanel;
     }
 
     private ConversationEditPanel convEditPanel() {
@@ -819,6 +845,13 @@ public final class NumenScreen extends Screen {
         modalCard = which;
         modalCard.reset();   // 开卡:草稿从当下真相取基线
         cardBox.show();
+        rebuild();
+    }
+
+    /** 回到上一张卡(从召唤卡开的选皮肤卡收起时):不取新基线,那张卡的草稿原样。 */
+    private void backTo(ModalCard which) {
+        modalCard.release();
+        modalCard = which;
         rebuild();
     }
 
@@ -1009,9 +1042,7 @@ public final class NumenScreen extends Screen {
         }
 
         @Override public boolean canChooseMode() {
-            // 与服务端 applyGameMode 的门同一判据:有 gamemode 权限,或主人本人在创造。
-            return minecraft != null && minecraft.player != null
-                    && (minecraft.player.hasPermissions(2) || minecraft.player.isCreative());
+            return mayChooseMode();
         }
 
         @Override public void openSkins() {
@@ -1551,7 +1582,7 @@ public final class NumenScreen extends Screen {
         switchTo(items.get(Math.floorMod(at + dir, items.size())));
     }
 
-    /** 召唤卡:每次开都是新的一张(默认/无/生存)。 */
+    /** 召唤卡:每次开都是新的一张(名字空着,配置都是默认,"更多选项"收着)。 */
     private void openSummon() {
         openCard(summonPanel());
     }
@@ -2202,6 +2233,9 @@ public final class NumenScreen extends Screen {
             } else {
                 var s = new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font);
                 var c = com.dwinovo.numen.api.client.screen.settings.HostThemeColors.current();
+                // 卡里的过渡(可展开的一截)先走一帧,卡按新高度重新居中,控件跟着挪
+                modalCard.advance(now);
+                modalCard.place(modalCardY(), modalCardBottom() - modalCardY());
                 cardBox.paint(s, c, railX, top, railW + panelW, panelH,
                         modalCardX(), modalCardY(), modalCardW(), modalCardBottom() - modalCardY());
                 boolean live = cardBox.shown();
