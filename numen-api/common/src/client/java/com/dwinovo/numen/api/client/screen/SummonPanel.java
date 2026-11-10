@@ -4,6 +4,7 @@ import com.dwinovo.numen.api.client.skin.SkinChoices;
 import com.dwinovo.numen.api.client.skin.SkinTextures;
 import com.dwinovo.numen.api.client.ui.NumenStyle;
 import com.dwinovo.numen.api.client.ui.NumenTheme;
+import com.dwinovo.numen.api.client.ui.mc.GuiAlpha;
 import com.dwinovo.numen.api.client.ui.mc.McDrawSurface;
 import com.dwinovo.numen.api.client.ui.mc.Sprites;
 import com.dwinovo.numen.api.client.ui.widget.TextField;
@@ -100,8 +101,8 @@ public final class SummonPanel extends ModalCard {
         var face = pick == null ? null
                 : SkinTextures.faceOf(pick.choice().where() + ":" + pick.choice().name(), pick.choice().png());
         if (face != null) {
-            PlayerFaceRenderer.draw(s.graphics(), face, px, py, PHOTO);
-            s.graphics().setColor(1f, 1f, 1f, alpha);
+            PlayerFaceRenderer.draw(s.graphics(), face, px, py, PHOTO, true, false, -1);
+            GuiAlpha.set(s.graphics(), alpha);
         } else {
             NumenStyle.box(s, px, py, PHOTO, PHOTO, c.sectionBg(), c.inputBorder());
             int size = Sprites.SIZE * 2;   // 整数倍放大,像素图才不糊

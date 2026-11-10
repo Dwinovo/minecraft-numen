@@ -6,6 +6,7 @@ import com.dwinovo.numen.api.client.agent.RemoteCompanions;
 import com.dwinovo.numen.api.client.screen.SetupDraft.Item;
 import com.dwinovo.numen.api.client.skin.CompanionFace;
 import com.dwinovo.numen.api.client.ui.NumenTheme;
+import com.dwinovo.numen.api.client.ui.mc.GuiAlpha;
 import com.dwinovo.numen.api.client.ui.mc.McDrawSurface;
 import com.dwinovo.numen.api.data.ModLanguageData;
 import net.minecraft.client.Minecraft;
@@ -98,7 +99,7 @@ public final class CompanionEditPanel extends ModalCard {
     @Override
     protected void paint(McDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs, float alpha) {
         CompanionFace.draw(s.graphics(), host.uuid(), KnownSkins.of(host.uuid()), photoX(), photoY(coverTop()), PHOTO);
-        s.graphics().setColor(1f, 1f, 1f, alpha);
+        GuiAlpha.set(s.graphics(), alpha);
         photoHover(s, c, mouseX, mouseY, alpha);
         coverName(s, c, coverTop(), host.name());
     }
