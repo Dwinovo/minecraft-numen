@@ -98,7 +98,6 @@ public final class CompanionEditPanel extends ModalCard {
     @Override
     protected void paint(McDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs, float alpha) {
         CompanionFace.draw(s.graphics(), host.uuid(), KnownSkins.of(host.uuid()), photoX(), photoY(coverTop()), PHOTO);
-        s.graphics().setColor(1f, 1f, 1f, alpha);
         photoHover(s, c, mouseX, mouseY, alpha);
         coverName(s, c, coverTop(), host.name());
     }

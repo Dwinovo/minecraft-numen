@@ -121,7 +121,7 @@ public record SummonSetup(Map<Slot, String> entries, Boolean creative, Skin skin
 
     /** 这位主人此刻的世界:库是他看得到的那些,模式门是他的权限,皮肤文件夹是服务器上的那个。 */
     public static Checks checks(ServerPlayer owner) {
-        MinecraftServer server = owner.server;
+        MinecraftServer server = owner.level().getServer();
         return new Checks() {
             @Override
             public boolean entryExists(Slot slot, String entry) {
@@ -185,7 +185,7 @@ public record SummonSetup(Map<Slot, String> entries, Boolean creative, Skin skin
          * 那一项没办成,如实告诉主人。
          */
         public void apply(ServerPlayer owner, NumenPlayer body) {
-            MinecraftServer server = owner.server;
+            MinecraftServer server = owner.level().getServer();
             for (Map.Entry<Slot, String> e : setup.entries().entrySet()) {
                 OwnerInputs.Applied applied = OwnerInputs.handle(server, owner.getUUID(),
                         new OwnerInput.Bind(body.getUUID(), e.getKey(), e.getValue()), Venue.PANEL);
