@@ -237,8 +237,10 @@ jobs:
           environment: client|server
           modrinth-id: b1E5VR0g
           modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
-          curseforge-id: 1581109
-          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          # CurseForge 的模组项目里没有 Paper 这个加载器(服务端插件在那边是另一类项目):带着 paper 传,它认不出加载器,
+          # 环境组也就不带,被 errorCode 1021 拒掉。Paper 的包只传 Modrinth。
+          curseforge-id: ${{ matrix.loader != 'paper' && '1581109' || '' }}
+          curseforge-token: ${{ matrix.loader != 'paper' && secrets.CURSEFORGE_TOKEN || '' }}
 
   release:
     needs: [build, upload]
