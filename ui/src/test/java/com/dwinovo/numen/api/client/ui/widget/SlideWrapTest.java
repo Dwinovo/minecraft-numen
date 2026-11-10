@@ -106,21 +106,16 @@ class SlideWrapTest {
     }
 
     @Test
-    void theExpandRowShowsTheSummaryWhileClosedAndFlipsTheReveal() {
+    void theExpandRowFlipsTheReveal() {
         Reveal reveal = Reveal.slide();
-        ExpandRow row = new ExpandRow("更多选项", () -> "声线:无 · 模式:生存", 16, reveal);
+        ExpandRow row = new ExpandRow("更多选项", 16, reveal);
         row.setBounds(0, 0, 300, ROW);
         WidgetTestSupport.FakeSurface s = new WidgetTestSupport.FakeSurface();
         row.render(s, C, -1, -1, 0);
-        assertTrue(s.texts.contains("更多选项"));
-        assertTrue(s.texts.contains("声线:无 · 模式:生存"), "收着时写出里面各项的值");
+        assertEquals(List.of("更多选项"), s.texts, "行上只有标签");
 
         assertTrue(row.mouseClicked(10, 10, 0));
         assertTrue(reveal.open());
-        reveal.snap(true);
-        s.reset();
-        row.render(s, C, -1, -1, 0);
-        assertFalse(s.texts.contains("声线:无 · 模式:生存"), "展开后那几行自己摆着,不再写摘要");
     }
 
     @Test
