@@ -10,6 +10,7 @@ import com.dwinovo.numen.api.client.skin.SkinTextures;
 import com.dwinovo.numen.api.client.ui.NumenTheme;
 import com.dwinovo.numen.api.client.ui.TextClip;
 import com.dwinovo.numen.api.client.ui.mc.McDrawSurface;
+import com.dwinovo.numen.api.client.ui.mc.Sprites;
 import com.dwinovo.numen.api.client.ui.widget.Button;
 import com.dwinovo.numen.api.client.ui.widget.DialogBox;
 import com.dwinovo.numen.api.client.ui.widget.Dropdown;
@@ -37,17 +38,26 @@ import java.util.UUID;
  * "穿上"之后她的皮肤由服务端用时才签({@code Wardrobe}):这里只显示"正在准备皮肤…"和失败的原因,签名这回事玩家看不见。
  * 管理员另有一行 MineSkin 的 API key(服务器钥匙串里的,提高签名额度)。
  *
+ * <p>召唤卡上点头像也开这张卡,那时她还不存在:选定的那张进召唤卡的草稿({@link Host#draft}),随召唤请求发出,这里不发请求;
+ * 主按钮叫"选择"。
+ *
  * <p>脸是 MC 独有的东西,在这一层直接画;几何与状态色走 NumenStyle。
  */
 public final class SkinPickerPanel extends ModalCard {
 
     /** 屏幕侧的面:对着哪只、关卡。 */
     public interface Host {
+        /** 对着哪只;召唤卡上选的时候她还不存在,是 {@code null}。 */
         UUID uuid();
 
         String name();
 
         void onClose();
+
+        /** 召唤卡的草稿:选定写进它,不发请求;对着已有的她时是 {@code null},选定就是当场换。 */
+        default SetupDraft draft() {
+            return null;
+        }
     }
 
     /** 列表里的一行:节标题、说明、"默认皮肤"、一张图。 */
@@ -162,8 +172,12 @@ public final class SkinPickerPanel extends ModalCard {
         return row instanceof Row.Default || row instanceof Row.Item item && item.choice().usable();
     }
 
-    /** 她现在穿着的(缓存里的名字);没穿是 {@code null}。 */
+    /** 她现在穿着的(缓存里的名字),召唤卡上是草稿里选着的;默认皮肤是 {@code null}。 */
     private SkinRef worn() {
+        SetupDraft draft = host.draft();
+        if (draft != null) {
+            return draft.skin() == null ? null : draft.skin().ref();
+        }
         return SkinRef.parse(RemoteCompanions.getOrCreate(host.uuid()).skinId());
     }
 
@@ -199,7 +213,9 @@ public final class SkinPickerPanel extends ModalCard {
 
     @Override
     protected void layout(int top) {
-        title(I18n.get(ModLanguageData.Keys.SKIN_PICKER_TITLE, host.name()));
+        String her = host.name();
+        title(her == null || her.isBlank() ? t(ModLanguageData.Keys.SETUP_SKIN_CHOOSE)
+                : I18n.get(ModLanguageData.Keys.SKIN_PICKER_TITLE, her));
         int px = x + DialogBox.PAD_X;
         int pw = w - DialogBox.PAD_X * 2;
         int ry = top;
@@ -240,7 +256,7 @@ public final class SkinPickerPanel extends ModalCard {
         }
         statusY = ry;
         wear = buttons(t(ModLanguageData.Keys.GUI_SETTINGS_CANCEL), host::onClose,
-                t(ModLanguageData.Keys.SKIN_WEAR), this::wear);
+                t(host.draft() != null ? ModLanguageData.Keys.SKIN_PICK : ModLanguageData.Keys.SKIN_WEAR), this::wear);
     }
 
     /** 路径只写到游戏目录往下,不把玩家的用户名与盘符摆在界面上。 */
@@ -262,6 +278,13 @@ public final class SkinPickerPanel extends ModalCard {
         }
         if (admin()) {
             ServerLibraries.saveKey(MineSkinClient.KEY_SERVICE, mineSkinKey, !RemoteCompanions.host());
+        }
+        SetupDraft draft = host.draft();
+        if (draft != null) {
+            draft.set(SetupDraft.Item.SKIN, rows.get(selected) instanceof Row.Item item
+                    ? new SkinChoices.Pick(item.choice(), arm) : null);
+            host.onClose();
+            return;
         }
         JsonObject body = new JsonObject();
         body.addProperty("companion", host.uuid().toString());
@@ -413,7 +436,12 @@ public final class SkinPickerPanel extends ModalCard {
             }
         } else if (row instanceof Row.Default ignored) {
             paintBase(s, c, index, at, h, hot);
-            PlayerFaceRenderer.draw(s.graphics(), DefaultPlayerSkin.get(host.uuid()), tx, at + (h - FACE) / 2, FACE);
+            if (host.uuid() != null) {
+                PlayerFaceRenderer.draw(s.graphics(), DefaultPlayerSkin.get(host.uuid()), tx, at + (h - FACE) / 2, FACE);
+            } else {   // 还没召唤:默认皮肤按她的 UUID 挑,此刻不知道是哪一张,摆人形占位
+                Sprites.draw(s.graphics(), Sprites.USER, tx + (FACE - Sprites.SIZE) / 2, at + (h - Sprites.SIZE) / 2,
+                        Sprites.SIZE, c.textSecondary());
+            }
             s.drawText(t(ModLanguageData.Keys.SUMMON_SKIN_DEFAULT), tx + FACE + 6, at + 6,
                     c.textPrimary(), false);
             if (worn == null) {
