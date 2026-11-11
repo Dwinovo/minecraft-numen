@@ -112,9 +112,9 @@ public final class CompanionTickDispatcher {
             heartbeatLogged = true;
             com.dwinovo.numen.api.Constants.LOG.info("[numen-task] scheduler heartbeat online (first server tick)");
         }
-        // 登录时只记了一笔,恢复放在这儿做——那时 placeNewPlayer 早已返回,同伴出什么事
-        // 都落不到主人的入场流程上。见 Companions.scheduleRestoreFor。
-        Companions.restorePending(server);
+        // 登入登出时只记了一笔,对账放在这儿做——那时 placeNewPlayer / remove 早已返回,同伴出什么事
+        // 都落不到主人的入场流程上。见 Companions.scheduleReconcile。
+        Companions.reconcilePending(server);
         // 她们的程序排着的服务端调用:在预算里执行,主线程不等任何程序
         com.dwinovo.numen.api.program.ServerPrograms.tick();
         com.dwinovo.numen.api.brain.OwnerInputs.tick(server);   // 主人经客户端做的事:信箱里取几条处理

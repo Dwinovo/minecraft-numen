@@ -76,6 +76,11 @@ public final class EventTypes {
      * 她不在世界里时停牌压着(见 {@code Hold.DEAD}),主人再召唤她,这条随停牌解开一起交给她。
      */
     public static final String REMOVED = "removed";
+    /**
+     * 她从登出回到了世界(主人不在场时她被收起来,或主人让她下线):因为什么离开、游戏里过了多久、此刻在哪。离开时不另发——她下线期间没有回合,
+     * 回来时这一条就够她接上。不是急件:位置和背包都是她离开时的样子,随下一次调模型捎上就够。
+     */
+    public static final String RETURNED = "returned";
     /** 饿了 —— 她不会自己吃,得主人给或者叫她去弄。恒为急件。 */
     public static final String HUNGRY = "hungry";
     /**
@@ -345,6 +350,7 @@ public final class EventTypes {
         register(event(DEATH, true));
         register(event(RESPAWNED, true));
         register(event(REMOVED, true));
+        register(event(RETURNED, false));
         register(event(HUNGRY, true));
         register(event(INVENTORY_FULL, true));
         register(new Type(ADVANCEMENT_REWARD, s -> s, s -> null, false, false, Delivery.AMBIENT, false));

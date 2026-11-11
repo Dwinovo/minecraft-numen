@@ -175,9 +175,9 @@ public class CommandGameTests {
         }
     }
 
-    /** 玩家名的大小写不产生第二个 UUID、身体或背包;按名遣散也认同一套名字。 */
+    /** 玩家名的大小写不产生第二个 UUID、身体或背包;按名删除也认同一套名字。 */
     @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_command")
-    public static void name_case_reuses_the_body_and_dismisses_the_same_identity(GameTestHelper helper) {
+    public static void name_case_reuses_the_body_and_deletes_the_same_identity(GameTestHelper helper) {
         var server = helper.getLevel().getServer();
         var owner = presentVanillaPlayer(helper, null, "gametest_case_owner", "en_us");
         var position = net.minecraft.world.phys.Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(8, 2, 8)));
@@ -193,10 +193,9 @@ public class CommandGameTests {
                 helper.assertTrue(same.getInventory().getItem(0).is(net.minecraft.world.item.Items.DIAMOND)
                         && same.getInventory().getItem(0).getCount() == 3, "the inventory changed");
             }
-            helper.assertTrue(com.dwinovo.numen.api.entity.Companions.dismissByName(server, owner.getUUID(), "qacasebody") == 1,
-                    "case-insensitive dismissal did not find the identity");
+            server.getCommands().performPrefixedCommand(owner.createCommandSourceStack(), "numen player delete qacasebody");
             helper.assertTrue(NumenPlayer.findByUuid(server, body.getUUID()) == null && registry.find(body.getUUID()) == null,
-                    "the dismissed identity is still present");
+                    "the deleted identity is still present");
             helper.succeed();
         } finally {
             if (registry.find(body.getUUID()) != null) com.dwinovo.numen.api.entity.Companions.dismiss(server, body);
@@ -236,7 +235,7 @@ public class CommandGameTests {
                         entry.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.REMOVED)
                                 && entry.text().contains("cheating at cards")),
                 "her inbox has no removal fact: " + loop.inbox().entries());
-        helper.assertTrue(registry.find(id) != null && registry.find(id).removed(), "the roster does not record it");
+        helper.assertTrue(registry.find(id) != null && registry.find(id).outside().server(), "the roster does not record it");
         helper.assertTrue(GameTestKit.said(owner).stream().anyMatch(line ->
                         line.text().getString().contains("Kickable") && line.text().getString().contains("cheating at cards")),
                 "her owner was not told");
@@ -248,7 +247,7 @@ public class CommandGameTests {
                 net.minecraft.world.phys.Vec3.atBottomCenterOf(at));
         helper.assertTrue(back.getUUID().equals(id) && NumenPlayer.findByUuid(server, id) != null,
                 "the summon did not bring the same companion back");
-        helper.assertTrue(!registry.find(id).removed(), "the roster still says she is out");
+        helper.assertTrue(!registry.find(id).outside().isOutside(), "the roster still says she is out");
         helper.assertTrue(loop.status().hold() != com.dwinovo.numen.api.agent.loop.Hold.DEAD,
                 "her loop is still held for the missing body");
         panel.flush();   // 回来后的停牌变化若编不出来,这里抛出
@@ -258,6 +257,102 @@ public class CommandGameTests {
         registry.remove(id);
         leave(owner);
         helper.succeed();
+    }
+
+    /**
+     * 主人不在场她就像真玩家一样登出:不在玩家表里、名册还有她、背包随存档留着;主人回来,她落在离开时的位置、背包原样,
+     * 收件箱里留着一条回来的事实。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
+    public static void she_logs_out_with_her_absent_owner_and_returns_with_him_where_she_was(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var server = level.getServer();
+        java.util.UUID ownerId = java.util.UUID.randomUUID();
+        var owner = presentVanillaPlayerAs(helper, ownerId, "gametest_att_owner", "en_us");
+        NumenPlayer her = com.dwinovo.numen.api.gametest.Bodies.summon(server, ownerId, "Attendee", level,
+                net.minecraft.world.phys.Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(8, 2, 8))));
+        java.util.UUID id = her.getUUID();
+        her.getInventory().setItem(0, new net.minecraft.world.item.ItemStack(Items.DIAMOND, 3));
+        BlockPos where = her.blockPosition();
+        var registry = com.dwinovo.numen.api.entity.CompanionRegistry.get(server);
+        java.util.concurrent.atomic.AtomicReference<net.minecraft.server.level.ServerPlayer> returned =
+                new java.util.concurrent.atomic.AtomicReference<>();
+
+        steps(helper)
+                .thenExecute(() -> {
+                    com.dwinovo.numen.api.platform.PlayerSessions.left(owner);   // 平台的登出事件先到,玩家后移除
+                    leave(owner);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(NumenPlayer.findByUuid(server, id) == null,
+                        "she is still in the world with nobody to drive her"))
+                .thenExecute(() -> {
+                    helper.assertTrue(registry.find(id) != null && !registry.find(id).outside().isOutside(),
+                            "the roster lost her or marked her left outside");
+                    returned.set(presentVanillaPlayerAs(helper, ownerId, "gametest_att_owner", "en_us"));
+                })
+                .thenWaitUntil(() -> helper.assertTrue(NumenPlayer.findByUuid(server, id) != null,
+                        "she did not come back with her owner"))
+                .thenExecute(() -> {
+                    NumenPlayer back = NumenPlayer.findByUuid(server, id);
+                    helper.assertTrue(back.blockPosition().equals(where), "she did not return where she left: "
+                            + back.blockPosition() + " vs " + where);
+                    helper.assertTrue(back.getInventory().countItem(Items.DIAMOND) == 3, "her backpack changed");
+                    var inbox = com.dwinovo.numen.api.brain.CompanionLoops.get(id).orElseThrow().inbox();
+                    helper.assertTrue(inbox.entries().stream().anyMatch(entry ->
+                                    entry.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.RETURNED)
+                                            && entry.text().contains("owner_absent")),
+                            "she was not told she was back: " + inbox.entries());
+                    com.dwinovo.numen.api.entity.Companions.dismiss(server, back);
+                    leave(returned.get());
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * 主人下令下线(`/numen player despawn`):她登出、东西留着、名册记着她留在外面、大脑停牌;主人上线触发的对账不替他带回来,
+     * 他再召唤她才回来,背包原样,收件箱里留着一条回来的事实。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
+    public static void an_offline_order_keeps_her_out_until_the_owner_summons_her(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var server = level.getServer();
+        var owner = presentVanillaPlayer(helper, null, "gametest_ord_owner", "en_us");
+        var at = net.minecraft.world.phys.Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(8, 2, 8)));
+        NumenPlayer her = com.dwinovo.numen.api.gametest.Bodies.summon(server, owner.getUUID(), "Ordered", level, at);
+        java.util.UUID id = her.getUUID();
+        her.getInventory().setItem(0, new net.minecraft.world.item.ItemStack(Items.DIAMOND, 2));
+        var registry = com.dwinovo.numen.api.entity.CompanionRegistry.get(server);
+        var loop = com.dwinovo.numen.api.brain.CompanionLoops.get(id).orElseThrow();
+
+        server.getCommands().performPrefixedCommand(owner.createCommandSourceStack(), "numen player despawn ordered");
+
+        helper.assertTrue(NumenPlayer.findByUuid(server, id) == null, "the order did not log her out");
+        helper.assertTrue(registry.find(id) != null && registry.find(id).outside().why()
+                        == com.dwinovo.numen.api.entity.Attendance.Why.OWNER, "the roster does not record the order");
+        helper.assertTrue(loop.status().hold() == com.dwinovo.numen.api.agent.loop.Hold.DEAD,
+                "her loop is not held while she is offline: " + loop.status().hold());
+        com.dwinovo.numen.api.entity.Companions.scheduleReconcile(owner.getUUID());   // 主人登入时排的就是这一笔
+
+        steps(helper)
+                .thenIdle(3)
+                .thenExecute(() -> {
+                    helper.assertTrue(NumenPlayer.findByUuid(server, id) == null,
+                            "the owner being here brought her back without a summon");
+                    NumenPlayer back = com.dwinovo.numen.api.gametest.Bodies.summon(server, owner.getUUID(), "Ordered",
+                            level, at);
+                    helper.assertTrue(back.getUUID().equals(id), "the summon made another companion");
+                    helper.assertTrue(back.getInventory().countItem(Items.DIAMOND) == 2, "her backpack changed");
+                    helper.assertTrue(!registry.find(id).outside().isOutside(), "the roster still says she is out");
+                    helper.assertTrue(loop.status().hold() != com.dwinovo.numen.api.agent.loop.Hold.DEAD,
+                            "her loop is still held for the missing body");
+                    helper.assertTrue(loop.inbox().entries().stream().anyMatch(entry ->
+                                    entry.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.RETURNED)
+                                            && entry.text().contains("owner_ordered")),
+                            "she was not told she was back: " + loop.inbox().entries());
+                    com.dwinovo.numen.api.entity.Companions.dismiss(server, back);
+                    leave(owner);
+                })
+                .thenSucceed();
     }
 
     /**

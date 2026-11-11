@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.mcp.server;
 
 import com.dwinovo.numen.api.brain.OwnerPresence;
+import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.home.Homes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -22,6 +23,7 @@ public final class ServerMcp {
                     @Override
                     public void connected(UUID owner) {
                         tell(server, owner, "numen.brain.back_active");
+                        Companions.reconcile(server, owner);
                     }
 
                     @Override

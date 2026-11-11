@@ -78,7 +78,11 @@ public final class CompanionBrains {
                 },
                 () -> {
                     CompanionRegistry.Entry entry = registry.find(companion);
-                    return entry != null && entry.removed() ? HaltReason.REMOVED : null;
+                    return entry == null ? null : switch (entry.outside().why()) {
+                        case SERVER -> HaltReason.REMOVED;
+                        case OWNER -> HaltReason.OFFLINE;
+                        case NONE -> null;
+                    };
                 },
                 ownerOnline, driving, initiative, persona,
                 () -> server.overworld().getDayTime(), () -> server.overworld().getGameTime(), rooms));

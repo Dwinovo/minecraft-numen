@@ -596,9 +596,14 @@ public final class CompanionLoop {
                 System.currentTimeMillis(), true)));
     }
 
-    /** 主人再召唤了被请出去的她:身体回到世界里,解开停牌,刚才留下的那条事实一并交给她。 */
+    /** 主人让她下线:内核冻结,收件箱照收;她下线期间没有回合,回来时由 {@link #onReturned} 解开。 */
+    public void onOrderedOffline() {
+        loop.halt(HaltReason.OFFLINE);
+    }
+
+    /** 她的身体从登出或"留在外面"回到了世界里:解开停牌(没有停牌就什么也不变),攒下的事实(被请出去那条、回来那条)一并交给她。 */
     public void onReturned() {
-        Constants.LOG.info("[numen-entity#{}] summoned back after removal — loop thawed", companion);
+        Constants.LOG.info("[numen-entity#{}] back in the world — loop thawed", companion);
         loop.respawned();
     }
 

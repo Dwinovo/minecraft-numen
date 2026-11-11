@@ -75,14 +75,45 @@ class CompanionRegistryTest {
     void beingRemovedFromTheServerSurvivesUntilTheOwnerSummonsHerAgain() {
         CompanionRegistry reg = new CompanionRegistry();
         reg.put(A, entry("小焰", OWNER));
-        reg.markRemoved(A, "cheating at cards");
+        reg.markOutside(A, Attendance.Outside.byServer("cheating at cards"));
 
         CompanionRegistry back = roundTrip(reg);
-        assertTrue(back.find(A).removed(), "被请出去必须活过读档——否则主人一上线就把她悄悄重建了");
+        assertTrue(back.find(A).outside().server(), "被请出去必须活过读档——否则主人一上线就把她悄悄重建了");
         assertEquals("cheating at cards", back.find(A).removedFor());
 
         back.markReturned(A);
-        assertFalse(roundTrip(back).find(A).removed());
+        assertFalse(roundTrip(back).find(A).outside().isOutside());
+    }
+
+    @Test
+    void anOwnerOrderedOfflineSurvivesReloadAndIsNotAServerRemoval() {
+        CompanionRegistry reg = new CompanionRegistry();
+        reg.put(A, entry("小焰", OWNER));
+        reg.markOutside(A, Attendance.Outside.byOwner());
+        reg.markLeftAt(A, 4200L);
+
+        CompanionRegistry back = roundTrip(reg);
+
+        assertEquals(Attendance.Why.OWNER, back.find(A).outside().why());
+        assertEquals(4200L, back.find(A).leftAt());
+        assertEquals("", back.find(A).removedFor(), "主人让她下线的,面板的名册不当作被请出了服务器");
+        back.markReturned(A);
+        assertFalse(roundTrip(back).find(A).outside().isOutside());
+    }
+
+    @Test
+    void theOldRemovedForFieldLoadsAsAServerRemoval() {
+        CompanionRegistry reg = new CompanionRegistry();
+        reg.put(A, entry("小焰", OWNER));
+        CompoundTag tag = reg.save(new CompoundTag(), null);
+        tag.getCompound("companions").getCompound(A.toString()).putString("removedFor", "cheating at cards");
+
+        CompanionRegistry back = CompanionRegistry.load(tag, null);
+
+        assertTrue(back.find(A).outside().server());
+        assertEquals("cheating at cards", back.find(A).removedFor());
+        CompoundTag resaved = back.save(new CompoundTag(), null).getCompound("companions").getCompound(A.toString());
+        assertFalse(resaved.contains("removedFor"), "旧字段读进来就并进了 outside,不再写回");
     }
 
     @Test
@@ -187,7 +218,7 @@ class CompanionRegistryTest {
     void skinAndPositionUpdatesKeepEverythingElse() {
         CompanionRegistry reg = new CompanionRegistry();
         reg.put(A, entry("小焰", OWNER).doing("kaleidoscope.pot.stir", "kaleidoscope.pot.stir({x = 1, y = 2, z = 3})"));
-        reg.markRemoved(A, "cheating at cards");
+        reg.markOutside(A, Attendance.Outside.byServer("cheating at cards"));
 
         // 换肤 / 挪落点都不该顺手把在做的活和被请出去的状态抹掉
         reg.put(A, reg.find(A).withSkin("v", "s"));

@@ -409,6 +409,7 @@ public final class ModLanguageData {
         public static final String COMMAND_SEVERAL_NAMED     = "numen.command.several_named";
         public static final String COMMAND_SUMMONED          = "numen.command.summoned";
         public static final String COMMAND_NO_SUCH_COMPANION = "numen.command.no_such_companion";
+        public static final String COMMAND_OFFLINED          = "numen.command.offlined";
         public static final String COMMAND_DISMISSED         = "numen.command.dismissed";
         public static final String COMMAND_DISMISSED_DUPLICATES = "numen.command.dismissed_duplicates";
         public static final String COMMAND_YOURS_NOT_HERE    = "numen.command.yours_not_here";
@@ -710,6 +711,7 @@ public final class ModLanguageData {
         adder.add("numen.cause.halt.death_by", "She died (%s)");
         adder.add("numen.cause.halt.removed", "She was removed from the server");
         adder.add("numen.cause.halt.removed_by", "She was removed from the server (%s)");
+        adder.add("numen.cause.halt.offline", "She went offline");
         adder.add("numen.cause.halt.disconnect", "You disconnected");
         adder.add("numen.cause.halt.external", "An external brain took over");
         adder.add("numen.cause.halt.dispose", "Her brain was reset");
@@ -1128,8 +1130,9 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_SEVERAL_NAMED,     "%s companions here are named '%s'");
         adder.add(Keys.COMMAND_SUMMONED,          "Summoned companion '%s' (%s)");
         adder.add(Keys.COMMAND_NO_SUCH_COMPANION, "No companion of yours named '%s'");
-        adder.add(Keys.COMMAND_DISMISSED,         "Dismissed companion '%s' — gone for good");
-        adder.add(Keys.COMMAND_DISMISSED_DUPLICATES, "Dismissed companion '%s' — gone for good (cleaned up %s duplicates)");
+        adder.add(Keys.COMMAND_OFFLINED,          "Companion '%s' went offline — summon her to bring her back");
+        adder.add(Keys.COMMAND_DISMISSED,         "Deleted companion '%s' — gone for good");
+        adder.add(Keys.COMMAND_DISMISSED_DUPLICATES, "Deleted companion '%s' — gone for good (cleaned up %s duplicates)");
         adder.add(Keys.COMMAND_YOURS_NOT_HERE,    "No companion of yours named '%s' is here");
         adder.add(Keys.COMMAND_MODE,              "%s: permission mode %s");
         adder.add(Keys.COMMAND_MODE_SET,          "%s: permission mode set to %s");
@@ -1479,6 +1482,7 @@ public final class ModLanguageData {
         adder.add("numen.cause.halt.death_by", "她死了(%s)");
         adder.add("numen.cause.halt.removed", "她被请出了服务器");
         adder.add("numen.cause.halt.removed_by", "她被请出了服务器(%s)");
+        adder.add("numen.cause.halt.offline", "她下线了");
         adder.add("numen.cause.halt.disconnect", "你断线了");
         adder.add("numen.cause.halt.external", "外接大脑接管了");
         adder.add("numen.cause.halt.dispose", "她的大脑被重置了");
@@ -1898,8 +1902,9 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_SEVERAL_NAMED,     "这里有 %s 个同伴都叫「%s」");
         adder.add(Keys.COMMAND_SUMMONED,          "召唤了同伴「%s」(%s)");
         adder.add(Keys.COMMAND_NO_SUCH_COMPANION, "你没有叫「%s」的同伴");
-        adder.add(Keys.COMMAND_DISMISSED,         "遣散了同伴「%s」,她不会再回来");
-        adder.add(Keys.COMMAND_DISMISSED_DUPLICATES, "遣散了同伴「%s」,她不会再回来(清掉了 %s 个重复的)");
+        adder.add(Keys.COMMAND_OFFLINED,          "同伴「%s」下线了,召唤她就能回来");
+        adder.add(Keys.COMMAND_DISMISSED,         "删除了同伴「%s」,她不会再回来");
+        adder.add(Keys.COMMAND_DISMISSED_DUPLICATES, "删除了同伴「%s」,她不会再回来(清掉了 %s 个重复的)");
         adder.add(Keys.COMMAND_YOURS_NOT_HERE,    "你叫「%s」的同伴不在这里");
         adder.add(Keys.COMMAND_MODE,              "%s:权限模式 %s");
         adder.add(Keys.COMMAND_MODE_SET,          "%s:权限模式已设为 %s");

@@ -729,11 +729,24 @@ public final class GameTestKit {
         return join(helper, companion, name, false, language);
     }
 
+    /**
+     * 同上,但指定这位玩家的 UUID:扮"同一位主人下线之后又上线"。用完经 {@link #leave} 离开。
+     */
+    static net.minecraft.server.level.ServerPlayer presentVanillaPlayerAs(GameTestHelper helper, UUID id, String name,
+                                                                          String language) {
+        return join(helper, null, id, name, false, language);
+    }
+
     private static net.minecraft.server.level.ServerPlayer join(GameTestHelper helper, NumenPlayer companion,
+                                                                String name, boolean installed, String language) {
+        return join(helper, companion, UUID.randomUUID(), name, installed, language);
+    }
+
+    private static net.minecraft.server.level.ServerPlayer join(GameTestHelper helper, NumenPlayer companion, UUID id,
                                                                 String name, boolean installed, String language) {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
-        com.mojang.authlib.GameProfile profile = new com.mojang.authlib.GameProfile(UUID.randomUUID(), name);
+        com.mojang.authlib.GameProfile profile = new com.mojang.authlib.GameProfile(id, name);
         var info = net.minecraft.server.level.ClientInformation.createDefault();
         var player = new net.minecraft.server.level.ServerPlayer(server, level, profile,
                 new net.minecraft.server.level.ClientInformation(language, info.viewDistance(), info.chatVisibility(),

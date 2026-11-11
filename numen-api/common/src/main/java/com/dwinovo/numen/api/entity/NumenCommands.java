@@ -47,7 +47,8 @@ import java.util.function.Predicate;
  *
  * <pre>
  *   /numen player summon &lt;name&gt;    summon the named companion (idempotent — reuses an existing one)
- *   /numen player despawn &lt;name&gt;   permanently dismiss the named companion (gone for good)
+ *   /numen player despawn &lt;name&gt;   take the named companion offline (she logs out; her things stay, summon brings her back)
+ *   /numen player delete &lt;name&gt;    permanently delete the named companion (gone for good)
  *   /numen settings                  open the settings GUI on the caller's client
  *   /numen reset                     clear the caller's conversation loops
  *   /numen debug                     toggle debug mode (the caller's chat UI shows text unfiltered)
@@ -192,7 +193,10 @@ public final class NumenCommands {
                                 .executes(ctx -> summon(ctx, StringArgumentType.getString(ctx, "name")))))
                 .then(Commands.literal("despawn")
                         .then(Commands.argument("name", StringArgumentType.word())
-                                .executes(ctx -> despawn(ctx, StringArgumentType.getString(ctx, "name"))))));
+                                .executes(ctx -> despawn(ctx, StringArgumentType.getString(ctx, "name")))))
+                .then(Commands.literal("delete")
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .executes(ctx -> delete(ctx, StringArgumentType.getString(ctx, "name"))))));
         graft(dispatcher, Commands.literal("settings")
                 .executes(ctx -> clientAction(ctx, ClientUiActionPayload.Action.OPEN_SETTINGS)));
         graft(dispatcher, Commands.literal("reset").executes(NumenCommands::resetBrains));
@@ -312,6 +316,18 @@ public final class NumenCommands {
     }
 
     private static int despawn(CommandContext<CommandSourceStack> ctx, String name)
+            throws CommandSyntaxException {
+        ServerPlayer owner = ctx.getSource().getPlayerOrException();
+        int offlined = Companions.offlineByName(owner.level().getServer(), owner.getUUID(), name);
+        if (offlined == 0) {
+            ctx.getSource().sendFailure(Component.translatable(Keys.COMMAND_NO_SUCH_COMPANION, name));
+            return 0;
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable(Keys.COMMAND_OFFLINED, name), false);
+        return offlined;
+    }
+
+    private static int delete(CommandContext<CommandSourceStack> ctx, String name)
             throws CommandSyntaxException {
         ServerPlayer owner = ctx.getSource().getPlayerOrException();
         var server = owner.level().getServer();

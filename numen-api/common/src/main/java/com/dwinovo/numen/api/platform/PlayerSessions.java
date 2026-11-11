@@ -29,14 +29,14 @@ public final class PlayerSessions {
 
     private PlayerSessions() {}
 
-    /** 一位玩家登入了:他名下沉睡的同伴排队等着回来,对他的客户端开场。 */
+    /** 一位玩家登入了:他名下的同伴排队等着对账(该回来的回来),对他的客户端开场。 */
     public static void joined(ServerPlayer player) {
         if (player instanceof NumenPlayer) {
             return;
         }
-        // 只排队,不在这儿恢复:登入事件跑在原版 placeNewPlayer 内部,在这里出的任何异常都会打断主人的入场,
+        // 只排队,不在这儿对账:登入事件跑在原版 placeNewPlayer 内部,在这里出的任何异常都会打断主人的入场,
         // 客户端只看到"无效的玩家数据"。
-        Companions.scheduleRestoreFor(player.getUUID());
+        Companions.scheduleReconcile(player.getUUID());
         // 模组上登入时他的连接已经能收我们的包,开场就在这里发;Paper 上 Fabric 客户端要进游戏之后才登记频道,
         // 这一刻发不出去,由频道登记的事件再调一次 channelReady
         channelReady(player);
@@ -57,10 +57,14 @@ public final class PlayerSessions {
         NumenNetwork.sendToPlayer(player, new ServerHelloPayload(Presence.PROTOCOL));
     }
 
-    /** 主人断线:他名下在服务端跑着的程序收掉,等他答复的反向请求失败,他的模块缓存清掉。 */
+    /**
+     * 主人断线:他名下在服务端跑着的程序收掉,等他答复的反向请求失败,他的模块缓存清掉;他名下的同伴排队等着对账
+     * (登出事件跑在原版 {@code PlayerList.remove} 内部,他还在玩家表里,到下一个服务端刻才算得准他在不在场)。
+     */
     public static void left(ServerPlayer player) {
         if (!(player instanceof NumenPlayer)) {
             OwnerPresence.playerLeft(player.getUUID());
+            Companions.scheduleReconcile(player.getUUID());
             ANNOUNCED.remove(player.getUUID());
         }
     }

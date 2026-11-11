@@ -149,7 +149,7 @@ public final class ServerActuator implements ExternalHands {
         CompletableFuture<Boolean> f = new CompletableFuture<>();
         server.execute(() -> {
             // 先开来访再送话:话一进收件箱内核就可能开轮,那一刻主人必须已经算在场
-            Visits.begin(companion, owner, channel);
+            Visits.begin(server, companion, owner, channel);
             boolean sent = OwnerInputs.apply(server, owner,
                     new OwnerInput.Emit(companion, EventTypes.QUERY, text)).problem() == null;
             if (!sent) {

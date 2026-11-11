@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.brain;
 
+import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.permission.ConsentDesk;
 import com.dwinovo.numen.api.permission.ConsentVenues;
 import com.dwinovo.numen.api.platform.ServerLifecycle;
@@ -70,9 +71,12 @@ public final class Visits {
         ConsentVenues.unregister(VENUE);
     }
 
-    /** 渠道来人了:从这一刻起主人算在场,她的回话回这个渠道。同一只同伴上后来的渠道顶掉先来的。 */
-    public static void begin(UUID companion, UUID owner, Channel channel) {
+    /**
+     * 渠道来人了:从这一刻起主人算在场,她的回话回这个渠道,她若登出着就被对账带回世界里。同一只同伴上后来的渠道顶掉先来的。
+     */
+    public static void begin(MinecraftServer server, UUID companion, UUID owner, Channel channel) {
         VISITS.put(companion, new Visit(owner, channel));
+        Companions.reconcile(server, owner);
     }
 
     /** 这次来访作废(话没送进去)。 */

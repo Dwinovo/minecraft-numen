@@ -2,6 +2,7 @@ package com.dwinovo.numen.api.entity;
 
 import com.dwinovo.numen.api.CompanionEvent;
 import com.dwinovo.numen.api.NumenPlugins;
+import com.dwinovo.numen.api.entity.Attendance.Outside;
 import com.dwinovo.numen.api.gear.GearSlot;
 import com.dwinovo.numen.api.network.payload.CompanionListPayload;
 import com.dwinovo.numen.api.network.NumenNetwork;
@@ -43,18 +44,15 @@ public final class Companions {
         CompanionRegistry reg = CompanionRegistry.get(server);
         UUID existing = findByOwnerName(server, ownerUuid, name);
         if (existing != null) {
-            // 被外面请出去的她只有主人再召唤才回来:召唤就是主人的决定,清掉"被请出去"的状态,身体回来后解开停牌
-            boolean returning = reg.find(existing).removed();
+            // 留在外面的她(主人让她下线的、被外面请出去的)只有主人再召唤才回来:召唤就是主人的决定,清掉"留在外面"的状态
+            Outside was = reg.find(existing).outside();
             reg.markReturned(existing);
             if (respawn(server, existing, arrival -> {
                 if (arrival.body() != null) {
                     com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, existing);
-                    if (returning) {
-                        com.dwinovo.numen.api.brain.CompanionLoops.get(existing)
-                                .ifPresent(com.dwinovo.numen.api.brain.CompanionLoop::onReturned);
-                    }
+                    welcomeBack(server, arrival.body(), was);
                 } else if (arrival.refusal() != null) {
-                    reg.markRemoved(existing, arrival.refusal().getString());   // 服务器说不:停在外面,下回主人再召唤才再试
+                    reg.markOutside(existing, Outside.byServer(arrival.refusal().getString()));   // 服务器说不:停在外面,下回主人再召唤才再试
                 }
                 then.accept(arrival);
             })) {
@@ -244,23 +242,57 @@ public final class Companions {
     }
 
     /**
-     * 把休眠的她叫回世界,没有人在等结果:成了她就在世界里(平台当场接纳的话,这个调用返回时已经在),服务器说不就按
-     * {@link #afterwards} 收尾。注册表不认得她返回 {@code false}。
+     * 把登出的她叫回世界,没有人在等结果:成了她就在世界里(平台当场接纳的话,这个调用返回时已经在),回来的事告诉她
+     * ({@link #welcomeBack});服务器说不(登录插件、封禁、白名单)就停在外面——记下原因、如实告诉主人,不替它轮询;
+     * 主人再召唤她才再试。注册表不认得她返回 {@code false}。
      */
-    public static boolean bringBack(MinecraftServer server, UUID companionUuid) {
-        return respawn(server, companionUuid, afterwards(server, companionUuid));
+    private static boolean bringBack(MinecraftServer server, UUID companionUuid) {
+        return respawn(server, companionUuid, arrival -> {
+            if (arrival.refusal() != null) {
+                refusedByPlatform(server, companionUuid, arrival.refusal());
+            } else if (arrival.body() != null) {
+                welcomeBack(server, arrival.body(), Outside.NONE);
+            }
+        });
     }
 
     /**
-     * 没有人在等结果的重建(换皮肤、主人上线时的恢复)结束时做的事:服务器说不(登录插件、封禁、白名单)就停在外面——
-     * 记下原因、如实告诉主人,不替它轮询;主人再召唤她才再试。
+     * 她回到了世界里。从登出回来的(名册记着她是什么时候离开的)或从"留在外面"回来的:解开停牌,留下一条回来的事实——
+     * 因为什么离开、过了多久、此刻在哪;被服务器请出去的另有离开时那条事实,不再重复。本来就在世界里的什么也不做。
      */
-    private static Consumer<Arrivals.Arrival<NumenPlayer>> afterwards(MinecraftServer server, UUID companionUuid) {
-        return arrival -> {
-            if (arrival.refusal() != null) {
-                refusedByPlatform(server, companionUuid, arrival.refusal());
+    private static void welcomeBack(MinecraftServer server, NumenPlayer body, Outside was) {
+        UUID uuid = body.getUUID();
+        CompanionRegistry reg = CompanionRegistry.get(server);
+        CompanionRegistry.Entry entry = reg.find(uuid);
+        long leftAt = entry == null ? -1L : entry.leftAt();
+        if (!was.isOutside() && leftAt < 0) {
+            return;
+        }
+        if (leftAt >= 0) {
+            reg.markLeftAt(uuid, -1L);
+            if (!was.server()) {
+                com.dwinovo.numen.api.event.NumenEvents.emit(body, com.dwinovo.numen.api.agent.inbox.EventTypes.RETURNED,
+                        java.util.Map.of("cause", was.why() == Attendance.Why.OWNER ? "owner_ordered" : "owner_absent"),
+                        returnedText(body, was, server.overworld().getGameTime() - leftAt), false);
             }
-        };
+        }
+        com.dwinovo.numen.api.brain.CompanionLoops.get(uuid)
+                .ifPresent(com.dwinovo.numen.api.brain.CompanionLoop::onReturned);
+    }
+
+    /** 回来那条事件的话:为什么离开、过了多久、落在哪;背包与位置都是离开时的样子。 */
+    static String returnedText(NumenPlayer body, Outside was, long awayTicks) {
+        String why = was.why() == Attendance.Why.OWNER ? "主人让你下线了" : "主人不在游戏里,你被收了起来";
+        return "你回到了世界里:" + why + ",游戏里过了约 " + awayWords(awayTicks) + "。位置 "
+                + body.level().dimension().location() + " "
+                + com.dwinovo.numen.api.sdk.Positions.literal(body.blockPosition())
+                + ";背包和位置都是你离开时的样子,没有人替你挪动过。";
+    }
+
+    /** 游戏刻数说成人话:不到一分钟、几分钟、几小时(都是游戏里的时间)。 */
+    static String awayWords(long ticks) {
+        long minutes = Math.max(0L, ticks) / 1200L;
+        return minutes < 1 ? "不到一分钟" : minutes < 120 ? minutes + " 分钟" : minutes / 60 + " 小时";
     }
 
     /**
@@ -275,7 +307,7 @@ public final class Companions {
         }
         String why = reason.getString();
         com.dwinovo.numen.api.Constants.LOG.warn("[numen] {} 没被接纳:{}", entry.name(), why);
-        reg.markRemoved(companionUuid, why);
+        reg.markOutside(companionUuid, Outside.byServer(why));
         com.dwinovo.numen.api.brain.CompanionLoops.get(companionUuid).ifPresent(brain -> brain.onRemoved(why));
         ServerPlayer owner = server.getPlayerList().getPlayer(entry.owner());
         if (owner != null) {
@@ -285,96 +317,126 @@ public final class Companions {
     }
 
     /**
-     * 主人登录了,记一笔:他的同伴该回世界了。<b>真正的恢复不在这里做。</b>
+     * 记一笔:这位主人名下的同伴该对一次账。<b>真正的对账({@link #reconcile})不在这里做。</b>用于主人登入、登出这两个时机。
      *
      * <h2>为什么必须推迟</h2>
      * 登录事件是在原版 {@code PlayerList.placeNewPlayer()} <b>内部</b>触发的——那句还没返回。
-     * 在这里恢复同伴,等于把恢复期间的任何异常接到主人的入场流程上:一只同伴的 {@code .dat}
+     * 在这里把同伴带回来,等于把带回来期间的任何异常接到主人的入场流程上:一只同伴的 {@code .dat}
      * 有毛病、或者别的模组在同伴的入场事件里抛了,冒泡上去打断的是<b>主人的登录</b>,客户端
      * 看到的是"无效的玩家数据"——他会以为自己的存档毁了。
      *
      * <p>第二类堵不完:同伴入场会触发它自己的登录事件,装在这个世界里的任何模组都收得到,
      * 而它们没想过"玩家"可能是假的。我们挡不住别人抛异常,只能不让那异常落在主人头上。
      *
-     * <p>推迟到下一个服务端 tick({@link #restorePending})就彻底解耦了:那时 placeNewPlayer
-     * 早已返回,主人已经在世界里,同伴出什么事都只是同伴的事。
+     * <p>登出事件同理跑在 {@code PlayerList.remove} 内部,那一刻他还在玩家表里,"主人在不在场"还算不准。
+     *
+     * <p>推迟到下一个服务端 tick({@link #reconcilePending})就彻底解耦了:那时 placeNewPlayer / remove
+     * 早已返回,同伴出什么事都只是同伴的事。
      */
-    public static void scheduleRestoreFor(UUID ownerUuid) {
-        PENDING_RESTORE.add(ownerUuid);
+    public static void scheduleReconcile(UUID ownerUuid) {
+        PENDING_RECONCILE.add(ownerUuid);
     }
 
-    /** 排队等恢复的主人。世界作废时一并清掉——排的是上一个存档的账。 */
-    private static final java.util.Set<UUID> PENDING_RESTORE =
+    /** 排队等对账的主人。世界作废时一并清掉——排的是上一个存档的账。 */
+    private static final java.util.Set<UUID> PENDING_RECONCILE =
             java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     static {
-        com.dwinovo.numen.api.platform.ServerLifecycle.onStopped(PENDING_RESTORE::clear);
+        com.dwinovo.numen.api.platform.ServerLifecycle.onStopped(PENDING_RECONCILE::clear);
     }
 
     /**
-     * 每个服务端 tick 调一次:把记下的主人挨个恢复。
+     * 每个服务端 tick 调一次:把记下的主人挨个对账;他在线就先把"被服务器请出去"的同伴告诉他。
      *
-     * <p>一个主人恢复失败不牵连下一个——他们之间毫无关系,没有理由一起倒。
+     * <p>一个主人对账失败不牵连下一个——他们之间毫无关系,没有理由一起倒。
      */
-    public static void restorePending(MinecraftServer server) {
-        drainPending(ownerUuid -> respawnAllOwnedBy(server, ownerUuid));
+    public static void reconcilePending(MinecraftServer server) {
+        drainPending(ownerUuid -> {
+            tellRemoved(server, ownerUuid);
+            reconcile(server, ownerUuid);
+        });
     }
 
     /**
-     * 排空队列,逐个交给 {@code restore}。
+     * 排空队列,逐个交给 {@code reconcile}。
      *
-     * <p>两条不变式:<b>每个主人只恢复一次</b>(先摘牌再执行,否则失败的那个会每 tick 重试到
+     * <p>两条不变式:<b>每个主人只对一次</b>(先摘牌再执行,否则失败的那个会每 tick 重试到
      * 天荒地老),以及<b>一个失败不牵连下一个</b>(主人之间毫无关系,没有理由一起倒)。
      *
      * <p>纯逻辑,不碰 Minecraft——留这个缝是为了这两条能被单测钉住。
      */
-    static void drainPending(java.util.function.Consumer<UUID> restore) {
-        if (PENDING_RESTORE.isEmpty()) {
+    static void drainPending(java.util.function.Consumer<UUID> reconcile) {
+        if (PENDING_RECONCILE.isEmpty()) {
             return;
         }
-        List<UUID> due = new ArrayList<>(PENDING_RESTORE);
-        PENDING_RESTORE.removeAll(due);
+        List<UUID> due = new ArrayList<>(PENDING_RECONCILE);
+        PENDING_RECONCILE.removeAll(due);
         for (UUID ownerUuid : due) {
             try {
-                restore.accept(ownerUuid);
+                reconcile.accept(ownerUuid);
             } catch (RuntimeException ex) {
-                com.dwinovo.numen.api.Constants.LOG.error("[numen] 恢复 {} 的同伴时出错", ownerUuid, ex);
+                com.dwinovo.numen.api.Constants.LOG.error("[numen] 对 {} 的同伴对账时出错", ownerUuid, ex);
             }
         }
     }
 
-    /** When an owner logs in, bring back every companion of theirs, restored from its {@code .dat}.
-     *
-     *  <p>逐只隔离:一只回不来是少一只同伴,不该把同一个主人的其余同伴也一起拖掉。 */
-    public static void respawnAllOwnedBy(MinecraftServer server, UUID ownerUuid) {
+    /** 主人上线了:被服务器请出去的同伴,把理由告诉他(主人让她下线的不用说)。 */
+    private static void tellRemoved(MinecraftServer server, UUID ownerUuid) {
         ServerPlayer owner = server.getPlayerList().getPlayer(ownerUuid);
+        if (owner == null) {
+            return;
+        }
         for (Map.Entry<UUID, CompanionRegistry.Entry> e : CompanionRegistry.get(server).ownedBy(ownerUuid)) {
-            try {
-                com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, e.getKey());
-                if (e.getValue().removed()) {
-                    // 她是被外面请出去的,不替主人重建;他上线了就把这件事告诉他
-                    if (owner != null) tellRemoved(owner, e.getValue().name(), e.getValue().removedFor());
-                } else {
-                    bringBack(server, e.getKey());
-                }
-            } catch (RuntimeException ex) {
-                com.dwinovo.numen.api.Constants.LOG.error("[numen] 同伴 {} 没能回到世界里,跳过", e.getKey(), ex);
+            if (e.getValue().outside().server()) {
+                tellRemoved(owner, e.getValue().name(), e.getValue().removedFor());
             }
         }
     }
 
     /**
+     * <b>把一位主人名下的同伴修到该有的样子的唯一入口</b>:该在线的(判据见 {@link Attendance#move})不在世界里就带回来,
+     * 不该在线的还在世界里就登出。登入、登出、外部大脑连上或断开、来访开始或结束、下线命令、召唤,都只是"对一次账"的时机,
+     * 她的去留不由它们各自决定。登出是真玩家登出({@link #dormant}):存 {@code .dat}、不动背包,回来落在 {@code .dat} 里的位置。
+     *
+     * <p>逐只隔离:一只出了问题是少一只同伴,不该把同一个主人的其余同伴也一起拖掉。
+     */
+    public static void reconcile(MinecraftServer server, UUID ownerUuid) {
+        boolean ownerPresent = com.dwinovo.numen.api.brain.OwnerPresence.present(server, ownerUuid);
+        for (Map.Entry<UUID, CompanionRegistry.Entry> e : CompanionRegistry.get(server).ownedBy(ownerUuid)) {
+            try {
+                com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, e.getKey());
+                NumenPlayer body = NumenPlayer.findByUuid(server, e.getKey());
+                switch (Attendance.move(e.getValue().outside(), ownerPresent, body != null)) {
+                    case BRING -> bringBack(server, e.getKey());
+                    case LOG_OUT -> logOut(server, body);
+                    case STAY -> { }
+                }
+            } catch (RuntimeException ex) {
+                com.dwinovo.numen.api.Constants.LOG.error("[numen] 同伴 {} 没能修到该有的样子,跳过", e.getKey(), ex);
+            }
+        }
+    }
+
+    /**
+     * 她登出世界:名册记下离开的时刻,身体存档离场。主人不在场时大脑本来就待命({@code Hold.AWAY}),不用另外停牌。
+     */
+    private static void logOut(MinecraftServer server, NumenPlayer body) {
+        CompanionRegistry.get(server).markLeftAt(body.getUUID(), server.overworld().getGameTime());
+        dormant(server, body);
+    }
+
+    /**
      * <b>她的身体被外面的人或插件移除了的唯一入口</b>:服主的 {@code /kick}、别的插件踢人、登录插件超时踢人。
-     * Numen 自己造成的移除(遣散、休眠、主人下线、关服)各有各的路,不要调这里。
+     * Numen 自己造成的移除(删除、登出、关服)各有各的路,不要调这里。
      *
      * <p>平台挂点契约:模组上由 {@code MixinServerCommonPacketListener} 在断开落到她的假连接上那一步调(关服时不调);
      * Paper 上由 {@code PlayerKickEvent}/{@code PlayerQuitEvent} 调(踢人会连着触发两个,第二次被忽略)。调用时她的身体还在世界里;
      * <b>身体本身由平台移除</b>,这里只管之后的一切:
      * <ul>
      *   <li>大脑停牌、收件箱留下一条事实({@link com.dwinovo.numen.api.brain.CompanionLoop#onRemoved}),她手上的活和程序经
-     *       {@link com.dwinovo.numen.api.CompanionEvent#REMOVE} 收掉——和主人下线、遣散走同一条收拾的路;</li>
+     *       {@link com.dwinovo.numen.api.CompanionEvent#REMOVE} 收掉——和她被登出、被删除走同一条收拾的路;</li>
      *   <li>名册记下她被请出去了和理由,在主人再召唤({@link #summon})之前不重建;</li>
-     *   <li>主人在线就告诉他,不在线就等他下次上线({@link #respawnAllOwnedBy})。</li>
+     *   <li>主人在线就告诉他,不在线就等他下次上线({@link #reconcilePending})。</li>
      * </ul>
      *
      * @param reason 踢人时说的理由
@@ -383,13 +445,13 @@ public final class Companions {
         MinecraftServer server = body.level().getServer();
         CompanionRegistry reg = CompanionRegistry.get(server);
         CompanionRegistry.Entry entry = reg.find(body.getUUID());
-        if (entry != null && entry.removed()) {
+        if (entry != null && entry.outside().isOutside()) {
             return;
         }
         String why = reason.getString();
         com.dwinovo.numen.api.brain.CompanionLoops.get(body.getUUID()).ifPresent(brain -> brain.onRemoved(why));
         if (entry != null) {
-            reg.markRemoved(body.getUUID(), why);
+            reg.markOutside(body.getUUID(), Outside.byServer(why));
         }
         CompanionEvents.fire(CompanionEvent.REMOVE, body);
         ServerPlayer owner = body.resolveOwnerPlayer();
@@ -601,7 +663,7 @@ public final class Companions {
                 : "你从床上醒来了,可是天还没亮——是外力把你弄醒的(床没了、被传送都算)。先看看周围。";
     }
 
-    /** Save the companion to its {@code .dat} and remove it from the world (dormancy). */
+    /** Save the companion to its {@code .dat} and remove it from the world (the real-player logout). */
     public static void dormant(MinecraftServer server, NumenPlayer body) {
         // Refresh the respawn hint before the body leaves.
         CompanionRegistry reg = CompanionRegistry.get(server);
@@ -613,14 +675,39 @@ public final class Companions {
         CompanionFactory.despawn(server, body);
     }
 
-    /** 遣散这一只活体,见 {@link #dismiss(MinecraftServer, UUID, Collection)}。 */
+    /**
+     * <b>下线的唯一入口</b>:面板的下线与 {@code /numen player despawn} 都走这里,调用方只管验归属、挑出是哪几只。
+     * 名册记下"主人让她留在外面"、大脑停牌(主人在场,不停牌它会照样开回合),再对一次账({@link #reconcile}):她像真玩家一样登出,
+     * 东西随 {@code .dat} 留着,她的家(对话、札记)原样;主人再召唤她才回来。已经被服务器请出去的不改。
+     */
+    public static void offline(MinecraftServer server, UUID ownerUuid, Collection<UUID> uuids) {
+        CompanionRegistry reg = CompanionRegistry.get(server);
+        for (UUID uuid : uuids) {
+            CompanionRegistry.Entry entry = reg.find(uuid);
+            if (entry != null && !entry.outside().isOutside()) {
+                reg.markOutside(uuid, Outside.byOwner());
+                com.dwinovo.numen.api.brain.CompanionLoops.get(uuid)
+                        .ifPresent(com.dwinovo.numen.api.brain.CompanionLoop::onOrderedOffline);
+            }
+        }
+        reconcile(server, ownerUuid);
+    }
+
+    /** 主人名下叫这个名字的同伴(大小写不计,同名的都算)让她们下线,见 {@link #offline};返回有几只。 */
+    public static int offlineByName(MinecraftServer server, UUID ownerUuid, String name) {
+        List<UUID> ids = idsByName(server, ownerUuid, name);
+        offline(server, ownerUuid, ids);
+        return ids.size();
+    }
+
+    /** 删除这一只活体,见 {@link #dismiss(MinecraftServer, UUID, Collection)}。 */
     public static void dismiss(MinecraftServer server, NumenPlayer body) {
         dismiss(server, body.getOwnerUuid(), List.of(body.getUUID()));
     }
 
     /**
-     * <b>遣散的唯一入口</b>:面板 ✕ 与 {@code /numen player despawn} 都走这里,调用方只管验归属、挑出是哪几只。
-     * 活着的身体像死亡一样把身上的一切掉在脚下再离场;休眠的没有身体可掉,{@code .dat} 留着东西但再没人重建它。
+     * <b>删除(销号)的唯一入口</b>:面板的删除与 {@code /numen player delete} 都走这里,调用方只管验归属、挑出是哪几只。
+     * 活着的身体像死亡一样把身上的一切掉在脚下再离场;登出着的没有身体可掉,{@code .dat} 留着东西但再没人重建它。
      * 最后一次除名、一次推送。
      */
     public static void dismiss(MinecraftServer server, UUID ownerUuid, Collection<UUID> uuids) {
@@ -675,11 +762,29 @@ public final class Companions {
      * respawns them.)
      */
     public static int dismissByName(MinecraftServer server, UUID ownerUuid, String name) {
+        List<UUID> ids = idsByName(server, ownerUuid, name);
+        dismiss(server, ownerUuid, ids);
+        return ids.size();
+    }
+
+    /** 主人名下叫这个名字的同伴(大小写不计,同名的都算)。 */
+    private static List<UUID> idsByName(MinecraftServer server, UUID ownerUuid, String name) {
         List<UUID> ids = new ArrayList<>();
         for (Map.Entry<UUID, CompanionRegistry.Entry> e : CompanionRegistry.get(server).ownedBy(ownerUuid)) {
             if (e.getValue().name().equalsIgnoreCase(name)) ids.add(e.getKey());
         }
-        dismiss(server, ownerUuid, ids);
-        return ids.size();
+        return ids;
+    }
+
+    /**
+     * 这只同伴是不是这位主人的:活体看身体上的主人;登出着的、没加载的看名册。面板的下线、删除请求都先过这一问。
+     */
+    public static boolean owns(MinecraftServer server, UUID ownerUuid, UUID companion) {
+        NumenPlayer body = NumenPlayer.findByUuid(server, companion);
+        if (body != null) {
+            return body.isOwnedByPlayer(ownerUuid);
+        }
+        CompanionRegistry.Entry entry = CompanionRegistry.get(server).find(companion);
+        return entry != null && entry.owner().equals(ownerUuid);
     }
 }

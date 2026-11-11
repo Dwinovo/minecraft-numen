@@ -42,12 +42,13 @@ class HandshakeTest extends Scenario {
             owner.close();
             waitFor(() -> !onList(name), "owner to leave");
             owner = join(name, "en_us");
+            waitFor(() -> onList(companion), "companion to log back in with her owner");
             register(owner, ROSTER, "numen_api:numen_state", "numen_api:numen_locations");
             assertNothingSent(owner, companion);
             assertEquals(originalUuid, console("data get entity " + companion + " UUID"), "rejoining must keep the body");
         } finally {
             if (owner.connected()) {
-                owner.command("numen player despawn " + companion);
+                owner.command("numen player delete " + companion);
                 waitFor(() -> !onList(companion), "test companion to leave");
             }
         }

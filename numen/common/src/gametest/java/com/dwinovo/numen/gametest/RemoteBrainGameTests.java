@@ -144,18 +144,26 @@ public class RemoteBrainGameTests {
         }
     }
 
-    /** 主人不在游戏里:她待命;他的外部大脑连上,驾驶席换人、她不再待命;它断开,和登出一样收拾一次回到待命。 */
+    /**
+     * 主人不在游戏里:她待命、身体登出;他的外部大脑连上,驾驶席换人、她不再待命、被带回世界里;它断开,和登出一样收拾一次回到待命,
+     * 她再登出。
+     */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_remote_1")
     public static void an_external_brain_connecting_wakes_her_and_leaving_puts_her_away_again(GameTestHelper helper)
             throws Exception {
         Rig her = new Rig(helper, "gametest_remote_away", null);
         helper.assertTrue(her.hold() == Hold.AWAY, "not away while nobody is here: " + her.hold());
         helper.assertTrue(her.disconnects() == 0, "collected before anyone had been here: " + her.halts);
+        com.dwinovo.numen.api.entity.Companions.reconcile(her.server, her.owner);
+        helper.assertTrue(NumenPlayer.findByUuid(her.server, her.companion.getUUID()) == null,
+                "she is still in the world with nobody to drive her");
 
         her.brain.connectLater();
 
         her.brain.afterConnected(helper, 5, () -> {
             helper.assertTrue(her.hold() == Hold.EXTERNAL, "the external brain did not take the seat: " + her.hold());
+            helper.assertTrue(NumenPlayer.findByUuid(her.server, her.companion.getUUID()) != null,
+                    "she was not brought back for the external brain");
             helper.assertTrue(her.disconnects() == 0, "she was collected while the brain was connected");
             try {
                 her.brain.disconnect(her.server);
@@ -166,6 +174,8 @@ public class RemoteBrainGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(her.hold() == Hold.AWAY, "not put away after the brain left: " + her.hold());
             helper.assertTrue(her.disconnects() == 1, "not collected once after the brain left: " + her.halts);
+            helper.assertTrue(NumenPlayer.findByUuid(her.server, her.companion.getUUID()) == null,
+                    "she stayed in the world after the brain left");
             her.close();
         });
     }
@@ -208,6 +218,8 @@ public class RemoteBrainGameTests {
             helper.runAfterDelay(7, () -> {
                 helper.assertTrue(her.hold() == Hold.EXTERNAL, "she stopped driving when only the player left: "
                         + her.hold());
+                helper.assertTrue(NumenPlayer.findByUuid(her.server, her.companion.getUUID()) != null,
+                        "she logged out although his brain was driving her");
                 helper.assertTrue(her.disconnects() == 0, "collected while his brain was still connected: " + her.halts);
                 try {
                     her.brain.disconnect(her.server);
@@ -219,6 +231,8 @@ public class RemoteBrainGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(her.hold() == Hold.AWAY, "not put away after both were gone: " + her.hold());
             helper.assertTrue(her.disconnects() == 1, "not collected once: " + her.halts);
+            helper.assertTrue(NumenPlayer.findByUuid(her.server, her.companion.getUUID()) == null,
+                    "she stayed in the world after both were gone");
             her.close();
         });
     }
@@ -317,7 +331,7 @@ public class RemoteBrainGameTests {
         Rig her = new Rig(helper, "gametest_remote_visited", null, new BrainGameTests.Scripted(),
                 McpToken.Role.CHANNEL);
         List<com.dwinovo.numen.api.permission.ConsentVenues.Offer> offered = new CopyOnWriteArrayList<>();
-        com.dwinovo.numen.api.brain.Visits.begin(her.companion.getUUID(), her.owner,
+        com.dwinovo.numen.api.brain.Visits.begin(her.server, her.companion.getUUID(), her.owner,
                 new com.dwinovo.numen.api.brain.Visits.Channel() {
                     @Override
                     public void said(UUID companion, String text) {

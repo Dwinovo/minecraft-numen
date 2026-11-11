@@ -35,18 +35,18 @@ public final class OwnedBody {
     public static NumenPlayer of(MinecraftServer server, UUID ownerUuid, UUID entityUuid, Consumer<String> refuse) {
         NumenPlayer companion = NumenPlayer.findByUuid(server, entityUuid);
         if (companion == null) {
-            // 被外面请出去的:回来只能是主人再召唤(Companions.summon),不是一个包把她拉起来
-            CompanionRegistry.Entry reg = CompanionRegistry.get(server).find(entityUuid);
-            if (reg != null && reg.removed()) {
-                refuse.accept("她被请出了服务器(" + reg.removedFor() + "),要主人再召唤她才能回来");
-                return null;
-            }
-            Companions.bringBack(server, entityUuid);
+            // 该在线的她由对账带回来(登入的那一刻还没轮到推迟的对账时,这一问就是它的时机);留在外面的回来只能是主人再召唤
+            // (Companions.summon),不是一个包把她拉起来
+            Companions.reconcile(server, ownerUuid);
             companion = NumenPlayer.findByUuid(server, entityUuid);
+            CompanionRegistry.Entry reg = CompanionRegistry.get(server).find(entityUuid);
             if (companion == null && reg != null) {
-                CompanionRegistry.Entry after = CompanionRegistry.get(server).find(entityUuid);
-                if (after != null && after.removed()) {
-                    refuse.accept("服务器没让她进来(" + after.removedFor() + "),要主人再召唤她才能回来");
+                if (reg.outside().server()) {
+                    refuse.accept("她被请出了服务器(" + reg.removedFor() + "),要主人再召唤她才能回来");
+                    return null;
+                }
+                if (reg.outside().isOutside()) {
+                    refuse.accept("她下线了(主人让她下线的),要主人再召唤她才能回来");
                     return null;
                 }
                 if (CompanionFactory.isArriving(entityUuid)) {

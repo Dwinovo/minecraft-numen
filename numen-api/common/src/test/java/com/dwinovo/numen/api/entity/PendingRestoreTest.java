@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 主人登录后，同伴的恢复排在队列里、下一个服务端 tick 才做。
+ * 主人登入登出后，同伴的对账排在队列里、下一个服务端 tick 才做。
  *
  * <p>为什么不当场做:登录事件跑在原版 {@code PlayerList.placeNewPlayer()} <b>内部</b>。在那儿
  * 恢复同伴，等于把同伴的问题接到主人的入场流程上——一只同伴的存档有毛病、或者别的模组在
@@ -34,14 +34,14 @@ class PendingRestoreTest {
     @Test
     void aScheduledOwnerIsRestoredOnTheNextDrain() {
         UUID a = owner();
-        Companions.scheduleRestoreFor(a);
+        Companions.scheduleReconcile(a);
         assertEquals(List.of(a), drain());
     }
 
     @Test
     void anOwnerIsRestoredOnceNotEveryTick() {
         // 先摘牌再执行。反过来的话,失败的那个会每 tick 重试到天荒地老
-        Companions.scheduleRestoreFor(owner());
+        Companions.scheduleReconcile(owner());
         assertEquals(1, drain().size());
         assertTrue(drain().isEmpty(), "第二个 tick 不该再恢复一遍");
     }
@@ -49,8 +49,8 @@ class PendingRestoreTest {
     @Test
     void schedulingTheSameOwnerTwiceStillRestoresOnce() {
         UUID a = owner();
-        Companions.scheduleRestoreFor(a);
-        Companions.scheduleRestoreFor(a);
+        Companions.scheduleReconcile(a);
+        Companions.scheduleReconcile(a);
         assertEquals(List.of(a), drain());
     }
 
@@ -60,9 +60,9 @@ class PendingRestoreTest {
         UUID a = owner();
         UUID bad = owner();
         UUID c = owner();
-        Companions.scheduleRestoreFor(a);
-        Companions.scheduleRestoreFor(bad);
-        Companions.scheduleRestoreFor(c);
+        Companions.scheduleReconcile(a);
+        Companions.scheduleReconcile(bad);
+        Companions.scheduleReconcile(c);
 
         List<UUID> reached = new ArrayList<>();
         Companions.drainPending(id -> {
@@ -79,7 +79,7 @@ class PendingRestoreTest {
     void anOwnerThatBlewUpIsNotRetriedForever() {
         // 恢复失败是坏事,每 tick 重复失败并刷屏是更坏的事
         UUID bad = owner();
-        Companions.scheduleRestoreFor(bad);
+        Companions.scheduleReconcile(bad);
         Companions.drainPending(id -> {
             throw new IllegalStateException("坏了");
         });

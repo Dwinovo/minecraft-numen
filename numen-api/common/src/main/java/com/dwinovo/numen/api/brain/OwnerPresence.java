@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.brain;
 
+import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.mcp.server.McpMode;
 import com.dwinovo.numen.api.program.ServerPrograms;
 import net.minecraft.server.MinecraftServer;
@@ -12,7 +13,9 @@ import java.util.UUID;
  *
  * <p>主人在 = 他人在游戏里,或者他的外部大脑连着(远程端点上持他大脑令牌的会话),或者渠道上他的话正由服务端大脑
  * 想着({@link Visits},想完就不算)。都没有就是不在:
- * 内脑待命({@code Hold.AWAY}),她的程序收掉,收件箱照收。外部大脑连回来就算他回来了。
+ * 内脑待命({@code Hold.AWAY}),她的程序收掉,收件箱照收,她的身体登出世界;外部大脑连回来就算他回来了,她也跟着回到世界里。
+ * 身体的去留不在这里定:在不在场变了的每个时机都只是让 {@link Companions#reconcile} 对一次账(判据见
+ * {@link com.dwinovo.numen.api.entity.Attendance})。
  *
  * <p>不在的那一刻要收拾一次({@link #collect}):作废在飞的回应、收掉程序。收拾的触发有两个——他的玩家下线
  * ({@link #playerLeft},没有外部大脑接着)与另外两样撑着他在场的东西没了({@link #settle}:外部大脑断开、来访做完,
@@ -41,11 +44,14 @@ public final class OwnerPresence {
         }
     }
 
-    /** 撑着他在场的外部大脑断开了、渠道来访做完了:人也不在游戏里、别的也没撑着,就和他登出一样收拾一次。 */
+    /**
+     * 撑着他在场的外部大脑断开了、渠道来访做完了:人也不在游戏里、别的也没撑着,就和他登出一样收拾一次,她的身体也跟着对账。
+     */
     public static void settle(MinecraftServer server, UUID owner) {
         if (!present(server, owner)) {
             collect(owner);
         }
+        Companions.reconcile(server, owner);
     }
 
     private static void collect(UUID owner) {

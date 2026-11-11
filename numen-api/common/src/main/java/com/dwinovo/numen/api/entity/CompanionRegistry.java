@@ -13,6 +13,9 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
 
+import com.dwinovo.numen.api.entity.Attendance.Outside;
+import com.dwinovo.numen.api.entity.Attendance.Why;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -36,15 +39,16 @@ public final class CompanionRegistry extends SavedData {
     /** One companion's catalog entry.
      *  {@code skinValue}/{@code skinSig} = 借来的正版皮肤(Mojang 签名的 textures 属性),
      *  空串 = 无皮肤,客户端回落原版默认皮肤(按 UUID 哈希抽取)。
-     *  {@code removedFor} 非空 = 她的身体被外面的人或插件请出了服务器(值是当时说的理由),在主人再召唤她之前不重建。
+     *  {@code outside} = 她被留在外面(主人下令下线的,或被外面的人或插件请出了服务器的,后者带当时说的理由),在主人再召唤她之前不重建。
+     *  {@code leftAt} = 她被 Numen 登出世界那一刻的游戏时间(overworld 的 gameTime),回来时据此告诉她离开了多久;-1 = 没有这回事。
      *  死亡不进名册:她死了就由原版重生流程当场重生,没有"死着等复活"的状态;老存档里的 {@code diedAt}、{@code deathCause}
      *  读档时被忽略,下一次存盘就不再写。 */
     public record Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos,
                         String skinValue, String skinSig,
-                        String taskName, String taskLua, String taskOld, String removedFor) {
+                        String taskName, String taskLua, String taskOld, Outside outside, long leftAt) {
         /** A companion with no borrowed skin, idle. */
         public Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos) {
-            this(name, owner, dimension, pos, "", "", "", "", "", "");
+            this(name, owner, dimension, pos, "", "", "", "", "", Outside.NONE, -1L);
         }
 
         /**
@@ -53,30 +57,49 @@ public final class CompanionRegistry extends SavedData {
          */
         public Entry doing(String task, String lua) {
             return new Entry(name, owner, dimension, pos, skinValue, skinSig,
-                    task == null ? "" : task, lua == null ? "" : lua, "", removedFor);
+                    task == null ? "" : task, lua == null ? "" : lua, "", outside, leftAt);
         }
 
         /** 刷新落点(休眠/移动时的 respawn 提示),皮肤原样保留。 */
         public Entry movedTo(ResourceKey<Level> dimension, BlockPos pos) {
             return new Entry(name, owner, dimension, pos, skinValue, skinSig,
-                    taskName, taskLua, taskOld, removedFor);
+                    taskName, taskLua, taskOld, outside, leftAt);
         }
 
         /** 换上 Mojang 签名的皮肤数据(value+signature)。 */
         public Entry withSkin(String value, String sig) {
             return new Entry(name, owner, dimension, pos,
-                    value == null ? "" : value, sig == null ? "" : sig, taskName, taskLua, taskOld, removedFor);
+                    value == null ? "" : value, sig == null ? "" : sig, taskName, taskLua, taskOld, outside, leftAt);
         }
 
-        /** 身体被外面请出了服务器({@code reason} 是当时说的理由);主人再召唤之前不重建。 */
-        Entry removed(String reason) {
+        /** 换一个"留在外面"的状态({@link Outside#NONE} = 不在外面)。 */
+        Entry outside(Outside next) {
             return new Entry(name, owner, dimension, pos, skinValue, skinSig,
-                    taskName, taskLua, taskOld, reason);
+                    taskName, taskLua, taskOld, next, leftAt);
         }
 
-        /** 身体被外面请出了服务器、还没被再召唤。 */
-        public boolean removed() {
-            return !removedFor.isEmpty();
+        /** 记下她被登出世界的游戏时间;-1 = 清掉。 */
+        Entry leftAt(long at) {
+            return new Entry(name, owner, dimension, pos, skinValue, skinSig,
+                    taskName, taskLua, taskOld, outside, at);
+        }
+
+        /** 被服务器请出去时说的理由;不是服务器请出去的是空串。面板的名册只显示这一种。 */
+        public String removedFor() {
+            return outside.server() ? outside.reason() : "";
+        }
+
+        private static final Codec<Outside> OUTSIDE = RecordCodecBuilder.create(i -> i.group(
+                Codec.stringResolver(w -> w.name().toLowerCase(java.util.Locale.ROOT), Entry::whyOf)
+                        .fieldOf("why").forGetter(Outside::why),
+                Codec.STRING.optionalFieldOf("reason", "").forGetter(Outside::reason)
+        ).apply(i, Outside::new));
+
+        private static Why whyOf(String name) {
+            for (Why why : Why.values()) {
+                if (why.name().equalsIgnoreCase(name)) return why;
+            }
+            return null;
         }
 
         static final Codec<Entry> CODEC = RecordCodecBuilder.create(i -> i.group(
@@ -90,8 +113,13 @@ public final class CompanionRegistry extends SavedData {
                 Codec.STRING.optionalFieldOf("taskLua", "").forGetter(Entry::taskLua),
                 // 旧版本记的那一行命令:读进来只为如实说它接不回来,写回去它已经清掉了
                 Codec.STRING.optionalFieldOf("taskArgs", "").forGetter(Entry::taskOld),
-                Codec.STRING.optionalFieldOf("removedFor", "").forGetter(Entry::removedFor)
-        ).apply(i, Entry::new));
+                // 旧版本记的"被服务器请出去"的理由:读进来当作服务器请出去的状态,写回去它已经并进了 outside
+                Codec.STRING.optionalFieldOf("removedFor", "").forGetter(e -> ""),
+                OUTSIDE.optionalFieldOf("outside", Outside.NONE).forGetter(Entry::outside),
+                Codec.LONG.optionalFieldOf("leftAt", -1L).forGetter(Entry::leftAt)
+        ).apply(i, (name, owner, dimension, pos, skinValue, skinSig, taskName, taskLua, taskOld, legacyRemovedFor,
+                    outside, leftAt) -> new Entry(name, owner, dimension, pos, skinValue, skinSig, taskName, taskLua,
+                taskOld, legacyRemovedFor.isEmpty() ? outside : Outside.byServer(legacyRemovedFor), leftAt)));
     }
 
     private static final Codec<CompanionRegistry> CODEC = RecordCodecBuilder.create(i -> i.group(
@@ -181,19 +209,27 @@ public final class CompanionRegistry extends SavedData {
         return out;
     }
 
-    /** 记下她的身体被外面请出了服务器(理由 {@code reason} 随名册落盘,主人下次上线还说得出)。 */
-    public void markRemoved(UUID uuid, String reason) {
+    /** 记下她被留在外面(服务器请出去的理由随名册落盘,主人下次上线还说得出)。 */
+    public void markOutside(UUID uuid, Outside outside) {
         Entry e = entries.get(uuid);
         if (e == null) return;
-        entries.put(uuid, e.removed(reason));
+        entries.put(uuid, e.outside(outside));
         setDirty();
     }
 
-    /** 主人再召唤了她:不再是被请出去的状态。 */
+    /** 主人再召唤了她:不再是留在外面的状态。 */
     public void markReturned(UUID uuid) {
         Entry e = entries.get(uuid);
-        if (e == null || !e.removed()) return;
-        entries.put(uuid, e.removed(""));
+        if (e == null || !e.outside().isOutside()) return;
+        entries.put(uuid, e.outside(Outside.NONE));
+        setDirty();
+    }
+
+    /** 记下她被登出世界的游戏时间;{@code -1} 是她回到了世界。 */
+    public void markLeftAt(UUID uuid, long gameTime) {
+        Entry e = entries.get(uuid);
+        if (e == null) return;
+        entries.put(uuid, e.leftAt(gameTime));
         setDirty();
     }
 }
