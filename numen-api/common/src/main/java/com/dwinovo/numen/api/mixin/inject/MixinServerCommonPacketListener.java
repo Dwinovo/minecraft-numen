@@ -80,8 +80,10 @@ public abstract class MixinServerCommonPacketListener {
         // 丢之前先给"客户端"看一眼:原版有几处是发完就等对面回话的(传送编号),
         // 回执不来那边就永远悬着;对她说的话(系统聊天与动作栏)也在这里,要交给模型。
         // 这里是玩家连接唯一的下行出口,所以也是唯一该看的地方。
+        // 她正在退出的那一步里发来的(公屏上她自己那句"退出了游戏")不给:真玩家断开之后收不到这一句。
         if ((Object) this instanceof ServerGamePacketListenerImpl game
-                && game.getPlayer() instanceof NumenPlayer companion) {
+                && game.getPlayer() instanceof NumenPlayer companion
+                && !com.dwinovo.numen.api.entity.CompanionFactory.isLeaving(companion)) {
             companion.fakeClient().onOutbound(packet);
         }
         ci.cancel();
