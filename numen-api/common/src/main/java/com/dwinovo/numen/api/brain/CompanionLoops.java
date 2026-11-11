@@ -87,6 +87,7 @@ public final class CompanionLoops {
 
     static {
         ServerLifecycle.onStopped(CompanionLoops::dropAll);
+        ServerLifecycle.onStopped(com.dwinovo.numen.api.agent.trace.TraceRecorders::forgetAll);
     }
 
     private CompanionLoops() {}
@@ -202,6 +203,7 @@ public final class CompanionLoops {
         }
         CompanionSpeech.setSpeaking(companion, false);
         Homes homes = Homes.of(server);
+        com.dwinovo.numen.api.agent.trace.TraceRecorders.forget(companion);
         Home home = homes.companion(companion);
         home.delete();
         homes.forgetCompanion(companion);

@@ -195,14 +195,17 @@ public class PerceptionGameTests {
     }
 
     /**
-     * 她自己的状态:手里的剑、背包用了几格、血与饥饿都照实报。穿戴位置在身体状态打头的 {@code <worn>} 里(空位也列),两只手那一栏
-     * 只有手。
+     * 她自己的状态:手里的剑、背包用了几格、血与饥饿、朝着哪边都照实报。穿戴位置在身体状态打头的 {@code <worn>} 里(空位也列),
+     * 两只手那一栏只有手。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void get_self_status_reports_what_she_carries(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_selfie", new BlockPos(3, 2, 3), false);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
         companion.getInventory().add(new ItemStack(Items.DIAMOND, 3));
+        // 朝西、略微低头:朝向这两个值她以前读不到,只能绕道 /data get entity @s Rotation,而那条路被权限层拦下
+        companion.setYRot(90.0f);
+        companion.setXRot(30.0f);
         ToolRun status = lua(companion, "numen.status.self()");
         ToolRun viaCommand = lua(companion, "numen.status.self()");
 
@@ -213,6 +216,10 @@ public class PerceptionGameTests {
             helper.assertTrue(s.getAsJsonObject("backpack_slots").get("used").getAsInt() == 2,
                     "the backpack does not count two used slots: " + status.reply());
             helper.assertTrue(s.get("hp").getAsFloat() == companion.getHealth(), "hp is not her health");
+            helper.assertTrue(s.getAsJsonObject("facing").get("yaw").getAsFloat() == companion.getYRot(),
+                    "she cannot read which way she faces: " + status.reply());
+            helper.assertTrue(s.getAsJsonObject("facing").get("pitch").getAsFloat() == companion.getXRot(),
+                    "she cannot read how far up or down she looks: " + status.reply());
             helper.assertTrue(s.get("body_state").getAsString().startsWith("<worn>head: empty; chest: empty; legs: empty; feet: empty"),
                     "body_state does not open with the worn slots: " + status.reply());
             helper.assertTrue(!s.getAsJsonObject("hands").has("head"), "the hands report armor beside <worn>: "
@@ -220,6 +227,40 @@ public class PerceptionGameTests {
             helper.assertTrue(status.reply().equals(viaCommand.reply()),
                     "status_self and status self read differently: " + status.reply() + " / "
                             + viaCommand.reply());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /**
+     * 转过去:{@code numen.body.turn} 真的把她的视线转到了要的地方,读回来的就是转过去的那个值。
+     * 只写一个轴时另一个留在原处;俯仰超出口子当场拒绝。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
+    public static void turn_aims_where_she_looks(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_turner", new BlockPos(3, 2, 3), false);
+
+        succeedWhen(helper, () -> {
+            JsonObject up = json(lua(companion, "numen.body.turn({pitch = -90})"));
+            helper.assertTrue(up.get("pitch").getAsFloat() == companion.getXRot(),
+                    "turn did not report the pitch she now has: " + up);
+            helper.assertTrue(companion.getXRot() < -45f,
+                    "looking up did not tilt her head up, pitch is " + companion.getXRot());
+
+            JsonObject west = json(lua(companion, "numen.body.turn({yaw = 90})"));
+            helper.assertTrue(west.get("yaw").getAsFloat() == companion.getYRot(),
+                    "turn did not report the yaw she now has: " + west);
+            helper.assertTrue(Math.abs(companion.getYRot() - 90f) < 1f,
+                    "turning west did not face her west, yaw is " + companion.getYRot());
+            helper.assertTrue(companion.getXRot() < -45f, "turning yaw alone reset the pitch she had");
+
+            // 与 status.self 同一个真源:转完之后她读到的就是刚转到的
+            JsonObject self = json(lua(companion, "numen.status.self()"));
+            helper.assertTrue(self.getAsJsonObject("facing").get("yaw").getAsFloat() == companion.getYRot(),
+                    "status.self does not agree with where turn put her: " + self);
+
+            ToolRun tooFar = lua(companion, "numen.body.turn({pitch = 120})");
+            helper.assertTrue(!tooFar.reply().contains("\"success\":true"),
+                    "a pitch of 120 should be refused: " + tooFar.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }

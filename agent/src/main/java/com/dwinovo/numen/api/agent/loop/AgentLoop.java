@@ -339,7 +339,7 @@ public final class AgentLoop {
         }
         inject(inbox.takeForCall(answerDue, host.now(), host.dayTime()));
         run.phase = Phase.MODEL;
-        ModelRequest request = model.turnRequest();
+        ModelRequest request = model.turnRequest(run.id, ++run.turnNo);
         transcript.incrementTurn();
         long id = run.id;
         AiLog.LOG.info("[numen-entity#{}] turn {}: convo={} msgs, tools={}",

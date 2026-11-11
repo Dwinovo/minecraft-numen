@@ -26,6 +26,8 @@ final class Run {
     boolean retried;
     /** 这条链已经为一次"上下文超长"整理过并重试了。模型回了话就清掉。 */
     boolean overflowRecovered;
+    /** 这次 run 的第几次模型调用,只增不减;重试也接着数。 */
+    int turnNo;
 
     Run(long id, boolean control, boolean retried, boolean ownerSpoke) {
         this.id = id;

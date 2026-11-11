@@ -41,6 +41,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -221,6 +222,53 @@ public class BrainGameTests {
             return transcript().stream()
                     .filter(m -> !(m instanceof ConvoState.Msg.User u && u.content().startsWith("<events>"))).toList();
         }
+
+        /** 这一段轨迹里 {@code type} 那一类的记录。 */
+        List<TraceRecord> traceRecords(String type) {
+            try {
+                return TraceRecord.readAll(loop.trace().file()).stream()
+                        .filter(r -> r.type().equals(type)).toList();
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+        }
+    }
+
+    /** 轨迹文件里的一行。只给这些用例读,不做通用的读取器。 */
+    record TraceRecord(JsonObject json) {
+        String type() {
+            return json.get("type").getAsString();
+        }
+
+        long run() {
+            return json.get("run").getAsLong();
+        }
+
+        int n() {
+            return json.get("n").getAsInt();
+        }
+
+        String string(String key) {
+            return json.has(key) && json.get(key).isJsonPrimitive() ? json.get(key).getAsString() : null;
+        }
+
+        static List<TraceRecord> readAll(Path file) throws java.io.IOException {
+            List<TraceRecord> out = new ArrayList<>();
+            if (!Files.isRegularFile(file)) {
+                return out;
+            }
+            for (String line : Files.readAllLines(file)) {
+                if (line.isBlank()) {
+                    continue;
+                }
+                JsonObject o = com.google.gson.JsonParser.parseString(line).getAsJsonObject();
+                if (o.has("type") && "header".equals(o.get("type").getAsString())) {
+                    continue;
+                }
+                out.add(new TraceRecord(o));
+            }
+            return out;
+        }
     }
 
     /** 主人的话 → 模型派一段程序 → 程序在服务端跑 → 回执回到模型 → 最终回复,整条回路都落进她的日志。 */
@@ -252,6 +300,93 @@ public class BrainGameTests {
             helper.assertTrue(her.owner.events.get(her.owner.events.size() - 1) instanceof Feed.Status s
                             && s.state().phase() == null && s.state().hold() == null,
                     "the last thing the client hears is not that she is idle: " + her.owner.events);
+            her.close();
+        });
+    }
+
+    /** 寻路的"为什么"落到她自己的轨迹文件里:与 turn、body 同一条时间线。 */
+    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_brain")
+    public static void aPathThatGivesUpLandsInHerTrace(GameTestHelper helper) throws Exception {
+        Brain her = new Brain(helper, "gametest_stuck");
+        // 模板坐标先换成世界坐标:setBlock 收的是相对模板的,tick 里身体站在世界里
+        BlockPos feet = helper.absolutePos(new BlockPos(8, 1, 8));
+        // 四面与头顶围成基岩盒子:她出不去,这一趟必然收场并诊断出"没有路"
+        for (int dx = -2; dx <= 2; dx++) {
+            for (int dy = 0; dy <= 3; dy++) {
+                for (int dz = -2; dz <= 2; dz++) {
+                    boolean shell = dx == -2 || dx == 2 || dy == 0 || dy == 3 || dz == -2 || dz == 2;
+                    helper.getLevel().setBlockAndUpdate(feet.offset(dx, dy, dz),
+                            shell ? Blocks.BEDROCK.defaultBlockState() : Blocks.AIR.defaultBlockState());
+                }
+            }
+        }
+        her.companion.teleportTo(helper.getLevel(), feet.getX() + 0.5, feet.getY(), feet.getZ() + 0.5, 0f, 0f);
+        BlockPos goal = feet.offset(12, 0, 0);
+
+        var nav = com.dwinovo.numen.nav.CompanionPorts.navigator(her.companion,
+                        com.dwinovo.numen.nav.CompanionPorts.dangers(her.companion), List.of())
+                .drive(com.dwinovo.numen.pathing.api.NavRequest.to(
+                        com.dwinovo.numen.pathing.search.Goals.at(goal),
+                        com.dwinovo.numen.pathing.spec.RouteSpec.defaults()));
+
+        succeedWhen(helper, () -> {
+            var status = nav.tick();
+            helper.assertTrue(!status.running(), "这一趟还没收场: " + status);
+            List<TraceRecord> paths = her.traceRecords("path");
+            helper.assertTrue(!paths.isEmpty(), "寻路的一条都没落进她的轨迹,结局是 " + status);
+            TraceRecord last = paths.get(paths.size() - 1);
+            helper.assertTrue(!"Arrived".equals(last.string("outcome")),
+                    "围死了却说到了: " + last.json());
+            helper.assertTrue(last.string("outcome") != null, "收场那条没结局: " + last.json());
+            her.close();
+        });
+    }
+
+    /** 身体记录带着位置、朝向、姿态;她没动的那些刻不重复写同一条内容。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
+    public static void herBodyIsRecordedWithoutRepeatingWhatDidNotChange(GameTestHelper helper) throws Exception {
+        Brain her = new Brain(helper, "gametest_plotted");
+        her.companion.setYRot(90.0f);
+
+        succeedWhen(helper, () -> {
+            List<TraceRecord> bodies = her.traceRecords("body");
+            helper.assertTrue(!bodies.isEmpty(), "no body record at all");
+            helper.assertTrue(bodies.size() < 20,
+                    "still standing, yet " + bodies.size() + " identical bodies were written");
+            TraceRecord last = bodies.get(bodies.size() - 1);
+            helper.assertTrue(last.json().has("pos"), "no position on the body record");
+            helper.assertTrue(last.json().getAsJsonArray("pos").get(0).getAsDouble() == her.companion.getX(),
+                    "the body record does not hold where she is: " + last.json());
+            helper.assertTrue(last.json().getAsJsonArray("pos").get(1).getAsDouble() == her.companion.getY(),
+                    "the body record does not hold her height: " + last.json());
+            helper.assertTrue(last.json().get("yaw").getAsFloat() == 90.0f,
+                    "the body record does not hold where she looks: " + last.json());
+            helper.assertTrue(last.json().has("stance"), "no stance on the body record");
+            her.close();
+        });
+    }
+
+    /** 每一轮模型请求都留一份"她当时看到了什么":发出去的那份运行期状态原文,一字不多一字不少。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
+    public static void everyTurnLeavesWhatSheSawOnDisk(GameTestHelper helper) throws Exception {
+        Brain her = new Brain(helper, "gametest_seer");
+        her.mind.say("看到了");
+
+        her.loop.submitPrompt("你周围有什么");
+
+        succeedWhen(helper, () -> {
+            List<TraceRecord> turns = her.traceRecords("turn");
+            helper.assertTrue(turns.size() == 1, "one turn, got " + turns.size());
+            TraceRecord turn = turns.get(0);
+            helper.assertTrue(turn.n() == 1, "the first turn of the run is 1, got " + turn.n());
+            helper.assertTrue(turn.run() > 0, "the turn does not carry its run");
+            String sent = her.mind.asked.get(0).messages().stream()
+                    .filter(m -> m instanceof ConvoState.Msg.User u && u.content().startsWith("<runtime_state>"))
+                    .map(m -> ((ConvoState.Msg.User) m).content()).findFirst().orElse("");
+            helper.assertTrue(!sent.isEmpty(), "the request did not carry a runtime_state at all");
+            helper.assertTrue(sent.equals(turn.string("runtime")),
+                    "what was recorded is not what was sent");
+            helper.assertTrue(turn.json().has("body"), "the turn does not carry the body it was taken from");
             her.close();
         });
     }

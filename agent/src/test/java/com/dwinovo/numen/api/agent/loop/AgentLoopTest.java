@@ -1255,4 +1255,37 @@ class AgentLoopTest extends LoopHarness {
         assertTrue(loop.status().busy());
         assertEquals(new LoopStatus.Doing("numen.activity.dig", List.of("64")), loop.status().activity());
     }
+
+    /** 一次 run 的第几次模型调用,由内核自己数;换 run 才从 1 重来。 */
+    @Nested
+    class TurnCoordinates {
+
+        @Test
+        void theModelIsAskedWithTheRunAndItsTurnNumber() {
+            ownerSays("过来");
+
+            assertEquals(1L, model.lastRunId);
+            assertEquals(1, model.lastTurnNo, "开 run 的第一轮是 1");
+        }
+
+        @Test
+        void theTurnNumberOnlyGoesUpWithinARun() {
+            ownerSays("挖铁");
+            model.last().callTools(new LlmToolCall("c1", "mine", "{}"));
+            tools.finish("c1");
+            model.last().say("挖完了");
+
+            assertEquals(List.of(1, 2), model.turnNos, "一轮工具往返算两轮");
+        }
+
+        @Test
+        void aNewRunStartsCountingAgain() {
+            ownerSays("第一件事");
+            model.last().say("好");
+            ownerSays("第二件事");
+
+            assertEquals(List.of(1, 1), model.turnNos, "换 run 就是新的坐标");
+            assertEquals(2L, model.lastRunId);
+        }
+    }
 }

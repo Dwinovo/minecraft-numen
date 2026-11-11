@@ -11,6 +11,7 @@ import com.dwinovo.numen.api.agent.inbox.ExternalWait;
 import com.dwinovo.numen.api.agent.inbox.JsonlJournal;
 import com.dwinovo.numen.api.agent.llm.ConvoLog;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
+import com.dwinovo.numen.api.agent.llm.LlmEndpoint;
 import com.dwinovo.numen.api.agent.loop.AgentLoop;
 import com.dwinovo.numen.api.agent.loop.Cause;
 import com.dwinovo.numen.api.agent.loop.HaltReason;
@@ -36,7 +37,9 @@ import com.dwinovo.numen.api.agent.request.TaskReport;
 import com.dwinovo.numen.api.agent.loop.Program;
 import com.dwinovo.numen.api.agent.tool.CompanionToolPort;
 import com.dwinovo.numen.api.agent.tool.ToolBook;
+import com.dwinovo.numen.api.agent.trace.TraceRecorder;
 import com.dwinovo.numen.api.agent.tool.ToolAnchor;
+import com.dwinovo.numen.api.agent.trace.TraceRecorders;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.event.NumenEvents;
@@ -44,6 +47,7 @@ import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.program.ProgramHost;
 import com.dwinovo.numen.api.script.Modules;
 import com.dwinovo.numen.api.store.JsonDoc;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 import java.util.List;
@@ -128,6 +132,7 @@ public final class CompanionLoop {
     private final Compactor compactor;
     private final GoalSteward goals;
     private final AgentLoop loop;
+    private final TraceRecorder trace;
     private final JsonDoc goalDoc;
     private final JsonDoc bindingDoc;
     private final OwnerSchedules schedules;
@@ -160,6 +165,8 @@ public final class CompanionLoop {
         this.companion = parts.companion();
         Home home = parts.home();
         this.log = ConvoLog.atFile(home.file(CHAT), home.io());
+        this.trace = new TraceRecorder(home.dir(), home.io(), companion);
+        TraceRecorders.put(companion, trace);
         this.convo = new ConvoState(msg -> log.append(msg, conversation));
         this.memory = new MemoryPreamble(NoteBook.of(companion));
         this.runtime = new RuntimeState(companion, parts.snapshot(), parts.dayTime());
@@ -181,6 +188,7 @@ public final class CompanionLoop {
         loop.subscribe(goals::on);
         loop.subscribe(memory::on);
         loop.subscribe(runtime::on);
+        loop.subscribe(trace::on);
         this.wasDriving = parts.driving().getAsBoolean();
         restore();
     }
@@ -298,6 +306,11 @@ public final class CompanionLoop {
     /** 她的对话日志:面板按 id 往前翻它。 */
     public ConvoLog log() {
         return log;
+    }
+
+    /** 她的旁路轨迹:她看到了什么、在哪、寻路为什么放弃。读者是人和工具,模型不看。 */
+    public TraceRecorder trace() {
+        return trace;
     }
 
     /** 她的收件箱(只读用:条目与编号)。 */
@@ -459,6 +472,9 @@ public final class CompanionLoop {
             }
         }
         loop.tick();
+        // 每刻都问一次,写不写由 recorder 定:与上一条相同时不写(站着不动的那些刻不该各占一条),
+        // 但心跳仍然每隔 STILL_TICKS 刻留一条——"她还在"与"记录断了"得能分开
+        trace.body(bodyRecord());
     }
 
     // ---- 主人的定时 ----
@@ -780,6 +796,79 @@ public final class CompanionLoop {
         return personaId == null ? null : parts.persona().apply(personaId);
     }
 
+    // ---- 轨迹 ----
+
+    /**
+     * 这一轮记进轨迹的其余字段:出处、档位、阶段、目标、队里有几条待唤醒、发出去的那份运行期状态原文,
+     * 以及<b>这一刻的身体</b>。身体嵌在 turn 里,于是"她看到了什么"与"她在哪"在同一条记录里对齐,
+     * 事后不必按时间戳去两个来源里对。
+     */
+    private JsonObject turnBody(LlmEndpoint endpoint, String xml) {
+        JsonObject o = new JsonObject();
+        o.addProperty("model", endpoint.model().id());
+        o.addProperty("thinking", endpoint.options().thinking().id());
+        LoopStatus status = loop.status();
+        o.addProperty("phase", status.phase() == null ? "IDLE" : status.phase().name());
+        GoalState goal = goals.goal();
+        o.addProperty("goal", goal == null ? "" : goal.objective());
+        o.addProperty("inbox", queue.size());
+        o.addProperty("runtime", xml);
+        o.add("body", bodyRecord());
+        return o;
+    }
+
+    /**
+     * 这一刻身体的样子。没有天然的挂载点,{@link #tick()} 是唯一位置。身体不在时(死着、被请出了服务器)
+     * 只有 {@code tick} 一栏,其余照实留空。
+     */
+    private JsonObject bodyRecord() {
+        JsonObject o = new JsonObject();
+        NumenPlayer body = parts.body().get();
+        o.addProperty("tick", body == null ? 0 : body.tickCount);
+        if (body == null) {
+            return o;
+        }
+        o.add("pos", vec(body.position()));
+        o.addProperty("yaw", body.getYRot());
+        o.addProperty("pitch", body.getXRot());
+        o.addProperty("stance", body.getPose().name());
+        o.addProperty("onGround", body.onGround());
+        o.addProperty("inWater", body.isInWater());
+        o.addProperty("hp", body.getHealth());
+        o.addProperty("food", body.getFoodData().getFoodLevel());
+        o.addProperty("air", body.getAirSupply());
+        o.addProperty("dim", body.level().dimension().location().toString());
+        o.addProperty("doing", doingKey());
+        o.add("keys", keys(body));
+        o.addProperty("moving", body.getDeltaMovement().horizontalDistanceSqr() > 1.0E-6);
+        return o;
+    }
+
+    private static JsonArray vec(net.minecraft.world.phys.Vec3 v) {
+        JsonArray a = new JsonArray();
+        a.add(v.x);
+        a.add(v.y);
+        a.add(v.z);
+        return a;
+    }
+
+    /** 此刻按着的键,从 {@link com.dwinovo.numen.api.entity.Controls} 读:身体没有别的真源。 */
+    private static JsonArray keys(NumenPlayer body) {
+        JsonArray a = new JsonArray();
+        for (com.dwinovo.numen.api.entity.Controls.Key key : com.dwinovo.numen.api.entity.Controls.Key.values()) {
+            if (body.controls().held(key)) {
+                a.add(key.name());
+            }
+        }
+        return a;
+    }
+
+    /** 她此刻在做什么的键;空闲是空串。 */
+    private String doingKey() {
+        LoopStatus.Doing doing = runtime.doing(tools.currentToolName());
+        return doing == null ? "" : doing.key();
+    }
+
     // ---- 内核的端口 ----
 
     /** 模型那一侧:组装请求、问 {@link Mind}、把回调切回主线程。 */
@@ -793,9 +882,28 @@ public final class CompanionLoop {
         /** 这一轮的请求:组装只在 {@link AgentRequestContext#turn} 一处,评测调的也是它。 */
         @Override
         public ModelRequest turnRequest() {
-            // 这一轮用的端点和日志里最后记下的不同,就在日志里记一条换了模型 / 换了档位
             log.noteEndpoint(parts.mind().endpoint(providerId));
-            return AgentRequestContext.turn(convo.snapshot(), runtime.xml(), personaText(), Modules.of(companion),
+            return assemble(runtime.xml());
+        }
+
+        /**
+         * 同 {@link #turnRequest()},记下这一轮在循环里的坐标与<b>发出去的那一份</b>运行期状态。
+         *
+         * <p>{@code xml} 只算一次:{@link RuntimeState#xml()} 是现算的,连"四周"都是这一刻现看的,
+         * 两次调用得到的不是同一份。记下来的必须就是发出去的那一份。
+         */
+        @Override
+        public ModelRequest turnRequest(long runId, int n) {
+            LlmEndpoint endpoint = parts.mind().endpoint(providerId);
+            log.noteEndpoint(endpoint);
+            String xml = runtime.xml();
+            ModelRequest request = assemble(xml);
+            trace.turn(runId, n, turnBody(endpoint, xml));
+            return request;
+        }
+
+        private ModelRequest assemble(String xml) {
+            return AgentRequestContext.turn(convo.snapshot(), xml, personaText(), Modules.of(companion),
                     com.dwinovo.numen.api.agent.skill.SkillRegistry.of(companion), parts.tools().all());
         }
 

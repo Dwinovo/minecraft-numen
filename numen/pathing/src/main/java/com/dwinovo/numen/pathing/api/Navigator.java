@@ -90,6 +90,7 @@ public final class Navigator {
                 request.route() != null ? " 先照这条 " + PathLog.route(request.route()) : "",
                 PathLog.num(entity.level().tickRateManager().tickrate()), PathLog.body(entity));
         return new Navigation(new Voyage(body, request.travel(), request.admission(), ports.terrain(), ports.materials(), ports.threats(),
-                request.goal(), request.spec(), request.budget(), request.route(), request.through(), ports.clock()), entity);
+                request.goal(), request.spec(), request.budget(), request.route(), request.through(), ports.clock()),
+                entity, ports.trace());
     }
 }

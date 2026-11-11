@@ -18,6 +18,7 @@ import com.dwinovo.numen.pathing.api.PlanQuery;
 import com.dwinovo.numen.pathing.api.PlanResult;
 import com.dwinovo.numen.pathing.api.Planning;
 import com.dwinovo.numen.pathing.api.Ports;
+import com.dwinovo.numen.pathing.api.Trace;
 import com.dwinovo.numen.pathing.api.Report;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.plan.Materials;
@@ -82,6 +83,8 @@ final class Trial {
     Materials materials = NO_MATERIALS;
     TerrainPolicy terrain = ALLOW_ALL;
     Threats threats = Threats.NONE;
+    /** 收"为什么"的那一头;用例要看寻路报了什么就换成自己的。 */
+    Trace trace = Trace.NONE;
 
     Trial(GameTestHelper helper) {
         this.helper = helper;
@@ -242,7 +245,7 @@ final class Trial {
 
     /** 这具身体加这条用例的端口组成的门面。 */
     Navigator navigator(TestBody body) {
-        return Navigator.of(body, new Ports(terrain, materials, threats, SearchClock.STEADY));
+        return Navigator.of(body, new Ports(terrain, materials, threats, SearchClock.STEADY, trace));
     }
 
     /** 一次导航通过了;全部都通过,这条用例才通过。 */

@@ -48,6 +48,11 @@ public final class StatusApi {
     /** 背包占了几格。 */
     public record Slots(int used, int total) {}
 
+    /** 她朝着哪边。一栏而不是两栏:{@code self} 的字段数已经过了显示阈值,多一栏就把 {@code pos} 挤出缩略窗口。 */
+    @Doc("Which way you look.")
+    public record Facing(@Doc("Degrees: 0 is south, 90 west, 180 north, -90 east.") double yaw,
+                         @Doc("Degrees: -90 straight up, 0 the horizon, 90 straight down.") double pitch) {}
+
     /** 她的身体。 */
     @Doc("Your body right now.")
     public record Self(@Doc("Your own id, player@ plus a short code; name is how people call you.") String id,
@@ -58,6 +63,7 @@ public final class StatusApi {
                        @Doc("0-20.") int hunger,
                        double saturation,
                        @Doc("Where you are (decimals).") Vec3 pos,
+                       @Doc("The way you look from where you stand.") Facing facing,
                        String dimension,
                        String biome,
                        @Doc("Structures you stand in.") List<String> structures,
@@ -72,11 +78,11 @@ public final class StatusApi {
                        @Doc("You are gliding on an elytra.") boolean gliding,
                        @Doc("What you wear and what mods report about your body.") Optional<String> bodyState) {}
 
-    @Fn("Your body: health, hunger, position, biome, what is in your hands and on you, movement state.")
+    @Fn("Your body: health, hunger, position, the way you face, biome, what is in your hands and on you, movement state.")
     @Example("local me = numen.status.self()\nprint(me.pos.x, me.pos.y, me.pos.z, me.hp)")
-    @Note("Instant and read-only: name, game mode, health, hunger and saturation, position, dimension, biome, the "
-            + "structures you stand in, what is in your hands, what you wear and what mods report about your body, "
-            + "movement state (on the ground, in water or lava, flying, gliding).")
+    @Note("Instant and read-only: name, game mode, health, hunger and saturation, position and the way you face, "
+            + "dimension, biome, the structures you stand in, what is in your hands, what you wear and what mods "
+            + "report about your body, movement state (on the ground, in water or lava, flying, gliding).")
     @Note("It does not list your backpack: what you carry is in front of you every turn; `numen.gui.view()` shows "
             + "exact slots.")
     @SeeAlso({"numen.status.owner", "numen.status.world"})
@@ -105,7 +111,8 @@ public final class StatusApi {
         String bodyState = NumenPlugins.bodyStateFragments(self);
         return new Self(EntityLabel.of(self), self.getName().getString(), WorkProfile.mode(self).getName(), self.getHealth(),
                 self.getMaxHealth(), self.getFoodData().getFoodLevel(), self.getFoodData().getSaturationLevel(),
-                self.position(), self.level().dimension().location().toString(),
+                self.position(), new Facing(self.getYRot(), self.getXRot()),
+                self.level().dimension().location().toString(),
                 self.level().getBiome(self.blockPosition()).unwrapKey().map(k -> k.location().toString())
                         .orElse("unknown"),
                 structures, new Hands(held(self.getMainHandItem()), held(self.getOffhandItem())),

@@ -81,6 +81,11 @@ public abstract class LoopHarness {
         /** 非空时每次调用当场就用这句话答完,回调同步回到内核里——模拟回得比调用栈退得还快的端口。 */
         public String replyAtOnce;
         public final List<Call> calls = new ArrayList<>();
+        /** 最近一次带坐标的请求:哪一次 run、这次 run 的第几轮。 */
+        public long lastRunId = -1;
+        public int lastTurnNo = -1;
+        /** 每一次带坐标的请求的 {@code n},按发生顺序。 */
+        public final List<Integer> turnNos = new ArrayList<>();
 
         @Override
         public Cause unavailable() {
@@ -91,6 +96,14 @@ public abstract class LoopHarness {
         public ModelRequest turnRequest() {
             turnRequests++;
             return new ModelRequest(transcript.snapshot(), List.of(), "system");
+        }
+
+        @Override
+        public ModelRequest turnRequest(long runId, int n) {
+            lastRunId = runId;
+            lastTurnNo = n;
+            turnNos.add(n);
+            return turnRequest();
         }
 
         @Override

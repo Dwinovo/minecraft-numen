@@ -1,13 +1,19 @@
 package com.dwinovo.numen.pathing.api;
 
-import com.dwinovo.numen.pathing.drive.Voyage;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+import com.dwinovo.numen.pathing.drive.Blockage;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.drive.Halt;
+import com.dwinovo.numen.pathing.drive.Journal;
 import com.dwinovo.numen.pathing.drive.PathLog;
+import com.dwinovo.numen.pathing.drive.Voyage;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Pending;
 import com.dwinovo.numen.pathing.search.Searches;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
@@ -21,6 +27,7 @@ public final class Navigation {
 
     private final Voyage driver;
     private final ServerPlayer entity;
+    private final Trace trace;
     private final String who;
     /** 出发时的游戏刻与墙钟:结局里对比用了几刻、几秒,看得出刻速。 */
     private final long startTick;
@@ -30,9 +37,10 @@ public final class Navigation {
     /** 收场那一刻的游戏刻;没收场为 -1。 */
     private long endTick = -1;
 
-    Navigation(Voyage driver, ServerPlayer entity) {
+    Navigation(Voyage driver, ServerPlayer entity, Trace trace) {
         this.driver = driver;
         this.entity = entity;
+        this.trace = trace;
         this.who = PathLog.who(entity);
         this.startTick = entity.level().getGameTime();
         this.startNanos = System.nanoTime();
@@ -110,6 +118,29 @@ public final class Navigation {
                 driver.actions().size(), PathLog.replans(driver.journal()), ticks(),
                 PathLog.seconds(System.nanoTime() - startNanos), PathLog.num(entity.level().tickRateManager().tickrate()),
                 extra, PathLog.body(entity));
+        trace();
+    }
+
+    /**
+     * 收场的一条轨迹,与上面那行日志同源。收场只在这里报:全流程里唯一既拿得到 {@link Outcome}、又拿得到整趟行程账
+     * ({@link Journal})的就是门面,段状态机那一侧只有"搜不出来了",说不出诊断成了哪一类。
+     */
+    private void trace() {
+        Blockage cause = switch (status.outcome()) {
+            case Outcome.Blocked blocked -> blocked.blockage();
+            case Outcome.NoRoute noRoute -> noRoute.cause();
+            case Outcome.OutOfBudget budget -> budget.cause();
+            case null, default -> null;
+        };
+        Map<String, Integer> replans = new LinkedHashMap<>();
+        driver.journal().replans().forEach((why, n) -> replans.put(why.name(), n));
+        trace.path(new Trace.PathEvent(
+                // 被叫停时状态还是 RUNNING(叫停的人在这一行之后才改它),没有结局
+                status.running() ? "Stopped" : status.outcome().getClass().getSimpleName(),
+                entity.position(),
+                cause == null ? null : cause.cell(),
+                cause == null || cause.reason() == null ? null : cause.reason().name(),
+                ticks(), driver.ledger().steps(), replans));
     }
 
     /** 日志里的结局:几种带格子与方块的写齐坐标与方块 id,其余照它自己的样子。 */

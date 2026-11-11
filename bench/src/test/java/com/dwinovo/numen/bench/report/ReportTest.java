@@ -112,12 +112,73 @@ class ReportTest {
 
     @Test
     void failureTagRulesOnlyNameWhatARuleCanTell() {
-        assertNull(FailureTag.auto(true, EndReason.HARNESS_ERROR, true));
-        assertEquals(FailureTag.H, FailureTag.auto(false, EndReason.HARNESS_ERROR, false));
-        assertEquals(FailureTag.G, FailureTag.auto(false, EndReason.API_ERROR, true));
-        assertEquals(FailureTag.G, FailureTag.auto(false, EndReason.CONTEXT_OVERFLOW, false));
-        assertEquals(FailureTag.D, FailureTag.auto(false, EndReason.DONE, true));
-        assertNull(FailureTag.auto(false, EndReason.TURN_LIMIT, false), "判不出的留给人工");
+        assertNull(FailureTag.auto(true, EndReason.HARNESS_ERROR, true, true, false, List.of(), null));
+        assertEquals(FailureTag.H, FailureTag.auto(false, EndReason.HARNESS_ERROR, true, false, false, List.of(), null));
+        assertEquals(FailureTag.G, FailureTag.auto(false, EndReason.API_ERROR, true, true, false, List.of(), null));
+        assertEquals(FailureTag.G, FailureTag.auto(false, EndReason.CONTEXT_OVERFLOW, true, false, false, List.of(), null));
+        assertEquals(FailureTag.D, FailureTag.auto(false, EndReason.DONE, true, true, false, List.of(), null));
+        assertNull(FailureTag.auto(false, EndReason.TURN_LIMIT, true, false, false, List.of(), null), "判不出的留给人工");
+    }
+
+    @Test
+    void actingOnAWorldSheNeverLookedAtIsAPerceptionFailure() {
+        assertEquals(FailureTag.B,
+                FailureTag.auto(false, EndReason.DONE, true, false, false, List.of(used("numen.work.dig")), null),
+                "挖了却一次都没看过");
+        assertNull(FailureTag.auto(false, EndReason.DONE, true, false, false,
+                        List.of(used("numen.scan.block"), used("numen.work.dig")), null),
+                "看过了就判不出是不是感知的问题,留给人工");
+        assertNull(FailureTag.auto(false, EndReason.DONE, true, false, false, List.of(used("numen.move.walk")), null),
+                "只走路不算动世界:主人给了坐标本就不必先看一眼");
+        assertEquals(FailureTag.D, FailureTag.auto(false, EndReason.DONE, true, true, false, List.of(used("numen.work.dig")), null),
+                "没有别的证据时,命令写错了就是执行参数");
+        assertNull(FailureTag.auto(false, EndReason.DENIED, false, false, false, List.of(used("numen.use.block")), null),
+                "基线是写死的脚本,坐标在剧本里,拿它问看没看过是问错了对象");
+    }
+
+    /** 嘴上说做完了:她自己收了工、断言却没过。 */
+    @Test
+    void claimingDoneWithNothingToShowIsAMonitoringFailure() {
+        assertEquals(FailureTag.E, FailureTag.auto(false, EndReason.DONE, true, false, true, List.of(), null),
+                "说做好了,检查说包里 0 把");
+        assertNull(FailureTag.auto(true, EndReason.DONE, true, false, true, List.of(), null),
+                "真做成了就不是失败");
+        assertNull(FailureTag.auto(false, EndReason.TURN_LIMIT, true, false, true, List.of(), null),
+                "轮数用完不算她自己收的工");
+        assertNull(FailureTag.auto(false, EndReason.DONE, false, false, true, List.of(), null),
+                "基线的收场话是剧本写死的,不是她的自我评价");
+    }
+
+    /** 证据从具体到笼统:轨迹说的是这一趟自己的事,压过"整次运行里出过一次调用写错"。 */
+    @Test
+    void theTrajectoryOutranksAGenericCommandError() {
+        assertEquals(FailureTag.C, FailureTag.auto(false, EndReason.DONE, true, true, false, List.of(),
+                        new PathEnd("NoRoute", "NO_CLEARANCE")),
+                "路都搜不出来,不是某一次调用写错能解释的");
+        assertEquals(FailureTag.E, FailureTag.auto(false, EndReason.DONE, true, true, true, List.of(),
+                        new PathEnd("Arrived", null)),
+                "路走到了、她却说做完了而没做成,是自我评价出了错,不是那一次调用写错");
+    }
+
+    @Test
+    void theLastPathSaysWhetherItWasPlanningReachOrTheScenarioItself() {
+        assertEquals(FailureTag.C, FailureTag.auto(false, EndReason.DONE, true, false, false, List.of(),
+                new PathEnd("NoRoute", "NO_CLEARANCE")), "搜遍了没有路是规划");
+        assertEquals(FailureTag.C, FailureTag.auto(false, EndReason.DONE, true, false, false, List.of(),
+                new PathEnd("NoMaterials", null)), "没料可垫也是规划");
+        assertEquals(FailureTag.D, FailureTag.auto(false, EndReason.DONE, true, false, false, List.of(),
+                new PathEnd("Denied", "OUT_OF_REACH")), "够不着是执行参数");
+        assertEquals(FailureTag.H, FailureTag.auto(false, EndReason.DONE, true, false, false, List.of(),
+                new PathEnd("Denied", "FORBIDDEN")), "目标圈在她不许进的地方,是场景设错了");
+        assertNull(FailureTag.auto(false, EndReason.DONE, true, false, false, List.of(), new PathEnd("Blocked", null)),
+                "执行期受阻判不出是规划还是恢复,留给人工");
+        assertEquals(FailureTag.H, FailureTag.auto(false, EndReason.DONE, true, true, false,
+                        List.of(used("numen.work.dig")), new PathEnd("NoRoute", "EXCLUDED")),
+                "场景设错了排在最前:别的证据都是它的后果");
+    }
+
+    private static FunctionUse used(String function) {
+        return new FunctionUse(function, 1, Map.of(), 0, 0);
     }
 
     @Test
