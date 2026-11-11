@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.network.payload;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.entity.Attendance;
 import com.dwinovo.numen.api.network.Wire;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -8,6 +9,7 @@ import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ByIdMap;
 
 import java.util.List;
 import java.util.UUID;
@@ -23,7 +25,7 @@ import java.util.UUID;
  * <p>{@code worldId} 让"不在名册上"这句话有了作用域:客户端的
  * {@code config/numen/companions/} 是跨存档共用的,不知道名册属于哪个世界就没法安全对账。
  *
- * <p>推送时机:主人登录、召唤、遣散、被请出服务器——任何"存在状态"的变化。
+ * <p>推送时机:主人登录、召唤、下线、删除、被请出服务器——任何"存在状态"的变化。
  */
 public record CompanionListPayload(String worldId, List<Entry> companions) implements CustomPacketPayload {
 
@@ -31,16 +33,21 @@ public record CompanionListPayload(String worldId, List<Entry> companions) imple
     public static final int MAX = 64;
 
     /** 一行。{@code creative} 是此刻的游戏模式(不在场按生存),
-     *  编辑卡的模式格用它显示当前值。{@code removedFor} 非空 = 她被外面的人或插件请出了服务器(值是当时的理由),
-     *  不在世界里,等主人再召唤;空串是在世界里(或休眠)。 */
-    public record Entry(UUID uuid, String name, boolean creative, String removedFor) {
+     *  编辑卡的模式格用它显示当前值。{@code outside} 是她被留在外面的状态与原因(主人让她下线、服务器把她请出去,见
+     *  {@link Attendance.Outside}):留在外面的不在世界里,等主人再召唤。 */
+    public record Entry(UUID uuid, String name, boolean creative, Attendance.Outside outside) {
+        private static final StreamCodec<io.netty.buffer.ByteBuf, Attendance.Why> WHY = ByteBufCodecs.idMapper(
+                ByIdMap.continuous(Attendance.Why::ordinal, Attendance.Why.values(), ByIdMap.OutOfBoundsStrategy.ZERO),
+                Attendance.Why::ordinal);
         static final StreamCodec<RegistryFriendlyByteBuf, Entry> CODEC =
                 StreamCodec.composite(
                         UUIDUtil.STREAM_CODEC, Entry::uuid,
                         Wire.TO_CLIENT.text(), Entry::name,
                         ByteBufCodecs.BOOL, Entry::creative,
-                        Wire.TO_CLIENT.text(), Entry::removedFor,
-                        Entry::new);
+                        WHY, e -> e.outside().why(),
+                        Wire.TO_CLIENT.text(), e -> e.outside().reason(),
+                        (uuid, name, creative, why, reason) ->
+                                new Entry(uuid, name, creative, new Attendance.Outside(why, reason)));
     }
 
     public static final Type<CompanionListPayload> TYPE = new Type<>(

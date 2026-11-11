@@ -123,6 +123,7 @@ public final class ModLanguageData {
         public static final String GUI_PROVIDERS_TAG_NO_TOOLS = "numen.gui.providers.tag.no_tools";
         public static final String GUI_PROVIDERS_TAG_MANUAL = "numen.gui.providers.tag.manual";
         public static final String HEADER_REMOVED = "numen.header.removed";
+        public static final String HEADER_OFFLINE = "numen.header.offline";
 
         // 征询:同伴等主人点头时对话流里那条带内联按钮的消息(ConsentMessage)与右上角的 toast。
         public static final String CONSENT_ALLOW          = "numen.consent.allow";
@@ -208,6 +209,7 @@ public final class ModLanguageData {
         public static final String EDIT_TITLE            = "numen.edit.title";
         public static final String EDIT_DELETE           = "numen.edit.delete";
         public static final String EDIT_OFFLINE          = "numen.edit.offline";
+        public static final String EDIT_ONLINE           = "numen.edit.online";
 
         // Conversation header: invite card, rename card, dissolve confirm.
         public static final String CONVO_INVITE           = "numen.convo.invite";
@@ -806,6 +808,7 @@ public final class ModLanguageData {
         adder.add(Keys.EDIT_TITLE,            "Edit");
         adder.add(Keys.EDIT_DELETE,           "Delete");
         adder.add(Keys.EDIT_OFFLINE,          "Log out");
+        adder.add(Keys.EDIT_ONLINE,           "Log in");
         adder.add(Keys.CONVO_INVITE,           "Invite");
         adder.add(Keys.CONVO_INVITE_TITLE,     "Invite companions");
         adder.add(Keys.CONVO_INVITE_CONFIRM,   "Invite");
@@ -1059,6 +1062,7 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_PROVIDERS_TAG_NO_TOOLS, "No tool calling");
         adder.add(Keys.GUI_PROVIDERS_TAG_MANUAL, "Manual model");
         adder.add(Keys.HEADER_REMOVED,                  "removed from the server (%s)");
+        adder.add(Keys.HEADER_OFFLINE,                  "offline");
         adder.add(Keys.CONSENT_ALLOW,          "Allow");
         adder.add(Keys.CONSENT_ALLOW_REMEMBER, "Always allow");
         adder.add(Keys.CONSENT_DENY,           "Deny");
@@ -1578,6 +1582,7 @@ public final class ModLanguageData {
         adder.add(Keys.EDIT_TITLE,            "编辑");
         adder.add(Keys.EDIT_DELETE,           "删除");
         adder.add(Keys.EDIT_OFFLINE,          "下线");
+        adder.add(Keys.EDIT_ONLINE,           "上线");
         adder.add(Keys.CONVO_INVITE,           "邀请");
         adder.add(Keys.CONVO_INVITE_TITLE,     "邀请同伴");
         adder.add(Keys.CONVO_INVITE_CONFIRM,   "邀请");
@@ -1832,6 +1837,7 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_PROVIDERS_TAG_NO_TOOLS, "不支持工具调用");
         adder.add(Keys.GUI_PROVIDERS_TAG_MANUAL, "手填的型号");
         adder.add(Keys.HEADER_REMOVED,                  "被请出了服务器(%s)");
+        adder.add(Keys.HEADER_OFFLINE,                  "已下线");
         adder.add(Keys.CONSENT_ALLOW,          "允许");
         adder.add(Keys.CONSENT_ALLOW_REMEMBER, "以后都允许");
         adder.add(Keys.CONSENT_DENY,           "拒绝");

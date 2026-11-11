@@ -84,7 +84,7 @@ public final class CompanionRegistry extends SavedData {
                     taskName, taskLua, taskOld, outside, at);
         }
 
-        /** 被服务器请出去时说的理由;不是服务器请出去的是空串。面板的名册只显示这一种。 */
+        /** 被服务器请出去时说的理由;不是服务器请出去的是空串。 */
         public String removedFor() {
             return outside.server() ? outside.reason() : "";
         }

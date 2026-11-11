@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.client.agent;
 
+import com.dwinovo.numen.api.entity.Attendance;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,18 +26,14 @@ import java.util.UUID;
 public final class NumenRoster {
 
     /**
-     * 一只存在的同伴。{@code creative} 是服务端推来的此刻游戏模式,编辑卡的模式格显示当前值用。{@code removedFor} 非空 = 她被请出了
-     * 服务器、不在世界里(值是理由)。
+     * 一只存在的同伴。{@code creative} 是服务端推来的此刻游戏模式,编辑卡的模式格显示当前值用。{@code outside} 是她被留在外面的
+     * 状态与原因(主人让她下线、服务器把她请出去):留在外面的不在世界里,等主人再召唤。
      */
-    public record Entry(UUID uuid, String name, boolean creative, String removedFor) {
+    public record Entry(UUID uuid, String name, boolean creative, Attendance.Outside outside) {
 
-        /** 在册的一行,没有被请出去。 */
+        /** 在册的一行,没有被留在外面。 */
         public Entry(UUID uuid, String name) {
-            this(uuid, name, false, "");
-        }
-
-        public boolean removed() {
-            return !removedFor.isEmpty();
+            this(uuid, name, false, Attendance.Outside.NONE);
         }
     }
 
@@ -89,15 +86,9 @@ public final class NumenRoster {
         return e == null ? null : e.name();
     }
 
-    /** 被请出了服务器、等主人再召唤? */
-    public boolean isRemoved(UUID uuid) {
+    /** 她被留在外面的状态与原因;不在名册上或没被留在外面是 {@link Attendance.Outside#NONE}。 */
+    public Attendance.Outside outside(UUID uuid) {
         Entry e = entries.get(uuid);
-        return e != null && e.removed();
-    }
-
-    /** 被请出去时说的理由;不是被请出去的返回空串。 */
-    public String removedFor(UUID uuid) {
-        Entry e = entries.get(uuid);
-        return e == null ? "" : e.removedFor();
+        return e == null ? Attendance.Outside.NONE : e.outside();
     }
 }

@@ -584,7 +584,7 @@ public final class Companions {
         for (CompanionRoster.Row row : CompanionRoster.build(rowsOf(server, owner.getUUID()))) {
             NumenPlayer body = NumenPlayer.findByUuid(server, row.uuid());
             list.add(new CompanionListPayload.Entry(row.uuid(), row.name(),
-                    body != null && body.isCreative(), reg.find(row.uuid()).removedFor()));
+                    body != null && body.isCreative(), reg.find(row.uuid()).outside()));
         }
         NumenNetwork.sendToPlayer(owner, new CompanionListPayload(reg.worldId(), list));
     }
@@ -691,6 +691,10 @@ public final class Companions {
             }
         }
         reconcile(server, ownerUuid);
+        ServerPlayer owner = server.getPlayerList().getPlayer(ownerUuid);
+        if (owner != null) {
+            syncRosterToOwner(server, owner);   // 面板据此把她显示成下线了的样子
+        }
     }
 
     /** 主人名下叫这个名字的同伴(大小写不计,同名的都算)让她们下线,见 {@link #offline};返回有几只。 */

@@ -183,9 +183,12 @@ public final class NumenScreen extends Screen {
             return new HeaderStatus("members", I18n.get(ModLanguageData.Keys.HEADER_MEMBERS,
                     Conversations.instance().membersAlive(conv).size()));
         }
-        if (NumenRoster.instance().isRemoved(her)) {
-            return new HeaderStatus("removed", I18n.get(ModLanguageData.Keys.HEADER_REMOVED,
-                    NumenRoster.instance().removedFor(her)));
+        var outside = NumenRoster.instance().outside(her);
+        if (outside.server()) {
+            return new HeaderStatus("removed", I18n.get(ModLanguageData.Keys.HEADER_REMOVED, outside.reason()));
+        }
+        if (outside.isOutside()) {
+            return new HeaderStatus("offline", I18n.get(ModLanguageData.Keys.HEADER_OFFLINE));
         }
         var st = RemoteCompanions.get(her).map(RemoteCompanion::status).orElse(null);
         if (st == null) return new HeaderStatus("online", I18n.get(ModLanguageData.Keys.HEADER_ONLINE));
@@ -1074,6 +1077,24 @@ public final class NumenScreen extends Screen {
         NumenNetwork.sendToServer(new com.dwinovo.numen.api.network.payload.OfflineRequestPayload(target));
     }
 
+    /** 让留在外面的她上线:就是按她的名字再召唤一次,服务端把她带回她下线时的位置。 */
+    private void sendOnline(UUID target) {
+        String name = NumenRoster.instance().name(target);
+        if (name != null) {
+            NumenNetwork.sendToServer(new com.dwinovo.numen.api.network.payload.SummonRequestPayload(name,
+                    com.dwinovo.numen.api.entity.SummonSetup.NONE));
+        }
+    }
+
+    /** 菜单里管她在不在线的那一项:在线的是"下线",留在外面的是"上线"。 */
+    private PopupMenu.Item attendanceItem(UUID her) {
+        return NumenRoster.instance().outside(her).isOutside()
+                ? new PopupMenu.Item(com.dwinovo.numen.api.client.ui.mc.Sprites.USER_PLUS,
+                        I18n.get(ModLanguageData.Keys.EDIT_ONLINE), false, () -> sendOnline(her))
+                : new PopupMenu.Item(com.dwinovo.numen.api.client.ui.mc.Sprites.USER_X,
+                        I18n.get(ModLanguageData.Keys.EDIT_OFFLINE), false, () -> sendOffline(her));
+    }
+
     /** 删除确认:危险操作的最后一道闸——卡外点击吞掉、Esc 取消、删除钮红色。 */
     private void openDismissConfirm(UUID target) {
         dismissDialog.open(overlayUi, railX, top, railW + panelW, panelH,
@@ -1410,8 +1431,7 @@ public final class NumenScreen extends Screen {
         items.add(PopupMenu.SEPARATOR);
         Conversation c = conv;
         items.add(her != null
-                ? new PopupMenu.Item(com.dwinovo.numen.api.client.ui.mc.Sprites.USER_X,
-                        I18n.get(ModLanguageData.Keys.EDIT_OFFLINE), false, () -> sendOffline(her))
+                ? attendanceItem(her)
                 : new PopupMenu.Item(com.dwinovo.numen.api.client.ui.mc.Sprites.DELETE,
                         I18n.get(ModLanguageData.Keys.CONVO_DISSOLVE), true, () -> openDissolveConfirm(c)));
         headerMenu.open(overlayUi, items, moreX + ICON_N + 2, top + HEADER_H - 4, false);
@@ -1551,8 +1571,7 @@ public final class NumenScreen extends Screen {
                 I18n.get(ModLanguageData.Keys.FOLDER_ADD_TO), false, () -> openAddToFolderMenu(c, mx, my)));
         items.add(PopupMenu.SEPARATOR);
         items.add(her != null
-                ? new PopupMenu.Item(com.dwinovo.numen.api.client.ui.mc.Sprites.USER_X,
-                        I18n.get(ModLanguageData.Keys.EDIT_OFFLINE), false, () -> sendOffline(her))
+                ? attendanceItem(her)
                 : new PopupMenu.Item(com.dwinovo.numen.api.client.ui.mc.Sprites.DELETE,
                         I18n.get(ModLanguageData.Keys.CONVO_DISSOLVE), true, () -> openDissolveConfirm(c)));
         openContextMenu(items, mx, my);
@@ -2505,9 +2524,12 @@ public final class NumenScreen extends Screen {
             }
             // 状态点、等点头的"!"都是一只同伴的事;会话行上只有脸
             if (her == null) continue;
-            if (NumenRoster.instance().isRemoved(her)) {              // 被请出了服务器 — 灰罩加"×",细节在抬头第二行
+            var outside = NumenRoster.instance().outside(her);
+            if (outside.isOutside()) {                                // 留在外面、不在世界里 — 灰罩;被请出服务器的再加"×",细节在抬头第二行
                 g.fill(fx, fy, fx + RAIL_AV, fy + RAIL_AV, fade(0xB0101010, a));
-                txt(g, Component.literal("×"), fx + (RAIL_AV - font.width("×")) / 2, fy + (RAIL_AV - 8) / 2, fade(CTA, a));
+                if (outside.server()) {
+                    txt(g, Component.literal("×"), fx + (RAIL_AV - font.width("×")) / 2, fy + (RAIL_AV - 8) / 2, fade(CTA, a));
+                }
             } else {
                 int d = fx + RAIL_AV - 6, e2 = fy + RAIL_AV - 6;     // status LED, bottom-right
                 g.fill(d, e2, d + 5, e2 + 5, fade(statusColor(her), a));
