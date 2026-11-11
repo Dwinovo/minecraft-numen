@@ -334,11 +334,17 @@ public final class NumenNetwork {
                 com.dwinovo.numen.api.network.payload.SummonRequestPayload.STREAM_CODEC,
                 com.dwinovo.numen.api.network.payload.SummonRequestPayload::handle);
 
-        // C→S: the edit card's dismiss → confirm asks to permanently delete a companion (drops its inventory, armor and accessories first).
+        // C→S: the profile page's delete → confirm asks to permanently delete a companion (drops its inventory, armor and accessories first).
         toServer(
                 com.dwinovo.numen.api.network.payload.DismissRequestPayload.TYPE,
                 com.dwinovo.numen.api.network.payload.DismissRequestPayload.STREAM_CODEC,
                 com.dwinovo.numen.api.network.payload.DismissRequestPayload::handle);
+
+        // C→S: the panel's menu asks a companion to go offline (logs her out; her things stay in her .dat).
+        toServer(
+                com.dwinovo.numen.api.network.payload.OfflineRequestPayload.TYPE,
+                com.dwinovo.numen.api.network.payload.OfflineRequestPayload.STREAM_CODEC,
+                com.dwinovo.numen.api.network.payload.OfflineRequestPayload::handle);
 
         // C→S: the edit card flips an existing companion between survival/creative.
         toServer(

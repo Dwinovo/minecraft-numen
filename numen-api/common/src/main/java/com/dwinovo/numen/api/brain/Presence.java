@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class Presence {
 
     /** 服务端与客户端之间推送与请求的协议版本。改了线上的样子就加一。 */
-    public static final int PROTOCOL = 7;
+    public static final int PROTOCOL = 8;
 
     /** 报过协议版本、版本对得上、还在等它报能力的玩家。 */
     private static final Set<UUID> REPORTED = ConcurrentHashMap.newKeySet();

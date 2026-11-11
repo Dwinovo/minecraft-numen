@@ -386,9 +386,9 @@ final class ProfilePage {
         cy = actionRow(g, t, new Hit.Wipe(), Sprites.DELETE, I18n.get(ModLanguageData.Keys.PROFILE_WIPE), t.fail(),
                 x, cy, w, mouseX, mouseY);
 
-        // ---- 页底:遣散(红字,点了还要过确认卡) ----
+        // ---- 页底:删除(红字,点了还要过确认卡) ----
         cy = gap(g, t, x, w, cy);
-        cy = actionRow(g, t, new Hit.Dismiss(), Sprites.DELETE, I18n.get(ModLanguageData.Keys.EDIT_DISMISS), t.fail(),
+        cy = actionRow(g, t, new Hit.Dismiss(), Sprites.DELETE, I18n.get(ModLanguageData.Keys.EDIT_DELETE), t.fail(),
                 x, cy, w, mouseX, mouseY) + 8;
 
         contentH = cy + Math.round(scroll) - y;

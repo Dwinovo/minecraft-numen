@@ -1069,7 +1069,12 @@ public final class NumenScreen extends Screen {
     private int modalCardY() { return top + Math.max(10, (panelH - modalCardH()) / 2); }
     private int modalCardBottom() { return modalCardY() + Math.min(modalCardH(), panelH - 20); }
 
-    /** 遣散确认:危险操作的最后一道闸——卡外点击吞掉、Esc 取消、删除钮红色。 */
+    /** 让她下线:服务端把她像真玩家那样登出,背包与位置随存档留着;名册与对话都不变,这一边没有什么要收拾的。 */
+    private void sendOffline(UUID target) {
+        NumenNetwork.sendToServer(new com.dwinovo.numen.api.network.payload.OfflineRequestPayload(target));
+    }
+
+    /** 删除确认:危险操作的最后一道闸——卡外点击吞掉、Esc 取消、删除钮红色。 */
     private void openDismissConfirm(UUID target) {
         dismissDialog.open(overlayUi, railX, top, railW + panelW, panelH,
                 I18n.get("numen.dismiss.title", nameFor(target)),
@@ -1383,8 +1388,9 @@ public final class NumenScreen extends Screen {
     }
 
     /**
-     * 抬头 ⋮ 的菜单,作用在左栏选中的那一格:就他俩时是查看她的资料、编辑她、邀请、遣散;
-     * 群是查看群资料、改名、邀请、解散。邀请有人可请才有;遣散/解散在最下面标红,点了还要过确认卡。
+     * 抬头 ⋮ 的菜单,作用在左栏选中的那一格:就他俩时是查看她的资料、编辑她、邀请、下线;
+     * 群是查看群资料、改名、邀请、解散。邀请有人可请才有;下线点了就生效(东西随她留着,召唤她就回来),
+     * 解散在最下面标红,点了还要过确认卡;删除她放在资料页页底,也要过确认卡。
      */
     private void openHeaderMenu() {
         if (headerMenu == null) headerMenu = new PopupMenu(font);
@@ -1403,9 +1409,11 @@ public final class NumenScreen extends Screen {
         }
         items.add(PopupMenu.SEPARATOR);
         Conversation c = conv;
-        items.add(new PopupMenu.Item(com.dwinovo.numen.api.client.ui.mc.Sprites.DELETE,
-                I18n.get(her != null ? ModLanguageData.Keys.EDIT_DISMISS : ModLanguageData.Keys.CONVO_DISSOLVE),
-                true, () -> { if (her != null) openDismissConfirm(her); else openDissolveConfirm(c); }));
+        items.add(her != null
+                ? new PopupMenu.Item(com.dwinovo.numen.api.client.ui.mc.Sprites.USER_X,
+                        I18n.get(ModLanguageData.Keys.EDIT_OFFLINE), false, () -> sendOffline(her))
+                : new PopupMenu.Item(com.dwinovo.numen.api.client.ui.mc.Sprites.DELETE,
+                        I18n.get(ModLanguageData.Keys.CONVO_DISSOLVE), true, () -> openDissolveConfirm(c)));
         headerMenu.open(overlayUi, items, moreX + ICON_N + 2, top + HEADER_H - 4, false);
     }
 
@@ -1542,9 +1550,11 @@ public final class NumenScreen extends Screen {
         items.add(new PopupMenu.Item(com.dwinovo.numen.api.client.ui.mc.Sprites.FOLDER,
                 I18n.get(ModLanguageData.Keys.FOLDER_ADD_TO), false, () -> openAddToFolderMenu(c, mx, my)));
         items.add(PopupMenu.SEPARATOR);
-        items.add(new PopupMenu.Item(com.dwinovo.numen.api.client.ui.mc.Sprites.DELETE,
-                I18n.get(her != null ? ModLanguageData.Keys.EDIT_DISMISS : ModLanguageData.Keys.CONVO_DISSOLVE),
-                true, () -> { if (her != null) openDismissConfirm(her); else openDissolveConfirm(c); }));
+        items.add(her != null
+                ? new PopupMenu.Item(com.dwinovo.numen.api.client.ui.mc.Sprites.USER_X,
+                        I18n.get(ModLanguageData.Keys.EDIT_OFFLINE), false, () -> sendOffline(her))
+                : new PopupMenu.Item(com.dwinovo.numen.api.client.ui.mc.Sprites.DELETE,
+                        I18n.get(ModLanguageData.Keys.CONVO_DISSOLVE), true, () -> openDissolveConfirm(c)));
         openContextMenu(items, mx, my);
     }
 

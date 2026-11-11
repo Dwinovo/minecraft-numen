@@ -206,7 +206,8 @@ public final class ModLanguageData {
 
         // Edit card: click the active avatar to open; every pick applies immediately.
         public static final String EDIT_TITLE            = "numen.edit.title";
-        public static final String EDIT_DISMISS          = "numen.edit.dismiss";
+        public static final String EDIT_DELETE           = "numen.edit.delete";
+        public static final String EDIT_OFFLINE          = "numen.edit.offline";
 
         // Conversation header: invite card, rename card, dissolve confirm.
         public static final String CONVO_INVITE           = "numen.convo.invite";
@@ -803,7 +804,8 @@ public final class ModLanguageData {
         adder.add(Keys.SETUP_MODE_LOCKED,       "Creative requires cheats, or you in Creative mode");
         adder.add(Keys.SETUP_SKIN_CHOOSE,       "Choose skin");
         adder.add(Keys.EDIT_TITLE,            "Edit");
-        adder.add(Keys.EDIT_DISMISS,          "Dismiss");
+        adder.add(Keys.EDIT_DELETE,           "Delete");
+        adder.add(Keys.EDIT_OFFLINE,          "Log out");
         adder.add(Keys.CONVO_INVITE,           "Invite");
         adder.add(Keys.CONVO_INVITE_TITLE,     "Invite companions");
         adder.add(Keys.CONVO_INVITE_CONFIRM,   "Invite");
@@ -1574,7 +1576,8 @@ public final class ModLanguageData {
         adder.add(Keys.SETUP_MODE_LOCKED,       "创造模式需要作弊权限，或你本人处于创造模式");
         adder.add(Keys.SETUP_SKIN_CHOOSE,       "选择皮肤");
         adder.add(Keys.EDIT_TITLE,            "编辑");
-        adder.add(Keys.EDIT_DISMISS,          "遣散");
+        adder.add(Keys.EDIT_DELETE,           "删除");
+        adder.add(Keys.EDIT_OFFLINE,          "下线");
         adder.add(Keys.CONVO_INVITE,           "邀请");
         adder.add(Keys.CONVO_INVITE_TITLE,     "邀请同伴");
         adder.add(Keys.CONVO_INVITE_CONFIRM,   "邀请");
