@@ -33,6 +33,8 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 
 /**
  * 寻路交出来的事实怎么对模型说,全在这里,只此一处:结局({@link Outcome})说成一句英文、归到哪一种 {@link FailureType};
@@ -288,7 +290,7 @@ public final class NavText {
     // ==================== 实际账与身体动作 ====================
 
     /**
-     * 回执末尾那一段:路上挖了什么、放了什么(与倒下又收回的水),身体为走路做了什么,潜过几段水,飞了多远;什么都没有是空串。
+     * 回执末尾那一段:路上挖了什么、放了什么(与倒下又收回的水)、开关了哪几扇门,身体为走路做了什么,潜过几段水,飞了多远;什么都没有是空串。
      * 例如 {@code En route I had to break 2 oak_planks (120,64,-33; 120,65,-33) and place 1 cobblestone (121,64,-33).
      * I also stepped off the boat. I went under water once: 12 s without a breath from 10,40,5 to 20,40,5, air down to
      * 60/300. I flew 31 blocks (took off at 1,64,5; landed at 30,64,5).}
@@ -434,9 +436,9 @@ public final class NavText {
                 + longest.maxAir() + ".";
     }
 
-    /** 实际账按方块归堆:挖掉的、放下的、倒下的液体、收回的。 */
+    /** 实际账按方块归堆:挖掉的、放下的、倒下的液体、收回的,以及开了没关上、关了没打开的门(栅栏门、活板门)。 */
     record Tally(Map<Block, List<BlockPos>> broke, Map<Block, List<BlockPos>> placed, Map<Block, List<BlockPos>> poured,
-                 Map<Block, List<BlockPos>> scooped) {
+                 Map<Block, List<BlockPos>> scooped, Map<Block, List<BlockPos>> opened, Map<Block, List<BlockPos>> closed) {
 
         /** 挖了几格。 */
         int dugCount() {
@@ -458,6 +460,11 @@ public final class NavText {
             return cells(placed);
         }
 
+        /** 开了没关上的每一扇门(栅栏门、活板门),按账上的先后。 */
+        List<BlockPos> openedCells() {
+            return cells(opened);
+        }
+
         private static int count(Map<Block, List<BlockPos>> heaps) {
             return heaps.values().stream().mapToInt(List::size).sum();
         }
@@ -473,6 +480,9 @@ public final class NavText {
         Map<Block, List<BlockPos>> placed = new LinkedHashMap<>();
         Map<Block, List<BlockPos>> poured = new LinkedHashMap<>();
         Map<Block, List<BlockPos>> scooped = new LinkedHashMap<>();
+        // 一扇门一路上可能被开关不止一次:只看它最后的样子与最初的样子,回到原样的不算
+        Map<BlockPos, BlockState> doorsBefore = new LinkedHashMap<>();
+        Map<BlockPos, BlockState> doorsAfter = new LinkedHashMap<>();
         for (EditLedger.Entry entry : entries) {
             switch (entry) {
                 case EditLedger.Dug dug -> heap(broke, dug.before().getBlock(), dug.pos());
@@ -481,13 +491,33 @@ public final class NavText {
                 case EditLedger.Placed p when p.after().isAir() -> heap(scooped, p.before().getBlock(), p.pos());
                 case EditLedger.Placed p -> heap(placed, p.after().getBlock(), p.pos());
                 case EditLedger.Toggled toggled -> {
+                    doorsBefore.putIfAbsent(toggled.pos(), toggled.before());
+                    doorsAfter.put(toggled.pos(), toggled.after());
                 }
             }
         }
-        return new Tally(broke, placed, poured, scooped);
+        Map<Block, List<BlockPos>> opened = new LinkedHashMap<>();
+        Map<Block, List<BlockPos>> closed = new LinkedHashMap<>();
+        doorsAfter.forEach((pos, after) -> {
+            if (!isOneDoor(after) || open(after) == open(doorsBefore.get(pos))) {
+                return;
+            }
+            heap(open(after) ? opened : closed, after.getBlock(), pos);
+        });
+        return new Tally(broke, placed, poured, scooped, opened, closed);
     }
 
-    /** 实际账的正文:挖掉的、放下的、倒下的液体与收回的,各按方块归堆。空账是空串。 */
+    private static boolean open(BlockState state) {
+        return state.hasProperty(BlockStateProperties.OPEN) && state.getValue(BlockStateProperties.OPEN);
+    }
+
+    /** 一扇门算一次:两格高的门上下两半一起翻,只数下半;栅栏门、活板门本来就只有一格。 */
+    private static boolean isOneDoor(BlockState state) {
+        return !state.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
+                || state.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.LOWER;
+    }
+
+    /** 实际账的正文:挖掉的、放下的、倒下的液体与收回的、开关过的门,各按方块归堆。空账是空串。 */
     static String edits(List<EditLedger.Entry> entries) {
         Tally tally = tally(entries);
         List<String> parts = new ArrayList<>();
@@ -502,6 +532,12 @@ public final class NavText {
         }
         if (!tally.scooped().isEmpty()) {
             parts.add("scoop " + heaps(tally.scooped()) + " back into the bucket");
+        }
+        if (!tally.opened().isEmpty()) {
+            parts.add("open " + heaps(tally.opened()) + ", still open");
+        }
+        if (!tally.closed().isEmpty()) {
+            parts.add("close " + heaps(tally.closed()) + ", still closed");
         }
         return andJoined(parts);
     }

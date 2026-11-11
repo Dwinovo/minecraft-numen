@@ -72,7 +72,7 @@ public class MovementGameTests {
      * 开门出屋:同伴被关在四面石墙(3 高、无顶但空背包无从垫高、徒手拆墙
      * 代价高昂)的屋里,唯一出口是一扇关着的橡木门——goto 屋外目标必须
      * 走"规划穿门 + 执行层右键开门"这条链。守的是 MovementTraverse 的
-     * 门交互与 canWalkThroughBlockState 的木门可通行假定。
+     * 门交互与 canWalkThroughBlockState 的木门可通行假定,以及回执里说出她开了哪扇门。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_smoke")
     public static void goto_through_closed_door(GameTestHelper helper) {
@@ -100,10 +100,14 @@ public class MovementGameTests {
 
         NumenPlayer companion = spawnAt(helper, "gametest_shutin", new BlockPos(3, 2, 3), false);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 13));
-        TaskRecord<?> record = lua(companion, "numen.move.walk(" + xyz(target) + ")").task();
+        ToolRun walk = lua(companion, "numen.move.walk(" + xyz(target) + ")");
         succeedWhen(helper, () -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "companion has not escaped through the door");
+            // 门是她的身体推开的:回执要告诉她开了哪一扇、现在还开着,关不关由她定
+            helper.assertTrue(walk.done() && walk.outcome().contains("open 1 oak_door (" + doorLow.getX() + ","
+                            + doorLow.getY() + "," + doorLow.getZ() + "), still open"),
+                    "the receipt does not say which door she left open: " + walk.outcome());
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }

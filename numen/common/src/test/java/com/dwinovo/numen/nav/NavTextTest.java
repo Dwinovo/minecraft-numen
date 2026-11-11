@@ -77,6 +77,20 @@ class NavTextTest {
     }
 
     @Test
+    void aDoorOpenedOnTheWayIsToldOnceAndOnlyWhileItStaysOpen() {
+        BlockState shut = Blocks.OAK_DOOR.defaultBlockState();
+        BlockState open = shut.setValue(net.minecraft.world.level.block.DoorBlock.OPEN, true);
+        var upper = net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER;
+        var half = net.minecraft.world.level.block.DoorBlock.HALF;
+        List<EditLedger.Entry> through = List.of(new EditLedger.Toggled(C, shut, open),
+                new EditLedger.Toggled(C.above(), shut.setValue(half, upper), open.setValue(half, upper)));
+        assertEquals("En route I had to open 1 oak_door (121,64,-33), still open.",
+                NavText.journey(through, List.of(), List.of(), List.of(), NavText.Flights.NONE), "两格高的门只算一扇");
+        List<EditLedger.Entry> andBack = List.of(new EditLedger.Toggled(C, shut, open), new EditLedger.Toggled(C, open, shut));
+        assertEquals("", NavText.journey(andBack, List.of(), List.of(), List.of(), NavText.Flights.NONE), "开了又关回去的不说");
+    }
+
+    @Test
     void waterPouredToBreakAFallAndScoopedBackIsToldAsSuch() {
         BlockState water = Blocks.WATER.defaultBlockState();
         BlockState air = Blocks.AIR.defaultBlockState();

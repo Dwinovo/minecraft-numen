@@ -22,6 +22,8 @@ public record Walked(@Doc("Where you stand now (decimals).") Vec3 pos,
                      @Doc("Every cell it placed on the way (bridge, pillar and step blocks), in order; the receipt text "
                              + "lists only the first few of each kind. Break them again with numen.work.dig to clear the "
                              + "way behind you.") List<BlockPos> placedAt,
+                     @Doc("Every door, fence gate or trapdoor it opened on the way and left open, in order. Right-click one "
+                             + "with numen.use.block to close it behind you.") List<BlockPos> openedAt,
                      @Doc("What your owner or the rules ruled about the cells it wanted to change on the way: asked and "
                              + "allowed, asked and refused, refused outright.") List<Ruling> rulings,
                      @Doc("Blocks it flew on the way (creative flight; a straight-line sum over the flying steps); 0 when it "
@@ -34,6 +36,7 @@ public record Walked(@Doc("Where you stand now (decimals).") Vec3 pos,
     public Walked {
         dugAt = List.copyOf(dugAt);
         placedAt = List.copyOf(placedAt);
+        openedAt = List.copyOf(openedAt);
         rulings = List.copyOf(rulings);
         tookOffAt = List.copyOf(tookOffAt);
         landedAt = List.copyOf(landedAt);

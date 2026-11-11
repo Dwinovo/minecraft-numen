@@ -112,7 +112,7 @@ public final class Journey {
      */
     public Walked walked(Vec3 pos, double distanceLeft, boolean flying) {
         NavText.Tally edits = NavText.tally(entries);
-        return new Walked(pos, distanceLeft, edits.dugCount(), edits.placedCount(), edits.dugCells(), edits.placedCells(),
+        return new Walked(pos, distanceLeft, edits.dugCount(), edits.placedCount(), edits.dugCells(), edits.placedCells(), edits.openedCells(),
                 rulings, flown, launches, landings, flying, glides.stream().map(Gliding::of).toList());
     }
 }
