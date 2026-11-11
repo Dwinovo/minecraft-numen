@@ -131,7 +131,7 @@ public class Mouse {
     /** 右键这一下的结果。 */
     public sealed interface Use {
 
-        /** 手还没缓过来(原版两次右键至少隔 4 刻),或正在挖:这一下没按。 */
+        /** 手还没缓过来(原版两次右键至少隔 4 刻)、正在挖,或指名的实体够不着:这一下没按。 */
         record Waiting() implements Use {}
 
         /**
@@ -399,14 +399,22 @@ public class Mouse {
     }
 
     /**
-     * 左键打准星落着的那只实体:原版的一次攻击(伤害、冷却、横扫、击退都是原版的,冷却由原版的攻击计时器管,驱动者自己挑什么时候出手)。
-     * 疾跑会让原版取消暴击判定,所以出手前停跑。身体是同伴时先过权限层。
+     * 她点得到这只实体:原版服务端对玩家的交互包只查这一条({@code ServerGamePacketListenerImpl.handleInteract}:眼睛到它碰撞箱的
+     * 距离在交互距离加一格之内),不查准星、不查中间隔着什么。点哪一只由驱动者指名,和按协议发交互包的客户端一样。
      */
-    public Blow attack() {
-        if (!(pick() instanceof EntityHitResult hit)) {
+    public boolean reaches(Entity target) {
+        return target.isAlive() && body.canInteractWithEntity(target.getBoundingBox(), 1.0);
+    }
+
+    /**
+     * 左键打 {@code target}:原版的一次攻击(伤害、冷却、横扫、击退都是原版的,冷却由原版的攻击计时器管,驱动者自己挑什么时候出手)。
+     * 够不着({@link #reaches})这一下不算出手。疾跑会让原版取消暴击判定,所以出手前停跑。身体是同伴时先过权限层。
+     */
+    public Blow attack(Entity target) {
+        if (!reaches(target)) {
             return Blow.MISSED;
         }
-        Entity target = hit.getEntity();
+        EntityHitResult hit = new EntityHitResult(target);
         Refusal refusal = firstRefusal(intents(hit, true));
         if (refusal != null) {
             return new Blow.Refused(target, refusal);
@@ -450,6 +458,24 @@ public class Mouse {
             Refusal refusal = refusal(action);
             if (refusal != null) {
                 return new Use.Refused(action.pos() != null ? action.pos() : BlockPos.containing(hit.getLocation()), refusal);
+            }
+        }
+        return press(hit, itemFallthrough, at);
+    }
+
+    /**
+     * 右键 {@code target} 这只实体,不看准星:够得着({@link #reaches})就按在它身上,够不着这一下不按。{@code at} 同
+     * {@link #use(boolean, Vec3)}。
+     */
+    public Use use(Entity target, boolean itemFallthrough, Vec3 at) {
+        if (now() < useReadyAt || digging() || !reaches(target)) {
+            return Use.WAITING;
+        }
+        EntityHitResult hit = new EntityHitResult(target);
+        for (Action action : intents(hit, false)) {
+            Refusal refusal = refusal(action);
+            if (refusal != null) {
+                return new Use.Refused(action.pos() != null ? action.pos() : target.blockPosition(), refusal);
             }
         }
         return press(hit, itemFallthrough, at);

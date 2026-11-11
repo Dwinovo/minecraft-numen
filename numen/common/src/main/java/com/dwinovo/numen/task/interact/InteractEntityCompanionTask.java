@@ -68,12 +68,12 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
     }
 
     /** Act this tick when the target is gone (report the outcome), a fixed hold has elapsed, or we're
-     *  in reach with a clear line of sight; otherwise walk up to it first. */
+     *  in reach of it; otherwise walk up to it first. */
     @Override
     protected boolean reached() {
         return entity == null || !entity.isAlive()
                 || (interaction != null && holdUntil >= 0 && player.level().getGameTime() >= holdUntil)
-                || inReachAndLos();
+                || withinReach();
     }
 
     @Override
@@ -111,15 +111,9 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
             return TaskState.SUCCESS;
         }
 
-        // In reach + LOS: aim at the entity and confirm the crosshair actually resolves to IT
-        // (e.g. not another entity wandered into the exact line) before pressing.
-        player.look().at(com.dwinovo.numen.api.entity.Sight.aim(player.getEyePosition(), entity.getBoundingBox()));
-        HitResult hit = player.mouse().pick();
-        boolean onTarget = hit.getType() == HitResult.Type.ENTITY
-                && ((EntityHitResult) hit).getEntity() == entity;
-        if (!onTarget) {
-            return TaskState.RUNNING;   // settling / something briefly in the line — re-aim next tick
-        }
+        // 够得着就点这一只,不要求准星落在它身上(原版服务端对玩家也只查距离,见 Mouse#reaches);转过去看着它是给人看的。
+        player.look().atNearest(entity.getBoundingBox());
+        HitResult hit = new EntityHitResult(entity);
 
         if (interaction == null) {
             // 按下去之前交给权限层:左键是打它(宠物、有名字的、村民),右键是右键它(有主人的)。
@@ -174,12 +168,6 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
     private boolean withinReach() {
         return bodySettled() && entity != null
                 && player.canInteractWithEntity(entity, 0.0);
-    }
-
-    /** In arm's reach AND no block between our eyes and the entity (vanilla hasLineOfSight) —
-     *  the nav arrival gate, so the body walks around a wall instead of freezing in front of it. */
-    private boolean inReachAndLos() {
-        return withinReach() && player.hasLineOfSight(entity);
     }
 
     private String targetName() {

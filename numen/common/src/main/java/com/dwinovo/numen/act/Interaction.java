@@ -90,7 +90,7 @@ public final class Interaction {
     private final Entity entity;      // non-null → entity target
     private final Timing timing;
 
-    /** 按之前朝哪一点看:方块目标是命中的那一点;实体会动,按的那一刻现算({@link #aimAtEntity}),这里没有;朝空气按也没有。 */
+    /** 按之前朝哪一点看:方块目标是命中的那一点;实体会动,按的那一刻朝它身上最近的一点看,这里没有;朝空气按也没有。 */
     private final Vec3 lookAt;
     /**
      * 准星语义的 USE 才有的兜底:方块/实体没吃掉点击时,同一次按键落到物品自用({@code gameMode.useItem})——桶找水、船找
@@ -350,7 +350,7 @@ public final class Interaction {
     private boolean fireAttackEntity() {
         if (entity == null || !entity.isAlive()) return false;
         player.controls().stop();
-        player.look().at(aimAtEntity());
+        player.look().atNearest(entity.getBoundingBox());
         boolean recovering = entity instanceof net.minecraft.world.entity.LivingEntity living
                 && living.hurtTime > 0;
         // 无敌帧与冷却的判据在 Swing 里,战斗任务用的是同一处。
@@ -358,10 +358,10 @@ public final class Interaction {
                 false, recovering, player.getAttackStrengthScale(0.0f))) {
             return false;
         }
-        // 打准星落着的那只:原版的伤害、冷却、横扫、击退;宠物、有名字的、村民,主人没点头鼠标就不出手
-        return switch (player.mouse().attack()) {
+        // 打指名的这一只:原版的伤害、冷却、横扫、击退;宠物、有名字的、村民,主人没点头鼠标就不出手
+        return switch (player.mouse().attack(entity)) {
             case Mouse.Blow.Landed landed -> true;
-            case Mouse.Blow.Missed missed -> false;       // 准星还没落在它身上,下一刻再来
+            case Mouse.Blow.Missed missed -> false;       // 它够不着了,下一刻再来
             case Mouse.Blow.Refused refused -> {
                 Verdict verdict = refused.reason().verdict();
                 failReason = "cannot attack " + refused.target().getName().getString() + ": " + verdict.reason();
@@ -372,12 +372,7 @@ public final class Interaction {
         };
     }
 
-    /** 点实体时此刻该瞄的那一点,见 {@link com.dwinovo.numen.api.entity.Sight#aim(Vec3, net.minecraft.world.phys.AABB)}。 */
-    private Vec3 aimAtEntity() {
-        return com.dwinovo.numen.api.entity.Sight.aim(player.getEyePosition(), entity.getBoundingBox());
-    }
-
-    /** 右键方块或实体:转过去看着,按一下准星落着的东西。 */
+    /** 右键方块或实体:转过去看着;方块按准星落着的那一格,实体按指名的那一只(够得着就按,不看准星)。 */
     private boolean fireUse() {
         if (entity != null && !entity.isAlive()) {
             failReason = "the entity is gone";
@@ -386,8 +381,13 @@ public final class Interaction {
             return false;
         }
         player.controls().stop();
-        player.look().at(entity != null ? aimAtEntity() : lookAt);
-        return switch (player.mouse().use(itemFallthrough, at)) {
+        if (entity != null) {
+            player.look().atNearest(entity.getBoundingBox());
+        } else {
+            player.look().at(lookAt);
+        }
+        return switch (entity != null ? player.mouse().use(entity, itemFallthrough, at)
+                : player.mouse().use(itemFallthrough, at)) {
             case Mouse.Use.Waiting waiting -> false;
             case Mouse.Use.Refused refused -> {
                 Verdict verdict = refused.reason().verdict();

@@ -140,7 +140,7 @@ public class InteractGameTests {
         });
     }
 
-    /** 鼠标左键打实体先过权限层,谁驱动她都绕不开:只许看的模式下直接 mouse().attack() 被拒、牛一滴血没掉;放行了才打下去。 */
+    /** 鼠标左键打实体先过权限层,谁驱动她都绕不开:只许看的模式下直接 mouse().attack(cow) 被拒、牛一滴血没掉;放行了才打下去。 */
     @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_interact")
     public static void the_mouse_asks_the_permission_layer_before_hitting_an_entity(GameTestHelper helper) {
         net.minecraft.world.entity.animal.Cow cow = net.minecraft.world.entity.EntityType.COW.create(helper.getLevel());
@@ -154,14 +154,14 @@ public class InteractGameTests {
         steps(helper)
                 .thenExecute(() -> companion.look().at(cow.getEyePosition()))
                 .thenExecute(() -> {
-                    var blow = companion.mouse().attack();
+                    var blow = companion.mouse().attack(cow);
                     helper.assertTrue(blow instanceof com.dwinovo.numen.api.entity.Mouse.Blow.Refused
                                     && cow.getHealth() == cow.getMaxHealth(),
                             "the mouse hit the cow in observe mode: " + blow);
                     com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
                 })
                 .thenExecute(() -> {
-                    var blow = companion.mouse().attack();
+                    var blow = companion.mouse().attack(cow);
                     helper.assertTrue(blow instanceof com.dwinovo.numen.api.entity.Mouse.Blow.Landed
                                     && cow.getHealth() < cow.getMaxHealth(),
                             "the allowed hit did not land: " + blow);

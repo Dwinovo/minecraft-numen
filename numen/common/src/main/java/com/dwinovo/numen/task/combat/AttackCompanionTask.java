@@ -565,9 +565,8 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             return;
         }
         player.look().atNearest(victim.getBoundingBox());
-        // 朝它碰撞箱上离眼睛最近的一点看,和"够得着"(眼睛到碰撞箱)是同一个距离;打准星落着的那只(疾跑停跑、权限、挥手都在
-        // 鼠标里),准星没落在它身上这一刻不算出手,下一刻再来
-        if (player.mouse().attack() instanceof Mouse.Blow.Landed landed) {
+        // 朝它碰撞箱上离眼睛最近的一点看,打选中的这一只(疾跑停跑、权限、挥手都在鼠标里);它够不着这一刻不算出手,下一刻再来
+        if (player.mouse().attack(victim) instanceof Mouse.Blow.Landed landed) {
             r.strike(landed.target().getId());
         }
     }

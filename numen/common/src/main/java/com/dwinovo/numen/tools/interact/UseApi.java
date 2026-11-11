@@ -132,12 +132,12 @@ public final class UseApi {
                                    + "off what is on that part.")
                            @Omitted("click the entity itself") Optional<StandPart> at) {}
 
-    @Fn("Right-click an entity within reach and in sight of where you stand. When it opens a window (a villager's trade) "
+    @Fn("Right-click an entity within reach of where you stand. When it opens a window (a villager's trade) "
             + "it returns that Window.")
     @Example("numen.use.entity(\"sheep@3f9a1c\", {item = \"minecraft:shears\"})")
     @Example("numen.use.entity(\"villager@3f9a1c\", {sneak = true})")
     @Example("numen.use.entity(\"armor_stand@3f9a1c\", {item = \"minecraft:iron_helmet\", at = \"head\"})")
-    @Note("An entity farther than your reach, or behind a wall, is walked up to first, then clicked; the walk is told in "
+    @Note("An entity farther than your reach is walked up to first, then clicked; the walk is told in "
             + "the result and a walk that can't get there fails with its reason.")
     @Note("Right on a boat or rideable boards it: runtime_state then shows <riding>; `numen.move.walk` sails a boat "
             + "across water, numen.use.dismount() steps off. Never click your own vehicle again.")
