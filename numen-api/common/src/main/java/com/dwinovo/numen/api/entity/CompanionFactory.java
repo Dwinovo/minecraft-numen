@@ -163,7 +163,7 @@ public final class CompanionFactory {
     }
 
     /**
-     * Save the companion's data and remove it from the world (dormancy).
+     * Save the companion's data and remove it from the world, the way a real player quits.
      * 这具身体已经不在玩家列表里(被外面请出去了、或换了一具新的身体)就没有什么可移的:再走一遍移除,
      * 有的平台(Paper)会因为"已经退役"而抛异常。
      */
@@ -177,7 +177,9 @@ public final class CompanionFactory {
         CompanionEvents.fire(CompanionEvent.REMOVE, player);
         LEAVING.add(player);
         try {
-            server.getPlayerList().remove(player);
+            // 真玩家退出时连接层回调的那一步:公屏"退出了游戏"、存档、移出玩家表,都由原版自己做。她的假连接不会回调,这里替它调
+            player.connection.onDisconnect(new net.minecraft.network.DisconnectionDetails(
+                    net.minecraft.network.chat.Component.translatable("multiplayer.disconnect.quitting")));
         } finally {
             LEAVING.remove(player);
         }
