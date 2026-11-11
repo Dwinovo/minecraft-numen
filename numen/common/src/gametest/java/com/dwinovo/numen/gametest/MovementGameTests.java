@@ -113,8 +113,8 @@ public class MovementGameTests {
     }
 
     /**
-     * 驾船横渡:坐在船上去一处位置,她把船开过水面到离目标最近的水边;再 {@code numen.use.dismount()} 下船、走完最后
-     * 一段。守的是整条载具链——服务端权威开关(没有它船每刻被清零)、桨物理驱动、水面 A*、靠岸后下船与步行接力都由她的程序写明。
+     * 驾船横渡:右键船坐上去,去一处位置,她把船开过水面到离目标最近的水边;再 {@code numen.use.dismount()} 下船、走完最后
+     * 一段。守的是整条载具链——右键上船、服务端权威开关(没有它船每刻被清零)、桨物理驱动、水面 A*、靠岸后下船与步行接力都由她的程序写明。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_vehicle")
     public static void boat_goto_pilots_across_water(GameTestHelper helper) {
@@ -135,11 +135,8 @@ public class MovementGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_pilot", new BlockPos(3, 2, 8), false);
         BlockPos target = helper.absolutePos(new BlockPos(14, 2, 8));
         double boatStartDist = boat.position().distanceTo(Vec3.atCenterOf(target));
-        helper.runAfterDelay(2, () -> {
-            companion.startRiding(boat, true);
-            lua(companion, "numen.move.walk(" + xyz(target) + ")\nnumen.use.dismount()\nnumen.move.walk(" + xyz(target)
-                    + ")");
-        });
+        helper.runAfterDelay(2, () -> lua(companion, "numen.use.entity(" + ref(boat) + ")\nnumen.move.walk(" + xyz(target)
+                + ")\nnumen.use.dismount()\nnumen.move.walk(" + xyz(target) + ")"));
 
         succeedWhen(helper, () -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,

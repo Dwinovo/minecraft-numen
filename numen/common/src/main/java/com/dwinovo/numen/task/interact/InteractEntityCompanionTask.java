@@ -113,7 +113,7 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
 
         // In reach + LOS: aim at the entity and confirm the crosshair actually resolves to IT
         // (e.g. not another entity wandered into the exact line) before pressing.
-        player.look().at(entity.getEyePosition());
+        player.look().at(com.dwinovo.numen.api.entity.Sight.aim(player.getEyePosition(), entity.getBoundingBox()));
         HitResult hit = player.mouse().pick();
         boolean onTarget = hit.getType() == HitResult.Type.ENTITY
                 && ((EntityHitResult) hit).getEntity() == entity;

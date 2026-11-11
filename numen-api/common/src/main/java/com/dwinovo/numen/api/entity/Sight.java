@@ -448,6 +448,19 @@ public final class Sight {
         return inset(Faces.point(level, target, side), side);
     }
 
+    /**
+     * 点一只实体时瞄它身上的哪一点:包围盒上离眼睛最近的那一点,往盒心收 {@link #INSET}。够不够得着
+     * ({@code Player.canInteractWithEntity})量的是眼睛到包围盒的距离,准星落在这一点上的距离就是那个数——判据说够得着,
+     * 准星就点得中。瞄它的眼睛不行:宽而矮的实体(船)眼睛在盒子中间,比盒边远,够得着却落不上准星。
+     */
+    public static Vec3 aim(Vec3 eye, AABB box) {
+        Vec3 near = new Vec3(Mth.clamp(eye.x, box.minX, box.maxX), Mth.clamp(eye.y, box.minY, box.maxY),
+                Mth.clamp(eye.z, box.minZ, box.maxZ));
+        Vec3 inward = box.getCenter().subtract(near);
+        double length = inward.length();
+        return length <= INSET ? near : near.add(inward.scale(INSET / length));
+    }
+
     /** 面上的点往面里收 {@link #INSET}。 */
     public static Vec3 inset(Vec3 onFace, Direction side) {
         return new Vec3(onFace.x - side.getStepX() * INSET, onFace.y - side.getStepY() * INSET,

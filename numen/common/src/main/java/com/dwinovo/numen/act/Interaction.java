@@ -90,7 +90,7 @@ public final class Interaction {
     private final Entity entity;      // non-null → entity target
     private final Timing timing;
 
-    /** 按之前朝哪一点看:方块目标是命中的那一点,实体目标是它的眼睛;朝空气按没有。 */
+    /** 按之前朝哪一点看:方块目标是命中的那一点;实体会动,按的那一刻现算({@link #aimAtEntity}),这里没有;朝空气按也没有。 */
     private final Vec3 lookAt;
     /**
      * 准星语义的 USE 才有的兜底:方块/实体没吃掉点击时,同一次按键落到物品自用({@code gameMode.useItem})——桶找水、船找
@@ -204,7 +204,7 @@ public final class Interaction {
                 if (button == Button.ATTACK) {
                     return attackEntity(p, e, hold ? Timing.repeat(CONTINUOUS, 1) : Timing.once());
                 }
-                Interaction i = new Interaction(p, Button.USE, null, e, e.getEyePosition(),
+                Interaction i = new Interaction(p, Button.USE, null, e, null,
                         hold ? Timing.repeat(CONTINUOUS, 1) : Timing.once());
                 i.itemFallthrough = itemFallthrough;
                 return i;
@@ -350,7 +350,7 @@ public final class Interaction {
     private boolean fireAttackEntity() {
         if (entity == null || !entity.isAlive()) return false;
         player.controls().stop();
-        player.look().at(entity.getEyePosition());
+        player.look().at(aimAtEntity());
         boolean recovering = entity instanceof net.minecraft.world.entity.LivingEntity living
                 && living.hurtTime > 0;
         // 无敌帧与冷却的判据在 Swing 里,战斗任务用的是同一处。
@@ -372,6 +372,11 @@ public final class Interaction {
         };
     }
 
+    /** 点实体时此刻该瞄的那一点,见 {@link com.dwinovo.numen.api.entity.Sight#aim(Vec3, net.minecraft.world.phys.AABB)}。 */
+    private Vec3 aimAtEntity() {
+        return com.dwinovo.numen.api.entity.Sight.aim(player.getEyePosition(), entity.getBoundingBox());
+    }
+
     /** 右键方块或实体:转过去看着,按一下准星落着的东西。 */
     private boolean fireUse() {
         if (entity != null && !entity.isAlive()) {
@@ -381,7 +386,7 @@ public final class Interaction {
             return false;
         }
         player.controls().stop();
-        player.look().at(lookAt);
+        player.look().at(entity != null ? aimAtEntity() : lookAt);
         return switch (player.mouse().use(itemFallthrough, at)) {
             case Mouse.Use.Waiting waiting -> false;
             case Mouse.Use.Refused refused -> {
