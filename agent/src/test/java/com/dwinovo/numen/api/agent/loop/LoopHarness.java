@@ -93,17 +93,12 @@ public abstract class LoopHarness {
         }
 
         @Override
-        public ModelRequest turnRequest() {
-            turnRequests++;
-            return new ModelRequest(transcript.snapshot(), List.of(), "system");
-        }
-
-        @Override
         public ModelRequest turnRequest(long runId, int n) {
             lastRunId = runId;
             lastTurnNo = n;
             turnNos.add(n);
-            return turnRequest();
+            turnRequests++;
+            return new ModelRequest(transcript.snapshot(), List.of(), "system");
         }
 
         @Override

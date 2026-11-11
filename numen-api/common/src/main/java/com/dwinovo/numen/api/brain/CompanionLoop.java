@@ -165,8 +165,10 @@ public final class CompanionLoop {
         this.companion = parts.companion();
         Home home = parts.home();
         this.log = ConvoLog.atFile(home.file(CHAT), home.io());
-        this.trace = new TraceRecorder(home.dir(), home.io(), companion);
-        TraceRecorders.put(companion, trace);
+        this.trace = TraceRecorders.recording() ? new TraceRecorder(home.dir(), home.io(), companion) : null;
+        if (trace != null) {
+            TraceRecorders.put(companion, trace);
+        }
         this.convo = new ConvoState(msg -> log.append(msg, conversation));
         this.memory = new MemoryPreamble(NoteBook.of(companion));
         this.runtime = new RuntimeState(companion, parts.snapshot(), parts.dayTime());
@@ -188,7 +190,9 @@ public final class CompanionLoop {
         loop.subscribe(goals::on);
         loop.subscribe(memory::on);
         loop.subscribe(runtime::on);
-        loop.subscribe(trace::on);
+        if (trace != null) {
+            loop.subscribe(trace::on);
+        }
         this.wasDriving = parts.driving().getAsBoolean();
         restore();
     }
@@ -308,7 +312,10 @@ public final class CompanionLoop {
         return log;
     }
 
-    /** 她的旁路轨迹:她看到了什么、在哪、寻路为什么放弃。读者是人和工具,模型不看。 */
+    /**
+     * 她的旁路轨迹:她看到了什么、在哪、寻路为什么放弃。读者是人和工具,模型不看。
+     * 这个进程不记轨迹({@link TraceRecorders#recording})时是 {@code null}。
+     */
     public TraceRecorder trace() {
         return trace;
     }
@@ -474,7 +481,9 @@ public final class CompanionLoop {
         loop.tick();
         // 每刻都问一次,写不写由 recorder 定:与上一条相同时不写(站着不动的那些刻不该各占一条),
         // 但心跳仍然每隔 STILL_TICKS 刻留一条——"她还在"与"记录断了"得能分开
-        trace.body(bodyRecord());
+        if (trace != null) {
+            trace.body(bodyRecord());
+        }
     }
 
     // ---- 主人的定时 ----
@@ -879,15 +888,9 @@ public final class CompanionLoop {
             return parts.mind().unavailable(providerId);
         }
 
-        /** 这一轮的请求:组装只在 {@link AgentRequestContext#turn} 一处,评测调的也是它。 */
-        @Override
-        public ModelRequest turnRequest() {
-            log.noteEndpoint(parts.mind().endpoint(providerId));
-            return assemble(runtime.xml());
-        }
-
         /**
-         * 同 {@link #turnRequest()},记下这一轮在循环里的坐标与<b>发出去的那一份</b>运行期状态。
+         * 这一轮的请求:组装只在 {@link AgentRequestContext#turn} 一处,评测调的也是它。记轨迹时一并记下这一轮在循环里的坐标
+         * 与<b>发出去的那一份</b>运行期状态。
          *
          * <p>{@code xml} 只算一次:{@link RuntimeState#xml()} 是现算的,连"四周"都是这一刻现看的,
          * 两次调用得到的不是同一份。记下来的必须就是发出去的那一份。
@@ -895,16 +898,15 @@ public final class CompanionLoop {
         @Override
         public ModelRequest turnRequest(long runId, int n) {
             LlmEndpoint endpoint = parts.mind().endpoint(providerId);
+            // 这一轮用的端点和日志里最后记下的不同,就在日志里记一条换了模型 / 换了档位
             log.noteEndpoint(endpoint);
             String xml = runtime.xml();
-            ModelRequest request = assemble(xml);
-            trace.turn(runId, n, turnBody(endpoint, xml));
-            return request;
-        }
-
-        private ModelRequest assemble(String xml) {
-            return AgentRequestContext.turn(convo.snapshot(), xml, personaText(), Modules.of(companion),
+            ModelRequest request = AgentRequestContext.turn(convo.snapshot(), xml, personaText(), Modules.of(companion),
                     com.dwinovo.numen.api.agent.skill.SkillRegistry.of(companion), parts.tools().all());
+            if (trace != null) {
+                trace.turn(runId, n, turnBody(endpoint, xml));
+            }
+            return request;
         }
 
         @Override

@@ -307,6 +307,7 @@ public class BrainGameTests {
     /** 寻路的"为什么"落到她自己的轨迹文件里:与 turn、body 同一条时间线。 */
     @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_brain")
     public static void aPathThatGivesUpLandsInHerTrace(GameTestHelper helper) throws Exception {
+        com.dwinovo.numen.api.agent.trace.TraceRecorders.record();
         Brain her = new Brain(helper, "gametest_stuck");
         // 模板坐标先换成世界坐标:setBlock 收的是相对模板的,tick 里身体站在世界里
         BlockPos feet = helper.absolutePos(new BlockPos(8, 1, 8));
@@ -345,6 +346,7 @@ public class BrainGameTests {
     /** 身体记录带着位置、朝向、姿态;她没动的那些刻不重复写同一条内容。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void herBodyIsRecordedWithoutRepeatingWhatDidNotChange(GameTestHelper helper) throws Exception {
+        com.dwinovo.numen.api.agent.trace.TraceRecorders.record();
         Brain her = new Brain(helper, "gametest_plotted");
         her.companion.setYRot(90.0f);
 
@@ -369,6 +371,7 @@ public class BrainGameTests {
     /** 每一轮模型请求都留一份"她当时看到了什么":发出去的那份运行期状态原文,一字不多一字不少。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void everyTurnLeavesWhatSheSawOnDisk(GameTestHelper helper) throws Exception {
+        com.dwinovo.numen.api.agent.trace.TraceRecorders.record();
         Brain her = new Brain(helper, "gametest_seer");
         her.mind.say("看到了");
 

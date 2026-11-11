@@ -21,7 +21,20 @@ public final class TraceRecorders {
 
     private static final Map<UUID, TraceRecorder> RECORDERS = new ConcurrentHashMap<>();
 
+    /** 这个进程记不记轨迹。默认不记:轨迹只增不删、每刻要整理一遍身体,服主的服务器上没有人读它。 */
+    private static volatile boolean recording;
+
     private TraceRecorders() {}
+
+    /** 这个进程从现在起给之后建的大脑记轨迹。评测与读轨迹的用例在建同伴之前调。 */
+    public static void record() {
+        recording = true;
+    }
+
+    /** 这个进程记不记轨迹。 */
+    public static boolean recording() {
+        return recording;
+    }
 
     /** 让这只同伴的轨迹可以被按 UUID 找到。重建大脑时再登记一次,后登记的顶掉前一份。 */
     public static void put(UUID companion, TraceRecorder trace) {

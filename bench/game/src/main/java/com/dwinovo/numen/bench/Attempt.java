@@ -170,6 +170,8 @@ final class Attempt {
         LOG.info("[numen-bench] {}/{} {} #{} 开始,场地 {}", suite, scenario.id(), variant.id(), number,
                 origin.toShortString());
         MinecraftServer server = level.getServer();
+        // 失败分类要读她的轨迹(见 lastPath):这个进程给之后建的大脑都记
+        com.dwinovo.numen.api.agent.trace.TraceRecorders.record();
         transcript = new Transcript(Results.get().transcript(suite, scenario.id(), variant.id(), number));
         meter = new Meter(transcript);
         settleWorld(level);
