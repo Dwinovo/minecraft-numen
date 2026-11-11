@@ -231,40 +231,6 @@ public class PerceptionGameTests {
         });
     }
 
-    /**
-     * 转过去:{@code numen.body.turn} 真的把她的视线转到了要的地方,读回来的就是转过去的那个值。
-     * 只写一个轴时另一个留在原处;俯仰超出口子当场拒绝。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
-    public static void turn_aims_where_she_looks(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_turner", new BlockPos(3, 2, 3), false);
-
-        succeedWhen(helper, () -> {
-            JsonObject up = json(lua(companion, "numen.body.turn({pitch = -90})"));
-            helper.assertTrue(up.get("pitch").getAsFloat() == companion.getXRot(),
-                    "turn did not report the pitch she now has: " + up);
-            helper.assertTrue(companion.getXRot() < -45f,
-                    "looking up did not tilt her head up, pitch is " + companion.getXRot());
-
-            JsonObject west = json(lua(companion, "numen.body.turn({yaw = 90})"));
-            helper.assertTrue(west.get("yaw").getAsFloat() == companion.getYRot(),
-                    "turn did not report the yaw she now has: " + west);
-            helper.assertTrue(Math.abs(companion.getYRot() - 90f) < 1f,
-                    "turning west did not face her west, yaw is " + companion.getYRot());
-            helper.assertTrue(companion.getXRot() < -45f, "turning yaw alone reset the pitch she had");
-
-            // 与 status.self 同一个真源:转完之后她读到的就是刚转到的
-            JsonObject self = json(lua(companion, "numen.status.self()"));
-            helper.assertTrue(self.getAsJsonObject("facing").get("yaw").getAsFloat() == companion.getYRot(),
-                    "status.self does not agree with where turn put her: " + self);
-
-            ToolRun tooFar = lua(companion, "numen.body.turn({pitch = 120})");
-            helper.assertTrue(!tooFar.reply().contains("\"success\":true"),
-                    "a pitch of 120 should be refused: " + tooFar.reply());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     /** 世界信息:主世界、白天、晴天。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void get_world_info_tells_day_and_clear_weather(GameTestHelper helper) {

@@ -145,7 +145,6 @@ public final class NumenContent {
     private static void registerTools() {
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, NEEDS_RESTART, numen -> {
             api = numen;
-            com.dwinovo.numen.tools.body.BodyApi.install(numen);
             com.dwinovo.numen.tools.perception.StatusApi.install(numen);
             com.dwinovo.numen.tools.perception.ScanApi.install(numen);
             com.dwinovo.numen.tools.locate.LocateApi.install(numen);
