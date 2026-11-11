@@ -36,7 +36,7 @@ public final class CompanionRoster {
     }
 
     /**
-     * 主人名下叫这个名字的同伴,没有则 null——<b>召唤的幂等就靠它</b>:同名就复用,
+     * 主人名下叫这个玩家名的同伴(同原版玩家名,不分大小写),没有则 null——<b>召唤的幂等就靠它</b>:同名就复用,
      * 不铸新 UUID,否则每喊一次"召唤小焰"就多一只同名分身,登录时一起复活。
      *
      * <p>万一有重名(迁移过来的旧数据),取定序后的第一个:注册表是 HashMap,不定序的话
@@ -48,7 +48,7 @@ public final class CompanionRoster {
         }
         UUID best = null;
         for (Row r : rows) {
-            if (!name.equals(r.name())) {
+            if (!name.equalsIgnoreCase(r.name())) {
                 continue;
             }
             if (best == null || r.uuid().toString().compareTo(best.toString()) < 0) {

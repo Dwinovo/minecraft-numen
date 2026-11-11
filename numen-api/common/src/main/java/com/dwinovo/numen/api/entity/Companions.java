@@ -677,7 +677,7 @@ public final class Companions {
     public static int dismissByName(MinecraftServer server, UUID ownerUuid, String name) {
         List<UUID> ids = new ArrayList<>();
         for (Map.Entry<UUID, CompanionRegistry.Entry> e : CompanionRegistry.get(server).ownedBy(ownerUuid)) {
-            if (e.getValue().name().equals(name)) ids.add(e.getKey());
+            if (e.getValue().name().equalsIgnoreCase(name)) ids.add(e.getKey());
         }
         dismiss(server, ownerUuid, ids);
         return ids.size();

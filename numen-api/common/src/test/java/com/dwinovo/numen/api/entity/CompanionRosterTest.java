@@ -53,6 +53,27 @@ class CompanionRosterTest {
     }
 
     @Test
+    void playerNameCaseDoesNotMintAnotherIdentity() {
+        List<CompanionRoster.Row> rows = List.of(new CompanionRoster.Row(A, "QaNumenBody"));
+        assertEquals(A, CompanionRoster.findByName(rows, "qanumenbody"));
+        assertEquals(A, CompanionRoster.findByName(rows, "QANUMENBODY"));
+        assertEquals(A, CompanionRoster.findByName(rows, "qAnUmEnBoDy"));
+        assertNull(CompanionRoster.findByName(rows, "QaNumenBody_2"));
+        assertNull(CompanionRoster.findByName(rows, "QaNumenBody "));
+        assertEquals("QaNumenBody", rows.getFirst().name(), "查找不改写名册中的原名");
+    }
+
+    @Test
+    void historicalCaseDuplicatesKeepDeterministicResolution() {
+        List<CompanionRoster.Row> rows = List.of(
+                new CompanionRoster.Row(B, "QaNumenBody"),
+                new CompanionRoster.Row(A, "qanumenbody"));
+        assertEquals(A, CompanionRoster.findByName(rows, "QANUMENBODY"));
+        assertEquals(A, CompanionRoster.findByName(rows.reversed(), "QaNumenBody"));
+        assertEquals(2, rows.size(), "查找不删除或合并已有身份");
+    }
+
+    @Test
     void duplicateNamesResolveTheSameWayEveryTime() {
         // 同名分身(迁移来的数据里可能有):注册表是 HashMap,不定序的话同一句
         // "召唤小焰"今天复用这只、明天复用那只
