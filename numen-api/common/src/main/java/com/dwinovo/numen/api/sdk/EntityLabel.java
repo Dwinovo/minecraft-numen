@@ -50,6 +50,18 @@ public final class EntityLabel {
         return name == null || name.isEmpty() ? id : id + " (" + name + ")";
     }
 
+    private static final Pattern SHOWN_PLAYER = Pattern.compile(
+            "(player@([0-9a-f]{" + CODE_LENGTH + "}))(?: \\((.*)\\))?");
+
+    /** {@link #shown(UUID, String)} 写的一位玩家读回来的样子:身份({@code player@短码})、短码、名字(没带名字是空串)。 */
+    public record ShownPlayer(String id, String code, String name) {}
+
+    /** 读 {@link #shown(UUID, String)} 写的那种;不是这种写法是 {@code null}。写与读都只在这个类里。 */
+    public static ShownPlayer readShown(String text) {
+        java.util.regex.Matcher m = text == null ? null : SHOWN_PLAYER.matcher(text);
+        return m == null || !m.matches() ? null : new ShownPlayer(m.group(1), m.group(2), m.group(3) == null ? "" : m.group(3));
+    }
+
     /** 这段文字符合身份的格式 {@code kind@6位十六进制};对不对得上某一只是 {@link #find} 的事。 */
     public static boolean valid(String text) {
         return LABEL.matcher(text).matches();

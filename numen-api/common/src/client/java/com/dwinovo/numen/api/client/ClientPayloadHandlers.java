@@ -50,8 +50,7 @@ public final class ClientPayloadHandlers {
         java.util.List<NumenRoster.Entry> snapshot = new java.util.ArrayList<>();
         java.util.Set<UUID> onRoster = new java.util.LinkedHashSet<>();
         for (CompanionListPayload.Entry e : p.companions()) {
-            snapshot.add(new NumenRoster.Entry(e.uuid(), e.name(), e.creative(), e.outside(),
-                    e.creator(), e.creatorName()));
+            snapshot.add(new NumenRoster.Entry(e.uuid(), e.name(), e.creative(), e.outside(), e.keepers()));
             onRoster.add(e.uuid());
         }
         NumenRoster.instance().replaceAll(p.worldId(), snapshot);

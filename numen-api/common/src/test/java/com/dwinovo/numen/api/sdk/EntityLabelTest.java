@@ -32,6 +32,24 @@ class EntityLabelTest {
     }
 
     @Test
+    void aShownPlayerReadsBackAsItsCodeAndName() {
+        UUID steve = UUID.fromString("3f9a1c07-4b2e-4d11-9a55-0123456789ab");
+
+        EntityLabel.ShownPlayer named = EntityLabel.readShown(EntityLabel.shown(steve, "Steve (the) Miner"));
+        assertEquals("player@3f9a1c", named.id());
+        assertEquals("3f9a1c", named.code());
+        assertEquals("Steve (the) Miner", named.name(), "名字里有括号也整个读回来");
+
+        EntityLabel.ShownPlayer bare = EntityLabel.readShown(EntityLabel.shown(steve, null));
+        assertEquals("3f9a1c", bare.code());
+        assertEquals("", bare.name(), "名字查不到时只写了身份");
+
+        assertEquals(null, EntityLabel.readShown("zombie@3f9a1c"), "不是玩家");
+        assertEquals(null, EntityLabel.readShown("Steve"), "名字不是身份");
+        assertEquals(null, EntityLabel.readShown(null));
+    }
+
+    @Test
     void zeroHitsNoneOneHitFoundSeveralClash() {
         assertInstanceOf(EntityLabel.Match.None.class, EntityLabel.classify(List.of()));
         assertEquals("a", ((EntityLabel.Match.Found<String>) EntityLabel.classify(List.of("a"))).entity());

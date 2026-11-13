@@ -1,6 +1,8 @@
 package com.dwinovo.numen.api.client.agent;
 
 import com.dwinovo.numen.api.entity.Attendance;
+import com.dwinovo.numen.api.entity.Keeper;
+import com.dwinovo.numen.api.sdk.EntityLabel;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,15 +29,49 @@ public final class NumenRoster {
 
     /**
      * 一只存在的同伴。{@code creative} 是服务端推来的此刻游戏模式,编辑卡的模式格显示当前值用。{@code outside} 是她被留在外面的
-     * 状态与原因(主人让她下线、服务器把她请出去):留在外面的不在世界里,等主人再召唤。{@code creator} 是创建她的那位玩家
-     * (不是本机的玩家,她就是分享来的),{@code creatorName} 是他的名字,服务端查不到是空串。
+     * 状态与原因(主人让她下线、服务器把她请出去):留在外面的不在世界里,等主人再召唤。{@code keepers} 是她的主人表:创建者在前,
+     * 后面是分享给的人,按加进来的先后。
      */
-    public record Entry(UUID uuid, String name, boolean creative, Attendance.Outside outside,
-                        UUID creator, String creatorName) {
+    public record Entry(UUID uuid, String name, boolean creative, Attendance.Outside outside, List<Keeper> keepers) {
 
-        /** 在册的一行,没有被留在外面;是谁创建的没有说。 */
+        public Entry {
+            keepers = List.copyOf(keepers);
+        }
+
+        /** 在册的一行,没有被留在外面;主人表没有说。 */
         public Entry(UUID uuid, String name) {
-            this(uuid, name, false, Attendance.Outside.NONE, null, "");
+            this(uuid, name, false, Attendance.Outside.NONE, List.of());
+        }
+
+        /** 创建她的那位玩家;主人表没有说是 {@code null}。 */
+        public Keeper creator() {
+            return keepers.isEmpty() ? null : keepers.get(0);
+        }
+
+        /** {@code person} 是不是她的创建者:删除、清空记忆、改主人表这些入口只给他(能不能办仍由服务端判)。 */
+        public boolean createdBy(UUID person) {
+            Keeper creator = creator();
+            return creator != null && creator.uuid().equals(person);
+        }
+
+        /** 她不止一位主人(分享出去了,或是分享来的):说话的不止一位,每句得认得出是谁的。 */
+        public boolean severalKeepers() {
+            return keepers.size() > 1;
+        }
+
+        /** 对 {@code person} 来说她是分享来的:知道创建者是谁,而且不是他。 */
+        public boolean sharedWith(UUID person) {
+            return creator() != null && !createdBy(person);
+        }
+
+        /** 主人表上短码是这个的那一位({@code EntityLabel.code});没有是 {@code null}。 */
+        public Keeper keeperCoded(String code) {
+            for (Keeper keeper : keepers) {
+                if (EntityLabel.code(keeper.uuid()).equals(code)) {
+                    return keeper;
+                }
+            }
+            return null;
         }
     }
 
@@ -80,6 +116,43 @@ public final class NumenRoster {
 
     public int size() {
         return entries.size();
+    }
+
+    /** 这只同伴在册的那一行,不在名册上则 null。 */
+    public Entry entry(UUID uuid) {
+        return entries.get(uuid);
+    }
+
+    /**
+     * 她的日志里一句主人的话标着的说话人({@code EntityLabel.shown} 的写法)是谁:她主人表上的那一位;已经不在表上的(说过话之后被移出了)
+     * 照标记里的名字给,没带名字的写他的身份,UUID 由标记定(同一位永远同一个;没有他的皮肤,脸是默认的)。读不懂、名册上没有她是 null。
+     */
+    public Keeper speaker(UUID companion, String shown) {
+        EntityLabel.ShownPlayer read = EntityLabel.readShown(shown);
+        Entry entry = entries.get(companion);
+        if (read == null || entry == null) {
+            return null;
+        }
+        Keeper onTable = entry.keeperCoded(read.code());
+        return onTable != null ? onTable
+                : new Keeper(UUID.nameUUIDFromBytes(read.id().getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                read.name().isEmpty() ? read.id() : read.name());
+    }
+
+    /**
+     * 这条主人的话({@code content} 是日志里那条 user 消息)若是她的另一位主人说的,是那一位;{@code viewer} 自己说的、没标是谁说的
+     * (她只有一位主人,或不是谁亲口说的)是 {@code null}。聊天流的气泡、左栏的最后一句、未读都按这一处认。
+     */
+    public Keeper otherSpeaker(UUID companion, String content, UUID viewer) {
+        String marked = com.dwinovo.numen.api.agent.llm.ConvoLog.speaker(content);
+        Keeper said = marked == null ? null : speaker(companion, marked);
+        return said == null || said.uuid().equals(viewer) ? null : said;
+    }
+
+    /** 这只同伴的主人表上不止一位;不在名册上不算。 */
+    public boolean severalKeepers(UUID companion) {
+        Entry entry = entries.get(companion);
+        return entry != null && entry.severalKeepers();
     }
 
     /** 这只同伴的显示名,不在名册上则 null。 */

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.client.agent;
 
+import com.dwinovo.numen.api.entity.Keeper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -54,10 +55,71 @@ class NumenRosterTest {
     void aCompanionRemovedFromTheServerIsShownAsOut() {
         NumenRoster.instance().replaceAll("w1", List.of(
                 new NumenRoster.Entry(A, "小焰", false,
-                        com.dwinovo.numen.api.entity.Attendance.Outside.byServer("cheating at cards"), null, "")));
+                        com.dwinovo.numen.api.entity.Attendance.Outside.byServer("cheating at cards"), List.of())));
 
         assertTrue(NumenRoster.instance().outside(A).server());
         assertEquals("cheating at cards", NumenRoster.instance().outside(A).reason());
+    }
+
+    private static final UUID STEVE = UUID.fromString("3f9a1c07-4b2e-4d11-9a55-0123456789ab");
+    private static final UUID ALEX = UUID.fromString("0a1b2c07-4b2e-4d11-9a55-0123456789ab");
+
+    private static NumenRoster.Entry shared() {
+        return new NumenRoster.Entry(A, "小焰", false, com.dwinovo.numen.api.entity.Attendance.Outside.NONE,
+                List.of(new Keeper(STEVE, "Steve"), new Keeper(ALEX, "")));
+    }
+
+    @Test
+    void theFirstOnHerOwnerTableIsHerCreator() {
+        NumenRoster.Entry her = shared();
+
+        assertEquals(STEVE, her.creator().uuid());
+        assertTrue(her.createdBy(STEVE));
+        assertFalse(her.createdBy(ALEX), "分享来的:创建者另有其人");
+        assertFalse(her.createdBy(null), "没在世界里的玩家谁也不是");
+        assertNull(new NumenRoster.Entry(B, "阿岩").creator(), "主人表没有说");
+        assertFalse(new NumenRoster.Entry(B, "阿岩").createdBy(STEVE), "不知道是谁创建的,只有创建者的入口不给");
+        assertEquals("player@0a1b2c", her.keepers().get(1).shown(), "名字查不到的写他的身份");
+    }
+
+    @Test
+    void theSpeakerMarkedInHerLogIsTheOneOnHerOwnerTable() {
+        NumenRoster.instance().replaceAll("w1", List.of(shared()));
+        NumenRoster roster = NumenRoster.instance();
+
+        assertEquals(new Keeper(STEVE, "Steve"), roster.speaker(A, "player@3f9a1c (Steve)"));
+        assertEquals(new Keeper(STEVE, "Steve"), roster.speaker(A, "player@3f9a1c (OldName)"),
+                "认的是身份,名字照表上现在的");
+        assertEquals(new Keeper(ALEX, ""), roster.speaker(A, "player@0a1b2c"));
+    }
+
+    @Test
+    void wordsAreAnotherOwnersOnlyWhenTheLogMarksSomeoneElse() {
+        NumenRoster.instance().replaceAll("w1", List.of(shared(), new NumenRoster.Entry(B, "阿岩")));
+        NumenRoster roster = NumenRoster.instance();
+
+        assertEquals(new Keeper(STEVE, "Steve"),
+                roster.otherSpeaker(A, "<query from=\"player@3f9a1c (Steve)\">修一下镐子</query>", ALEX));
+        assertNull(roster.otherSpeaker(A, "<query from=\"player@3f9a1c (Steve)\">修一下镐子</query>", STEVE), "自己说的");
+        assertNull(roster.otherSpeaker(A, "<query>修一下镐子</query>", ALEX), "没标是谁说的:她那时只有一位主人");
+        assertNull(roster.otherSpeaker(A, "<query source=\"schedule\">该睡了</query>", ALEX), "定时说的,不是谁亲口说的");
+        assertTrue(roster.severalKeepers(A));
+        assertFalse(roster.severalKeepers(B), "主人表没有说的不算");
+        assertFalse(roster.severalKeepers(UUID.randomUUID()), "不在名册上");
+    }
+
+    @Test
+    void aSpeakerWhoLeftHerOwnerTableKeepsTheNameTheLogWrote() {
+        NumenRoster.instance().replaceAll("w1", List.of(shared()));
+        NumenRoster roster = NumenRoster.instance();
+
+        Keeper gone = roster.speaker(A, "player@ffffff (Herobrine)");
+        assertEquals("Herobrine", gone.name());
+        assertEquals(gone, roster.speaker(A, "player@ffffff (Herobrine)"), "同一位永远是同一个:连发、名字色靠它认");
+        assertFalse(gone.uuid().equals(STEVE) || gone.uuid().equals(ALEX));
+        assertEquals("player@ffffff", roster.speaker(A, "player@ffffff").shown(), "没带名字的写他的身份");
+        assertNull(roster.speaker(A, "not a label"), "读不懂");
+        assertNull(roster.speaker(B, "player@3f9a1c (Steve)"), "名册上没有她");
     }
 
     @Test

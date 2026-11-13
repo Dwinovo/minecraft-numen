@@ -20,7 +20,7 @@ import java.util.UUID;
  * 创建者加人、移人;被分享的人只能把自己移出去;创建者移不掉。可以加此刻不在线的玩家;分享不需要对方确认。
  *
  * <p>表本身只存在名册里({@link CompanionRegistry#share}、{@link CompanionRegistry#unshare}),这里在改完之后把后果收齐:
- * 重算她的出勤(多了一位在场的主人她就该在线,少了最后一位在场的就收拾、登出)、把新名册推给多了或少了她的那一位、
+ * 重算她的出勤(多了一位在场的主人她就该在线,少了最后一位在场的就收拾、登出)、把新名册推给表上的每一位与少了她的那一位(名册的行带着整张主人表)、
  * 给她一条事件(多了哪位主人、少了哪位)、被移出的人绑的那几项退回未绑定({@link CompanionBinding#releaseBoundBy})并告诉还在的主人、
  * 他的会话与聊天栏里相应收拾、她挂着的征询在他那边补上或收起,并告诉当事的人。
  *
@@ -63,9 +63,9 @@ public final class Sharing {
         Companions.reconcileCompanion(server, companion);
         tellHer(server, companion, shown(server, person) + " is now one of your owners: " + shown(server, by)
                 + " shared you with them. From now on their word is an owner's word to you.");
+        Companions.syncRosterToKeepers(server, registry.find(companion).keepers());
         ServerPlayer added = server.getPlayerList().getPlayer(person);
         if (added != null) {
-            Companions.syncRosterToOwner(server, added);
             CompanionLoops.sendSnapshot(companion, Replies.link(server, person));
             NumenPlayer body = NumenPlayer.findByUuid(server, companion);
             if (body != null) {
@@ -111,9 +111,7 @@ public final class Sharing {
         Conversations.of(server, person).withdrawn(companion, entry.name());
         Replies.conversations(server, person);
         ChatRoutes.refresh(server, person);
-        if (removed != null) {
-            Companions.syncRosterToOwner(server, removed);
-        }
+        Companions.syncRosterToKeepers(server, entry.keepers());   // 改表之前的那一份:还在的各位,加上少了她的那一位
         ServerPlayer told = server.getPlayerList().getPlayer(left ? entry.owner() : person);
         if (told != null) {
             told.sendSystemMessage(left

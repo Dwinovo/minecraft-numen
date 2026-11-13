@@ -584,7 +584,7 @@ public final class Companions {
     }
 
     /**
-     * 把这位主人用得了的、<b>存在的</b>同伴(他创建的,加上分享给他的)推给他的客户端;每行带着创建者是谁。
+     * 把这位主人用得了的、<b>存在的</b>同伴(他创建的,加上分享给他的)推给他的客户端;每行带着她的主人表(创建者在前)。
      *
      * <p>取自持久的 {@link CompanionRegistry},不是玩家列表——休眠的同伴还存在,只是此刻不在世界里。客户端拿这份名册对账并<b>删除已遣散同伴的
      * 本地数据</b>,所以名册的语义必须是"存在";用"此刻活着"做过一版,结果是同伴一休眠
@@ -600,7 +600,7 @@ public final class Companions {
             CompanionRegistry.Entry entry = reg.find(row.uuid());
             list.add(new CompanionListPayload.Entry(row.uuid(), row.name(),
                     body != null && body.isCreative(), entry.outside(),
-                    entry.owner(), NumenPlayer.playerName(server, entry.owner())));
+                    entry.keepers().stream().map(k -> new Keeper(k, NumenPlayer.playerName(server, k))).toList()));
         }
         NumenNetwork.sendToPlayer(owner, new CompanionListPayload(reg.worldId(), list));
     }
