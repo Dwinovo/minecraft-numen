@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.client.screen;
 
+import com.dwinovo.numen.api.brain.Bound;
 import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.client.agent.RemoteCompanions;
 import com.dwinovo.numen.api.client.agent.ServerLibraries;
@@ -8,6 +9,7 @@ import com.dwinovo.numen.api.client.ui.widget.Dropdown;
 import com.dwinovo.numen.api.client.ui.widget.Reveal;
 import com.dwinovo.numen.api.client.ui.widget.SlideWrap;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
+import com.dwinovo.numen.api.library.EntryId;
 import com.google.gson.JsonObject;
 import net.minecraft.client.resources.language.I18n;
 
@@ -16,6 +18,7 @@ import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -27,7 +30,9 @@ import java.util.function.BooleanSupplier;
  *   <li>库绑定的"不绑"那一项叫"默认(X)",X 是不绑时她实际的样子(见 {@link SetupDraft#summonDefaults});</li>
  *   <li>没改过的行值是次要色;改过的行值是主色,行尾一个 ×,点它回到基线——召唤卡是"恢复默认",编辑卡是"撤销更改";</li>
  *   <li>模式那一行在主人不能让她进创造时置灰,判据与服务端同一道({@code Companions.mayChooseCreative});</li>
- *   <li>模型配置没有"不绑"可选:基线没绑(召唤卡、没绑过的老档)才摆着"默认(未配置)"这一项。</li>
+ *   <li>模型配置没有"不绑"可选:基线没绑(召唤卡、没绑过的老档)才摆着"默认(未配置)"这一项;</li>
+ *   <li>能选的是这位主人自己看得到的条目,选了就是他绑的({@link Bound})。基线若是她的另一位主人绑的,那一项标着"某某的"单独摆着——
+ *       它在绑的人的库里解析,和这位主人库里同名的不是同一条;换成自己的一条就是改过。</li>
  * </ul>
  *
  * <p>皮肤的入口是卡头部那张脸,在卡里(召唤卡选定的皮肤进草稿,编辑卡选定就是当场换)。
@@ -50,6 +55,8 @@ final class SetupRows {
     private final Map<Item, List<Object>> options = new EnumMap<>(Item.class);
     private SlideWrap wrap;
     private boolean modeLocked;
+    /** 这台客户端的玩家:卡上选的条目记成他绑的。每次排版时取。 */
+    private UUID viewer;
 
     SetupRows(Context context, BooleanSupplier canChooseMode) {
         this.context = context;
@@ -81,6 +88,7 @@ final class SetupRows {
     void layout(ModalCard card, int ry) {
         picks.clear();
         options.clear();
+        viewer = RemoteCompanions.viewer();
         row(card, null, Item.PERSONA, ry);
         ry += ModalCard.ROW_H;
         row(card, null, Item.PROVIDER, ry);
@@ -119,17 +127,17 @@ final class SetupRows {
         switch (item) {
             case PERSONA -> {
                 out.put(null, defaultName(item));
-                ServerLibraries.personasInUse().forEach(p -> out.put(p.id(), p.name()));
+                ServerLibraries.personasInUse().forEach(p -> out.put(mine(p.id()), p.name()));
             }
             case PROVIDER -> {
                 if (draft.base(item) == null) {
                     out.put(null, defaultName(item));
                 }
-                ServerLibraries.providersInUse().forEach(p -> out.put(p.id(), p.name()));
+                ServerLibraries.providersInUse().forEach(p -> out.put(mine(p.id()), p.name()));
             }
             case VOICE -> {
                 out.put(null, defaultName(item));
-                ServerLibraries.voicesInUse().forEach(v -> out.put(v.id(), v.name()));
+                ServerLibraries.voicesInUse().forEach(v -> out.put(mine(v.id()), v.name()));
             }
             case MODE -> {
                 out.put(Boolean.FALSE, context == Context.SUMMON ? defaultName(item) : t(Keys.SUMMON_MODE_SURVIVAL));
@@ -139,10 +147,25 @@ final class SetupRows {
         }
         for (Object kept : new Object[]{draft.base(item), draft.value(item)}) {
             if (!out.containsKey(kept)) {
-                out.put(kept, String.valueOf(kept));
+                out.put(kept, kept instanceof Bound bound ? keptName(item, bound) : String.valueOf(kept));
             }
         }
         return out;
+    }
+
+    /** 我库里的这一条,由我来绑。 */
+    private Bound mine(String entryId) {
+        return new Bound(viewer, EntryId.parse(entryId));
+    }
+
+    /** 不在我能选的名单里的那一项怎么写:我绑的(条目刚被删、被关)照写 id;另一位主人绑的写条目名加"某某的"。 */
+    private String keptName(Item item, Bound bound) {
+        return foreign(bound) ? I18n.get(Keys.SETUP_BOUND_BY, bound.id().name(), draft.baseBy(item)) : bound.id().toString();
+    }
+
+    /** 这一项是她的另一位主人绑的。 */
+    private boolean foreign(Bound bound) {
+        return !bound.by().equals(viewer);
     }
 
     /** "默认(X)":X 是不指定这一项时她实际的样子。 */
@@ -178,6 +201,11 @@ final class SetupRows {
             }
             if (e.getKey() == Item.MODE && modeLocked) {
                 return t(Keys.SETUP_MODE_LOCKED);
+            }
+            // 另一位主人绑的那一项:说清它算谁的;他"我的"里的声线这台电脑看不到,不念
+            if (draft.value(e.getKey()) instanceof Bound bound && foreign(bound)) {
+                boolean unheard = e.getKey() == Item.VOICE && ServerLibraries.voice(bound, viewer) == null;
+                return I18n.get(unheard ? Keys.SETUP_BOUND_BY_UNHEARD : Keys.SETUP_BOUND_BY_TIP, draft.baseBy(e.getKey()));
             }
         }
         return null;

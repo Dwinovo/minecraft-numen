@@ -108,6 +108,15 @@ public final class RemoteCompanions {
         return host;
     }
 
+    /**
+     * 这台客户端的玩家(服务端认的那个 UUID):她的创建者是不是我、这项绑定是不是我绑的,都拿它比。没在世界里是 {@code null}
+     * (客户端还没起来时也是:这时谁都不是"我")。
+     */
+    public static UUID viewer() {
+        var client = net.minecraft.client.Minecraft.getInstance();
+        return client == null || client.player == null ? null : client.player.getUUID();
+    }
+
     /** 服务器上的库(人设、模型档案、服务器配置)在这里读写。 */
     public static RemoteLibrary library() {
         return LIBRARY;

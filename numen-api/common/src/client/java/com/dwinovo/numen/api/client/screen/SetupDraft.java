@@ -1,5 +1,7 @@
 package com.dwinovo.numen.api.client.screen;
 
+import com.dwinovo.numen.api.brain.Bound;
+import com.dwinovo.numen.api.brain.CompanionState;
 import com.dwinovo.numen.api.brain.Slot;
 import com.dwinovo.numen.api.client.skin.SkinChoices;
 import com.dwinovo.numen.api.entity.SummonSetup;
@@ -14,8 +16,9 @@ import java.util.Objects;
  * 一只同伴的配置草稿:人设、模型配置、声线、模式、皮肤五项,每项一个基线、一个此刻的值。召唤卡与编辑卡的配置行
  * ({@link SetupRows})改的都是它。改过 = 此刻的值与基线不同;恢复 = 回到基线;只有改过的项发给服务端。
  *
- * <p>值的样子:三项库绑定是条目 id({@code 命名空间:名字},{@code null} 是不绑),模式是 {@code Boolean}(创造为真),
- * 皮肤是 {@link SkinChoices.Pick}({@code null} 是默认皮肤)。
+ * <p>值的样子:三项库绑定是 {@link Bound}(谁绑的 + 条目 id,{@code null} 是不绑),模式是 {@code Boolean}(创造为真),
+ * 皮肤是 {@link SkinChoices.Pick}({@code null} 是默认皮肤)。主人在卡上能选的只有他自己看得到的条目,选了就是他绑的;她的另一位主人
+ * 绑的只会是基线——同一个 id 由两个人绑是两个值,换成自己的那一条算改过。
  */
 public final class SetupDraft {
 
@@ -37,10 +40,13 @@ public final class SetupDraft {
 
     private final Map<Item, Object> base;
     private final Map<Item, Object> now;
+    /** 基线的库绑定各是谁绑的(界面上怎么称呼他);没绑的不在表里。 */
+    private final Map<Item, String> baseBy;
 
-    private SetupDraft(Map<Item, Object> base) {
+    private SetupDraft(Map<Item, Object> base, Map<Item, String> baseBy) {
         this.base = base;
         this.now = new EnumMap<>(base);
+        this.baseBy = baseBy;
     }
 
     /**
@@ -55,18 +61,30 @@ public final class SetupDraft {
         base.put(Item.VOICE, null);
         base.put(Item.MODE, Boolean.FALSE);
         base.put(Item.SKIN, null);
-        return new SetupDraft(base);
+        return new SetupDraft(base, Map.of());
     }
 
-    /** 编辑卡的基线 = 她此刻的样子。皮肤不在草稿里:编辑时选皮肤卡里选定就是当场换。 */
-    public static SetupDraft current(String persona, String provider, String voice, boolean creative) {
+    /**
+     * 编辑卡的基线 = 她此刻的样子:三项绑定照服务端推来的状态({@code null} 是没绑),连同各是谁绑的。皮肤不在草稿里:编辑时选皮肤卡里
+     * 选定就是当场换。
+     */
+    public static SetupDraft current(CompanionState.Binding persona, CompanionState.Binding provider,
+                                     CompanionState.Binding voice, boolean creative) {
         Map<Item, Object> base = new EnumMap<>(Item.class);
-        base.put(Item.PERSONA, persona);
-        base.put(Item.PROVIDER, provider);
-        base.put(Item.VOICE, voice);
+        Map<Item, String> baseBy = new EnumMap<>(Item.class);
+        bound(base, baseBy, Item.PERSONA, persona);
+        bound(base, baseBy, Item.PROVIDER, provider);
+        bound(base, baseBy, Item.VOICE, voice);
         base.put(Item.MODE, creative);
         base.put(Item.SKIN, null);
-        return new SetupDraft(base);
+        return new SetupDraft(base, baseBy);
+    }
+
+    private static void bound(Map<Item, Object> base, Map<Item, String> baseBy, Item item, CompanionState.Binding binding) {
+        base.put(item, binding == null ? null : binding.bound());
+        if (binding != null) {
+            baseBy.put(item, binding.by().shown());
+        }
     }
 
     /** 这一项此刻的值。 */
@@ -77,6 +95,11 @@ public final class SetupDraft {
     /** 这一项的基线。 */
     public Object base(Item item) {
         return base.get(item);
+    }
+
+    /** 基线的这一项绑定是谁绑的(界面上怎么称呼他);没绑、或不是库绑定是 {@code null}。 */
+    public String baseBy(Item item) {
+        return baseBy.get(item);
     }
 
     public void set(Item item, Object value) {
@@ -116,7 +139,7 @@ public final class SetupDraft {
             Object value = now.get(item);
             if (item.slot() != null) {
                 if (value != null) {
-                    entries.put(item.slot(), (String) value);
+                    entries.put(item.slot(), ((Bound) value).id().toString());
                 }
             } else if (item == Item.MODE) {
                 creative = (Boolean) value;

@@ -77,14 +77,25 @@ class RemoteCompanionTest {
         assertEquals(33, her.contextPercent());
         assertEquals(64000, her.modelWindow());
         assertEquals("my:小焰", her.personaName(), "人设的名字就是它的 id");
-        assertEquals("my:prov1", her.providerEntryId());
+        assertEquals("my:prov1", her.binding(Slot.PROVIDER).id());
         assertEquals(FRIEND, her.binding(Slot.PROVIDER).bound().by(), "档案是另一位主人绑的");
         assertEquals("小柚", her.binding(Slot.PROVIDER).byName());
         assertNull(her.binding(Slot.VOICE), "没绑声线");
-        assertNull(her.voiceId());
         assertEquals("G", her.conversation());
         assertTrue(her.isToolCallOutstanding("call_1"));
         assertTrue(!her.isToolCallOutstanding("call_9"), "不在服务端手里的调用是被切断的");
+    }
+
+    @Test
+    void theBoundRowIsTheOneThisOwnerBoundNotAnotherOwnersOfTheSameName() {
+        her.apply(List.of(new Feed.Status(state(Phase.MODEL, null, List.of()))));
+
+        assertTrue(her.binds(Slot.PERSONA, ME, "my:小焰"), "我绑的、id 对得上:就是我库里的这一条");
+        assertTrue(!her.binds(Slot.PERSONA, ME, "my:小冰"), "id 不同");
+        assertTrue(!her.binds(Slot.PROVIDER, ME, "my:prov1"), "朋友绑的同名条目在他的库里,不是我库里的这一条");
+        assertTrue(her.binds(Slot.PROVIDER, FRIEND, "my:prov1"), "在朋友的客户端上它才是他的那一条");
+        assertTrue(!her.binds(Slot.VOICE, ME, "my:派蒙"), "没绑");
+        assertEquals("小柚", her.binding(Slot.PROVIDER).by().shown());
     }
 
     @Test

@@ -7,7 +7,6 @@ import com.dwinovo.numen.api.client.agent.RemoteCompanions;
 import com.dwinovo.numen.api.client.agent.ServerLibraries;
 import com.dwinovo.numen.api.client.data.ClientPrefs;
 import com.dwinovo.numen.api.voice.VoiceProfile;
-import net.minecraft.client.Minecraft;
 
 import java.util.UUID;
 
@@ -27,12 +26,12 @@ public record SpokenVoice(VoiceProfile profile, String apiKey) {
      * 都是 {@code null}(= 静音)。
      */
     public static SpokenVoice of(UUID companion) {
-        var me = Minecraft.getInstance().player;
+        UUID me = RemoteCompanions.viewer();
         if (!ClientPrefs.voiceEnabled() || companion == null || me == null) {
             return null;
         }
         CompanionState.Binding bound = RemoteCompanions.getOrCreate(companion).binding(Slot.VOICE);
-        ServerLibraries.Voice voice = bound == null ? null : ServerLibraries.voice(bound.bound(), me.getUUID());
+        ServerLibraries.Voice voice = bound == null ? null : ServerLibraries.voice(bound.bound(), me);
         return voice == null ? null : new SpokenVoice(voice.profile(), ClientKeys.keychain().get(voice.profile().keyService()));
     }
 

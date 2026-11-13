@@ -170,29 +170,19 @@ public final class RemoteCompanion {
         return state.binding(slot);
     }
 
-    private String boundId(Slot slot) {
+    /**
+     * 她这一项绑的是不是 {@code viewer} 库里的这一条(见 {@link CompanionState.Binding#is}):列表上"当前绑的是哪一行"按它认,
+     * 别人绑的同名条目不算。
+     */
+    public boolean binds(Slot slot, UUID viewer, String entryId) {
         CompanionState.Binding binding = state.binding(slot);
-        return binding == null ? null : binding.id();
+        return binding != null && binding.is(viewer, entryId);
     }
 
-    /** 她绑定的人设 id;没绑是 {@code null}。 */
-    public String personaId() {
-        return boundId(Slot.PERSONA);
-    }
-
-    /** 人设的 id 就是它的名字(文件名),所以名字不用另问。 */
+    /** 她绑的人设叫什么(人设的 id 就是它的名字);没绑是 {@code null}。 */
     public String personaName() {
-        return boundId(Slot.PERSONA);
-    }
-
-    /** 她绑定的模型档案 id;没绑是 {@code null}。 */
-    public String providerEntryId() {
-        return boundId(Slot.PROVIDER);
-    }
-
-    /** 她绑定的声线 id;没绑是 {@code null}。 */
-    public String voiceId() {
-        return boundId(Slot.VOICE);
+        CompanionState.Binding binding = state.binding(Slot.PERSONA);
+        return binding == null ? null : binding.id();
     }
 
     /** 她穿着的皮肤(签名缓存里的引用,{@code SkinRef} 的文字写法);默认皮肤是 {@code null}。 */

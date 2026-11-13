@@ -179,6 +179,15 @@ public final class SettingsView {
         return providerForm;
     }
 
+    /**
+     * 面板对着的那只同伴这一项绑的是不是我库里的这一条:库列表行尾的勾按它画。她的另一位主人绑的同名条目不是这一条
+     * (见 {@code CompanionState.Binding#is}),不打勾。面板没对着哪一只是 {@code null}(这一列不画)。
+     */
+    private Boolean bound(Slot slot, String entryId) {
+        return host.uuid() == null ? null
+                : RemoteCompanions.getOrCreate(host.uuid()).binds(slot, RemoteCompanions.viewer(), entryId);
+    }
+
     // ---- 模型配置列表:通用 LibraryListPanel(ListView 行 + ConfirmDialog 删除闸) ----
     private LibraryListPanel<ServerLibraries.Provider> profileList;
 
@@ -195,8 +204,7 @@ public final class SettingsView {
                                 + (nb(e.model()) ? e.model() : "?")
                                 + (e.hasKey() ? "" : " · " + I18n.get(ModLanguageData.Keys.PROVIDER_NO_KEY));
                         // 行尾勾 = 当前同伴走这份档案(召唤后也能换,即时生效)
-                        Boolean marked = host.uuid() == null ? null : e.id().equals(
-                                RemoteCompanions.getOrCreate(host.uuid()).providerEntryId());
+                        Boolean marked = bound(Slot.PROVIDER, e.id());
                         return new LibraryListPanel.Row(e.name() == null ? "" : e.name(), meta(e.base(), detail),
                                 !e.hasKey(), marked, !editable(e.base()), e.base().server());
                     },
@@ -248,8 +256,7 @@ public final class SettingsView {
                                 && ClientKeys.keychain().get(voice.keyService()) == null;
                         if (noKey) line += " · " + I18n.get(ModLanguageData.Keys.VOICE_NO_KEY, voice.keyService());
                         // 行尾勾 = 本同伴正在用的声线;右键菜单里换绑,或不再使用(闭嘴)。
-                        Boolean marked = host.uuid() == null ? null : e.id().equals(
-                                RemoteCompanions.getOrCreate(host.uuid()).voiceId());
+                        Boolean marked = bound(Slot.VOICE, e.id());
                         return new LibraryListPanel.Row(e.name(), meta(e.base(), line), noKey, marked,
                                 !editable(e.base()), e.base().server());
                     },
@@ -804,8 +811,7 @@ public final class SettingsView {
                         // 正文预览压成单行(MD 里的换行在 24px 行里没有意义)。
                         String detail = p.text().replace('\n', ' ');
                         // 行尾勾 = 本同伴的人设
-                        Boolean marked = host.uuid() == null ? null : p.id().equals(
-                                RemoteCompanions.getOrCreate(host.uuid()).personaId());
+                        Boolean marked = bound(Slot.PERSONA, p.id());
                         return new LibraryListPanel.Row(p.name(), meta(p.base(), detail), false, marked,
                                 !editable(p.base()), p.base().server());
                     },

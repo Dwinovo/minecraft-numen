@@ -6,6 +6,7 @@ import com.dwinovo.numen.api.agent.loop.Hold;
 import com.dwinovo.numen.api.agent.loop.LoopStatus;
 import com.dwinovo.numen.api.agent.loop.Phase;
 import com.dwinovo.numen.api.agent.provider.Usage;
+import com.dwinovo.numen.api.entity.Keeper;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -15,6 +16,7 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * 一只同伴此刻的样子,界面要读的全部状态:内核的快照({@link LoopStatus})加上只有服务端知道的几样——此刻能不能整理/清空
@@ -52,6 +54,19 @@ public record CompanionState(Phase phase, Hold hold, Cause holdReason, boolean b
         /** 绑的那一条的 id({@code 命名空间:名字})。 */
         public String id() {
             return bound.id().toString();
+        }
+
+        /** 绑的那个人:是谁、界面上怎么称呼他。 */
+        public Keeper by() {
+            return new Keeper(bound.by(), byName);
+        }
+
+        /**
+         * 这一项是不是 {@code person} 库里的那一条 {@code entryId}:得是他绑的,id 也对得上。别人绑的同名条目是另一条——它在绑的人看到的库里
+         * 解析、用绑的人的钥匙、账记在绑的人名下。界面上"当前绑的是哪一行"只按这一处认。
+         */
+        public boolean is(UUID person, String entryId) {
+            return bound.by().equals(person) && id().equals(entryId);
         }
     }
 

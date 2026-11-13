@@ -1,5 +1,7 @@
 package com.dwinovo.numen.api.client.screen;
 
+import com.dwinovo.numen.api.brain.Bound;
+import com.dwinovo.numen.api.brain.Slot;
 import com.dwinovo.numen.api.client.agent.KnownSkins;
 import com.dwinovo.numen.api.client.agent.RemoteCompanion;
 import com.dwinovo.numen.api.client.agent.RemoteCompanions;
@@ -16,7 +18,7 @@ import net.minecraft.client.resources.language.I18n;
  * "更多选项")。版式照 Telegram 的"编辑联系人":标题下面是她的脸和名字,再往下是配置行,右下取消/保存。
  *
  * <p>草稿制:配置行只改草稿,点保存才统一落地,且只发真正变过的项;取消丢弃草稿。草稿基线在开卡时从她的绑定取一次
- * ({@link #reset()},服务端推来的状态)。头部那张脸是皮肤的入口:点开选皮肤卡,选定就是当场换(换肤要原地刷新身体,不进草稿)。
+ * ({@link #reset()},服务端推来的状态,每项连同是谁绑的);存下去的条目由这位主人来绑。头部那张脸是皮肤的入口:点开选皮肤卡,选定就是当场换(换肤要原地刷新身体,不进草稿)。
  * 卡里只有"改","删"在头部菜单和资料页上,不在这张卡里。
  */
 public final class CompanionEditPanel extends ModalCard {
@@ -56,7 +58,8 @@ public final class CompanionEditPanel extends ModalCard {
     @Override
     void reset() {
         RemoteCompanion her = RemoteCompanions.getOrCreate(host.uuid());
-        rows.reset(SetupDraft.current(her.personaId(), her.providerEntryId(), her.voiceId(), host.currentCreative()));
+        rows.reset(SetupDraft.current(her.binding(Slot.PERSONA), her.binding(Slot.PROVIDER), her.binding(Slot.VOICE),
+                host.currentCreative()));
     }
 
     /** 头部 + 配置行此刻的高。 */
@@ -84,7 +87,7 @@ public final class CompanionEditPanel extends ModalCard {
         RemoteCompanion her = RemoteCompanions.getOrCreate(host.uuid());
         for (Item item : draft.changes()) {
             if (item.slot() != null) {
-                her.bind(item.slot(), (String) draft.value(item));
+                her.bind(item.slot(), draft.value(item) instanceof Bound bound ? bound.id().toString() : null);
             } else if (item == Item.MODE) {
                 host.setCreative((Boolean) draft.value(item));
             }

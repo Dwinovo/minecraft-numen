@@ -1,8 +1,10 @@
 package com.dwinovo.numen.api.client.screen;
 
 import com.dwinovo.numen.api.agent.conversation.Conversation;
+import com.dwinovo.numen.api.brain.CompanionState;
 import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.brain.OwnerSchedules;
+import com.dwinovo.numen.api.brain.Slot;
 import com.dwinovo.numen.api.client.agent.RemoteCompanions;
 import com.dwinovo.numen.api.client.agent.ActivityWords;
 import com.dwinovo.numen.api.client.agent.ClientNumenLookup;
@@ -186,6 +188,7 @@ final class ProfilePage {
         AbstractClientPlayer e = ClientNumenLookup.resolve(who);
         RemoteCompanion loop = RemoteCompanions.get(who).orElse(null);
         ItemStack[] hover = {ItemStack.EMPTY};
+        UUID me = RemoteCompanions.viewer();
         String tip = null;
         int cx = x + w / 2;
         int iw = w - PAD * 2;
@@ -343,20 +346,34 @@ final class ProfilePage {
         // ---- 设置:一行一项,左名右值,点了开编辑卡 ----
         cy = gap(g, t, x, w, cy);
         cy = sectionHead(g, t, I18n.get("numen.profile.settings"), "", x + PAD, cy, iw);
-        String persona = loop != null && loop.personaName() != null && !loop.personaName().isBlank()
-                ? loop.personaName() : I18n.get("numen.profile.persona_default");
+        // 三项绑定各写它是哪一条;另一位主人绑的标"某某的"——那一条在他的库里,我这边看不到的只写得出名字
+        CompanionState.Binding personaBound = loop == null ? null : loop.binding(Slot.PERSONA);
+        String persona = personaBound == null ? I18n.get("numen.profile.persona_default")
+                : personaBound.bound().by().equals(me) ? personaBound.id()
+                : boundBy(personaBound, personaBound.bound().id().name(), me);
         cy = settingRow(g, t, I18n.get("numen.profile.persona"), persona, x, cy, w, mouseX, mouseY);
+        CompanionState.Binding modelBound = loop == null ? null : loop.binding(Slot.PROVIDER);
         String model = I18n.get("numen.profile.model_none");
-        if (loop != null && loop.providerEntryId() != null && !loop.providerEntryId().isBlank()) {
-            var entry = ServerLibraries.providersInUse().stream()
-                    .filter(p -> p.id().equals(loop.providerEntryId())).findFirst().orElse(null);
-            model = entry == null ? I18n.get("numen.profile.model_deleted")
-                    : entry.model() == null || entry.model().isBlank() ? entry.name() : entry.model();
+        if (modelBound != null) {
+            var seen = ServerLibraries.provider(modelBound.bound(), me);
+            model = boundBy(modelBound, seen != null ? seen.model() == null || seen.model().isBlank() ? seen.name() : seen.model()
+                    : modelBound.bound().by().equals(me) ? I18n.get("numen.profile.model_deleted")
+                    : modelBound.bound().id().name(), me);
         }
         cy = settingRow(g, t, I18n.get("numen.profile.model"), model, x, cy, w, mouseX, mouseY);
-        var voice = loop == null ? null : ServerLibraries.voice(loop.voiceId());
-        cy = settingRow(g, t, I18n.get("numen.profile.voice"),
-                voice != null ? voice.name() : I18n.get("numen.profile.voice_none"), x, cy, w, mouseX, mouseY);
+        CompanionState.Binding voiceBound = loop == null ? null : loop.binding(Slot.VOICE);
+        String voice = I18n.get("numen.profile.voice_none");
+        if (voiceBound != null) {
+            var seen = ServerLibraries.voice(voiceBound.bound(), me);
+            if (seen != null) {
+                voice = boundBy(voiceBound, seen.name(), me);
+            } else if (!voiceBound.bound().by().equals(me)) {
+                // 他"我的"里的声线:这台电脑看不到,不念;写明白,免得当成坏了
+                voice = I18n.get(ModLanguageData.Keys.PROFILE_VOICE_UNHEARD,
+                        boundBy(voiceBound, voiceBound.bound().id().name(), me));
+            }
+        }
+        cy = settingRow(g, t, I18n.get("numen.profile.voice"), voice, x, cy, w, mouseX, mouseY);
         var conn = mc.getConnection();
         var info = conn == null ? null : conn.getPlayerInfo(who);
         if (info != null) {
@@ -464,8 +481,9 @@ final class ProfilePage {
 
     /** 简介:她人设的开头一段(跳过标题行),最多两行,再长截短。没有人设正文是空。 */
     private List<FormattedCharSequence> bio(RemoteCompanion loop, int width) {
-        if (loop == null || loop.personaId() == null) return List.of();
-        var persona = ServerLibraries.persona(loop.personaId());
+        CompanionState.Binding bound = loop == null ? null : loop.binding(Slot.PERSONA);
+        if (bound == null) return List.of();
+        var persona = ServerLibraries.persona(bound.bound(), RemoteCompanions.viewer());
         if (persona == null || persona.text() == null) return List.of();
         StringBuilder para = new StringBuilder();
         for (String line : persona.text().split("\n")) {
@@ -490,6 +508,12 @@ final class ProfilePage {
         });
         return List.of(lines.get(0),
                 Nb.colored(Nb.clip(font, second + "…", width), ink).getVisualOrderText());
+    }
+
+    /** 一项绑定在设置行上怎么写:条目的名字;另一位主人绑的再标上"某某的"。 */
+    private static String boundBy(CompanionState.Binding binding, String name, UUID me) {
+        return binding.bound().by().equals(me) ? name
+                : I18n.get(ModLanguageData.Keys.SETUP_BOUND_BY, name, binding.by().shown());
     }
 
     /** 节头:强调色小字,右端可带一个淡色的数。返回下面内容的顶边。 */
