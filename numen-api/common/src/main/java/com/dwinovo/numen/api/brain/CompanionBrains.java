@@ -13,7 +13,6 @@ import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.api.network.payload.RequestStatePayload;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
 import com.dwinovo.numen.api.program.LocalPrograms;
-import com.dwinovo.numen.api.sdk.EntityLabel;
 import net.minecraft.server.MinecraftServer;
 
 import java.util.ArrayList;
@@ -25,7 +24,7 @@ import java.util.function.IntSupplier;
 
 /**
  * 一只同伴的服务端大脑怎么从服务器的各处接起来——这个接线只在这里,产品和 GameTest 走同一个 {@link #create}:
- * 家在世界存档里({@link Homes})、模型用服主的档案({@link LlmMind})、人设从主人的库里现取、主动性是主人的偏好
+ * 家在世界存档里({@link Homes})、模型用她绑的档案({@link LlmMind})、人设从绑它的那个人的库里现取({@link Bound})、主动性是主人的偏好
  * ({@link OwnerPrefs})、程序在本进程里跑({@link LocalPrograms})、身体状态直接读身体、谁在场读说话那位主人的会话
  * ({@link Conversations})、驾驶席归外接大脑宿主。她的主人表(创建者加名册上分享给的人)现问名册。
  *
@@ -50,10 +49,9 @@ public final class CompanionBrains {
     public static CompanionLoop create(MinecraftServer server, UUID companion, UUID owner, Home home, Mind mind,
                                        CompanionLoops.Link link, BooleanSupplier ownerOnline,
                                        BooleanSupplier driving) {
-        PersonaLibrary personas = PersonaLibraries.of(server, owner);
         return create(server, companion, owner, home, mind, link, ownerOnline, driving,
-                OwnerPrefs.of(server, owner)::initiative, id -> {
-                    PersonaLibrary.Persona persona = personas.get(id);
+                OwnerPrefs.of(server, owner)::initiative, bound -> {
+                    PersonaLibrary.Persona persona = PersonaLibraries.of(server, bound.by()).get(bound.id().toString());
                     return persona == null ? null : persona.text();
                 });
     }
@@ -62,15 +60,15 @@ public final class CompanionBrains {
      * 同上,主动性与人设正文不从主人的偏好和人设库取,由调用方给:评测用它把这两样定死,模型之外的一切仍是产品的零件。
      *
      * @param initiative 主动性档位 1~10
-     * @param persona    人设 id 对应的正文;没有这个人设返回 {@code null}
+     * @param persona    她绑的人设的正文;没有这个人设返回 {@code null}
      */
     public static CompanionLoop create(MinecraftServer server, UUID companion, UUID owner, Home home, Mind mind,
                                        CompanionLoops.Link link, BooleanSupplier ownerOnline,
                                        BooleanSupplier driving, IntSupplier initiative,
-                                       Function<String, String> persona) {
+                                       Function<Bound, String> persona) {
         CompanionRegistry registry = CompanionRegistry.get(server);
         Function<UUID, Conversations> roomsOf = who -> Conversations.of(server, who);
-        CompanionLoop loop = new CompanionLoop(new CompanionLoop.Parts(companion, home, server, mind,
+        CompanionLoop loop = new CompanionLoop(new CompanionLoop.Parts(companion, owner, home, server, mind,
                 new LocalPrograms(server),
                 toolsOf(server, owner),
                 () -> NumenPlayer.findByUuid(server, companion),
@@ -88,20 +86,10 @@ public final class CompanionBrains {
                         case NONE -> null;
                     };
                 },
-                ownerOnline, driving, initiative, persona,
+                ownerOnline, driving, initiative, persona, player -> NumenPlayer.playerName(server, player),
                 () -> server.overworld().getDayTime(), () -> server.overworld().getGameTime(),
                 (speaker, her, conversation) -> roomsOf.apply(speaker).audienceLine(her, conversation),
-                new CompanionLoop.Keepers() {
-                    @Override
-                    public List<UUID> list() {
-                        return keepers(registry, owner, companion);
-                    }
-
-                    @Override
-                    public String shown(UUID keeper) {
-                        return EntityLabel.shown(keeper, NumenPlayer.playerName(server, keeper));
-                    }
-                }));
+                () -> keepers(registry, owner, companion)));
         CompanionLoops.install(owner, loop, link, roomsOf);
         return loop;
     }
@@ -135,8 +123,9 @@ public final class CompanionBrains {
         UUID owner = entry.owner();
         Homes homes = Homes.of(server);
         McpClients.of(server).owner(owner);   // 他自己接进来的 MCP 服务器,从这一刻起连着
+        ModelServices models = ModelServices.of(server);
         CompanionLoop loop = create(server, companion, owner, homes.companion(companion),
-                new LlmMind(ModelServices.of(server).providers(owner), owner, ModelServices.of(server).quota()),
+                new LlmMind(models::providers, models.catalog(), models.quota()),
                 new KeeperLinks(() -> keepers(registry, owner, companion), who -> Replies.link(server, who),
                         () -> CompanionLoops.get(companion).map(CompanionLoop::speaker).orElse(null)),
                 () -> OwnerPresence.present(server, keepers(registry, owner, companion)),

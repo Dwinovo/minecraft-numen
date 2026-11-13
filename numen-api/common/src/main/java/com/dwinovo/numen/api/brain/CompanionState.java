@@ -11,11 +11,14 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 一只同伴此刻的样子,界面要读的全部状态:内核的快照({@link LoopStatus})加上只有服务端知道的几样——此刻能不能整理/清空
- * (和理由的语言键)、长期目标、token 台账、上下文水位、绑定。服务端算一次、变了才推给主人的客户端,客户端只读不算。
+ * (和理由的语言键)、长期目标、token 台账、上下文水位、绑定(每一项连同是谁绑的)。服务端算一次、变了才推给主人的客户端,客户端只读不算。
  * 这里面没有一个翻译过的字:原因、理由、在做的事都是语言键加现场的词,界面按主人的语言翻。
  *
  * @param phase           内核在做的那件事;{@code null} = 闲
@@ -26,25 +29,51 @@ import java.util.List;
  * @param compactProblem  现在不能整理的理由(语言键);{@code null} = 能
  * @param clearProblem    现在不能清空的理由;{@code null} = 能
  * @param messages        她此刻的上下文里有几条消息
- * @param voiceId         她绑定的声线(库条目的名字);没绑是 {@code null},客户端据此朗读
+ * @param bindings        她绑着的那几项(档案、人设、声线),每一项带着是谁绑的;没绑的不在表里。声线由客户端据此朗读
  * @param skinId          她穿着的皮肤(签名缓存里的引用);默认皮肤是 {@code null}
  */
 public record CompanionState(Phase phase, Hold hold, Cause holdReason, boolean bodyTaskRunning,
                              LoopStatus.Doing activity, double compactProgress, List<EventQueue.Preview> queued,
                              String compactProblem, String clearProblem, JsonObject goal,
                              long totalTokens, Usage usageSum, Usage usageLast, long wastedTokens, int wasteCount,
-                             int contextPercent, int window, String personaId, String providerId,
-                             String voiceId, String skinId, String conversation, List<String> outstanding, int messages) {
+                             int contextPercent, int window, Map<Slot, Binding> bindings,
+                             String skinId, String conversation, List<String> outstanding, int messages) {
+
+    /**
+     * 状态里的一项绑定:绑定本身({@link Bound}:谁绑的、哪一条),加绑的人给人看的名字——界面把别人绑的标成"某某的"用;
+     * 名字不知道是空串。条目的内容不在这里:别人"我的"里的档案、人设、声线,看的人只看得到名字。
+     */
+    public record Binding(Bound bound, String byName) {
+
+        public Binding {
+            byName = byName == null ? "" : byName;
+        }
+
+        /** 绑的那一条的 id({@code 命名空间:名字})。 */
+        public String id() {
+            return bound.id().toString();
+        }
+    }
+
+    private static final String BY_NAME = "byName";
 
     public CompanionState {
         queued = List.copyOf(queued);
         outstanding = List.copyOf(outstanding);
+        EnumMap<Slot, Binding> copy = new EnumMap<>(Slot.class);
+        copy.putAll(bindings);
+        bindings = Collections.unmodifiableMap(copy);
+    }
+
+    /** 这一项绑着什么;没绑是 {@code null}。 */
+    public Binding binding(Slot slot) {
+        return bindings.get(slot);
     }
 
     /** 还没听说过她的任何事时的样子:闲着,什么都没排,没有目标。 */
     public static CompanionState idle() {
         return new CompanionState(null, null, null, false, null, 0.0, List.of(), null, null, null, 0, Usage.ZERO,
-                Usage.ZERO, 0, 0, 0, 0, null, null, null, null, null, List.of(), 0);
+                Usage.ZERO, 0, 0, 0, 0, Map.of(), null, null, List.of(), 0);
     }
 
     /** 停止键此刻有东西可停:在干活,或者排着主人的指令。 */
@@ -91,9 +120,13 @@ public record CompanionState(Phase phase, Hold hold, Cause holdReason, boolean b
         o.addProperty("wasteCount", wasteCount);
         o.addProperty("contextPercent", contextPercent);
         o.addProperty("window", window);
-        put(o, "personaId", personaId);
-        put(o, "providerId", providerId);
-        put(o, "voiceId", voiceId);
+        JsonObject bound = new JsonObject();
+        bindings.forEach((slot, binding) -> {
+            JsonObject b = binding.bound().toJson();
+            b.addProperty(BY_NAME, binding.byName());
+            bound.add(slot.wire(), b);
+        });
+        o.add("bindings", bound);
         put(o, "skinId", skinId);
         put(o, "conversation", conversation);
         o.add("outstanding", strings(outstanding));
@@ -123,12 +156,24 @@ public record CompanionState(Phase phase, Hold hold, Cause holdReason, boolean b
                 o.get("goal") instanceof JsonObject g ? g : null,
                 longOf(o, "totalTokens"), usage(o.getAsJsonObject("usageSum")), usage(o.getAsJsonObject("usageLast")),
                 longOf(o, "wastedTokens"), (int) longOf(o, "wasteCount"), (int) longOf(o, "contextPercent"),
-                (int) longOf(o, "window"), string(o, "personaId"), string(o, "providerId"), string(o, "voiceId"),
+                (int) longOf(o, "window"), bindings(o.get("bindings")),
                 string(o, "skinId"), string(o, "conversation"),
                 list(o.get("outstanding")), (int) longOf(o, "messages"));
     }
 
-    // ---- 小件:原因、预览、用量的 JSON ----
+    // ---- 小件:绑定、原因、预览、用量的 JSON ----
+
+    private static Map<Slot, Binding> bindings(JsonElement el) {
+        Map<Slot, Binding> out = new EnumMap<>(Slot.class);
+        if (el instanceof JsonObject all) {
+            for (Slot slot : Slot.values()) {
+                if (all.get(slot.wire()) instanceof JsonObject b && Bound.fromJson(b) != null) {
+                    out.put(slot, new Binding(Bound.fromJson(b), string(b, BY_NAME)));
+                }
+            }
+        }
+        return out;
+    }
 
     public static JsonObject cause(Cause cause) {
         JsonObject o = new JsonObject();

@@ -137,6 +137,7 @@ class CompanionLoopTest {
         her.loop.submitPrompt("一个人时", new Spoken(creator, Venue.PANEL));
         her.tick(5);
         her.keepers.add(friend);
+        her.names.put(friend, "p1");
         her.loop.submitPrompt("两个人时", new Spoken(friend, Venue.WHISPER));
         her.tick(5);
 

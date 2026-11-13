@@ -44,13 +44,17 @@ import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.event.NumenEvents;
 import com.dwinovo.numen.api.home.Home;
+import com.dwinovo.numen.api.library.EntryId;
 import com.dwinovo.numen.api.program.ProgramHost;
+import com.dwinovo.numen.api.sdk.EntityLabel;
 import com.dwinovo.numen.api.script.Modules;
 import com.dwinovo.numen.api.store.JsonDoc;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.Executor;
@@ -62,7 +66,7 @@ import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
 /**
- * 一只同伴的服务端大脑:循环内核 {@link AgentLoop} 的宿主,跑在服务端主线程上,用服主的模型档案想事。
+ * 一只同伴的服务端大脑:循环内核 {@link AgentLoop} 的宿主,跑在服务端主线程上,用她绑的模型档案想事(档案是谁绑的就用谁的,见 {@link Bound})。
  * 什么时候调模型、什么时候派工具、停止/死亡/登出/接管各做什么,全是内核的;内核只发 {@link LoopEvent},整理
  * ({@link Compactor})、长期目标({@link GoalSteward})、token 台账({@link TokenLedger})、札记索引重贴
  * ({@link MemoryPreamble})、运行期状态({@link RuntimeState})各自订阅。这里接的是需要世界的那些:
@@ -91,19 +95,10 @@ public final class CompanionLoop {
         String audienceLine(UUID speaker, UUID companion, String conversation);
     }
 
-    /** 主人表那一侧(见 {@code docs/adr/runtime/0006-keepers-ownership-use-provenance.md}):现问现答,表变了循环不用重建。 */
-    public interface Keepers {
-
-        /** 她的主人表,创建者在前。 */
-        List<UUID> list();
-
-        /** 一位主人写给模型读的身份({@code player@短码 (名字)},见 {@code EntityLabel#shown})。 */
-        String shown(UUID keeper);
-    }
-
     /**
      * 宿主给的东西。取值的都是现问现答,循环不存副本。
      *
+     * @param creator     她的创建者:绑定文件里只有 id 的值算他绑的({@link Bindings#read}),没有哪位主人亲口说过话时她回的是他
      * @param home        她的家:日志、收件箱、台账、目标、绑定落在这里
      * @param main        服务端主线程的执行器:模型回调经它回来
      * @param body        她此刻的身体;没加载是 {@code null}
@@ -112,26 +107,24 @@ public final class CompanionLoop {
      * @param ownerOnline 主人在不在场({@link OwnerPresence})
      * @param driving     驾驶席是不是在外接大脑手里
      * @param initiative  主动性档位 1~10
-     * @param persona     人设 id 对应的正文;没有这个人设返回 {@code null}
+     * @param persona     她绑的人设的正文,在绑的那个人的人设库里取;没有这个人设返回 {@code null}
+     * @param playerName  一位玩家给人看的名字(界面标"这一项是谁绑的"、{@code <query>} 上写是谁说的都用它);不知道是空串
      * @param tools       她看得到的工具
      * @param dayTime     游戏内时刻,给事件盖时间戳
      * @param gameTime    主世界的游戏刻(世界不跑它就不走,{@code /time set} 改不了它),主人的定时按它算到期
-     * @param keepers     她的主人表
+     * @param keepers     她的主人表,创建者在前(见 {@code docs/adr/runtime/0006-keepers-ownership-use-provenance.md});现问现答,表变了循环不用重建
      */
-    public record Parts(UUID companion, Home home, Executor main, Mind mind, ProgramHost programs, ToolBook tools,
-                        Supplier<NumenPlayer> body, Supplier<BodySnapshot> snapshot, Supplier<HaltReason> absent,
-                        BooleanSupplier ownerOnline, BooleanSupplier driving, IntSupplier initiative,
-                        Function<String, String> persona, LongSupplier dayTime, LongSupplier gameTime, Rooms rooms,
-                        Keepers keepers) {}
+    public record Parts(UUID companion, UUID creator, Home home, Executor main, Mind mind, ProgramHost programs,
+                        ToolBook tools, Supplier<NumenPlayer> body, Supplier<BodySnapshot> snapshot,
+                        Supplier<HaltReason> absent, BooleanSupplier ownerOnline, BooleanSupplier driving,
+                        IntSupplier initiative, Function<Bound, String> persona, Function<UUID, String> playerName,
+                        LongSupplier dayTime, LongSupplier gameTime, Rooms rooms, Supplier<List<UUID>> keepers) {}
 
     private static final String CHAT = "chat.jsonl";
     private static final String INBOX = "inbox.jsonl";
     private static final String STATS = "stats.json";
     private static final String GOAL = "goal.json";
-    private static final String BINDING = "binding.json";
     private static final String SCHEDULES = "schedules.json";
-    /** 绑定文件里穿的皮肤那一项。 */
-    private static final String SKIN = "skin";
 
     private final Parts parts;
     private final UUID companion;
@@ -160,14 +153,12 @@ public final class CompanionLoop {
      * 也是他的会话表里的。和 {@link #conversation} 一样是"最后一次被怎么叫醒"的会话态,不落盘。
      */
     private Spoken from = Spoken.NOBODY;
-    /** 绑定的档案 id;{@code null} = 没绑。落盘在 {@code binding.json},四项绑定一个文件。 */
-    private String providerId;
-    /** 绑定的人设 id;{@code null} = 默认人格。人设正文每轮现取,没有副本。 */
-    private String personaId;
-    /** 绑定的声线 id;{@code null} = 不出声。声线定义在库里,朗读在主人的客户端。 */
-    private String voiceId;
-    /** 穿着的皮肤:签名缓存里的键({@code SkinRef} 的文字写法);{@code null} = 默认皮肤。穿在身上的签名数据在名册里,这里记的是哪一张。 */
-    private String skin;
+    /**
+     * 她的绑定,落盘在 {@code binding.json}({@link Bindings}):档案(没绑就发不了请求)、人设(没绑是默认人格,正文每轮现取,没有副本)、
+     * 声线(没绑不出声;定义在库里,朗读在主人的客户端)各是谁绑的哪一条,和穿着的皮肤(签名缓存里的键;穿在身上的签名数据在名册里,
+     * 这里记的是哪一张)。
+     */
+    private Bindings bindings = Bindings.NONE;
     /** 上一刻驾驶席在不在外接大脑手里,只用来找翻转的那一下。 */
     private boolean wasDriving;
     /** 外接大脑正在跑的那个调用要收的进展;没有在跑的是 {@code null}。主线程上读写。 */
@@ -187,14 +178,15 @@ public final class CompanionLoop {
         this.runtime = new RuntimeState(companion, parts.snapshot(), parts.dayTime());
         this.queue = new EventQueue(JsonlJournal.atFile(home.file(INBOX), home.io()));
         this.goalDoc = new JsonDoc(home.file(GOAL), JsonDoc.Format.of(1), home.io());
-        this.bindingDoc = new JsonDoc(home.file(BINDING), JsonDoc.Format.of(1), home.io());
+        this.bindingDoc = new JsonDoc(home.file(Bindings.FILE), JsonDoc.Format.of(1), home.io());
         JsonDoc scheduleDoc = new JsonDoc(home.file(SCHEDULES), JsonDoc.Format.of(1), home.io());
         this.schedules = new OwnerSchedules(scheduleDoc, readDoc(scheduleDoc));
         ToolAnchor anchor = () -> companion;
         this.tools = new CompanionToolPort(companion, () -> anchor, parts.programs(), parts.tools(),
                 this::receiptAfterCut);
         this.tokens = new TokenLedger(companion, new JsonDoc(home.file(STATS), JsonDoc.Format.of(1), home.io()));
-        this.compactor = new Compactor(companion.toString(), convo, log, () -> parts.mind().endpoint(providerId));
+        this.compactor = new Compactor(companion.toString(), convo, log,
+                () -> parts.mind().endpoint(bound(Slot.PROVIDER)));
         this.loop = new AgentLoop(companion.toString(), new Model(), tools, convo, queue, compactor, new Host());
         this.goals = new GoalSteward(companion.toString(), loop, convo, queue, runtime::xml,
                 runtime::bodyOnFiniteTask, this::persistGoal, readGoal());
@@ -217,10 +209,7 @@ public final class CompanionLoop {
     private void restore() {
         JsonObject binding = readDoc(bindingDoc);
         if (binding != null) {
-            for (Slot slot : Slot.values()) {
-                set(slot, text(binding, slot.wire()));
-            }
-            skin = text(binding, SKIN);
+            bindings = Bindings.read(binding, parts.creator());
         }
         tokens.load();
         log.migrateIfNeeded();
@@ -259,26 +248,12 @@ public final class CompanionLoop {
         }
     }
 
-    private static String text(JsonObject o, String key) {
-        return o.has(key) && o.get(key).isJsonPrimitive() && !o.get(key).getAsString().isBlank()
-                ? o.get(key).getAsString() : null;
-    }
-
     private void persistBinding() {
-        if (providerId == null && personaId == null && voiceId == null && skin == null) {
+        if (bindings.isEmpty()) {
             bindingDoc.delete();
-            return;
+        } else {
+            bindingDoc.write(bindings.toJson());
         }
-        JsonObject o = new JsonObject();
-        for (Slot slot : Slot.values()) {
-            if (bound(slot) != null) {
-                o.addProperty(slot.wire(), bound(slot));
-            }
-        }
-        if (skin != null) {
-            o.addProperty(SKIN, skin);
-        }
-        bindingDoc.write(o);
     }
 
     // ---- 读 ----
@@ -317,7 +292,15 @@ public final class CompanionLoop {
                 status.activity(), status.compactProgress(), status.queuedPreview(), compactProblem(), clearProblem(),
                 goal == null ? null : goal.toJson(), tokens.total(), tokens.sum(), tokens.latest(),
                 tokens.waste().missedTokens(), tokens.waste().missCount(), contextPercent(), modelWindow(),
-                personaId, providerId, voiceId, skin, conversation, tools.outstanding(), convo.snapshot().size());
+                shownBindings(), bindings.skin(), conversation, tools.outstanding(), convo.snapshot().size());
+    }
+
+    /** 状态里的绑定:每一项连同绑的人此刻的名字。 */
+    private Map<Slot, CompanionState.Binding> shownBindings() {
+        Map<Slot, CompanionState.Binding> shown = new EnumMap<>(Slot.class);
+        bindings.slots().forEach((slot, bound) ->
+                shown.put(slot, new CompanionState.Binding(bound, parts.playerName().apply(bound.by()))));
+        return shown;
     }
 
     /** 她的对话日志:面板按 id 往前翻它。 */
@@ -368,13 +351,9 @@ public final class CompanionLoop {
         return tools.holds(callId);
     }
 
-    /** 她绑定的这一项的库条目 id({@code 命名空间:名字});没绑是 {@code null}。 */
-    public String bound(Slot slot) {
-        return switch (slot) {
-            case PROVIDER -> providerId;
-            case PERSONA -> personaId;
-            case VOICE -> voiceId;
-        };
+    /** 她这一项绑着什么(谁绑的、哪一条);没绑是 {@code null}。 */
+    public Bound bound(Slot slot) {
+        return bindings.bound(slot);
     }
 
     /** 她此刻在哪个会话里;{@code null} = 就他俩。 */
@@ -394,14 +373,9 @@ public final class CompanionLoop {
 
     /**
      * 她在回谁的话:最后跟她说话的那位主人;还没有哪一位亲口说过(刚重进、定时到点),或者他已经不在她的主人表上,就是创建者。
-     * 她一位主人也没有是 {@code null}。
      */
     public UUID speaker() {
-        List<UUID> keepers = parts.keepers().list();
-        if (from.who() != null && keepers.contains(from.who())) {
-            return from.who();
-        }
-        return keepers.isEmpty() ? null : keepers.get(0);
+        return from.who() != null && parts.keepers().get().contains(from.who()) ? from.who() : parts.creator();
     }
 
     /** 这一位不再是她的主人了:她若还站在他的场面里(最后一句是他说的),退回"没有人说过话"的样子。 */
@@ -414,7 +388,7 @@ public final class CompanionLoop {
 
     /** 与自动整理同一口径的上下文窗口,取自她绑定的档案解析出的端点;没绑是 0。 */
     public int modelWindow() {
-        return parts.mind().endpoint(providerId).contextWindow();
+        return parts.mind().endpoint(bound(Slot.PROVIDER)).contextWindow();
     }
 
     // ---- 输入 ----
@@ -461,7 +435,8 @@ public final class CompanionLoop {
      * 说了是噪音(与"就他俩时不写谁在场"同一个道理)。
      */
     private String speakerShown() {
-        return from.who() != null && parts.keepers().list().size() > 1 ? parts.keepers().shown(from.who()) : null;
+        return from.who() != null && parts.keepers().get().size() > 1
+                ? EntityLabel.shown(from.who(), parts.playerName().apply(from.who())) : null;
     }
 
     private boolean enqueueOwnerWords(String wire) {
@@ -809,7 +784,7 @@ public final class CompanionLoop {
     // ---- 绑定 ----
 
     /**
-     * 换她的一项绑定({@code null} = 不绑),落盘在她的家里。这里只记"绑的是哪一条";条目在不在库里、皮肤穿到身上
+     * 换她的一项绑定({@code null} = 不绑),落盘在她的家里。这里只记"谁绑的是哪一条";条目在不在他的库里、皮肤穿到身上
      * 这些是 {@link CompanionBinding} 的事。
      * <ul>
      *   <li>模型档案:下一次请求生效;因端点不可用停着的会再试一次;</li>
@@ -818,12 +793,12 @@ public final class CompanionLoop {
      *   <li>声线:界面读状态,客户端据此朗读。</li>
      * </ul>
      */
-    public void bind(Slot slot, String entryId) {
-        String id = entryId == null || entryId.isBlank() ? null : entryId;
-        boolean changed = !Objects.equals(bound(slot), id);
-        set(slot, id);
+    public void bind(Slot slot, Bound bound) {
+        boolean changed = !Objects.equals(bound(slot), bound);
+        bindings = bindings.with(slot, bound);
         persistBinding();
-        Constants.LOG.info("[numen-entity#{}] {} entry set to {}", companion, slot.wire(), id == null ? "(none)" : id);
+        Constants.LOG.info("[numen-entity#{}] {} entry set to {}", companion, slot.wire(),
+                bound == null ? "(none)" : bound.id() + " (bound by " + bound.by() + ")");
         switch (slot) {
             case PROVIDER -> loop.bindingChanged();   // 再绑同一份也要再试:可能是补上了 key
             case PERSONA -> {
@@ -840,21 +815,39 @@ public final class CompanionLoop {
      * 这里只记"穿的是哪一张";界面读状态,拿本机文件夹里图片的哈希对一对,就知道她穿的是不是这一张。
      */
     public void wearSkin(String ref) {
-        skin = ref == null || ref.isBlank() ? null : ref;
+        bindings = bindings.wearing(ref);
         persistBinding();
-        Constants.LOG.info("[numen-entity#{}] skin set to {}", companion, skin == null ? "(none)" : skin);
+        Constants.LOG.info("[numen-entity#{}] skin set to {}", companion,
+                bindings.skin() == null ? "(none)" : bindings.skin());
     }
 
-    private void set(Slot slot, String id) {
-        switch (slot) {
-            case PROVIDER -> providerId = id;
-            case PERSONA -> personaId = id;
-            case VOICE -> voiceId = id;
+    /**
+     * 这个人绑的那几项退回未绑定(他不再是她的主人了:他的库、他的 key 不该再被她用)。每一项的后果同 {@link #bind} 不绑时的。
+     *
+     * @return 退掉了哪几项;他什么都没绑是空表
+     */
+    public List<Slot> releaseBoundBy(UUID person) {
+        List<Slot> released = bindings.boundBy(person);
+        released.forEach(slot -> bind(slot, null));
+        return released;
+    }
+
+    /**
+     * 库条目改了名(id 就是名字):她这一项绑的正是 {@code was}(同一个人绑的同一条)就改指 {@code to}。
+     *
+     * @return 改了
+     */
+    public boolean repoint(Slot slot, Bound was, EntryId to) {
+        if (!was.equals(bound(slot))) {
+            return false;
         }
+        bind(slot, was.to(to));
+        return true;
     }
 
     private String personaText() {
-        return personaId == null ? null : parts.persona().apply(personaId);
+        Bound persona = bound(Slot.PERSONA);
+        return persona == null ? null : parts.persona().apply(persona);
     }
 
     // ---- 轨迹 ----
@@ -937,7 +930,7 @@ public final class CompanionLoop {
 
         @Override
         public Cause unavailable() {
-            return parts.mind().unavailable(providerId);
+            return parts.mind().unavailable(bound(Slot.PROVIDER));
         }
 
         /**
@@ -949,7 +942,7 @@ public final class CompanionLoop {
          */
         @Override
         public ModelRequest turnRequest(long runId, int n) {
-            LlmEndpoint endpoint = parts.mind().endpoint(providerId);
+            LlmEndpoint endpoint = parts.mind().endpoint(bound(Slot.PROVIDER));
             // 这一轮用的端点和日志里最后记下的不同,就在日志里记一条换了模型 / 换了档位
             log.noteEndpoint(endpoint);
             String xml = runtime.xml();
@@ -964,7 +957,7 @@ public final class CompanionLoop {
         @Override
         public void call(ModelRequest request, CancelToken cancel, java.util.function.Consumer<Delta> onDelta,
                          java.util.function.Consumer<ModelOutcome> onDone) {
-            parts.mind().ask(providerId, companion, request, cancel,
+            parts.mind().ask(bound(Slot.PROVIDER), companion, request, cancel,
                     delta -> parts.main().execute(() -> {
                         if (!cancel.isCancelled()) {
                             onDelta.accept(delta);

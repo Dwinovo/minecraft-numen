@@ -11,6 +11,7 @@ import com.dwinovo.numen.api.agent.loop.RunEnd;
 import com.dwinovo.numen.api.agent.memory.NoteBook;
 import com.dwinovo.numen.api.agent.prompt.NumenPrompts;
 import com.dwinovo.numen.api.agent.request.SystemPromptComposer;
+import com.dwinovo.numen.api.brain.Bound;
 import com.dwinovo.numen.api.brain.CompanionBrains;
 import com.dwinovo.numen.api.brain.CompanionLoop;
 import com.dwinovo.numen.api.brain.CompanionLoops;
@@ -21,6 +22,7 @@ import com.dwinovo.numen.api.brain.Venue;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.agent.skill.SkillRegistry;
+import com.dwinovo.numen.api.library.EntryId;
 import com.dwinovo.numen.api.library.LibraryHub;
 import com.dwinovo.numen.api.script.Modules;
 import com.dwinovo.numen.api.store.Io;
@@ -114,7 +116,7 @@ final class Attempt {
     /** 她闲下来保持这么久算收工。 */
     static final int SETTLE_TICKS = 60;
     /** 评测里她绑的人设的 id;正文是内置默认人设,与档案、服主的配置无关。 */
-    private static final String BENCH_PERSONA = "bench";
+    private static final EntryId BENCH_PERSONA = EntryId.mine("bench");
     /** 她叫这个名字,主人叫那个。 */
     private static final String HER_NAME = "Numen";
     private static final String OWNER_NAME = "Owner";
@@ -214,8 +216,8 @@ final class Attempt {
         CompanionRegistry.get(server).put(her.getUUID(), new CompanionRegistry.Entry(HER_NAME, owner.getUUID(),
                 level.dimension(), her.blockPosition()));
         loop = CompanionBrains.create(server, her.getUUID(), owner.getUUID(), new Home(home.resolve("her"), io), mind,
-                new OwnerEnd(), () -> true, () -> false, () -> EventQueue.DEFAULT_LEVEL, id -> NumenPrompts.DEFAULT_PERSONA);
-        loop.bind(com.dwinovo.numen.api.brain.Slot.PERSONA, BENCH_PERSONA);
+                new OwnerEnd(), () -> true, () -> false, () -> EventQueue.DEFAULT_LEVEL, bound -> NumenPrompts.DEFAULT_PERSONA);
+        loop.bind(com.dwinovo.numen.api.brain.Slot.PERSONA, new Bound(owner.getUUID(), BENCH_PERSONA));
         loop.subscribe(meter);
         loop.subscribe(this::onLoopEvent);
         scenario.setup(scene);

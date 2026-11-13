@@ -15,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -227,6 +228,24 @@ class LegacyLibrariesTest {
         LegacyLibraries.bindings(List.of(file), Map.of(), Map.of());
 
         assertEquals("my:不知道的", json(file).get("persona").getAsString());
+    }
+
+    /** 她的大脑落过盘的绑定每一项带着绑的人,不是旧客户端留下的 id:原样留着。 */
+    @Test
+    void aBindingThatAlreadySaysWhoBoundItIsLeftAlone(@TempDir Path dir) {
+        Path file = dir.resolve("binding.json");
+        Bindings current = Bindings.NONE
+                .with(Slot.PROVIDER, new Bound(UUID.randomUUID(), new EntryId("server", "备用")))
+                .with(Slot.PERSONA, new Bound(UUID.randomUUID(), new EntryId("numen", "小焰")));
+        JsonDoc doc = new JsonDoc(file, JsonDoc.Format.of(1), Io.direct(e -> {
+            throw e;
+        }));
+        doc.write(current.toJson());
+
+        int changed = LegacyLibraries.bindings(List.of(file), Map.of("prov_1", "server:我的 DeepSeek"), Map.of("小焰", "numen:小焰"));
+
+        assertEquals(0, changed);
+        assertEquals(current, Bindings.read(doc.read().orElseThrow(), UUID.randomUUID()));
     }
 
     private static void write(Path file, String provider, String persona) {

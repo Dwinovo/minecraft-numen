@@ -1,5 +1,6 @@
 package com.dwinovo.numen.gametest;
 
+import com.dwinovo.numen.api.brain.Bound;
 import com.dwinovo.numen.api.brain.CompanionLoops;
 import com.dwinovo.numen.api.brain.Replies;
 import com.dwinovo.numen.api.brain.ServerSkins;
@@ -49,14 +50,15 @@ public class LibraryCommandGameTests {
 
         run(owner, "numen companion gametest_bound persona " + persona, heard);
         run(owner, "numen companion gametest_bound voice " + voice, heard);
-        helper.assertTrue(persona.toString().equals(her.loop.bound(Slot.PERSONA)), "persona: " + heard);
-        helper.assertTrue(voice.toString().equals(her.loop.bound(Slot.VOICE)), "voice: " + heard);
+        helper.assertTrue(new Bound(owner.getUUID(), persona).equals(her.loop.bound(Slot.PERSONA)), "persona: " + heard);
+        helper.assertTrue(new Bound(owner.getUUID(), voice).equals(her.loop.bound(Slot.VOICE)), "voice: " + heard);
         helper.assertTrue(heard.stream().allMatch(m -> isKey(m, Keys.COMMAND_BOUND)), "not told: " + heard);
 
         heard.clear();
         run(owner, "numen companion gametest_bound voice my:not_there", heard);
         helper.assertTrue(heard.size() == 1 && isKey(heard.get(0), Keys.COMMAND_BIND_FAILED), "refusal not said: " + heard);
-        helper.assertTrue(voice.toString().equals(her.loop.bound(Slot.VOICE)), "a refused bind changed her voice");
+        helper.assertTrue(new Bound(owner.getUUID(), voice).equals(her.loop.bound(Slot.VOICE)),
+                "a refused bind changed her voice");
 
         heard.clear();
         run(owner, "numen companion gametest_bound voice", heard);

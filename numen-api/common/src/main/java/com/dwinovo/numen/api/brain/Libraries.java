@@ -374,14 +374,14 @@ public final class Libraries {
         Done done = switch (kind) {
             case PERSONA -> contentLibrary(owner, admin, PersonaLibrary.KIND, op, body,
                     b -> required(b, "text", "a persona needs a text"),
-                    (from, to) -> CompanionLoops.rebind(owner, Slot.PERSONA, from.toString(), to.toString()));
+                    (from, to) -> CompanionLoops.rebind(owner, Slot.PERSONA, from, to));
             case PROVIDER -> contentLibrary(owner, admin, ProviderLibrary.KIND, op, body,
                     b -> ProviderLibrary.write(ProviderLibrary.profileFromJson(b)),
-                    (from, to) -> CompanionLoops.rebind(owner, Slot.PROVIDER, from.toString(), to.toString()));
+                    (from, to) -> CompanionLoops.rebind(owner, Slot.PROVIDER, from, to));
             case SKILL -> contentLibrary(owner, admin, SkillRegistry.KIND, op, body, null, (from, to) -> { });
             case VOICE -> contentLibrary(owner, admin, VoiceProfile.KIND, op, body,
                     b -> VoiceProfile.fromJson(b).write(),
-                    (from, to) -> CompanionLoops.rebind(owner, Slot.VOICE, from.toString(), to.toString()));
+                    (from, to) -> CompanionLoops.rebind(owner, Slot.VOICE, from, to));
             case SKIN -> skin(owner, op, body);
             case KEY -> key(owner, admin, op, body);
             case PERMISSION -> permission(owner, op, body);
@@ -647,7 +647,7 @@ public final class Libraries {
      * 想改就 {@link #COPY} 到我的再改;开关记在他自己的偏好里。
      *
      * @param content 请求的正文变成文件的正文;这种库不能经协议存就是 {@code null}
-     * @param renamed 我的某一条改了名(id 随之更换)时,绑着旧 id 的同伴改指新的
+     * @param renamed 我的某一条改了名(id 随之更换)时,他绑的旧 id 改指新的
      */
     private Done contentLibrary(UUID owner, boolean admin, LibraryKind kind, String op, JsonObject body, Content content,
                                 java.util.function.BiConsumer<EntryId, EntryId> renamed) {
@@ -734,7 +734,7 @@ public final class Libraries {
         if (old != null && !old.equals(target)) {
             shelf.delete(old);
             if (!onServer) {
-                renamed.accept(old, target);   // 我的某条改了名:id 就是名字,在用它的同伴得重新指过去
+                renamed.accept(old, target);   // 我的某条改了名:id 就是名字,他绑着它的那些绑定得重新指过去
             }
         }
         if (old != null) {
