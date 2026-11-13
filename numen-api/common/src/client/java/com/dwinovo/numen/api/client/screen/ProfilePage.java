@@ -16,12 +16,15 @@ import com.dwinovo.numen.api.client.data.ClientNumenState;
 import com.dwinovo.numen.api.client.skin.CompanionFace;
 import com.dwinovo.numen.api.client.ui.Anim;
 import com.dwinovo.numen.api.client.ui.mc.Sprites;
+import com.dwinovo.numen.api.client.ui.widget.DialogBox;
 import com.dwinovo.numen.api.data.ModLanguageData;
+import com.dwinovo.numen.api.entity.Keeper;
 import com.dwinovo.numen.api.client.agent.ServerLibraries;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.PlayerFaceRenderer;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
@@ -31,22 +34,27 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 
 /**
  * 同伴资料页,照 Telegram 资料页的想法排:先是"这个人",再是"你们之间的东西",配置收在后面。整页可滚。
  * <ol>
- *   <li>顶部居中:大头像、名字、此刻在干什么(没在干活才说在线/忙碌),体征,一排操作块(发消息、编辑);</li>
+ *   <li>顶部居中:大头像、名字、此刻在干什么(没在干活才说在线/忙碌),分享来的她再一行"来自 某某",体征,一排操作块(发消息、编辑);</li>
  *   <li>资料:简介(她人设的开头一段)、在你哪边多远;</li>
  *   <li>记忆:最新几条札记(Telegram 的共享媒体那一节,我们这里最有意思的是她记住了什么);</li>
  *   <li>定时:主人给她定的话(每隔多久对她说一句),点开编辑,最后一行新增;</li>
  *   <li>共同群聊:她在哪几个群里,点了进去;</li>
+ *   <li>主人:她的主人表(创建者在前),一行一位;创建者在这里加人(最后一行)、移人(行尾的图标),别的主人只看;</li>
  *   <li>背包:收成一行"背包 · N 件",点开往下展开格子;</li>
- *   <li>设置:人设、模型、声线、游戏模式、上下文,一行一项、左名右值,点了开编辑卡;</li>
- *   <li>页底红字:遣散。</li>
+ *   <li>设置:人设、模型、声线、游戏模式、上下文,一行一项、左名右值,点了开编辑卡;另一位主人绑的那几项标着"某某的";</li>
+ *   <li>页底红字:创建者是删除,被分享的人是退出。</li>
  * </ol>
+ * 只有创建者办得成的事(删除、清空记忆、加人移人)别的主人这里不摆入口;能不能办仍由服务端判。
  * 节与节之间隔一道深色宽缝(Telegram 的分节),节头是强调色小字。
  */
 final class ProfilePage {
@@ -58,6 +66,12 @@ final class ProfilePage {
         record Dismiss() implements Hit {}
         record Export() implements Hit {}
         record Wipe() implements Hit {}
+        /** 创建者把她分享给一位玩家(开分享卡)。 */
+        record Share() implements Hit {}
+        /** 创建者不再把她分享给这一位。 */
+        record Unshare(Keeper keeper) implements Hit {}
+        /** 被分享的人退出。 */
+        record Leave() implements Hit {}
         /** 点开一条札记编辑。 */
         record Note(String name) implements Hit {}
         /** 新增一条札记。 */
@@ -77,6 +91,8 @@ final class ProfilePage {
     /** 两行的资料(值 + 它是什么)与一行的设置项。 */
     private static final int ROW_H = 21, LINE_ROW_H = 15;
     private static final int GAP_H = 7;
+    /** 主人表一行的高与行里那张脸的边长(8 的整数倍)。 */
+    private static final int KEEPER_ROW_H = 20, KEEPER_AV = 16;
     private static final int PAD = 8;
     private static final int TEXT_DX = Sprites.SIZE + 10;
     private static final EquipmentSlot[] ARMOR = {
@@ -103,6 +119,13 @@ final class ProfilePage {
     private int viewX, viewY, viewW;
     /** 背包那一行这一帧的顶边;点它是页内开合。 */
     private int itemsRowY = Integer.MIN_VALUE;
+    /** 主人表那一节画着的行:表上的,加上刚被移出、还在收起的;与各行此刻露出多高(像素,按趋近走)。 */
+    private final List<Keeper> keeperRows = new ArrayList<>();
+    private final Map<UUID, Float> keeperShown = new HashMap<>();
+    /** 这一页对着这只画过主人表没有:头一帧表上的行直接摆到位,之后新加的才从零长出来。 */
+    private boolean keepersSettled;
+    /** 这一帧指针下那处要说的一句(主人表行尾的图标、上下文那一行);没有是 null。 */
+    private String tip;
     /** 上次向服务端要她的札记与定时的时刻:面板开着时隔几秒要一次最新的。 */
     private long askedMs;
     private static final long REFRESH_MS = 5_000L;
@@ -118,6 +141,9 @@ final class ProfilePage {
         itemsOpen = false;
         itemsShown = 0;
         memoryPending = false;
+        keeperRows.clear();
+        keeperShown.clear();
+        keepersSettled = false;
     }
 
     /** 记忆那一节(札记)顶边在整页内容里的位置(像素,从页顶起);画过一帧才有。 */
@@ -188,8 +214,13 @@ final class ProfilePage {
         AbstractClientPlayer e = ClientNumenLookup.resolve(who);
         RemoteCompanion loop = RemoteCompanions.get(who).orElse(null);
         ItemStack[] hover = {ItemStack.EMPTY};
+        tip = null;
+        // 她的主人表:创建者是不是我,决定只有创建者办得成的那几个入口摆不摆
+        NumenRoster.Entry entry = NumenRoster.instance().entry(who);
         UUID me = RemoteCompanions.viewer();
-        String tip = null;
+        Keeper creator = entry == null ? null : entry.creator();
+        boolean mine = entry != null && entry.createdBy(me);
+        boolean shared = entry != null && entry.sharedWith(me);
         int cx = x + w / 2;
         int iw = w - PAD * 2;
 
@@ -199,7 +230,8 @@ final class ProfilePage {
         // ---- 顶部:大头像、名字、此刻在干什么、体征、操作块 ----
         CompanionFace.draw(g, who, KnownSkins.of(who), cx - AVATAR / 2, cy, AVATAR);
         cy += AVATAR + 7;
-        Component name = Component.literal(NumenRoster.instance().name(who)).withStyle(ChatFormatting.BOLD);
+        // 她刚从名册上没了(不再分享给我、被删了)的那几帧,这一页还在滑出去:名字空着,别的照画
+        Component name = Component.literal(entry == null ? "" : entry.name()).withStyle(ChatFormatting.BOLD);
         Nb.text(g, font, name, cx - font.width(name) / 2, cy, t.text());
         cy += 12;
         // 手上有活就说她在干什么(强调色,这是她此刻最要紧的一句),没有才是在线/忙碌
@@ -208,6 +240,14 @@ final class ProfilePage {
         String st = Nb.clip(font, doing != null ? I18n.get("numen.profile.doing", doing) : status.apply(who), iw);
         Nb.text(g, font, st, cx - font.width(st) / 2, cy, doing != null ? t.accent() : t.textDim());
         cy += 13;
+        if (shared) {
+            // 分享来的她:是谁创建的
+            String from = Nb.clip(font, I18n.get(ModLanguageData.Keys.SHARE_FROM, creator.shown()), iw - Sprites.SIZE - 4);
+            int fx = cx - (Sprites.SIZE + 4 + font.width(from)) / 2;
+            Sprites.draw(g, Sprites.USERS, fx, cy - 2, Sprites.SIZE, t.accent());
+            Nb.text(g, font, from, fx + Sprites.SIZE + 4, cy, t.accent());
+            cy += 15;
+        }
         if (e != null) {
             int food = snap != null && snap.loaded() ? snap.foodLevel() : 0;
             int vx = cx - (10 * ICON * 2 + 8) / 2;
@@ -319,6 +359,12 @@ final class ProfilePage {
             cy += 2;
         }
 
+        // ---- 主人:她的主人表;创建者在这里加人、移人 ----
+        if (entry != null && creator != null) {
+            cy = gap(g, t, x, w, cy);
+            cy = keepers(g, t, entry, me, mine, x, cy, w, mouseX, mouseY, dt);
+        }
+
         // ---- 背包:一行,点开往下展开 ----
         cy = gap(g, t, x, w, cy);
         int count = 0;
@@ -400,13 +446,20 @@ final class ProfilePage {
         cy += 3;
         cy = actionRow(g, t, new Hit.Export(), Sprites.COPY, I18n.get(ModLanguageData.Keys.PROFILE_EXPORT), t.accent(),
                 x, cy, w, mouseX, mouseY);
-        cy = actionRow(g, t, new Hit.Wipe(), Sprites.DELETE, I18n.get(ModLanguageData.Keys.PROFILE_WIPE), t.fail(),
-                x, cy, w, mouseX, mouseY);
+        if (mine) {
+            cy = actionRow(g, t, new Hit.Wipe(), Sprites.DELETE, I18n.get(ModLanguageData.Keys.PROFILE_WIPE), t.fail(),
+                    x, cy, w, mouseX, mouseY);
+        }
 
-        // ---- 页底:删除(红字,点了还要过确认卡) ----
-        cy = gap(g, t, x, w, cy);
-        cy = actionRow(g, t, new Hit.Dismiss(), Sprites.DELETE, I18n.get(ModLanguageData.Keys.EDIT_DELETE), t.fail(),
-                x, cy, w, mouseX, mouseY) + 8;
+        // ---- 页底(红字,点了还要过确认卡):创建者是删除她,被分享的人是退出 ----
+        if (mine || shared) {
+            cy = gap(g, t, x, w, cy);
+            cy = mine ? actionRow(g, t, new Hit.Dismiss(), Sprites.DELETE, I18n.get(ModLanguageData.Keys.EDIT_DELETE),
+                    t.fail(), x, cy, w, mouseX, mouseY)
+                    : actionRow(g, t, new Hit.Leave(), Sprites.USER_X, I18n.get(ModLanguageData.Keys.SHARE_LEAVE),
+                    t.fail(), x, cy, w, mouseX, mouseY);
+        }
+        cy += 8;
 
         contentH = cy + Math.round(scroll) - y;
         // 滚动条:只有滑块,内容超出一屏才画
@@ -514,6 +567,96 @@ final class ProfilePage {
     private static String boundBy(CompanionState.Binding binding, String name, UUID me) {
         return binding.bound().by().equals(me) ? name
                 : I18n.get(ModLanguageData.Keys.SETUP_BOUND_BY, name, binding.by().shown());
+    }
+
+    /**
+     * 主人表那一节:一行一位(脸、名字,创建者与"你"各标一枚),创建者看别人的行尾有一枚移出的图标(点了过确认卡),最后一行加人。
+     * 表变了行不硬切:新加的从零长出来、淡入,被移出的收回去、淡出。返回下一节的顶边。
+     */
+    private int keepers(GuiGraphics g, UiTheme t, NumenRoster.Entry entry, UUID me, boolean mine,
+                        int x, int cy, int w, int mouseX, int mouseY, float dt) {
+        List<Keeper> table = entry.keepers();
+        cy = sectionHead(g, t, I18n.get(ModLanguageData.Keys.SHARE_OWNERS),
+                table.size() > 1 ? String.valueOf(table.size()) : "", x + PAD, cy, w - PAD * 2);
+        // 表上新来的接在后面(服务端按加进来的先后给);已经画着的换成表上最新的那份(名字可能刚查到)
+        for (Keeper keeper : table) {
+            int at = rowOf(keeper.uuid());
+            if (at >= 0) {
+                keeperRows.set(at, keeper);
+            } else {
+                keeperRows.add(keeper);
+                keeperShown.put(keeper.uuid(), keepersSettled ? 0f : (float) KEEPER_ROW_H);
+            }
+        }
+        keepersSettled = true;
+        for (Iterator<Keeper> rows = keeperRows.iterator(); rows.hasNext(); ) {
+            Keeper keeper = rows.next();
+            boolean on = table.contains(keeper);
+            float shown = Anim.approach(keeperShown.get(keeper.uuid()), on ? KEEPER_ROW_H : 0f, 16f, dt);
+            if (!on && shown <= 0f) {
+                rows.remove();
+                keeperShown.remove(keeper.uuid());
+                continue;
+            }
+            keeperShown.put(keeper.uuid(), shown);
+            int rowH = Math.round(shown);
+            if (rowH > 0) {
+                g.enableScissor(x, cy, x + w, cy + rowH);
+                // 字体把几乎全透明的颜色当不透明画,所以淡到底也留一点
+                keeperRow(g, t, keeper, entry.createdBy(keeper.uuid()), keeper.uuid().equals(me),
+                        mine && on && shown >= KEEPER_ROW_H, x, cy, w, Math.max(0.05f, shown / KEEPER_ROW_H),
+                        mouseX, mouseY);
+                g.disableScissor();
+                cy += rowH;
+            }
+        }
+        cy += 2;
+        if (mine) {
+            cy = actionRow(g, t, new Hit.Share(), Sprites.USER_PLUS, I18n.get(ModLanguageData.Keys.SHARE_ADD), t.accent(),
+                    x, cy, w, mouseX, mouseY);
+        }
+        return cy;
+    }
+
+    private int rowOf(UUID keeper) {
+        for (int i = 0; i < keeperRows.size(); i++) {
+            if (keeperRows.get(i).uuid().equals(keeper)) return i;
+        }
+        return -1;
+    }
+
+    /**
+     * 主人表的一行,整行按 {@code alpha} 淡。{@code removable} = 这一行尾上摆移出的图标:看的人是创建者、这一行不是他自己、行已经长满。
+     */
+    private void keeperRow(GuiGraphics g, UiTheme t, Keeper keeper, boolean creator, boolean self, boolean removable,
+                           int x, int y, int w, float alpha, int mouseX, int mouseY) {
+        com.mojang.blaze3d.systems.RenderSystem.enableBlend();
+        g.setColor(1f, 1f, 1f, alpha);
+        PlayerFaceRenderer.draw(g, KnownSkins.of(keeper.uuid()), x + PAD - 2, y + (KEEPER_ROW_H - KEEPER_AV) / 2, KEEPER_AV);
+        g.setColor(1f, 1f, 1f, 1f);
+        int ty = y + (KEEPER_ROW_H - 8) / 2;
+        int tx = x + PAD + TEXT_DX;
+        int right = x + w - PAD - (removable && !creator ? Sprites.SIZE + 6 : 0);
+        String role = creator ? I18n.get(ModLanguageData.Keys.SHARE_CREATOR) : "";
+        String you = self ? I18n.get(ModLanguageData.Keys.SHARE_YOU) : "";
+        int tags = (role.isEmpty() ? 0 : font.width(role) + 6) + (you.isEmpty() ? 0 : font.width(you) + 6);
+        String name = Nb.clip(font, keeper.shown(), right - tx - tags);
+        Nb.text(g, font, name, tx, ty, DialogBox.fade(t.text(), alpha));
+        tx += font.width(name) + 6;
+        if (!role.isEmpty()) {
+            Nb.text(g, font, role, tx, ty, DialogBox.fade(t.accent(), alpha));
+            tx += font.width(role) + 6;
+        }
+        if (!you.isEmpty()) {
+            Nb.text(g, font, you, tx, ty, DialogBox.fade(t.textDim(), alpha));
+        }
+        if (removable && !creator) {
+            int bx = x + w - PAD - Sprites.SIZE, by = y + (KEEPER_ROW_H - Sprites.SIZE) / 2;
+            boolean hot = mouseX >= bx - 3 && mouseX < bx + Sprites.SIZE + 3 && mouseY >= by - 3 && mouseY < by + Sprites.SIZE + 3;
+            Sprites.draw(g, Sprites.USER_X, bx, by, Sprites.SIZE, hot ? t.fail() : t.textDim());
+            rects.add(new Rect(new Hit.Unshare(keeper), bx - 3, by - 3, Sprites.SIZE + 6, Sprites.SIZE + 6));
+            if (hot) tip = I18n.get(ModLanguageData.Keys.UNSHARE_TIP, keeper.shown());
+        }
     }
 
     /** 节头:强调色小字,右端可带一个淡色的数。返回下面内容的顶边。 */

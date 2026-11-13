@@ -16,6 +16,7 @@ import com.dwinovo.numen.api.client.chat.SelectedCompanion;
 import com.dwinovo.numen.api.client.data.ClientNumenState;
 import com.dwinovo.numen.api.client.agent.ServerLibraries;
 import com.dwinovo.numen.api.data.ModLanguageData;
+import com.dwinovo.numen.api.entity.Keeper;
 import com.dwinovo.numen.api.network.payload.RequestStatePayload;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
 import com.dwinovo.numen.api.platform.Services;
@@ -1137,6 +1138,125 @@ public final class NumenScreen extends Screen {
         rebuild();
     }
 
+    /** 分享卡对着哪只。 */
+    private UUID shareOf;
+    private SharePanel sharePanel;
+
+    /** 创建者把她分享给一位玩家:开分享卡(填名字,后果写在卡上)。 */
+    private void openShare(UUID who) {
+        shareOf = who;
+        if (sharePanel == null) {
+            sharePanel = new SharePanel(new ShareHost());
+        }
+        openCard(sharePanel);
+    }
+
+    /** 分享卡的宿主面:发给服务端(办不办得成由它判,结局回在聊天里,办成了名册推回来、主人表多一行),关卡。 */
+    private final class ShareHost implements SharePanel.Host {
+        @Override public UUID uuid() { return shareOf; }
+
+        @Override public String name() { return nameFor(shareOf); }
+
+        @Override public void onShare(String player) {
+            RemoteCompanions.getOrCreate(shareOf).share(player);
+            closeCard();
+        }
+
+        @Override public void onClose() {
+            closeCard();
+        }
+    }
+
+    /** 创建者不再把她分享给这一位:过确认卡,写明他绑的那几项会退回未绑定。 */
+    private void openUnshareConfirm(UUID target, Keeper keeper) {
+        dismissDialog.open(overlayUi, railX, top, railW + panelW, panelH,
+                I18n.get(ModLanguageData.Keys.UNSHARE_TITLE, nameFor(target), keeper.shown()),
+                I18n.get(ModLanguageData.Keys.UNSHARE_WARNING),
+                I18n.get(ModLanguageData.Keys.GUI_SETTINGS_CANCEL), I18n.get(ModLanguageData.Keys.UNSHARE_CONFIRM),
+                () -> {
+                    RemoteCompanions.getOrCreate(target).unshare(keeper.uuid());
+                    rebuild();
+                });
+        rebuild();
+    }
+
+    /**
+     * 被分享的人退出:过确认卡。确认之后只发给服务端;她从名册上没了,面板自己跟上({@link #followRoster})。
+     */
+    private void openLeaveConfirm(UUID target) {
+        NumenRoster.Entry row = NumenRoster.instance().entry(target);
+        dismissDialog.open(overlayUi, railX, top, railW + panelW, panelH,
+                I18n.get(ModLanguageData.Keys.LEAVE_TITLE, nameFor(target)),
+                I18n.get(ModLanguageData.Keys.LEAVE_WARNING, row.creator().shown()),
+                I18n.get(ModLanguageData.Keys.GUI_SETTINGS_CANCEL), I18n.get(ModLanguageData.Keys.SHARE_LEAVE),
+                () -> {
+                    RemoteCompanions.getOrCreate(target).unshare(RemoteCompanions.viewer());
+                    rebuild();
+                });
+        rebuild();
+    }
+
+    /**
+     * 面板对着的那只不在名册上了(创建者不再分享给我、我退出了、她在别处被删了):名册是服务端推来的,这里跟上——开着的卡收掉,
+     * 换到另一个会话(没有就回空面板);资料页对着的那只没了,资料页退回去。
+     */
+    private void followRoster() {
+        NumenRoster roster = NumenRoster.instance();
+        UUID her = solo();
+        if (her != null && roster.entry(her) == null) {
+            if (cardLive()) closeCard();
+            leave(conv);
+        } else if (tab == Tab.ITEMS && profileOf != null && roster.entry(profileOf) == null) {
+            if (cardLive()) closeCard();
+            back();
+        }
+    }
+
+    /** 这只同伴分享的事用一句话说:创建者看到"分享给了 甲、乙",被分享的人看到"来自 某某"。只对不止一位主人的她问。 */
+    private static String shareWords(NumenRoster.Entry row) {
+        if (row.sharedWith(RemoteCompanions.viewer())) {
+            return I18n.get(ModLanguageData.Keys.SHARE_FROM, row.creator().shown());
+        }
+        return I18n.get(ModLanguageData.Keys.SHARE_WITH, row.keepers().stream().skip(1).map(Keeper::shown)
+                .collect(java.util.stream.Collectors.joining(I18n.get(ModLanguageData.Keys.LIST_SEPARATOR))));
+    }
+
+    /** 她不止一位主人(分享出去了,或是分享来的):名册上她那一行;只有一位主人、或不在名册上是 null。 */
+    private static NumenRoster.Entry sharedEntry(UUID her) {
+        NumenRoster.Entry row = her == null ? null : NumenRoster.instance().entry(her);
+        return row != null && row.severalKeepers() ? row : null;
+    }
+
+    /**
+     * 抬头上名字后面的分享记号:一枚图标(悬停说分享给了谁、或来自谁);分享来的她再跟一句"来自 某某"。整枚按 {@code alpha} 淡
+     * (她的主人表从一位变多位、或变回一位时淡入淡出)。返回它后面的东西从哪儿开始。
+     */
+    private int renderShareMark(GuiGraphics g, NumenRoster.Entry row, int x, int limit, int mouseX, int mouseY, float alpha) {
+        if (x + ICON_N > limit) return x;
+        UiTheme t = UiTheme.current();
+        boolean hot = alpha >= 1f && !modalOpen() && !overlayOpen() && overIcon(x, mouseX, mouseY);
+        com.dwinovo.numen.api.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.api.client.ui.mc.Sprites.USERS,
+                x, iconTop(), ICON_N, fade(hot ? CTA : t.accent(), alpha));
+        if (hot) tip(java.util.List.of(Component.literal(shareWords(row))), mouseX, mouseY);
+        x += ICON_N + 3;
+        if (row.sharedWith(RemoteCompanions.viewer()) && x + font.width("…") <= limit) {
+            String from = Nb.clip(font, shareWords(row), limit - x);
+            txt(g, Component.literal(from), x, top + NAME_Y, fade(t.accent(), alpha));
+            x += font.width(from);
+        }
+        return x + 6;
+    }
+
+    /** 抬头上那枚分享记号的淡入淡出:对着哪个会话、露出多少(0~1)、淡出去的那几帧还画着的是哪一行。 */
+    private String shareMarkOf;
+    private float shareMarkT;
+    private NumenRoster.Entry shareMarkRow;
+    private long lastShareMarkMs;
+    /** 左栏每行名字后面那枚分享记号露出多少(0~1);没见过的行第一帧直接摆到位。 */
+    private final java.util.Map<String, Float> railShareT = new java.util.HashMap<>();
+    /** 分享记号淡入淡出的快慢(每秒走这么多,和左栏"在干什么"那一行同一个数)。 */
+    private static final float SHARE_MARK_RATE = 7f;
+
     /** 解散确认:记录留在成员各自的日志里,所以副文本说的是"不会丢",不是"无法撤销"。 */
     private void openDissolveConfirm(Conversation target) {
         dismissDialog.open(overlayUi, railX, top, railW + panelW, panelH,
@@ -1456,7 +1576,7 @@ public final class NumenScreen extends Screen {
                 });
     }
 
-    /** 资料页上的点击:发消息回到和她的对话,编辑开她的编辑卡,点群进那个群,遣散先过确认卡;背包开合页内自己管。 */
+    /** 资料页上的点击:发消息回到和她的对话,编辑开她的编辑卡,点群进那个群,加人开分享卡,删除、移人、退出先过确认卡;背包开合页内自己管。 */
     private boolean profileClicked(double mx, double my) {
         if (tab != Tab.ITEMS || profilePage == null || profileOf == null) return false;
         boolean eaten = profilePage.consumes(mx, my);
@@ -1469,6 +1589,9 @@ public final class NumenScreen extends Screen {
             case ProfilePage.Hit.Dismiss ignored -> openDismissConfirm(who);
             case ProfilePage.Hit.Export ignored -> com.dwinovo.numen.api.client.agent.MemoryFiles.ask(who, nameFor(who));
             case ProfilePage.Hit.Wipe ignored -> openWipeConfirm(who);
+            case ProfilePage.Hit.Share ignored -> openShare(who);
+            case ProfilePage.Hit.Unshare unshare -> openUnshareConfirm(who, unshare.keeper());
+            case ProfilePage.Hit.Leave ignored -> openLeaveConfirm(who);
             case ProfilePage.Hit.Note note -> openNote(who, note.name());
             case ProfilePage.Hit.NewNote ignored -> openNote(who, null);
             case ProfilePage.Hit.Schedule schedule -> openSchedule(who, schedule.id());
@@ -2175,6 +2298,7 @@ public final class NumenScreen extends Screen {
     private void renderInner(GuiGraphics g, int mouseX, int mouseY, float partial) {
         super.render(g, mouseX, mouseY, partial);
         pendingTip = null;   // recollected each frame by the section renderers
+        followRoster();      // 这一帧画的得是名册上还有的
 
         drawWorkspace(g);                // rail column + panel chrome, in the CURRENT theme's colours
         renderRail(g, mouseX, mouseY);   // avatars + status + summon tile on the rail column
@@ -2229,6 +2353,23 @@ public final class NumenScreen extends Screen {
                 tip(java.util.List.of(Component.translatable(ModLanguageData.Keys.HEADER_PROFILE)), mouseX, mouseY);
             }
             int afterName = left + PAD + font.width(nm) + 6;
+            // 她不止一位主人时名字后面跟分享记号;主人表变了它淡入淡出,后面的人设名跟着滑,换了会话直接摆到位
+            NumenRoster.Entry sharedRow = sharedEntry(her);
+            long markNow = System.currentTimeMillis();
+            float markDt = Math.min(0.1f, (markNow - lastShareMarkMs) / 1000f);
+            lastShareMarkMs = markNow;
+            String markOf = conv == null ? null : conv.id();
+            if (!java.util.Objects.equals(markOf, shareMarkOf)) {
+                shareMarkOf = markOf;
+                shareMarkT = sharedRow != null ? 1f : 0f;
+            } else {
+                shareMarkT = Math.clamp(shareMarkT + (sharedRow != null ? markDt : -markDt) * SHARE_MARK_RATE, 0f, 1f);
+            }
+            if (sharedRow != null) shareMarkRow = sharedRow;
+            if (shareMarkT > 0.03f && shareMarkRow != null) {
+                int markEnd = renderShareMark(g, shareMarkRow, afterName, iconsLeft, mouseX, mouseY, shareMarkT);
+                afterName += Math.round((markEnd - afterName) * com.dwinovo.numen.api.client.ui.Anim.easeOutCubic(shareMarkT));
+            }
             if (moreX >= 0) {
                 // 菜单开着时 ⋮ 保持亮着:它是菜单挂着的那个点
                 boolean menuOpen = headerMenu != null && headerMenu.isOpen();
@@ -2462,7 +2603,10 @@ public final class NumenScreen extends Screen {
             if (railW < RAIL_FULL_W) {
                 // 窄栏:只有脸;名字靠悬停
                 if (hovered && !active && railQuiet) {
-                    tip(java.util.List.of(Component.literal(c.displayName(NumenRoster.instance()::name))), mouseX, mouseY);
+                    NumenRoster.Entry sharedRow = sharedEntry(her);
+                    Component name = Component.literal(c.displayName(NumenRoster.instance()::name));
+                    tip(sharedRow == null ? java.util.List.of(name)
+                            : java.util.List.of(name, Component.literal(shareWords(sharedRow))), mouseX, mouseY);
                 }
             } else {
             // 名字一行、最后一句一行;时间在名字那行的右端
@@ -2472,8 +2616,25 @@ public final class NumenScreen extends Screen {
             var last = com.dwinovo.numen.api.client.screen.chat.ConversationPreview.last(c);
             String when = last == null ? "" : whenLabel(last.ts(), now);
             int whenW = when.isEmpty() ? 0 : font.width(when) + 4;
-            txt(g, Component.literal(Nb.clip(font, c.displayName(NumenRoster.instance()::name), textRight - tx - whenW)),
-                    tx, ay + 6, fade(nameColor, a));
+            // 她不止一位主人(分享出去了,或是分享来的):名字后面一枚记号,悬停说分享给了谁、来自谁
+            NumenRoster.Entry sharedRow = sharedEntry(her);
+            float markT = railShareT.getOrDefault(c.id(), sharedRow != null ? 1f : 0f);
+            if (live) {
+                markT = Math.clamp(markT + (sharedRow != null ? dt : -dt) * SHARE_MARK_RATE, 0f, 1f);
+                railShareT.put(c.id(), markT);
+            }
+            int markW = markT > 0f ? ICON_N + 3 : 0;
+            String rowName = Nb.clip(font, c.displayName(NumenRoster.instance()::name), textRight - tx - whenW - markW);
+            txt(g, Component.literal(rowName), tx, ay + 6, fade(nameColor, a));
+            if (markT > 0.03f) {
+                int markX = tx + font.width(rowName) + 3, markY = ay + 6 + (font.lineHeight - ICON_N) / 2;
+                com.dwinovo.numen.api.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.api.client.ui.mc.Sprites.USERS,
+                        markX, markY, ICON_N, fade(active ? dimColor : t.accent(), a * markT));
+                if (sharedRow != null && railQuiet && mouseX >= markX - 1 && mouseX < markX + ICON_N + 1
+                        && mouseY >= markY - 1 && mouseY < markY + ICON_N + 1) {
+                    tip(java.util.List.of(Component.literal(shareWords(sharedRow))), mouseX, mouseY);
+                }
+            }
             if (!when.isEmpty()) {
                 txt(g, Component.literal(when), textRight - font.width(when), ay + 6, fade(active ? dimColor : TXT_FAINT, a));
             }
