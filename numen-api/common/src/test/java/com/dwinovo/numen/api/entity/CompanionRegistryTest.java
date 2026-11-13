@@ -5,6 +5,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -198,6 +199,76 @@ class CompanionRegistryTest {
         assertEquals(1, reg.ownedBy(OWNER).size());
         assertEquals(A, reg.ownedBy(OWNER).get(0).getKey());
         assertTrue(reg.ownedBy(UUID.randomUUID()).isEmpty());
+    }
+
+    // ---- 主人表 ----
+
+    @Test
+    void sharingAddsAKeeperWithoutChangingWhoOwnsHer() {
+        CompanionRegistry reg = new CompanionRegistry();
+        reg.put(A, entry("小焰", OWNER));
+
+        assertTrue(reg.share(A, OTHER_OWNER));
+
+        assertEquals(OWNER, reg.find(A).owner(), "分享不换创建者");
+        assertEquals(List.of(OWNER, OTHER_OWNER), reg.find(A).keepers(), "创建者在前");
+        assertTrue(reg.find(A).usableBy(OTHER_OWNER));
+        assertEquals(A, reg.usableBy(OTHER_OWNER).get(0).getKey());
+        assertTrue(reg.ownedBy(OTHER_OWNER).isEmpty(), "分享来的不算他名下的");
+        assertEquals(List.of(OTHER_OWNER), roundTrip(reg).find(A).sharedWith(), "主人表必须活过读档");
+    }
+
+    @Test
+    void sharingTwiceOrToTheOwnerChangesNothing() {
+        CompanionRegistry reg = new CompanionRegistry();
+        reg.put(A, entry("小焰", OWNER));
+        reg.share(A, OTHER_OWNER);
+
+        assertFalse(reg.share(A, OTHER_OWNER));
+        assertFalse(reg.share(A, OWNER));
+        assertFalse(reg.share(B, OTHER_OWNER), "名册上没有的同伴分享不出去");
+        assertEquals(List.of(OTHER_OWNER), reg.find(A).sharedWith());
+    }
+
+    @Test
+    void unsharingRemovesOnlyThatPersonAndNeverTheOwner() {
+        CompanionRegistry reg = new CompanionRegistry();
+        UUID third = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
+        reg.put(A, entry("小焰", OWNER));
+        reg.share(A, OTHER_OWNER);
+        reg.share(A, third);
+
+        assertFalse(reg.unshare(A, OWNER), "创建者移不掉");
+        assertTrue(reg.unshare(A, OTHER_OWNER));
+
+        assertEquals(List.of(OWNER, third), reg.find(A).keepers());
+        assertTrue(reg.usableBy(OTHER_OWNER).isEmpty());
+        assertFalse(reg.unshare(A, OTHER_OWNER));
+    }
+
+    @Test
+    void otherUpdatesKeepTheKeepers() {
+        CompanionRegistry reg = new CompanionRegistry();
+        reg.put(A, entry("小焰", OWNER));
+        reg.share(A, OTHER_OWNER);
+
+        reg.put(A, reg.find(A).withSkin("v", "s").movedTo(Level.NETHER, new BlockPos(9, 9, 9)).doing("t", "t()"));
+        reg.markOutside(A, Attendance.Outside.byOwner());
+        reg.markLeftAt(A, 7L);
+
+        assertEquals(List.of(OTHER_OWNER), reg.find(A).sharedWith());
+    }
+
+    @Test
+    void aSaveFromBeforeSharingLoadsWithOnlyTheOwner() {
+        CompanionRegistry reg = new CompanionRegistry();
+        reg.put(A, entry("小焰", OWNER));
+        CompoundTag tag = reg.save(new CompoundTag(), null);
+        tag.getCompound("companions").getCompound(A.toString()).remove("sharedWith");
+
+        CompanionRegistry back = CompanionRegistry.load(tag, null);
+
+        assertEquals(List.of(OWNER), back.find(A).keepers());
     }
 
     @Test

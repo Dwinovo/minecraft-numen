@@ -40,15 +40,35 @@ public final class CompanionRegistry extends SavedData {
      *  {@code skinValue}/{@code skinSig} = 借来的正版皮肤(Mojang 签名的 textures 属性),
      *  空串 = 无皮肤,客户端回落原版默认皮肤(按 UUID 哈希抽取)。
      *  {@code outside} = 她被留在外面(主人下令下线的,或被外面的人或插件请出了服务器的,后者带当时说的理由),在主人再召唤她之前不重建。
+     *  {@code sharedWith} = 创建者把她分享给了谁(不含创建者自己);{@code owner} 加上这些人就是她的主人表,只存在这一处,
+     *  见 {@code docs/adr/runtime/0006-keepers-ownership-use-provenance.md}。
      *  {@code leftAt} = 她被 Numen 登出世界那一刻的游戏时间(overworld 的 gameTime),回来时据此告诉她离开了多久;-1 = 没有这回事。
      *  死亡不进名册:她死了就由原版重生流程当场重生,没有"死着等复活"的状态;老存档里的 {@code diedAt}、{@code deathCause}
      *  读档时被忽略,下一次存盘就不再写。 */
     public record Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos,
                         String skinValue, String skinSig,
-                        String taskName, String taskLua, String taskOld, Outside outside, long leftAt) {
+                        String taskName, String taskLua, String taskOld, Outside outside, long leftAt,
+                        List<UUID> sharedWith) {
+        public Entry {
+            sharedWith = List.copyOf(sharedWith);
+        }
+
         /** A companion with no borrowed skin, idle. */
         public Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos) {
-            this(name, owner, dimension, pos, "", "", "", "", "", Outside.NONE, -1L);
+            this(name, owner, dimension, pos, "", "", "", "", "", Outside.NONE, -1L, List.of());
+        }
+
+        /** 她的主人们:创建者在前,后面是分享给的人,按加进来的先后。 */
+        public List<UUID> keepers() {
+            List<UUID> out = new ArrayList<>(sharedWith.size() + 1);
+            out.add(owner);
+            out.addAll(sharedWith);
+            return out;
+        }
+
+        /** 这个人用不用得了她:他是创建者,或者她分享给了他。 */
+        public boolean usableBy(UUID person) {
+            return owner.equals(person) || sharedWith.contains(person);
         }
 
         /**
@@ -57,31 +77,38 @@ public final class CompanionRegistry extends SavedData {
          */
         public Entry doing(String task, String lua) {
             return new Entry(name, owner, dimension, pos, skinValue, skinSig,
-                    task == null ? "" : task, lua == null ? "" : lua, "", outside, leftAt);
+                    task == null ? "" : task, lua == null ? "" : lua, "", outside, leftAt, sharedWith);
         }
 
         /** 刷新落点(休眠/移动时的 respawn 提示),皮肤原样保留。 */
         public Entry movedTo(ResourceKey<Level> dimension, BlockPos pos) {
             return new Entry(name, owner, dimension, pos, skinValue, skinSig,
-                    taskName, taskLua, taskOld, outside, leftAt);
+                    taskName, taskLua, taskOld, outside, leftAt, sharedWith);
         }
 
         /** 换上 Mojang 签名的皮肤数据(value+signature)。 */
         public Entry withSkin(String value, String sig) {
             return new Entry(name, owner, dimension, pos,
-                    value == null ? "" : value, sig == null ? "" : sig, taskName, taskLua, taskOld, outside, leftAt);
+                    value == null ? "" : value, sig == null ? "" : sig, taskName, taskLua, taskOld, outside, leftAt,
+                    sharedWith);
         }
 
         /** 换一个"留在外面"的状态({@link Outside#NONE} = 不在外面)。 */
         Entry outside(Outside next) {
             return new Entry(name, owner, dimension, pos, skinValue, skinSig,
-                    taskName, taskLua, taskOld, next, leftAt);
+                    taskName, taskLua, taskOld, next, leftAt, sharedWith);
         }
 
         /** 记下她被登出世界的游戏时间;-1 = 清掉。 */
         Entry leftAt(long at) {
             return new Entry(name, owner, dimension, pos, skinValue, skinSig,
-                    taskName, taskLua, taskOld, outside, at);
+                    taskName, taskLua, taskOld, outside, at, sharedWith);
+        }
+
+        /** 换一份分享给的人(不含创建者)。 */
+        Entry sharedWith(List<UUID> next) {
+            return new Entry(name, owner, dimension, pos, skinValue, skinSig,
+                    taskName, taskLua, taskOld, outside, leftAt, next);
         }
 
         /** 被服务器请出去时说的理由;不是服务器请出去的是空串。 */
@@ -116,10 +143,12 @@ public final class CompanionRegistry extends SavedData {
                 // 旧版本记的"被服务器请出去"的理由:读进来当作服务器请出去的状态,写回去它已经并进了 outside
                 Codec.STRING.optionalFieldOf("removedFor", "").forGetter(e -> ""),
                 OUTSIDE.optionalFieldOf("outside", Outside.NONE).forGetter(Entry::outside),
-                Codec.LONG.optionalFieldOf("leftAt", -1L).forGetter(Entry::leftAt)
+                Codec.LONG.optionalFieldOf("leftAt", -1L).forGetter(Entry::leftAt),
+                UUIDUtil.STRING_CODEC.listOf().optionalFieldOf("sharedWith", List.of()).forGetter(Entry::sharedWith)
         ).apply(i, (name, owner, dimension, pos, skinValue, skinSig, taskName, taskLua, taskOld, legacyRemovedFor,
-                    outside, leftAt) -> new Entry(name, owner, dimension, pos, skinValue, skinSig, taskName, taskLua,
-                taskOld, legacyRemovedFor.isEmpty() ? outside : Outside.byServer(legacyRemovedFor), leftAt)));
+                    outside, leftAt, sharedWith) -> new Entry(name, owner, dimension, pos, skinValue, skinSig,
+                taskName, taskLua, taskOld, legacyRemovedFor.isEmpty() ? outside : Outside.byServer(legacyRemovedFor),
+                leftAt, sharedWith)));
     }
 
     private static final Codec<CompanionRegistry> CODEC = RecordCodecBuilder.create(i -> i.group(
@@ -207,6 +236,45 @@ public final class CompanionRegistry extends SavedData {
             if (e.getValue().owner().equals(ownerUuid)) out.add(e);
         }
         return out;
+    }
+
+    /** 这个人用得了的每一只:他创建的,加上分享给他的(UUID + entry)。 */
+    public List<Map.Entry<UUID, Entry>> usableBy(UUID person) {
+        List<Map.Entry<UUID, Entry>> out = new ArrayList<>();
+        for (Map.Entry<UUID, Entry> e : entries.entrySet()) {
+            if (e.getValue().usableBy(person)) out.add(e);
+        }
+        return out;
+    }
+
+    /**
+     * 把她分享给一个人。
+     *
+     * @return 表有没有变:名册上没有她、他是创建者、已经分享给他了,都是没变
+     */
+    public boolean share(UUID companionUuid, UUID person) {
+        Entry e = entries.get(companionUuid);
+        if (e == null || e.usableBy(person)) return false;
+        List<UUID> next = new ArrayList<>(e.sharedWith());
+        next.add(person);
+        entries.put(companionUuid, e.sharedWith(next));
+        setDirty();
+        return true;
+    }
+
+    /**
+     * 不再分享给这个人。
+     *
+     * @return 表有没有变:名册上没有她、没分享给过他(创建者也在此列,他移不掉),都是没变
+     */
+    public boolean unshare(UUID companionUuid, UUID person) {
+        Entry e = entries.get(companionUuid);
+        if (e == null || !e.sharedWith().contains(person)) return false;
+        List<UUID> next = new ArrayList<>(e.sharedWith());
+        next.remove(person);
+        entries.put(companionUuid, e.sharedWith(next));
+        setDirty();
+        return true;
     }
 
     /** 记下她被留在外面(服务器请出去的理由随名册落盘,主人下次上线还说得出)。 */
