@@ -8,7 +8,6 @@ import com.dwinovo.numen.api.store.JsonDoc;
 import com.dwinovo.numen.api.store.StoreException;
 import com.dwinovo.numen.api.store.Trees;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
 
 import java.io.IOException;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -18,6 +17,8 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 /**
@@ -28,7 +29,7 @@ import java.util.stream.Stream;
  * <ul>
  *   <li>条目:目标里没有同名的就移过去;同名而且内容一模一样(多半是随 jar 发的默认内容)就丢掉他这份;内容不同则按"我的优先"——
  *       他原来读到的是他这份,所以他这份改名({@code 名字_2}……)移过去,返回的 {@link Renamed} 说明改成了什么,
- *       他的同伴绑着的旧名字(档案、人设、声线)由 {@link #rebind} 改指新的,界面再告诉他;</li>
+ *       他绑着的旧名字(档案、人设、声线,绑在谁创建的同伴身上都算)由 {@link #rebind} 改指新的,界面再告诉他;</li>
  *   <li>钥匙:同一个服务两边都有而且不同,他的留下(用钥匙时他的本来就排在服主的前面),服主的被它换掉,返回的服务名界面告诉他。</li>
  * </ul>
  */
@@ -100,32 +101,33 @@ public final class HostMerge {
     }
 
     /**
-     * 她们的绑定里记着的旧名字改指新的(模型档案、人设、声线)。绑定文件可能不存在。
+     * 房主绑的旧名字改指新的(模型档案、人设、声线)。改名的是他"我的"里的条目,所以只动<b>他绑的</b>那些绑定——绑在谁创建的同伴身上都算;
+     * 别人绑的同名条目指的是服务器目录里原有的那一条,不动。绑定文件可能不存在。
      *
+     * @param bindingFiles 每只同伴的绑定文件 → 她的创建者(只有 id 的旧值算他绑的,见 {@link Bindings#read})
      * @return 改了几个文件
      */
-    public static int rebind(List<Path> bindingFiles, List<Renamed> renamed) {
+    public static int rebind(Map<Path, UUID> bindingFiles, UUID host, List<Renamed> renamed) {
         int changed = 0;
-        for (Path file : bindingFiles) {
-            if (!Files.isRegularFile(file)) {
+        for (Map.Entry<Path, UUID> each : bindingFiles.entrySet()) {
+            if (!Files.isRegularFile(each.getKey())) {
                 continue;
             }
-            JsonDoc doc = new JsonDoc(file, JsonDoc.Format.of(1), Io.direct(e -> {
+            JsonDoc doc = new JsonDoc(each.getKey(), JsonDoc.Format.of(1), Io.direct(e -> {
                 throw e;
             }));
-            JsonObject binding = doc.read().orElse(new JsonObject());
-            boolean edited = false;
-            for (Renamed each : renamed) {
+            Bindings before = Bindings.read(doc.read().orElse(new JsonObject()), each.getValue());
+            Bindings after = before;
+            for (Renamed entry : renamed) {
+                Bound was = new Bound(host, entry.from());
                 for (Slot slot : Slot.values()) {
-                    if (slot.kind().equals(each.kind()) && binding.get(slot.wire()) instanceof JsonPrimitive p
-                            && p.getAsString().equals(each.from().toString())) {
-                        binding.addProperty(slot.wire(), each.to().toString());
-                        edited = true;
+                    if (slot.kind().equals(entry.kind()) && was.equals(after.bound(slot))) {
+                        after = after.with(slot, was.to(entry.to()));
                     }
                 }
             }
-            if (edited) {
-                doc.write(binding);
+            if (!after.equals(before)) {
+                doc.write(after.toJson());
                 changed++;
             }
         }

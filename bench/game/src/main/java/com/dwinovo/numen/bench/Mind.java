@@ -11,6 +11,7 @@ import com.dwinovo.numen.api.agent.loop.ModelRequest;
 import com.dwinovo.numen.api.agent.provider.AssistantTurn;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.agent.provider.Usage;
+import com.dwinovo.numen.api.brain.Bound;
 import com.dwinovo.numen.script.ScriptEngine;
 import com.dwinovo.numen.api.agent.tool.ScriptTool;
 
@@ -65,18 +66,18 @@ interface Mind extends com.dwinovo.numen.api.brain.Mind {
         }
 
         @Override
-        public Cause unavailable(String provider) {
+        public Cause unavailable(Bound provider) {
             return endpoint.hasApiKey() ? null : Cause.of(Cause.NO_KEY, "环境变量 " + Settings.KEY_ENV);
         }
 
         @Override
-        public LlmEndpoint endpoint(String provider) {
+        public LlmEndpoint endpoint(Bound provider) {
             return endpoint;
         }
 
         /** 不要流式增量:评测不落思考,正文等整条回复。 */
         @Override
-        public void ask(String provider, UUID companion, ModelRequest request, CancelToken cancel,
+        public void ask(Bound provider, UUID companion, ModelRequest request, CancelToken cancel,
                         Consumer<ModelPort.Delta> onDelta, Consumer<ModelOutcome> done) {
             if (!mayCall.getAsBoolean()) {
                 return;
@@ -139,17 +140,17 @@ interface Mind extends com.dwinovo.numen.api.brain.Mind {
         }
 
         @Override
-        public Cause unavailable(String provider) {
+        public Cause unavailable(Bound provider) {
             return null;
         }
 
         @Override
-        public LlmEndpoint endpoint(String provider) {
+        public LlmEndpoint endpoint(Bound provider) {
             return endpoint;
         }
 
         @Override
-        public void ask(String provider, UUID companion, ModelRequest request, CancelToken cancel,
+        public void ask(Bound provider, UUID companion, ModelRequest request, CancelToken cancel,
                         Consumer<ModelPort.Delta> onDelta, Consumer<ModelOutcome> done) {
             if (!mayCall.getAsBoolean()) {
                 return;

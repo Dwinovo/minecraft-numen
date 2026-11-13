@@ -165,24 +165,34 @@ public final class RemoteCompanion {
         return state.window();
     }
 
+    /** 她这一项绑着什么:哪一条、谁绑的(连同他的名字);没绑是 {@code null}。 */
+    public CompanionState.Binding binding(Slot slot) {
+        return state.binding(slot);
+    }
+
+    private String boundId(Slot slot) {
+        CompanionState.Binding binding = state.binding(slot);
+        return binding == null ? null : binding.id();
+    }
+
     /** 她绑定的人设 id;没绑是 {@code null}。 */
     public String personaId() {
-        return state.personaId();
+        return boundId(Slot.PERSONA);
     }
 
     /** 人设的 id 就是它的名字(文件名),所以名字不用另问。 */
     public String personaName() {
-        return state.personaId();
+        return boundId(Slot.PERSONA);
     }
 
     /** 她绑定的模型档案 id;没绑是 {@code null}。 */
     public String providerEntryId() {
-        return state.providerId();
+        return boundId(Slot.PROVIDER);
     }
 
     /** 她绑定的声线 id;没绑是 {@code null}。 */
     public String voiceId() {
-        return state.voiceId();
+        return boundId(Slot.VOICE);
     }
 
     /** 她穿着的皮肤(签名缓存里的引用,{@code SkinRef} 的文字写法);默认皮肤是 {@code null}。 */

@@ -170,12 +170,12 @@ public final class ServerBrains {
         var skinIds = LegacyLooks.skins(clientDir.resolve("skin.json"), clientDir.resolve("skins"), NumenPaths.skins(), skins);
         LegacyLooks.bindings(clientDir.resolve("looks.json"), legacy.resolve("companions"), justMoved, voiceIds, skinIds);
 
-        // 他个人目录里已有的库条目与钥匙并进服务器目录;同名的改了名,他名下同伴的绑定跟着改指
+        // 他个人目录里已有的库条目与钥匙并进服务器目录;同名的改了名,他绑的那些绑定(不管绑在谁创建的同伴身上)跟着改指
         List<HostMerge.Renamed> renamed = HostMerge.libraries(hostDir, serverDir, MERGED_KINDS);
         List<String> replaced = HostMerge.keys(hostDir.resolve("keys"), serverDir.resolve("keys"));
-        List<Path> hers = registry.all().stream().filter(c -> host.equals(registry.find(c).owner()))
-                .map(c -> homes.companion(c).file("binding.json")).toList();
-        HostMerge.rebind(hers, renamed);
+        Map<Path, UUID> creators = new LinkedHashMap<>();
+        registry.all().forEach(c -> creators.put(homes.companion(c).file(Bindings.FILE), registry.find(c).owner()));
+        HostMerge.rebind(creators, host, renamed);
         HostNotices.merged(host, renamed, replaced);
     }
 

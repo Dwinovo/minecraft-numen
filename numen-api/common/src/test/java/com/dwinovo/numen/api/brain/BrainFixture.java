@@ -13,6 +13,7 @@ import com.dwinovo.numen.api.agent.provider.Usage;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
 import com.dwinovo.numen.api.agent.tool.ToolBook;
 import com.dwinovo.numen.api.home.Home;
+import com.dwinovo.numen.api.library.EntryId;
 import com.dwinovo.numen.api.agent.loop.Program;
 import com.dwinovo.numen.api.program.ProgramHost;
 import com.dwinovo.numen.api.store.Io;
@@ -23,7 +24,9 @@ import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -33,10 +36,12 @@ import java.util.function.Consumer;
  */
 final class BrainFixture {
 
-    /** 按事先排好的回复答的"模型";记下每次收到的请求。{@code holding} 时回复先扣着,等 {@link #release}。 */
+    /** 按事先排好的回复答的"模型";记下每次收到的请求和它是凭哪份档案问的。{@code holding} 时回复先扣着,等 {@link #release}。 */
     static final class Scripted implements Mind {
         final Deque<ModelOutcome> replies = new ArrayDeque<>();
         final List<ModelRequest> asked = new ArrayList<>();
+        /** 每次请求带来的档案绑定(谁绑的、哪一条);没绑是 {@code null}。 */
+        final List<Bound> askedWith = new ArrayList<>();
         boolean holding;
         private Runnable held;
 
@@ -54,19 +59,20 @@ final class BrainFixture {
         }
 
         @Override
-        public Cause unavailable(String provider) {
+        public Cause unavailable(Bound provider) {
             return null;
         }
 
         @Override
-        public LlmEndpoint endpoint(String provider) {
+        public LlmEndpoint endpoint(Bound provider) {
             return LlmEndpoint.unresolved("");
         }
 
         @Override
-        public void ask(String provider, UUID companion, ModelRequest request, CancelToken cancel,
+        public void ask(Bound provider, UUID companion, ModelRequest request, CancelToken cancel,
                         Consumer<ModelPort.Delta> onDelta, Consumer<ModelOutcome> onDone) {
             asked.add(request);
+            askedWith.add(provider);
             ModelOutcome reply = replies.poll();
             Runnable answer = () -> onDone.accept(reply);
             if (holding) {
@@ -131,39 +137,47 @@ final class BrainFixture {
     }
 
     final UUID companion;
+    /** 她的创建者。 */
+    final UUID creator;
     final Path home;
     final Scripted mind;
     final CompanionLoop loop;
+    /** 玩家的名字;不在表里的不知道名字。 */
+    final Map<UUID, String> names = new HashMap<>();
+    /** 各人的人设库里有的人设正文;不在表里的是一句默认的。 */
+    final Map<Bound, String> personas = new HashMap<>();
     boolean ownerOnline = true;
     long gameTime;
 
     BrainFixture() throws IOException {
-        this(UUID.randomUUID(), Files.createTempDirectory("numen-brain-"), new Scripted(), 0);
+        this(UUID.randomUUID(), UUID.randomUUID(), Files.createTempDirectory("numen-brain-"), new Scripted(), 0);
     }
 
     /** 她的大脑换新(重载存档):同一只、同一个家、同一个"模型",游戏刻接着走。 */
     BrainFixture reloaded() throws IOException {
-        return new BrainFixture(companion, home, mind, gameTime);
+        return new BrainFixture(companion, creator, home, mind, gameTime);
     }
 
-    private BrainFixture(UUID companion, Path home, Scripted mind, long gameTime) throws IOException {
+    private BrainFixture(UUID companion, UUID creator, Path home, Scripted mind, long gameTime) throws IOException {
         this.companion = companion;
+        this.creator = creator;
         this.home = home;
         this.mind = mind;
         this.gameTime = gameTime;
         useTestNotes();
         // 模块库与技能库是全 JVM 一份,别的测试类可能换过:每只无头大脑起来时换成自己的(请求里列她能用的模块与技能)
         var hub = com.dwinovo.numen.api.library.LibraryHub.headless(Files.createTempDirectory("numen-brain-lib-"));
-        UUID owner = UUID.randomUUID();
-        com.dwinovo.numen.api.script.Modules.init(uuid -> hub.library(com.dwinovo.numen.api.script.Modules.KIND, owner));
+        com.dwinovo.numen.api.script.Modules.init(uuid -> hub.library(com.dwinovo.numen.api.script.Modules.KIND, creator));
         com.dwinovo.numen.api.agent.skill.SkillRegistry.init(
-                uuid -> hub.library(com.dwinovo.numen.api.agent.skill.SkillRegistry.KIND, owner));
+                uuid -> hub.library(com.dwinovo.numen.api.agent.skill.SkillRegistry.KIND, creator));
         Io io = Io.direct(e -> { throw new AssertionError(e); });
-        loop = new CompanionLoop(new CompanionLoop.Parts(companion, new Home(home, io), Runnable::run, mind, NO_PROGRAMS,
-                NO_TOOLS, () -> null, () -> null, () -> null, () -> ownerOnline, () -> false, () -> 5,
-                id -> "A companion under test.", () -> 6000L, () -> this.gameTime, (who, conversation) -> ""));
+        loop = new CompanionLoop(new CompanionLoop.Parts(companion, creator, new Home(home, io), Runnable::run, mind,
+                NO_PROGRAMS, NO_TOOLS, () -> null, () -> null, () -> null, () -> ownerOnline, () -> false, () -> 5,
+                bound -> personas.getOrDefault(bound, "A companion under test."), player -> names.getOrDefault(player, ""),
+                () -> 6000L, () -> this.gameTime,
+                (who, conversation) -> ""));
         // 绑一个人设:系统提示的人设层就取它,不去问加载器的配置(无头时没有)
-        loop.bind(Slot.PERSONA, "gt_persona");
+        loop.bind(Slot.PERSONA, new Bound(creator, EntryId.mine("gt_persona")));
     }
 
     /** 服务器走 {@code n} 刻。 */

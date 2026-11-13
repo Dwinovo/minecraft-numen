@@ -10,21 +10,32 @@ import com.dwinovo.numen.api.agent.loop.Phase;
 import com.dwinovo.numen.api.agent.provider.AssistantTurn;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.agent.provider.Usage;
+import com.dwinovo.numen.api.library.EntryId;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /** 线上的样子读回来和写出去的一样;读不懂的一条跳过,不拖垮整包。 */
 class FeedTest {
 
+    private static final UUID CREATOR = UUID.randomUUID();
+    private static final UUID FRIEND = UUID.randomUUID();
+
     private static final CompanionState STATE = new CompanionState(Phase.MODEL, Hold.BLOCKED,
             Cause.of(Cause.NO_KEY, "我的档案"), true, new LoopStatus.Doing("numen.activity.dig", List.of("64")), 0.5,
             List.of(new EventQueue.Preview("a1b2", "query", "<query>去挖矿</query>")), "numen.loop.compacting", null,
-            goal(), 1200, new Usage(1, 2, 3, 4), new Usage(5, 6, 7, 8), 9000, 2, 41, 128000, "p1", "prov1", "v1", "s1", "G", List.of("call_1", "call_2"), 17);
+            goal(), 1200, new Usage(1, 2, 3, 4), new Usage(5, 6, 7, 8), 9000, 2, 41, 128000,
+            // 档案是另一位主人绑的:绑的人与他的名字随状态上线
+            Map.of(Slot.PERSONA, new CompanionState.Binding(new Bound(CREATOR, EntryId.mine("p1")), "阿岚"),
+                    Slot.PROVIDER, new CompanionState.Binding(new Bound(FRIEND, EntryId.mine("prov1")), "小柚"),
+                    Slot.VOICE, new CompanionState.Binding(new Bound(CREATOR, new EntryId("numen", "v1")), "")),
+            "s1", "G", List.of("call_1", "call_2"), 17);
 
     private static JsonObject goal() {
         JsonObject o = new JsonObject();
@@ -40,7 +51,7 @@ class FeedTest {
     @Test
     void anIdleCompanionWithNothingBoundSurvivesToo() {
         CompanionState idle = new CompanionState(null, null, null, false, null, 0.0, List.of(), null, null, null, 0,
-                Usage.ZERO, Usage.ZERO, 0, 0, 0, 0, null, null, null, null, null, List.of(), 0);
+                Usage.ZERO, Usage.ZERO, 0, 0, 0, 0, Map.of(), null, null, List.of(), 0);
 
         assertEquals(idle, CompanionState.fromJson(JsonParser.parseString(idle.toJson().toString()).getAsJsonObject()));
     }

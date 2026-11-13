@@ -5,6 +5,7 @@ import com.dwinovo.numen.api.agent.loop.Phase;
 import com.dwinovo.numen.api.entity.CompanionSpeech;
 import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.home.Homes;
+import com.dwinovo.numen.api.library.EntryId;
 import com.dwinovo.numen.api.platform.ServerLifecycle;
 import net.minecraft.server.MinecraftServer;
 
@@ -146,12 +147,14 @@ public final class CompanionLoops {
         }
     }
 
-    /** 这位主人的某一项库条目改了名(id 就是名字):名下绑着它的大脑改指新的 id。 */
-    public static void rebind(UUID owner, Slot slot, String from, String to) {
+    /**
+     * 这个人"我的"里的某一条改了名(id 就是名字):他绑的这一条——不管绑在谁创建的同伴身上——改指新的 id。
+     * 别人绑的同名条目是别人库里的,不动。
+     */
+    public static void rebind(UUID by, Slot slot, EntryId from, EntryId to) {
+        Bound was = new Bound(by, from);
         for (Entry entry : LOOPS.values()) {
-            if (entry.owner.equals(owner) && from.equals(entry.loop.bound(slot))) {
-                entry.loop.bind(slot, to);
-            }
+            entry.loop.repoint(slot, was, to);
         }
     }
 

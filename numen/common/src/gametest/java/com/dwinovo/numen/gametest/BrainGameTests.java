@@ -15,6 +15,7 @@ import com.dwinovo.numen.api.agent.provider.AssistantTurn;
 import com.dwinovo.numen.api.agent.provider.Usage;
 import com.dwinovo.numen.script.ScriptEngine;
 import com.dwinovo.numen.api.agent.tool.ScriptTool;
+import com.dwinovo.numen.api.brain.Bound;
 import com.dwinovo.numen.api.brain.CompanionBrains;
 import com.dwinovo.numen.api.brain.CompanionLoop;
 import com.dwinovo.numen.api.brain.CompanionLoops;
@@ -68,6 +69,11 @@ public class BrainGameTests {
         GameTestKit.settleWorld(level, Difficulty.PEACEFUL, GameTestKit.NOON);
     }
 
+    /** 一项绑定的值:这个人绑的这一条({@code 命名空间:名字})。 */
+    static Bound boundBy(UUID by, String entry) {
+        return new Bound(by, com.dwinovo.numen.api.library.EntryId.parse(entry));
+    }
+
     /** 按事先排好的回复答的"模型";记下每次收到的请求。{@code holding} 时回复先扣着,等 {@link #release}。 */
     static final class Scripted implements Mind {
         final Deque<ModelOutcome> replies = new ArrayDeque<>();
@@ -94,17 +100,17 @@ public class BrainGameTests {
         }
 
         @Override
-        public Cause unavailable(String provider) {
+        public Cause unavailable(Bound provider) {
             return null;
         }
 
         @Override
-        public LlmEndpoint endpoint(String provider) {
+        public LlmEndpoint endpoint(Bound provider) {
             return LlmEndpoint.unresolved("");
         }
 
         @Override
-        public void ask(String provider, UUID companion, ModelRequest request, CancelToken cancel,
+        public void ask(Bound provider, UUID companion, ModelRequest request, CancelToken cancel,
                         Consumer<ModelPort.Delta> onDelta, Consumer<ModelOutcome> onDone) {
             asked.add(request);
             ModelOutcome reply = replies.poll();
@@ -1022,13 +1028,15 @@ public class BrainGameTests {
                 var applied = com.dwinovo.numen.api.brain.OwnerInputs.apply(server, owner.getUUID(),
                         new com.dwinovo.numen.api.brain.OwnerInput.Bind(born.getUUID(), slots[i], entries[i]));
                 helper.assertTrue(applied.problem() == null, slots[i] + " was refused: " + applied.problem());
-                helper.assertTrue(entries[i].equals(brain.get().bound(slots[i])), slots[i] + " not bound");
+                helper.assertTrue(boundBy(owner.getUUID(), entries[i]).equals(brain.get().bound(slots[i])),
+                        slots[i] + " not bound by the one who bound it: " + brain.get().bound(slots[i]));
             }
             var refused = com.dwinovo.numen.api.brain.OwnerInputs.apply(server, owner.getUUID(),
                     new com.dwinovo.numen.api.brain.OwnerInput.Bind(born.getUUID(),
                             com.dwinovo.numen.api.brain.Slot.VOICE, "my:nowhere"));
             helper.assertTrue(refused.problem() != null, "an entry that is not in the library was bound");
-            helper.assertTrue(voiceId.toString().equals(brain.get().bound(com.dwinovo.numen.api.brain.Slot.VOICE)),
+            helper.assertTrue(boundBy(owner.getUUID(), voiceId.toString())
+                            .equals(brain.get().bound(com.dwinovo.numen.api.brain.Slot.VOICE)),
                     "a refused bind changed her voice");
 
             com.dwinovo.numen.api.entity.Companions.dismiss(server, owner.getUUID(), List.of(born.getUUID()));
@@ -1074,7 +1082,8 @@ public class BrainGameTests {
         var brain = CompanionLoops.get(born.getUUID());
         helper.assertTrue(brain.isPresent(), "she has no server brain");
         entries.forEach((slot, entry) ->
-                helper.assertTrue(entry.equals(brain.get().bound(slot)), slot + " was not bound as she arrived"));
+                helper.assertTrue(boundBy(owner.getUUID(), entry).equals(brain.get().bound(slot)),
+                        slot + " was not bound as she arrived"));
         helper.assertTrue(born.isCreative(), "she did not arrive in the mode picked on the card");
 
         com.dwinovo.numen.api.entity.Companions.dismiss(server, owner.getUUID(), List.of(born.getUUID()));
@@ -1117,7 +1126,7 @@ public class BrainGameTests {
         UUID owner = her.companion.getOwnerUuid();
         var library = com.dwinovo.numen.api.brain.PersonaLibraries.of(server, owner);
         var old = library.create("gametest_old_name", "文本");
-        her.loop.bind(com.dwinovo.numen.api.brain.Slot.PERSONA, old.id());
+        her.loop.bind(com.dwinovo.numen.api.brain.Slot.PERSONA, boundBy(owner, old.id()));
 
         JsonObject body = new JsonObject();
         body.addProperty("id", old.id());
@@ -1127,7 +1136,8 @@ public class BrainGameTests {
                 com.dwinovo.numen.api.brain.Libraries.PERSONA, com.dwinovo.numen.api.brain.Libraries.PUT, body);
 
         helper.assertTrue(result.problem() == null, "the rename was refused: " + result.problem());
-        helper.assertTrue("my:gametest_new_name".equals(her.loop.bound(com.dwinovo.numen.api.brain.Slot.PERSONA)),
+        helper.assertTrue(boundBy(owner, "my:gametest_new_name")
+                        .equals(her.loop.bound(com.dwinovo.numen.api.brain.Slot.PERSONA)),
                 "she still points at " + her.loop.bound(com.dwinovo.numen.api.brain.Slot.PERSONA));
         library.remove("my:gametest_new_name");
         her.close();

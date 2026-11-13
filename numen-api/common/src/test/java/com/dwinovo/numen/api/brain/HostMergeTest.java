@@ -2,7 +2,6 @@ package com.dwinovo.numen.api.brain;
 
 import com.dwinovo.numen.api.library.EntryId;
 import com.dwinovo.numen.api.library.LibraryKind;
-import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -10,7 +9,10 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -116,20 +118,37 @@ class HostMergeTest {
         assertTrue(HostMerge.keys(host().resolve("keys"), server().resolve("keys")).isEmpty(), "再来一次没有什么可搬的");
     }
 
+    /**
+     * 改了名的是房主"我的"里的条目,所以改指的是<b>房主绑的</b>那些绑定:他自己的同伴(只有 id 的旧值算创建者绑的)和别人创建、
+     * 他绑了这一条的同伴;别人绑的同名条目指的是服务器目录里原有的那一条,不动。
+     */
     @Test
-    void herBindingFollowsTheRenamedEntry() throws IOException {
-        Path binding = dir.resolve("companion").resolve("binding.json");
-        put(binding, "{\"persona\":\"numen:小焰\",\"voice\":\"my:派蒙\"}");
-        Path other = dir.resolve("other").resolve("binding.json");
-        put(other, "{\"persona\":\"my:甲\"}");
+    void whatTheHostBoundFollowsTheRenamedEntryWhoeverCreatedHer() throws IOException {
+        UUID host = UUID.randomUUID();
+        UUID guest = UUID.randomUUID();
+        EntryId old = new EntryId("numen", "小焰");
+        Path hers = dir.resolve("hers").resolve("binding.json");
+        put(hers, "{\"persona\":\"numen:小焰\",\"voice\":\"my:派蒙\"}");
+        Path shared = dir.resolve("shared").resolve("binding.json");
+        put(shared, "{\"persona\":" + new Bound(host, old).toJson() + "}");
+        Path guests = dir.resolve("guests").resolve("binding.json");
+        put(guests, "{\"persona\":\"numen:小焰\"}");
+        Map<Path, UUID> creators = new LinkedHashMap<>();
+        creators.put(hers, host);
+        creators.put(shared, guest);
+        creators.put(guests, guest);
+        creators.put(dir.resolve("none.json"), host);
 
-        int changed = HostMerge.rebind(List.of(binding, other, dir.resolve("none.json")), List.of(
-                new HostMerge.Renamed(PERSONA, new EntryId("numen", "小焰"), new EntryId("numen", "小焰_2"))));
+        int changed = HostMerge.rebind(creators, host, List.of(
+                new HostMerge.Renamed(PERSONA, old, new EntryId("numen", "小焰_2"))));
 
-        JsonObject now = JsonParser.parseString(Files.readString(binding)).getAsJsonObject();
-        assertEquals(1, changed);
-        assertEquals("numen:小焰_2", now.get("persona").getAsString());
-        assertEquals("my:派蒙", now.get("voice").getAsString(), "别的项不动");
-        assertTrue(Files.readString(other).contains("my:甲"));
+        assertEquals(2, changed);
+        Bindings now = Bindings.read(JsonParser.parseString(Files.readString(hers)).getAsJsonObject(), guest);
+        assertEquals(new Bound(host, new EntryId("numen", "小焰_2")), now.bound(Slot.PERSONA));
+        assertEquals(new Bound(host, EntryId.mine("派蒙")), now.bound(Slot.VOICE), "别的项不动");
+        assertEquals(new Bound(host, new EntryId("numen", "小焰_2")),
+                Bindings.read(JsonParser.parseString(Files.readString(shared)).getAsJsonObject(), guest).bound(Slot.PERSONA),
+                "房主绑在别人创建的同伴身上的也跟着改指");
+        assertEquals("{\"persona\":\"numen:小焰\"}", Files.readString(guests), "别人绑的同名条目不动");
     }
 }

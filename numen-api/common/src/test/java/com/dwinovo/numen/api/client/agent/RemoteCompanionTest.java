@@ -6,14 +6,17 @@ import com.dwinovo.numen.api.agent.llm.ConvoLog;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
 import com.dwinovo.numen.api.agent.loop.Phase;
 import com.dwinovo.numen.api.agent.provider.Usage;
+import com.dwinovo.numen.api.brain.Bound;
 import com.dwinovo.numen.api.brain.CompanionState;
 import com.dwinovo.numen.api.brain.Feed;
 import com.dwinovo.numen.api.brain.OwnerInput;
 import com.dwinovo.numen.api.brain.Slot;
+import com.dwinovo.numen.api.library.EntryId;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -24,6 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RemoteCompanionTest {
 
     private static final UUID HER = UUID.randomUUID();
+    private static final UUID ME = UUID.randomUUID();
+    private static final UUID FRIEND = UUID.randomUUID();
 
     private final List<OwnerInput> sent = new ArrayList<>();
     private final List<Feed> heard = new ArrayList<>();
@@ -33,8 +38,10 @@ class RemoteCompanionTest {
     private static CompanionState state(Phase phase, String compactProblem, List<String> outstanding) {
         return new CompanionState(phase, null, null, false, null, 0.0,
                 List.of(new EventQueue.Preview("p1", "query", "<query>去挖矿</query>")), compactProblem, null, null,
-                1500, new Usage(1, 2, 3, 4), new Usage(5, 6, 7, 8), 900, 2, 33, 64000, "小焰", "prov1", null, null, "G",
-                outstanding, 12);
+                1500, new Usage(1, 2, 3, 4), new Usage(5, 6, 7, 8), 900, 2, 33, 64000,
+                Map.of(Slot.PERSONA, new CompanionState.Binding(new Bound(ME, EntryId.mine("小焰")), "我"),
+                        Slot.PROVIDER, new CompanionState.Binding(new Bound(FRIEND, EntryId.mine("prov1")), "小柚")),
+                null, "G", outstanding, 12);
     }
 
     @Test
@@ -69,8 +76,12 @@ class RemoteCompanionTest {
         assertEquals(900, her.wastedTokens());
         assertEquals(33, her.contextPercent());
         assertEquals(64000, her.modelWindow());
-        assertEquals("小焰", her.personaName(), "人设的名字就是它的 id");
-        assertEquals("prov1", her.providerEntryId());
+        assertEquals("my:小焰", her.personaName(), "人设的名字就是它的 id");
+        assertEquals("my:prov1", her.providerEntryId());
+        assertEquals(FRIEND, her.binding(Slot.PROVIDER).bound().by(), "档案是另一位主人绑的");
+        assertEquals("小柚", her.binding(Slot.PROVIDER).byName());
+        assertNull(her.binding(Slot.VOICE), "没绑声线");
+        assertNull(her.voiceId());
         assertEquals("G", her.conversation());
         assertTrue(her.isToolCallOutstanding("call_1"));
         assertTrue(!her.isToolCallOutstanding("call_9"), "不在服务端手里的调用是被切断的");

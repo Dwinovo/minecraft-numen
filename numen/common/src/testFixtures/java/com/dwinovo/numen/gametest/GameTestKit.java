@@ -315,17 +315,17 @@ public final class GameTestKit {
     /** 不思考的脑:GameTest 造的同伴只要一个收事件的收件箱,主人不在线,她待命,事件原样攒着;真被叫去想是用例写错了。 */
     private static final com.dwinovo.numen.api.brain.Mind SILENT = new com.dwinovo.numen.api.brain.Mind() {
         @Override
-        public com.dwinovo.numen.api.agent.loop.Cause unavailable(String provider) {
+        public com.dwinovo.numen.api.agent.loop.Cause unavailable(com.dwinovo.numen.api.brain.Bound provider) {
             return com.dwinovo.numen.api.agent.loop.Cause.of(com.dwinovo.numen.api.agent.loop.Cause.NO_KEY, "gametest");
         }
 
         @Override
-        public com.dwinovo.numen.api.agent.llm.LlmEndpoint endpoint(String provider) {
+        public com.dwinovo.numen.api.agent.llm.LlmEndpoint endpoint(com.dwinovo.numen.api.brain.Bound provider) {
             return com.dwinovo.numen.api.agent.llm.LlmEndpoint.unresolved("");
         }
 
         @Override
-        public void ask(String provider, UUID companion, com.dwinovo.numen.api.agent.loop.ModelRequest request,
+        public void ask(com.dwinovo.numen.api.brain.Bound provider, UUID companion, com.dwinovo.numen.api.agent.loop.ModelRequest request,
                         com.dwinovo.numen.api.agent.http.CancelToken cancel,
                         java.util.function.Consumer<com.dwinovo.numen.api.agent.loop.ModelPort.Delta> onDelta,
                         java.util.function.Consumer<com.dwinovo.numen.api.agent.loop.ModelOutcome> onDone) {
