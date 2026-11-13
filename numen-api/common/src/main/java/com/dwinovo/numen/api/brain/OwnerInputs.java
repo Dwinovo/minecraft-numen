@@ -135,7 +135,9 @@ public final class OwnerInputs {
                     brain.setGoal(GoalState.of(goal.objective(), System.currentTimeMillis()), goal.echo()));
             case OwnerInput.ClearGoal goal -> loop(server, owner, goal.companion(), brain -> brain.clearGoal(null));
             case OwnerInput.Bind bind -> {
-                if (!owns(server, owner, bind.companion())) {
+                // 她的主人都能改她的绑定;绑上的条目在动手的这个人的库里解析,记着是他绑的
+                CompanionRegistry.Entry her = CompanionRegistry.get(server).find(bind.companion());
+                if (her == null || !her.usableBy(owner)) {
                     yield Applied.refused("not your companion");
                 }
                 String problem = CompanionBinding.apply(server, owner, bind.companion(), bind.slot(), bind.entry());
