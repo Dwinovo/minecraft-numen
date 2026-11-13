@@ -8,6 +8,7 @@ import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.permission.ConsentDesk;
 import com.dwinovo.numen.api.sdk.EntityLabel;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -20,7 +21,8 @@ import java.util.UUID;
  *
  * <p>表本身只存在名册里({@link CompanionRegistry#share}、{@link CompanionRegistry#unshare}),这里在改完之后把后果收齐:
  * 重算她的出勤(多了一位在场的主人她就该在线,少了最后一位在场的就收拾、登出)、把新名册推给多了或少了她的那一位、
- * 给她一条事件(多了哪位主人、少了哪位)、他的会话与聊天栏里相应收拾、她挂着的征询在他那边补上或收起,并告诉当事的人。
+ * 给她一条事件(多了哪位主人、少了哪位)、被移出的人绑的那几项退回未绑定({@link CompanionBinding#releaseBoundBy})并告诉还在的主人、
+ * 他的会话与聊天栏里相应收拾、她挂着的征询在他那边补上或收起,并告诉当事的人。
  *
  * <p>线程:服务端主线程。
  */
@@ -91,6 +93,8 @@ public final class Sharing {
         if (!registry.unshare(companion, person)) {
             return Outcome.UNCHANGED;
         }
+        // 他绑的那几项退回未绑定:她不该再用他的库、他的 key、记他的账
+        List<Slot> released = CompanionBinding.releaseBoundBy(server, companion, person);
         // 她若还站在他的场面里(最后一句是他说的),先退出来:之后她的回话、她在哪个会话里都不再指向他
         CompanionLoops.get(companion).ifPresent(loop -> loop.keeperLeft(person));
         CompanionLoops.voicePlaying(companion, person, false);
@@ -103,6 +107,7 @@ public final class Sharing {
         Companions.reconcileCompanion(server, companion);
         tellHer(server, companion, shown(server, person) + " is no longer one of your owners: " + (left
                 ? "they gave you back." : shown(server, by) + " stopped sharing you with them."));
+        tellReleased(server, registry.find(companion), person, released);
         Conversations.of(server, person).withdrawn(companion, entry.name());
         Replies.conversations(server, person);
         ChatRoutes.refresh(server, person);
@@ -123,6 +128,25 @@ public final class Sharing {
         return CompanionRegistry.get(server).usableBy(person).stream()
                 .filter(e -> e.getValue().owner().equals(person) == created && e.getValue().name().equalsIgnoreCase(name))
                 .map(java.util.Map.Entry::getKey).toList();
+    }
+
+    /** 少了哪几项绑定、因为谁不再是主人,告诉还在游戏里的每位主人:没绑档案她就发不了请求,得有人给她重新绑。 */
+    private static void tellReleased(MinecraftServer server, CompanionRegistry.Entry entry, UUID person,
+                                     List<Slot> released) {
+        if (released.isEmpty()) {
+            return;
+        }
+        MutableComponent slots = Component.empty();
+        for (Slot slot : released) {
+            slots.append(slots.getSiblings().isEmpty() ? "" : ", ").append(Component.translatable(slot.label()));
+        }
+        for (UUID keeper : entry.keepers()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(keeper);
+            if (player != null) {
+                player.sendSystemMessage(Component.translatable(Keys.NOTICE_BINDINGS_RELEASED,
+                        NumenPlayer.playerName(server, person), entry.name(), slots));
+            }
+        }
     }
 
     /** 关系变了要让她知道:进她的收件箱,捎带投递(她不在世界里也收得到)。 */

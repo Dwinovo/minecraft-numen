@@ -520,6 +520,7 @@ public final class ModLanguageData {
         public static final String NOTICE_SHARED_WITH_YOU   = "numen.notice.shared_with_you";
         public static final String NOTICE_UNSHARED_FROM_YOU = "numen.notice.unshared_from_you";
         public static final String NOTICE_KEEPER_LEFT       = "numen.notice.keeper_left";
+        public static final String NOTICE_BINDINGS_RELEASED = "numen.notice.bindings_released";
         public static final String COMMAND_BOUND          = "numen.command.bound";
         public static final String COMMAND_UNBOUND        = "numen.command.unbound";
         public static final String COMMAND_BIND_FAILED    = "numen.command.bind_failed";
@@ -1276,6 +1277,7 @@ public final class ModLanguageData {
         adder.add(Keys.NOTICE_SHARED_WITH_YOU,   "[Numen] %1$s shared the companion %2$s with you: talk to her like your own. /numen player leave %2$s gives her back");
         adder.add(Keys.NOTICE_UNSHARED_FROM_YOU, "[Numen] %1$s no longer shares the companion %2$s with you");
         adder.add(Keys.NOTICE_KEEPER_LEFT,       "[Numen] %1$s gave the companion %2$s back");
+        adder.add(Keys.NOTICE_BINDINGS_RELEASED, "[Numen] %1$s is no longer an owner of %2$s, so what they had set on her is now unset: %3$s");
         adder.add(Keys.COMMAND_BOUND,          "%1$s now uses the %2$s %3$s");
         adder.add(Keys.COMMAND_UNBOUND,        "%1$s no longer has a %2$s");
         adder.add(Keys.COMMAND_BIND_FAILED,    "That did not work: %s");
@@ -2062,6 +2064,7 @@ public final class ModLanguageData {
         adder.add(Keys.NOTICE_SHARED_WITH_YOU,   "[Numen] %1$s 把同伴 %2$s 分享给了你:像对自己的同伴一样跟她说话就行。不想要可以 /numen player leave %2$s");
         adder.add(Keys.NOTICE_UNSHARED_FROM_YOU, "[Numen] %1$s 不再把同伴 %2$s 分享给你");
         adder.add(Keys.NOTICE_KEEPER_LEFT,       "[Numen] %1$s 退出了同伴 %2$s");
+        adder.add(Keys.NOTICE_BINDINGS_RELEASED, "[Numen] %1$s 不再是 %2$s 的主人,他给她绑的这几项退回了未绑定:%3$s");
         adder.add(Keys.COMMAND_BOUND,          "%1$s 的%2$s换成了 %3$s");
         adder.add(Keys.COMMAND_UNBOUND,        "%1$s 不再绑定%2$s了");
         adder.add(Keys.COMMAND_BIND_FAILED,    "没办成:%s");
