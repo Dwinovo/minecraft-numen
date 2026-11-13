@@ -26,7 +26,7 @@ public final class ConversationPreview {
     /** 一行:显示文本(多人会话里带说话人),和它的时间戳。 */
     public record Line(String text, long ts) {}
 
-    /** {@code saidAt} = 她们每句可见的话的时间戳,升序;数未读只比大小,不每帧重新解析。 */
+    /** {@code saidAt} = 别人(她们、她的另一位主人)每句可见的话的时间戳,升序;数未读只比大小,不每帧重新解析。 */
     private record Cached(int lines, Line line, List<Long> saidAt) {}
 
     private static final Map<String, Cached> CACHE = new HashMap<>();
@@ -38,7 +38,7 @@ public final class ConversationPreview {
         return cached(c).line();
     }
 
-    /** {@code since} 之后她们说了几句(主人自己的话不算未读)。 */
+    /** {@code since} 之后别人说了几句——她们,和她的另一位主人(本机玩家自己的话不算未读)。 */
     public static int unread(Conversation c, long since) {
         int n = 0;
         for (long ts : cached(c).saidAt()) {
@@ -56,12 +56,22 @@ public final class ConversationPreview {
         if (hit != null && hit.lines() == total) {
             return hit;
         }
-        boolean group = convos.soloOf(c) == null;
+        UUID her = convos.soloOf(c);
+        UUID me = RemoteCompanions.viewer();
+        // 说话的不止她和我:群,或者她不止一位主人——最后一句得标是谁说的
+        boolean group = her == null || NumenRoster.instance().severalKeepers(her);
         Line out = null;
         List<Long> saidAt = new java.util.ArrayList<>();
         for (Transcript.Entry e : merged) {
-            if (e.ts() > 0 && e.msg() instanceof ConvoState.Msg.Assistant a
+            if (e.ts() <= 0) {
+                continue;
+            }
+            if (e.msg() instanceof ConvoState.Msg.Assistant a
                     && !ChatDisplayModes.current().assistantText(a.turn().content()).isBlank()) {
+                saidAt.add(e.ts());
+            } else if (e.msg() instanceof ConvoState.Msg.User u
+                    && NumenRoster.instance().otherSpeaker(e.companion(), u.content(), me) != null
+                    && !ChatDisplayModes.current().userText(u.content()).isBlank()) {
                 saidAt.add(e.ts());
             }
         }
@@ -71,7 +81,9 @@ public final class ConversationPreview {
                 String t = flat(com.dwinovo.numen.api.agent.conversation.Quote.parse(
                         ChatDisplayModes.current().userText(u.content())).body());   // 引的那句不进预览
                 if (!t.isEmpty()) {
-                    out = new Line(I18n.get(ModLanguageData.Keys.RAIL_YOU) + ": " + t, e.ts());
+                    var other = NumenRoster.instance().otherSpeaker(e.companion(), u.content(), me);
+                    out = new Line((other == null ? I18n.get(ModLanguageData.Keys.RAIL_YOU) : other.shown()) + ": " + t,
+                            e.ts());
                 }
             } else if (e.msg() instanceof ConvoState.Msg.Assistant a) {
                 String t = flat(ChatDisplayModes.current().assistantText(a.turn().content()));

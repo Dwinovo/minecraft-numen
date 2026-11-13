@@ -1701,7 +1701,7 @@ public final class NumenScreen extends Screen {
     }
 
     private void openMessageMenu(com.dwinovo.numen.api.client.screen.chat.ChatView.Picked p, double mx, double my) {
-        String who = p.who() == null ? Minecraft.getInstance().getUser().getName() : nameFor(p.who());
+        String who = p.name();
         java.util.List<PopupMenu.Item> items = new java.util.ArrayList<>();
         items.add(new PopupMenu.Item(com.dwinovo.numen.api.client.ui.mc.Sprites.COPY, I18n.get("numen.menu.copy"), false,
                 () -> Minecraft.getInstance().keyboardHandler.setClipboard(p.text())));

@@ -25,8 +25,10 @@ import com.dwinovo.numen.api.client.ui.NumenStyle;
 import com.dwinovo.numen.api.client.ui.markdown.Markdown;
 import com.dwinovo.numen.api.client.ui.richtext.Doc;
 import com.dwinovo.numen.api.client.ui.richtext.RichLayout;
+import com.dwinovo.numen.api.entity.Keeper;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.PlayerFaceRenderer;
 import com.dwinovo.numen.api.client.skin.CompanionFace;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
@@ -263,7 +265,10 @@ public final class ChatView {
     /** 这一帧画出来的脸(气泡旁、工具行旁):点哪张开哪只的资料页(Telegram 点消息头像看资料)。 */
     private record Face(UUID who, int x, int y) {}
     private final List<Face> faces = new ArrayList<>();
-    /** 这一帧画的是不是群:只有群里画别人的脸和名字(Telegram 私聊两边都不画)。 */
+    /**
+     * 这一帧画的是不是群:只有群里画别人的脸和名字(Telegram 私聊两边都不画)。就他俩的会话里她不止一位主人也算——
+     * 说话的不止本机这一位,每句得认得出是谁的。
+     */
     private boolean group;
     private int hoverX = -1, hoverY = -1;
     /** 每条记录第一次被看见的时刻(与归并后的记录同序);0 = 打开时就有的历史,不飞入。 */
@@ -368,7 +373,7 @@ public final class ChatView {
 
     public void render(GuiGraphics g, int x, int y, int w, int h, int mouseX, int mouseY) {
         loadPalette();
-        group = solo() == null;
+        group = solo() == null || NumenRoster.instance().severalKeepers(solo());
         hoverX = mouseX;
         hoverY = mouseY;
         faces.clear();
@@ -595,14 +600,16 @@ public final class ChatView {
     /** One spoken message. {@code label} non-null = companion side (name above the bubble);
      *  {@code runEnd} = 这一块是这个人连发的最后一块(群里脸贴它旁边,气泡带尾巴);
      *  {@code who} = the companion whose face goes on it (null on the owner's side);
+     *  {@code by} 非空 = 这句是她的另一位主人说的,是他的名字——这时 {@code who} 是那位玩家,气泡和她的话一样画在左边、
+     *  按人标名字和脸(脸是玩家的皮肤,不是同伴,点不开资料页);
      *  {@code time} = 时间戳贴在气泡右下角(Telegram),放得进最后一行右侧就 {@code timeInline},
      *  放不进单独占一小行;{@code entry} = 归并后的记录序号,新来的按它飞入(-1 = 不飞)。 */
     private record Bubble(boolean own, String label, RichLayout.Laid text, int ink,
                           int maxLineW, int fill,
                           boolean runEnd, UUID who, String time, boolean timeInline, int entry,
-                          String raw, Quote quote) implements Block {
+                          String raw, Quote quote, String by) implements Block {
         Bubble withRunEnd(boolean on) {
-            return new Bubble(own, label, text, ink, maxLineW, fill, on, who, time, timeInline, entry, raw, quote);
+            return new Bubble(own, label, text, ink, maxLineW, fill, on, who, time, timeInline, entry, raw, quote, by);
         }
 
         int rows() {
@@ -656,8 +663,14 @@ public final class ChatView {
     private static final int FLASH_MS = 1200;
     private final List<Hit> hits = new ArrayList<>();
 
-    /** 右键点中的那句:谁说的(主人自己是 null)、原文(引用条不算在内)。 */
-    public record Picked(UUID who, String text) {}
+    /** 右键点中的那句:哪只同伴说的(人说的——本机的玩家、她的另一位主人——是 null)、说的人的名字、原文(引用条不算在内)。 */
+    public record Picked(UUID who, String name, String text) {}
+
+    /** 这个气泡是谁说的,给人读的名字:本机的玩家、她的另一位主人、或那只同伴。 */
+    private static String saidBy(Bubble b) {
+        return b.own() ? net.minecraft.client.Minecraft.getInstance().getUser().getName()
+                : b.by() != null ? b.by() : speaker(b.who());
+    }
 
     /** 主人在这个会话里上一句说的话(引的那句不算);没说过是 null。 */
     public String lastOwnText() {
@@ -694,7 +707,7 @@ public final class ChatView {
         if (mx < gx || mx >= gx + gw || my < gy || my >= gy + gh) return null;
         for (Hit h : hits) {
             if (h.b().raw() != null && mx >= h.x() && mx < h.x() + h.w() && my >= h.y() && my < h.y() + h.h()) {
-                return new Picked(h.b().own() ? null : h.b().who(), h.b().raw());
+                return new Picked(h.b().own() || h.b().by() != null ? null : h.b().who(), saidBy(h.b()), h.b().raw());
             }
         }
         return null;
@@ -804,9 +817,8 @@ public final class ChatView {
         String head = q.snippet().endsWith("…") ? q.snippet().substring(0, q.snippet().length() - 1) : q.snippet();
         for (int j = Math.min(from, blocks.size()) - 1; j >= 0; j--) {
             if (!(blocks.get(j) instanceof Bubble bb) || bb.raw() == null) continue;
-            String speaker = bb.own() ? net.minecraft.client.Minecraft.getInstance().getUser().getName() : speaker(bb.who());
             String flat = bb.raw().replace('\r', ' ').replace('\n', ' ').strip();
-            if (!q.who().equals(speaker) || !flat.startsWith(head)) continue;
+            if (!q.who().equals(saidBy(bb)) || !flat.startsWith(head)) continue;
             int y = TOP_PAD;
             for (int k = 0; k < j; k++) y += heightOf(blocks.get(k)) + gapAfter(blocks, k);
             scrollTarget = Math.clamp(y - gh / 3, 0, lastMaxScroll);
@@ -953,18 +965,25 @@ public final class ChatView {
                         notice(out, I18n.get(com.dwinovo.numen.api.data.ModLanguageData.Keys.CHAT_SCHEDULED), bubbleMaxW);   // 主人定的定时到点说的,不是他此刻开的口
                         f.last = null;
                     }
-                    String speaker = ConvoLog.speaker(u.content());
-                    var me = net.minecraft.client.Minecraft.getInstance().player;
-                    if (speaker != null && (me == null
-                            || !speaker.startsWith(com.dwinovo.numen.api.sdk.EntityLabel.shown(me.getUUID(), null)))) {
-                        notice(out, speaker, bubbleMaxW);   // 她的另一位主人说的,不是本机的玩家
-                        f.last = null;
-                    }
                     Quote q = Quote.parse(shown);   // 引用回复:第一行画成气泡顶上的引用条
-                    out.add(bubble(true, null, rich(q.body(), true), TXT,
-                            OWN_FILL, innerW, null,
-                            clock(entry.ts()), msgIndex, q.body(), q.quoted() ? q : null));
-                    f.last = OWNER;
+                    Keeper other = otherOwner(entry.companion(), u.content());
+                    if (other == null) {
+                        out.add(bubble(true, null, rich(q.body(), true), TXT,
+                                OWN_FILL, innerW, null,
+                                clock(entry.ts()), msgIndex, q.body(), q.quoted() ? q : null, null));
+                        f.last = OWNER;
+                    } else {
+                        if (!f.unreadPlaced && entry.ts() > unreadSince) {
+                            out.add(new UnreadBar());   // 打开时还没看过的第一句:别人说的都算
+                            f.unreadPlaced = true;
+                            f.last = null;
+                        }
+                        // 她的另一位主人说的:和群里别人的话一样在左边,连发的第一块上标他的名字
+                        out.add(bubble(false, other.uuid().equals(f.last) ? null : other.shown(), rich(q.body(), true), TXT,
+                                AI_FILL, innerW, other.uuid(),
+                                clock(entry.ts()), msgIndex, q.body(), q.quoted() ? q : null, other.shown()));
+                        f.last = other.uuid();
+                    }
                 }
                 case ConvoState.Msg.Assistant a -> {
                     UUID who = entry.companion();
@@ -987,7 +1006,7 @@ public final class ChatView {
                         boolean first = !who.equals(f.last);
                         out.add(bubble(false, first ? label(who) : null,
                                 rich(spoken, false), TXT, AI_FILL, innerW, who,
-                                clock(entry.ts()), msgIndex, spoken, null));
+                                clock(entry.ts()), msgIndex, spoken, null, null));
                         f.last = who;
                     }
                     for (LlmToolCall tc : turn.toolCalls()) {
@@ -1014,7 +1033,8 @@ public final class ChatView {
         // 在飞的状态按成员各自的循环取:单成员就是她一个,多人各画各的。
         // 只画她此刻所在的会话里的:她在群里想着,私聊页不该也看见——和落库的行同一条印的规矩。
         String tag = Conversations.instance().tagOf(conv.get());
-        java.util.Set<String> queued = new java.util.LinkedHashSet<>();
+        // 排着的话,连同是不是她的另一位主人说的(本机的玩家说的、整理与清空是 null)
+        Map<String, Keeper> queued = new java.util.LinkedHashMap<>();
         boolean compacting = false;
         for (UUID her : Conversations.instance().membersAlive(conv.get())) {
             RemoteCompanion lp = RemoteCompanions.get(her).orElse(null);
@@ -1031,17 +1051,17 @@ public final class ChatView {
                 // 光标是接在解析完的正文后面的一小段字:没写完的 Markdown 记号照字面显示,写完才变样式
                 Doc typing = l.caret ? rich(l.shown, false).withTail("_") : rich(l.shown, false);
                 out.add(bubble(false, first ? label(her) : null, typing, TXT,
-                        AI_FILL, innerW, her, null, -1, l.shown, null));
+                        AI_FILL, innerW, her, null, -1, l.shown, null, null));
                 f.last = her;
             }
             // 排着的话:主人一句话复制进每个醒着的成员的队列,按原文去重,画一次
             var status = lp.status();
             for (var preview : status.queuedPreview()) {
                 // 整理、清空排着时,条目的字是语言键(整理后面可跟主人附的关注点):键按主人的语言翻;主人的话取 <query> 里的原话
-                String shown = com.dwinovo.numen.api.agent.inbox.EventTypes.COMPACT.equals(preview.type())
-                        || com.dwinovo.numen.api.agent.inbox.EventTypes.CLEAR.equals(preview.type())
-                        ? controlShown(preview.text()) : ownerText(preview.text());
-                if (!shown.isEmpty()) queued.add(shown);
+                boolean control = com.dwinovo.numen.api.agent.inbox.EventTypes.COMPACT.equals(preview.type())
+                        || com.dwinovo.numen.api.agent.inbox.EventTypes.CLEAR.equals(preview.type());
+                String shown = control ? controlShown(preview.text()) : ownerText(preview.text());
+                if (!shown.isEmpty()) queued.putIfAbsent(shown, control ? null : otherOwner(her, preview.text()));
             }
             compacting |= status.phase() == com.dwinovo.numen.api.agent.loop.Phase.COMPACT;
         }
@@ -1052,11 +1072,18 @@ public final class ChatView {
         }
         // Prompts still waiting for a protocol-valid splice point — visible immediately
         // so a queued message never feels swallowed.
-        for (String shown : queued) {
-            String body = Quote.parse(shown).body();
-            out.add(bubble(true, null, Doc.plain("⌛ " + body), FAINT, QUEUED_FILL,
-                    innerW, null, null, -1, body, null));
-            f.last = OWNER;
+        for (Map.Entry<String, Keeper> waiting : queued.entrySet()) {
+            String body = Quote.parse(waiting.getKey()).body();
+            Keeper other = waiting.getValue();
+            if (other == null) {
+                out.add(bubble(true, null, Doc.plain("⌛ " + body), FAINT, QUEUED_FILL,
+                        innerW, null, null, -1, body, null, null));
+                f.last = OWNER;
+            } else {
+                out.add(bubble(false, other.uuid().equals(f.last) ? null : other.shown(), Doc.plain("⌛ " + body), FAINT,
+                        QUEUED_FILL, innerW, other.uuid(), null, -1, body, null, other.shown()));
+                f.last = other.uuid();
+            }
         }
         if (compacting) notice(out, I18n.get("numen.chat.compacting"), bubbleMaxW);
         if (out.isEmpty()) {
@@ -1116,9 +1143,18 @@ public final class ChatView {
         };
     }
 
+    /**
+     * 这句主人的话若是她的另一位主人说的,是那一位;本机的玩家说的是 {@code null}(见 {@link NumenRoster#otherSpeaker})。
+     *
+     * @param companion 这句话出自哪只的日志:说话人在她的主人表里认
+     */
+    private static Keeper otherOwner(UUID companion, String content) {
+        return NumenRoster.instance().otherSpeaker(companion, content, RemoteCompanions.viewer());
+    }
+
     private Bubble bubble(boolean own, String label, Doc body, int ink, int fill,
                           int innerW, UUID who, String time, int entry,
-                          String raw, Quote quote) {
+                          String raw, Quote quote, String by) {
         RichLayout.Laid text = lay(body, innerW);
         int maxW = text.width();
         if (quote != null) {
@@ -1132,7 +1168,7 @@ public final class ChatView {
             inline = text.lastEnd() + tw <= innerW;
             maxW = Math.max(maxW, inline ? text.lastEnd() + tw : tw);
         }
-        return new Bubble(own, label, text, ink, maxW, fill, false, who, time, inline, entry, raw, quote);
+        return new Bubble(own, label, text, ink, maxW, fill, false, who, time, inline, entry, raw, quote, by);
     }
 
     /**
@@ -1409,7 +1445,7 @@ public final class ChatView {
         int bx = x + EDGE + faceCol();
         int bh = consentBubbleH(c);
         int bubTop = y + (c.label() != null ? LABEL_H : 0);
-        bubbleFrame(g, false, c.label(), card.companion(), c.runEnd(), x, y, bx, c.w(), bh, AI_FILL);
+        bubbleFrame(g, false, c.label(), card.companion(), false, c.runEnd(), x, y, bx, c.w(), bh, AI_FILL);
         ConsentMessage.drawList(g, font, card, bx + PAD_H, bubTop + PAD_V, c.w() - PAD_H * 2);
         String meta = consentMeta(card);
         int metaY = c.timeInline() ? ConsentMessage.lastRowTextY(font, card, bubTop + PAD_V)
@@ -1468,7 +1504,7 @@ public final class ChatView {
         int bubTop = y + (b.label() != null ? LABEL_H : 0);
         // 自己的贴右缘(留出尾巴的宽);别人的在脸那一列右边(私聊那一列只有尾巴宽)
         int bx = b.own() ? x + w - TAIL - bw : x + EDGE + faceCol();
-        bubbleFrame(g, b.own(), b.label(), b.who(), b.runEnd(), x, y, bx, bw, bh, b.fill());
+        bubbleFrame(g, b.own(), b.label(), b.who(), b.by() != null, b.runEnd(), x, y, bx, bw, bh, b.fill());
         hits.add(new Hit(bx, bubTop, bw, bh, b, drawingIndex));
         if (b.quote() != null) {
             // 引用条(Telegram 回复的样子):一道强调色竖线、谁(强调色)、那句(和时间同一档淡字)
@@ -1495,9 +1531,10 @@ public final class ChatView {
     /**
      * 一块气泡的外形,话和清单共用:群里的名字在上(从 {@code y} 起占一行)、群里别人连发最后一块旁边贴脸
      * (和气泡齐底)、底色、连发最后一块靠脸那侧的尾巴。气泡只有底色、没有描边(Telegram):和地面分开靠色块,
-     * 不靠框线。{@code bh} 是气泡本身的高,不含名字那一行。
+     * 不靠框线。{@code bh} 是气泡本身的高,不含名字那一行。{@code person} = {@code who} 是一位玩家(她的另一位主人):
+     * 脸是他的皮肤,不是同伴的头像,也点不开资料页。
      */
-    private void bubbleFrame(GuiGraphics g, boolean own, String label, UUID who, boolean runEnd,
+    private void bubbleFrame(GuiGraphics g, boolean own, String label, UUID who, boolean person, boolean runEnd,
                              int x, int y, int bx, int bw, int bh, int fill) {
         int bubTop = y + (label != null ? LABEL_H : 0);
         if (label != null) {
@@ -1505,8 +1542,12 @@ public final class ChatView {
         }
         if (group && !own && runEnd) {
             int avX = x + EDGE, avY = bubTop + bh - AV;
-            CompanionFace.draw(g, who, KnownSkins.of(who), avX, avY, AV);
-            face(g, who, avX, avY);
+            if (person) {
+                PlayerFaceRenderer.draw(g, KnownSkins.of(who), avX, avY, AV);
+            } else {
+                CompanionFace.draw(g, who, KnownSkins.of(who), avX, avY, AV);
+                face(g, who, avX, avY);
+            }
         }
         g.fill(bx, bubTop, bx + bw, bubTop + bh, fill);
         if (runEnd) tail(g, own, own ? bx + bw : bx, bubTop + bh, fill);
@@ -1518,7 +1559,7 @@ public final class ChatView {
         int bh = checklistH(c);
         int bubTop = y + (c.label() != null ? LABEL_H : 0);
         int bx = x + EDGE + faceCol();
-        bubbleFrame(g, false, c.label(), c.who(), c.runEnd(), x, y, bx, bw, bh, AI_FILL);
+        bubbleFrame(g, false, c.label(), c.who(), false, c.runEnd(), x, y, bx, bw, bh, AI_FILL);
         int tx = bx + PAD_H;
         int ty = bubTop + PAD_V + 1;
         draw(g, Nb.colored(c.header(), MENTION).getVisualOrderText(), tx, ty);
