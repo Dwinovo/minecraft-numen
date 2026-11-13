@@ -170,6 +170,73 @@ public class ClientlessGameTests {
         });
     }
 
+    /**
+     * 创建者把她分享给一位朋友({@code /numen player share}):朋友在场她就在线(创建者走了也不登出),朋友的私聊和主人的话一样
+     * 叫得到她、标着是谁说的;只有创建者能做的事(删除、清空记忆、再分享给别人)朋友做不了;朋友退出({@code /numen player leave})后
+     * 她的主人表上无人在场,她登出。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
+    public static void a_shared_companion_serves_the_friend_and_stays_her_creators(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var server = level.getServer();
+        ServerPlayer creator = GameTestKit.presentVanillaPlayer(helper, null, "gt_sharer", "en_us");
+        ServerPlayer friend = GameTestKit.presentVanillaPlayer(helper, null, "gt_friend", "en_us");
+        NumenPlayer her = com.dwinovo.numen.api.gametest.Bodies.summon(server, creator.getUUID(), "gt_shared", level,
+                net.minecraft.world.phys.Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(8, 2, 8))));
+        java.util.UUID id = her.getUUID();
+        var registry = com.dwinovo.numen.api.entity.CompanionRegistry.get(server);
+        List<Component> heard = new ArrayList<>();
+
+        run(creator, "numen player share gt_shared gt_friend", heard);
+        helper.assertTrue(registry.find(id).usableBy(friend.getUUID()),
+                "the share command did not put him on her owners: " + heard);
+
+        GameTestKit.steps(helper)
+                .thenExecute(() -> {
+                    com.dwinovo.numen.api.platform.PlayerSessions.left(creator);   // 平台的登出事件先到,玩家后移除
+                    GameTestKit.leave(creator);
+                })
+                .thenIdle(3)
+                .thenExecute(() -> {
+                    NumenPlayer still = NumenPlayer.findByUuid(server, id);
+                    helper.assertTrue(still != null, "she logged out though the friend she is shared with is here");
+                    whisper(friend, still, "你好");
+                    var loop = com.dwinovo.numen.api.brain.CompanionLoops.get(id).orElseThrow();
+                    String from = "from=\"player@" + friend.getUUID().toString().substring(0, 6) + " (gt_friend)\"";
+                    helper.assertTrue(loop.inbox().entries().stream().anyMatch(e -> e.type().equals(EventTypes.QUERY)
+                                    && e.text().contains("你好") && e.text().contains(from))
+                                    || loop.log().loadLines(100).stream().anyMatch(line -> line.msg() instanceof
+                                    com.dwinovo.numen.api.agent.llm.ConvoState.Msg.User u && u.content().contains("你好")
+                                    && u.content().contains(from)),
+                            "the friend's whisper did not reach her as an owner's words naming him: "
+                                    + loop.inbox().entries());
+                    helper.assertTrue(friend.getUUID().equals(loop.speaker()), "she is not answering the friend");
+
+                    List<Component> refused = new ArrayList<>();
+                    run(friend, "numen player delete gt_shared", refused);
+                    helper.assertTrue(registry.find(id) != null
+                                    && refused.stream().anyMatch(m -> isKey(m, Keys.COMMAND_NO_SUCH_COMPANION)),
+                            "the friend could delete a companion he did not create: " + refused);
+                    helper.assertTrue(com.dwinovo.numen.api.brain.OwnerInputs.apply(server, friend.getUUID(),
+                                    new com.dwinovo.numen.api.brain.OwnerInput.Wipe(id)).problem() != null,
+                            "the friend could wipe her memory");
+                    helper.assertTrue(com.dwinovo.numen.api.brain.Sharing.share(server, friend.getUUID(), id,
+                                    java.util.UUID.randomUUID()) == com.dwinovo.numen.api.brain.Sharing.Outcome.NOT_CREATOR,
+                            "the friend could share her on");
+
+                    run(friend, "numen player leave gt_shared", refused);
+                    helper.assertTrue(!registry.find(id).usableBy(friend.getUUID()),
+                            "leaving did not take him off her owners: " + refused);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(NumenPlayer.findByUuid(server, id) == null,
+                        "she stayed in the world with none of her owners present"))
+                .thenExecute(() -> {
+                    Companions.dismiss(server, creator.getUUID(), List.of(id));
+                    GameTestKit.leave(friend);
+                })
+                .thenSucceed();
+    }
+
     // ---- 征询与动作栏 ----
 
     /** 消息里依次出现的、点下去会敲的命令。 */
