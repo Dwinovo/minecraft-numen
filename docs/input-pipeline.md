@@ -113,7 +113,7 @@ QQ、Discord ──┤  (每只一个)        └─ 外部大脑(MCP,自带 key
 
 | 大脑 | 怎么跑 | key 在哪 | 什么时候用 |
 |---|---|---|---|
-| 服务端大脑 | 服务端跑 `AgentLoop`,自己调模型 | 主人自己的钥匙串,没有再用服主提供的(受每人每天的限额,§六) | 默认;主人在游戏里时 |
+| 服务端大脑 | 服务端跑 `AgentLoop`,自己调模型 | 绑档案的那位主人自己的钥匙串,没有再用服主提供的(受每人每天的限额,§六) | 默认;主人在游戏里时 |
 | 外部大脑 | 循环停牌,外部 agent 经远程端点驾驶(§五) | 外部 agent 自己的 | 主人用自己的 Claude Code、Codex 一类 agent 指挥她;想在别人的服务器上用自己的 key,也走这条 |
 
 - **不做客户端大脑,也不做"主人客户端代调"。** 代调要把每一轮的请求反向发给客户端、流式传回,复杂、费网络,同类模组也没人这样做;
@@ -291,8 +291,9 @@ pi 有、这里不要的:文件锁(pi 防的是同一台机器上开好几个 pi
   - 插件卸载了 → 它没被改过的条目一起删,改过的留下、标"来源已卸载"。
 - **MCP 工具**:玩家只能加 HTTP 类的;stdio 类起的是服务器机器上的进程,只有管理员能加(§十)。
 - **钥匙串(key 不在条目里)**:档案、声线、MCP 条目只写"用哪个服务商",key 按服务商存在钥匙串里——服务器 `server/keys/`(服主出钱、玩家看不到)、
-  玩家 `players/<uuid>/keys/`(只有本人看得到、改得了;房主的就是服务器那一本,只有"他自己的"一份)、本机 `client/keys/`(语音,§八)。用的时候先找主人的,再找服主的;服主的受 `server.json` 里每人每天的 token 限额
-  (默认不限,服主查得到每人的用量),主人自己的不受限。所以服务器提供的条目能带"推荐的模型档案、MCP 服务器、声线",填上对应服务商的 key 就能用;jar 里永远没有 key。
+  玩家 `players/<uuid>/keys/`(只有本人看得到、改得了;房主的就是服务器那一本,只有"他自己的"一份)、本机 `client/keys/`(语音,§八)。用的时候先找绑这一项的那个人的,再找服主的;服主的受 `server.json` 里每人每天的 token 限额
+  (默认不限,服主查得到每人的用量),用量记在绑的人名下,他自己的不受限。她的主人不止一位时,每项绑定在绑它的那个人看到的库里解析、
+  用他的钥匙串、记他的账([ADR runtime 0006](adr/runtime/0006-keepers-ownership-use-provenance.md));别人绑的档案,其余主人只看得到名字,key 不下行。所以服务器提供的条目能带"推荐的模型档案、MCP 服务器、声线",填上对应服务商的 key 就能用;jar 里永远没有 key。
 - **皮肤不是库**(10-21 改,[ADR runtime 0005](adr/runtime/0005-skins-are-pngs-in-a-folder-signed-on-use.md)):皮肤就是文件夹里的 png,文件名就是皮肤名,
   每台机器一个 `config/numen/skins/`(`NumenPaths.skins()`,Paper 上是 Numen 数据根目录下的 `skins/`),玩家只往里放图。客户端列自己机器上的("我的"),服务端列服务器上的
   ("服务器提供");房主两头是同一个文件夹,只列一节。两头共用 `SkinFolder` 的列举。选皮肤卡(`SkinPickerPanel`,编辑卡的皮肤行点开)按文件名列出、带小脸,
@@ -331,15 +332,16 @@ pi 有、这里不要的:文件锁(pi 防的是同一台机器上开好几个 pi
 - **声线是一种库**(`VoiceProfile.KIND`,一条一个 `.json`),走"服务器提供 + 我的"的同一套库协议与设置页。声线条目是后端、音色、参数,
   外加 `service`(用钥匙串里哪个服务的 key,缺省是后端的标识);**不含 key**。key 在本机钥匙串 `config/numen/client/keys/`(`ClientKeys`),按声线的服务名存;
   语音识别的 key 同在这里,按识别服务商存(`stt-<服务商>`),原先放在加载器配置文件里的 `sttApiKey` 删了(旧值不迁,填一次)。客户端朗读时读她绑定的那条声线
-  (状态 `CompanionState.voiceId`,表来自库协议)加本机的 key 合成(`SpokenVoice`)。语音总开关是这台电脑的偏好(`ClientPrefs`),不跟着她走。
+  (状态 `CompanionState` 里的声线绑定,表来自库协议)加本机的 key 合成(`SpokenVoice`);绑的是别的主人"我的"里的一条,这台电脑看不到它,不念。语音总开关是这台电脑的偏好(`ClientPrefs`),不跟着她走。
 - **皮肤签名只在服务端一处**:`SkinSigning` 一条队、一个工作线程一个一个发。图片三种来源——玩家上传的图(选皮肤卡里选的"我的"一张,分片上来)、服务端按网址取的图
   (只收公网 http(s)、不跟重定向、至多 256 KiB、必须是 64×64 或 64×32 的 png)、借正版玩家的(向 Mojang 查,本来就是签好的,不经 MineSkin;缓存的键要原图的哈希,所以还要从签名数据里写的图床取到它的图)。
   拿到原图先问缓存,签过的不再联网;被 MineSkin 限流就按 `Retry-After`(没说就 30 秒)等了再发同一张,一张总共等不过 10 分钟;每人最多同时 5 张在排。签好的存进缓存(原图 + 手臂模型 + value/signature),
   之后召唤和换肤不再联网。队里的状态(排第几、在签、在等限流、失败的原因)作为皮肤表里 `pending` 的几行交给当事人;`cancel` 撤掉排着的或不再显示失败的。服务器皮肤文件夹里的图是另一张只读的表(`skin-files`,
   客户端要看时才问,不随排队的进度一起推)。MineSkin 的 API key 是服务器钥匙串里的 `mineskin`,管理员在选皮肤卡里填;代理用的是调模型的同一处(`INumenConfig.getProxy()`,现状就是服务器一个代理),
   **没有另放一份在 `server.json`**,免得一件事两个真源。`MineSkinClient`、`MojangSkinLookup` 在主源码集(`skin` 包),客户端不再有任何签名代码。
-- **绑定在她的存档**(`binding.json`:`provider`、`persona`、`voice` 三项是库条目,值是 `命名空间:名字`;`skin` 是对签名缓存的引用)。库条目改绑只有一个入口 `CompanionBinding`:条目要在主人看得到、没关掉的库里。
-  面板编辑卡发 `OwnerInput.Bind`,命令 `/numen companion <她> profile|persona|voice [<条目>]` 同走它(不写条目是不绑,档案不能不绑);库里的条目改了名,绑着它的同伴跟着改指(`CompanionLoops.rebind`)。
+- **绑定在她的存档**(`binding.json`,形状只在 `Bindings` 一处:`provider`、`persona`、`voice` 三项是库条目,值是谁绑的加 `命名空间:名字`——`{"by": 绑的人, "id": …}`,
+  只有 id 的旧值读进来算创建者绑的;`skin` 是对签名缓存的引用,不带出处)。库条目改绑只有一个入口 `CompanionBinding`:条目要在动手绑的那个人看得到、没关掉的库里,她的主人都能改。
+  面板编辑卡发 `OwnerInput.Bind`,命令 `/numen companion <她> profile|persona|voice [<条目>]` 同走它(不写条目是不绑,档案不能不绑);"我的"里的条目改了名,改名的人绑的那些绑定跟着改指(`CompanionLoops.rebind`),绑在谁创建的同伴身上都算。
   皮肤另走 `Wardrobe`:穿到身上(`Companions.applySkin`,原地重建身体)并记下穿的是缓存里的哪一张(`CompanionLoop.wearSkin`)。
 - **召唤只有一个入口** `Companions.summonFor`:召唤卡、`/numen player summon`、外部大脑的 `create_companion` 都走它。名字合 MC 规则、不撞在线的别人、每人上限(`server.json` 的 `maxCompanions`,0 = 不限)。
   召唤卡只剩名字和模式。没绑档案的她停在 `BLOCKED`,原因 `endpoint.unbound`(现有的),主人跟她说话时界面照实说"还没配模型档案"。
