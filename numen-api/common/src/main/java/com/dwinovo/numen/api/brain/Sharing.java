@@ -121,6 +121,33 @@ public final class Sharing {
         return Outcome.DONE;
     }
 
+    /** 下令的人要的是哪一种改动。 */
+    public enum Change {
+        /** 创建者加人。 */
+        SHARE,
+        /** 创建者移人。 */
+        UNSHARE,
+        /** 被分享的人自己退出。 */
+        LEAVE
+    }
+
+    /**
+     * 改表的结局说给下令的人的那句话:命令回在命令的回执里,面板的上行({@link OwnerInput.Share}、{@link OwnerInput.Unshare})回在他的聊天里,
+     * 同一句。
+     *
+     * @param companion 她的名字
+     * @param player    被加、被移的那位玩家的名字(退出时不用)
+     */
+    public static Component told(Outcome outcome, Change change, String companion, String player) {
+        boolean done = outcome == Outcome.DONE;
+        return switch (change) {
+            case SHARE -> outcome == Outcome.NOT_A_PLAYER ? Component.translatable(Keys.COMMAND_SHARE_NOT_PLAYER, player)
+                    : Component.translatable(done ? Keys.COMMAND_SHARED : Keys.COMMAND_SHARE_UNCHANGED, companion, player);
+            case UNSHARE -> Component.translatable(done ? Keys.COMMAND_UNSHARED : Keys.COMMAND_NOT_SHARED, companion, player);
+            case LEAVE -> Component.translatable(done ? Keys.COMMAND_LEFT : Keys.COMMAND_NONE_SHARED_WITH_YOU, companion);
+        };
+    }
+
     /** 这位创建者名下、或分享给这个人的(不含他自己创建的)叫这个名字的同伴,大小写不计,同名的都算。 */
     public static List<UUID> named(MinecraftServer server, UUID person, String name, boolean created) {
         return CompanionRegistry.get(server).usableBy(person).stream()

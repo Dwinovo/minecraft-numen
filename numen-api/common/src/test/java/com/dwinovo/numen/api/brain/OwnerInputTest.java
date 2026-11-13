@@ -28,6 +28,7 @@ class OwnerInputTest {
                 new OwnerInput.Bind(HER, Slot.PROVIDER, "server:prov1"), new OwnerInput.Bind(HER, Slot.PROVIDER, null),
                 new OwnerInput.Bind(HER, Slot.PERSONA, "my:小焰"), new OwnerInput.Bind(HER, Slot.VOICE, "my:派蒙"),
                 new OwnerInput.Export(HER), new OwnerInput.Wipe(HER),
+                new OwnerInput.Share(HER, "Steve"), new OwnerInput.Unshare(HER, UUID.randomUUID()),
                 new OwnerInput.Speaking(HER, true),
                 new OwnerInput.Pull("G", HER, "N"), new OwnerInput.Pull("G", HER, null),
                 new OwnerInput.Emit(HER, "query", "来一下"), new OwnerInput.Drop("G", HER), new OwnerInput.Rename("G", "挖矿队"),
@@ -45,5 +46,6 @@ class OwnerInputTest {
         assertNull(OwnerInput.fromJson(json("{\"kind\":\"compact\"}")), "缺同伴");
         assertNull(OwnerInput.fromJson(json("{\"kind\":\"compact\",\"companion\":\"not-a-uuid\"}")), "UUID 写坏了");
         assertNull(OwnerInput.fromJson(json("{\"kind\":\"speaking\",\"companion\":\"" + HER + "\"}")), "缺布尔");
+        assertNull(OwnerInput.fromJson(json("{\"kind\":\"unshare\",\"companion\":\"" + HER + "\"}")), "缺要移出的那一位");
     }
 }

@@ -388,15 +388,13 @@ public final class NumenCommands {
         for (java.util.UUID companion : hers) {
             Sharing.Outcome outcome = add ? Sharing.share(server, owner.getUUID(), companion, profile.getId())
                     : Sharing.unshare(server, owner.getUUID(), companion, profile.getId());
+            Component told = Sharing.told(outcome, add ? Sharing.Change.SHARE : Sharing.Change.UNSHARE, name,
+                    profile.getName());
             if (outcome == Sharing.Outcome.DONE) {
                 changed++;
-                ctx.getSource().sendSuccess(() -> Component.translatable(
-                        add ? Keys.COMMAND_SHARED : Keys.COMMAND_UNSHARED, name, profile.getName()), false);
-            } else if (outcome == Sharing.Outcome.NOT_A_PLAYER) {
-                ctx.getSource().sendFailure(Component.translatable(Keys.COMMAND_SHARE_NOT_PLAYER, profile.getName()));
+                ctx.getSource().sendSuccess(() -> told, false);
             } else {
-                ctx.getSource().sendFailure(Component.translatable(
-                        add ? Keys.COMMAND_SHARE_UNCHANGED : Keys.COMMAND_NOT_SHARED, name, profile.getName()));
+                ctx.getSource().sendFailure(told);
             }
         }
         return changed;
@@ -414,10 +412,10 @@ public final class NumenCommands {
             }
         }
         if (left == 0) {
-            ctx.getSource().sendFailure(Component.translatable(Keys.COMMAND_NONE_SHARED_WITH_YOU, name));
+            ctx.getSource().sendFailure(Sharing.told(Sharing.Outcome.UNCHANGED, Sharing.Change.LEAVE, name, ""));
             return 0;
         }
-        ctx.getSource().sendSuccess(() -> Component.translatable(Keys.COMMAND_LEFT, name), false);
+        ctx.getSource().sendSuccess(() -> Sharing.told(Sharing.Outcome.DONE, Sharing.Change.LEAVE, name, ""), false);
         return left;
     }
 

@@ -703,6 +703,72 @@ public class BrainGameTests {
         helper.succeed();
     }
 
+    /**
+     * 面板上的加人与退出(上行的 {@link OwnerInput.Share}、{@link OwnerInput.Unshare})和命令落在同一处:创建者按名字加一位朋友,
+     * 结局照命令的那句话回给他,表上的每一位都收到带着整张主人表的名册(创建者在前);朋友加不了人;朋友退出后创建者收到的名册上
+     * 她的主人表只剩他自己,朋友的名册上没有她了。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
+    public static void the_panel_shares_and_leaves_through_the_same_door_as_the_command(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var server = level.getServer();
+        var creator = GameTestKit.presentPlayer(helper, null, "gt_panel_owner");
+        var friend = GameTestKit.presentPlayer(helper, null, "gt_panel_pal");
+        com.dwinovo.numen.api.brain.Replies.hello(creator, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
+        com.dwinovo.numen.api.brain.Replies.hello(friend, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
+        NumenPlayer her = com.dwinovo.numen.api.gametest.Bodies.summon(server, creator.getUUID(), "gt_panel_her", level,
+                net.minecraft.world.phys.Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(8, 2, 8))));
+        UUID id = her.getUUID();
+        var registry = CompanionRegistry.get(server);
+        GameTestKit.received(creator);
+        GameTestKit.received(friend);
+        GameTestKit.said(creator);
+
+        helper.assertTrue(OwnerInputs.apply(server, friend.getUUID(), new OwnerInput.Share(id, "gt_panel_owner")).problem() != null
+                        && registry.find(id).keepers().equals(List.of(creator.getUUID())),
+                "someone who is not her creator could share her");
+        helper.assertTrue(OwnerInputs.apply(server, creator.getUUID(), new OwnerInput.Share(id, "gt_panel_pal")).problem() == null
+                        && registry.find(id).keepers().equals(List.of(creator.getUUID(), friend.getUUID())),
+                "the creator's share from the panel did not put the friend on her owners");
+        helper.assertTrue(GameTestKit.said(creator).stream().anyMatch(s -> ClientlessGameTests.isKey(s.text(),
+                        com.dwinovo.numen.api.data.ModLanguageData.Keys.COMMAND_SHARED)),
+                "the creator was not told what the command would have told him");
+        var table = List.of(new com.dwinovo.numen.api.entity.Keeper(creator.getUUID(), "gt_panel_owner"),
+                new com.dwinovo.numen.api.entity.Keeper(friend.getUUID(), "gt_panel_pal"));
+        for (var keeper : List.of(creator, friend)) {
+            helper.assertTrue(table.equals(ownersOnRoster(keeper, id)),
+                    keeper.getGameProfile().getName() + " was not sent her whole owner table, creator first");
+        }
+
+        helper.assertTrue(OwnerInputs.apply(server, friend.getUUID(), new OwnerInput.Unshare(id, friend.getUUID())).problem() == null
+                        && registry.find(id).keepers().equals(List.of(creator.getUUID())),
+                "the friend's leave from the panel did not take him off her owners");
+        helper.assertTrue(GameTestKit.said(friend).stream().anyMatch(s -> ClientlessGameTests.isKey(s.text(),
+                        com.dwinovo.numen.api.data.ModLanguageData.Keys.COMMAND_LEFT)),
+                "the friend was not told he left");
+        helper.assertTrue(table.subList(0, 1).equals(ownersOnRoster(creator, id)),
+                "the creator's roster still lists the friend who left");
+        helper.assertTrue(ownersOnRoster(friend, id) == null, "she is still on the roster of the friend who left");
+
+        com.dwinovo.numen.api.entity.Companions.dismiss(server, creator.getUUID(), List.of(id));
+        GameTestKit.leave(creator);
+        GameTestKit.leave(friend);
+        helper.succeed();
+    }
+
+    /** 这位玩家最近收到的那份名册上她的主人表;没收到名册、或名册上没有她是 {@code null}。取走他收到的包。 */
+    private static List<com.dwinovo.numen.api.entity.Keeper> ownersOnRoster(net.minecraft.server.level.ServerPlayer player,
+                                                                             UUID companion) {
+        List<com.dwinovo.numen.api.entity.Keeper> owners = null;
+        for (var payload : GameTestKit.received(player)) {
+            if (payload instanceof com.dwinovo.numen.api.network.payload.CompanionListPayload roster) {
+                owners = roster.companions().stream().filter(row -> row.uuid().equals(companion))
+                        .map(com.dwinovo.numen.api.network.payload.CompanionListPayload.Entry::keepers).findFirst().orElse(null);
+            }
+        }
+        return owners;
+    }
+
     /** 协议版本对不上的客户端不被服务:开场那包已经告诉过它服务端的版本,之后什么也不发——回答、名册、她的东西都不发。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
     public static void a_client_of_another_protocol_is_sent_nothing_more(GameTestHelper helper) throws Exception {

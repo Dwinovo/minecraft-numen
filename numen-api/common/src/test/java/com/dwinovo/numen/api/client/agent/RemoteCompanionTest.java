@@ -121,12 +121,15 @@ class RemoteCompanionTest {
         her.bind(Slot.PERSONA, "my:小焰");
         her.bind(Slot.PROVIDER, "my:prov2");
         her.bind(Slot.VOICE, null);
+        her.share("Steve");
+        her.unshare(FRIEND);
 
         assertEquals(List.of(new OwnerInput.Say(HER.toString(), "你好"), new OwnerInput.Command(HER, "/build 木屋"),
                 new OwnerInput.Compact(HER, null), new OwnerInput.Compact(HER, "坐标别丢"), new OwnerInput.Clear(HER), new OwnerInput.Stop(HER.toString()),
                 new OwnerInput.SetGoal(HER, "挖铁", "/goal 挖铁"), new OwnerInput.ClearGoal(HER),
                 new OwnerInput.Bind(HER, Slot.PERSONA, "my:小焰"), new OwnerInput.Bind(HER, Slot.PROVIDER, "my:prov2"),
-                new OwnerInput.Bind(HER, Slot.VOICE, null)), sent);
+                new OwnerInput.Bind(HER, Slot.VOICE, null), new OwnerInput.Share(HER, "Steve"),
+                new OwnerInput.Unshare(HER, FRIEND)), sent);
     }
 
     @Test

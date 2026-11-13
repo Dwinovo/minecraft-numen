@@ -47,6 +47,14 @@ public sealed interface OwnerInput {
     /** 清空她的记忆(对话日志、札记、长期目标);名册与身体不动。界面在主人确认之后才发。 */
     record Wipe(UUID companion) implements OwnerInput {}
 
+    /**
+     * 把她分享给一位玩家:{@code player} 是他的名字(可以此刻不在线)。只有她的创建者办得成;界面在主人看过分享的后果之后才发。
+     */
+    record Share(UUID companion, String player) implements OwnerInput {}
+
+    /** 不再把她分享给 {@code person}:创建者移人,或者被分享的人把自己移出去({@code person} 就是他自己)。 */
+    record Unshare(UUID companion, UUID person) implements OwnerInput {}
+
     /** 往会话里拉一个人;从"就他俩"拉则新群用 {@code newId}。 */
     record Pull(String conversation, UUID companion, String newId) implements OwnerInput {}
 
@@ -78,6 +86,8 @@ public sealed interface OwnerInput {
             }
             case Export e -> put(o, "export", "companion", e.companion().toString());
             case Wipe w -> put(o, "wipe", "companion", w.companion().toString());
+            case Share s -> put(o, "share", "companion", s.companion().toString(), "player", s.player());
+            case Unshare u -> put(o, "unshare", "companion", u.companion().toString(), "person", u.person().toString());
             case Pull p -> put(o, "pull", "conversation", p.conversation(), "companion", p.companion().toString(),
                     "newId", p.newId());
             case Drop d -> put(o, "drop", "conversation", d.conversation(), "companion", d.companion().toString());
@@ -109,6 +119,8 @@ public sealed interface OwnerInput {
                 case "speaking" -> new Speaking(uuid(o, "companion"), o.get("playing").getAsBoolean());
                 case "export" -> new Export(uuid(o, "companion"));
                 case "wipe" -> new Wipe(uuid(o, "companion"));
+                case "share" -> new Share(uuid(o, "companion"), text(o, "player"));
+                case "unshare" -> new Unshare(uuid(o, "companion"), uuid(o, "person"));
                 case "pull" -> new Pull(text(o, "conversation"), uuid(o, "companion"), text(o, "newId"));
                 case "drop" -> new Drop(text(o, "conversation"), uuid(o, "companion"));
                 case "rename" -> new Rename(text(o, "conversation"), text(o, "name"));

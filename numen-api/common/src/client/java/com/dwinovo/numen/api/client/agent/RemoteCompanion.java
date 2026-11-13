@@ -271,6 +271,16 @@ public final class RemoteCompanion {
         send.accept(new OwnerInput.ClearGoal(uuid));
     }
 
+    /** 把她分享给叫这个名字的玩家(界面在主人看过后果、确认之后才调);办不办得成由服务端判,结局回在聊天里。 */
+    public void share(String player) {
+        send.accept(new OwnerInput.Share(uuid, player));
+    }
+
+    /** 不再把她分享给这一位;被分享的人退出时 {@code person} 是他自己。 */
+    public void unshare(UUID person) {
+        send.accept(new OwnerInput.Unshare(uuid, person));
+    }
+
     /** 换她的一项绑定(档案、人设、声线);{@code null} = 不绑。条目在不在库里由服务端判。 */
     public void bind(Slot slot, String entryId) {
         send.accept(new OwnerInput.Bind(uuid, slot, entryId));

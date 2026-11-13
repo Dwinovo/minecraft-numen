@@ -9,9 +9,12 @@ import com.dwinovo.numen.api.agent.skill.SkillInjection;
 import com.dwinovo.numen.api.agent.skill.SkillRegistry;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.Companions;
+import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.event.NumenEvents;
 import com.dwinovo.numen.api.platform.ServerLifecycle;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -19,7 +22,7 @@ import java.util.UUID;
 /**
  * 主人经客户端做的事({@link OwnerInput})到服务端大脑的唯一入口。上行的东西在网络线程上读懂、验过形状就投进信箱
  * ({@link #offer}),主线程每刻取几条处理({@link #tick});这里对每一条先问"这只同伴、这个会话是不是你用得了的"(问的是她的主人表;
- * 清空记忆另问是不是创建者),再交给
+ * 清空记忆另问是不是创建者,改主人表由 {@link Sharing} 问),再交给
  * 聊天、命令共用的那些入口——客户端什么判断都不替服务端做。
  *
  * <p>线程:{@link #offer} 任何线程,其余服务端主线程。
@@ -164,6 +167,20 @@ public final class OwnerInputs {
                 CompanionLoops.wiped(wipe.companion());
                 yield Applied.done();
             }
+            case OwnerInput.Share share -> {
+                com.mojang.authlib.GameProfile profile = share.player() == null ? null
+                        : NumenPlayer.profileNamed(server, share.player().strip());
+                if (profile == null) {
+                    tell(server, owner, Component.translatable("argument.player.unknown"));
+                    yield Applied.refused("no player by that name");
+                }
+                yield shared(server, owner, share.companion(), Sharing.Change.SHARE, profile.getName(),
+                        Sharing.share(server, owner, share.companion(), profile.getId()));
+            }
+            case OwnerInput.Unshare unshare -> shared(server, owner, unshare.companion(),
+                    owner.equals(unshare.person()) ? Sharing.Change.LEAVE : Sharing.Change.UNSHARE,
+                    NumenPlayer.playerName(server, unshare.person()),
+                    Sharing.unshare(server, owner, unshare.companion(), unshare.person()));
             case OwnerInput.Emit emit -> {
                 // 上行的类型不可信:主人的话,或登记过的世界事件,别的不收
                 try {
@@ -224,6 +241,26 @@ public final class OwnerInputs {
                 yield Applied.changed();
             }
         };
+    }
+
+    /**
+     * 改主人表的结局:能不能改由 {@link Sharing} 判过了。表上有她、下令的人也够格的,结局和命令一样说给他听;够不上的
+     * (没有这只同伴、他不是创建者——面板不给这个入口,只会是伪造或竞态)只进日志。
+     */
+    private static Applied shared(MinecraftServer server, UUID owner, UUID companion, Sharing.Change change,
+                                  String player, Sharing.Outcome outcome) {
+        if (outcome == Sharing.Outcome.NO_SUCH_COMPANION || outcome == Sharing.Outcome.NOT_CREATOR) {
+            return Applied.refused(outcome.name());
+        }
+        tell(server, owner, Sharing.told(outcome, change, CompanionRegistry.get(server).find(companion).name(), player));
+        return outcome == Sharing.Outcome.DONE ? Applied.done() : Applied.refused(outcome.name());
+    }
+
+    private static void tell(MinecraftServer server, UUID owner, Component message) {
+        ServerPlayer player = server.getPlayerList().getPlayer(owner);
+        if (player != null) {
+            player.sendSystemMessage(message);
+        }
     }
 
     /** 这个会话:落过盘的,或者"就他俩";而且成员里没有他用不了的同伴。 */
