@@ -37,10 +37,14 @@ class ConsentDeskTest {
         final List<ConsentDesk.Withdrawal> clears = new ArrayList<>();
         int cleared;
 
+        final List<UUID> answeredBy = new ArrayList<>();
+
+        @Override public String name() { return "her"; }
         @Override public long gameTime() { return now; }
         @Override public boolean ownerPresent() { return ownerOnline; }
         @Override public void show(ConsentRequest request) { shown.add(request); }
         @Override public void clear(long id, ConsentDesk.Withdrawal why) { cleared++; clears.add(why); }
+        @Override public void answered(long id, UUID by) { cleared++; clears.add(null); answeredBy.add(by); }
         @Override public void remember(List<Rule> allow) { remembered.addAll(allow); }
     }
 
@@ -279,5 +283,18 @@ class ConsentDeskTest {
         assertEquals(1, groups.get(1).count());
         assertEquals(rex, groups.get(1).head().name(), "起了名字的叫它的名字");
         assertTrue(groups.get(1).irreversible(), "撤不回的那一堆带着标记给答复框");
+    }
+
+    @Test
+    void theFirstOwnerToAnswerSettlesItAndTheOthersAreToldWhoDid() {
+        UUID friend = UUID.randomUUID();
+        ConsentDesk.Ticket ticket = desk.ask(new Task(), List.of(log(1)));
+
+        assertTrue(desk.answer(ticket.request().id(), ConsentAnswer.Decision.ALLOW_ONCE, "", friend));
+
+        assertEquals(List.of(friend), line.answeredBy, "谁答的交给接线,其余各位那边据此写明");
+        assertTrue(ticket.poll().allowed());
+        assertFalse(desk.answer(ticket.request().id(), ConsentAnswer.Decision.DENY, "", UUID.randomUUID()),
+                "先答的算数,后到的答复不算");
     }
 }

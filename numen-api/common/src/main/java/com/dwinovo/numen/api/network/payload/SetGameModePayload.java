@@ -41,10 +41,10 @@ public record SetGameModePayload(UUID uuid, boolean creative) implements CustomP
         MinecraftServer server = ((ServerLevel) owner.level()).getServer();
         if (server == null || p.uuid() == null) return;
         NumenPlayer body = NumenPlayer.findByUuid(server, p.uuid());
-        if (body == null || !body.isOwnedByPlayer(owner.getUUID())) {
-            return;   // 不在场(休眠/死亡)或不是他的:模式住在活体上,没有活体没有可改的
+        if (body == null || !body.usableBy(owner.getUUID())) {
+            return;   // 不在场(休眠/死亡)或不是他用得了的:模式住在活体上,没有活体没有可改的
         }
         Companions.applyGameMode(owner, body, p.creative());
-        Companions.syncRosterToOwner(server, owner);
+        Companions.syncRosterToKeepers(server, body.keepers());
     }
 }

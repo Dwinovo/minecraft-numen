@@ -47,9 +47,9 @@ public final class ConsentChat {
                 .append(" ").append(button(Keys.CONSENT_DENY, ChatFormatting.RED, "deny", request.id(), null));
     }
 
-    /** 一条请求没等到他答复就撤了,为什么。 */
-    public static Component withdrawn(String companion, ConsentDesk.Withdrawal why) {
-        return Component.translatable(Keys.CONSENT_WITHDRAWN, companion, Component.translatable(why.key()));
+    /** 一条请求没等到他答复就撤了,为什么。{@code by} 是答复了的另一位主人的名字,只有那一种原因的文案用得上。 */
+    public static Component withdrawn(String companion, ConsentDesk.Withdrawal why, String by) {
+        return Component.translatable(Keys.CONSENT_WITHDRAWN, companion, Component.translatable(why.key(), by));
     }
 
     /** 一件事本身:动词、对象(名字)、数量。 */

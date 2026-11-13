@@ -157,10 +157,9 @@ public final class TaskApi {
         return new Timer(timer.id(), seconds, reason);
     }
 
-    /** 她的日程也是主人的信息:表定在什么时候、为什么定,当场说一句;发的是语言键,主人按他自己的语言看。 */
+    /** 她的日程也是主人的信息:表定在什么时候、为什么定,当场对在游戏里的每一位主人说一句;发的是语言键,各按自己的语言看。 */
     private static void announceToOwner(NumenPlayer companion, int seconds, String reason) {
-        ServerPlayer owner = companion.resolveOwnerPlayer();
-        if (owner != null) {
+        for (ServerPlayer owner : companion.keepersInGame()) {
             owner.sendSystemMessage(Component.translatable(ModLanguageData.Keys.NOTICE_TIMER,
                     companion.getName(), seconds, reason));
         }

@@ -291,11 +291,18 @@ public final class ServerPrograms {
         }
     }
 
-    /** 这位主人断线了:他名下的程序收掉,等他答复的反向请求都失败,没收完的分片消息丢掉。 */
-    public static void ownerLeft(UUID owner) {
-        RUNNING.values().stream().filter(r -> r.owner.equals(owner)).forEach(r -> r.program.cancel(false));
-        NetworkTransport.INSTANCE.ownerLeft(owner);
-        NumenNetwork.disconnected(owner);
+    /** 她的主人表上已无人在场({@code OwnerPresence}):她在跑的那段程序收掉。 */
+    public static void keepersGone(UUID companion) {
+        Running running = RUNNING.get(companion);
+        if (running != null) {
+            running.program.cancel(false);
+        }
+    }
+
+    /** 这位玩家断线了:等他的客户端答复的反向请求都失败,他没收完的分片消息丢掉。 */
+    public static void clientLeft(UUID player) {
+        NetworkTransport.INSTANCE.ownerLeft(player);
+        NumenNetwork.disconnected(player);
     }
 
     /** 服务器停了:所有程序收掉,排着的调用作废。 */

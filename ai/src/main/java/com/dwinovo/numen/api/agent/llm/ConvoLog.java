@@ -460,6 +460,37 @@ public final class ConvoLog {
     /** 一句话来自主人给她定的定时({@code <query>} 开标签上多的那个属性,带前面的空格);认它也只在这一处,见 {@link #scheduled}。 */
     public static final String SCHEDULED_ATTR = " source=\"schedule\"";
 
+    private static final Pattern SPEAKER = Pattern.compile(" from=\"([^\"]*)\"");
+
+    /**
+     * 一句话是哪位主人说的:{@code <query>} 开标签上多的那个属性(带前面的空格),值是他写给模型读的身份({@code player@短码 (名字)})。
+     * 她不止一位主人时才带;写它和认它({@link #speaker})都只在这一处。
+     */
+    public static String speakerAttr(String speaker) {
+        return " from=\"" + speaker.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;").replace(">", "&gt;")
+                + "\"";
+    }
+
+    /**
+     * 这条 user 消息里主人的话是哪一位说的({@link #speakerAttr} 的值):面板据此在别的主人说的话前标出是谁。几句话不是同一位说的、
+     * 或者没有标({@code <query>} 上没有这个属性——她只有一位主人时,或那句话不是谁亲口说的),是 {@code null}。
+     */
+    public static String speaker(String content) {
+        if (content == null) return null;
+        java.util.regex.Matcher m = QUERY_TAG.matcher(content);
+        String who = null;
+        boolean any = false;
+        while (m.find()) {
+            java.util.regex.Matcher attr = SPEAKER.matcher(m.group(1));
+            String one = attr.find() ? attr.group(1).replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
+                    .replace("&amp;", "&") : null;
+            if (one == null || any && !one.equals(who)) return null;
+            who = one;
+            any = true;
+        }
+        return who;
+    }
+
     /**
      * 一条 user 消息里主人的原话——{@code <query>} 标记里的那些,按出现顺序;没有标记则空。
      * {@code <query>} 怎么认<b>只有这一处</b>:面板剥记号、归并去重都从这里取,别各写一份正则。

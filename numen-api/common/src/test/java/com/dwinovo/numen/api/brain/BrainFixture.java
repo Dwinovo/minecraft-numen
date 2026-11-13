@@ -133,6 +133,8 @@ final class BrainFixture {
     final UUID companion;
     final Path home;
     final Scripted mind;
+    /** 她的主人表,创建者在前;用例往里加人就是把她分享出去。 */
+    final java.util.List<UUID> keepers = new java.util.ArrayList<>(java.util.List.of(UUID.randomUUID()));
     final CompanionLoop loop;
     boolean ownerOnline = true;
     long gameTime;
@@ -161,7 +163,18 @@ final class BrainFixture {
         Io io = Io.direct(e -> { throw new AssertionError(e); });
         loop = new CompanionLoop(new CompanionLoop.Parts(companion, new Home(home, io), Runnable::run, mind, NO_PROGRAMS,
                 NO_TOOLS, () -> null, () -> null, () -> null, () -> ownerOnline, () -> false, () -> 5,
-                id -> "A companion under test.", () -> 6000L, () -> this.gameTime, (who, conversation) -> ""));
+                id -> "A companion under test.", () -> 6000L, () -> this.gameTime,
+                (speaker, who, conversation) -> "", new CompanionLoop.Keepers() {
+                    @Override
+                    public java.util.List<UUID> list() {
+                        return keepers;
+                    }
+
+                    @Override
+                    public String shown(UUID keeper) {
+                        return com.dwinovo.numen.api.sdk.EntityLabel.shown(keeper, "p" + keepers.indexOf(keeper));
+                    }
+                }));
         // 绑一个人设:系统提示的人设层就取它,不去问加载器的配置(无头时没有)
         loop.bind(Slot.PERSONA, "gt_persona");
     }

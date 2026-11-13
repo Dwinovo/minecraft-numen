@@ -128,7 +128,8 @@ public final class StatusApi {
     }
 
     /** 她的主人。 */
-    @Doc("Your owner right now; when they are offline, only online (false) is there.")
+    @Doc("Your owner right now — with several owners, the one who last spoke to you and is in the game, else the one "
+            + "who created you; when they are offline, only online (false) is there.")
     public record Owner(boolean online,
                         @Doc("Their id, player@ plus a short code; functions that take an entity take it.") Optional<String> id,
                         Optional<String> name,
@@ -150,7 +151,7 @@ public final class StatusApi {
     public static Owner owner(ServerCall call) {
         NumenPlayer self = call.her();
         // 全服去找:原版 getOwner() 只在宠物所在的那一层世界里找,别的维度的主人会被当成不在线
-        Player player = self.getOwnerUuid() == null ? null : self.resolveOwnerPlayer();
+        Player player = self.keeperAtHand();
         if (player == null) {
             return new Owner(false, Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
                     Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),

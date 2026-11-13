@@ -8,6 +8,7 @@ import com.dwinovo.numen.api.agent.skill.SkillInfo;
 import com.dwinovo.numen.api.agent.skill.SkillInjection;
 import com.dwinovo.numen.api.agent.skill.SkillRegistry;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
+import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.event.NumenEvents;
 import com.dwinovo.numen.api.platform.ServerLifecycle;
 import net.minecraft.server.MinecraftServer;
@@ -17,7 +18,8 @@ import java.util.UUID;
 
 /**
  * 主人经客户端做的事({@link OwnerInput})到服务端大脑的唯一入口。上行的东西在网络线程上读懂、验过形状就投进信箱
- * ({@link #offer}),主线程每刻取几条处理({@link #tick});这里对每一条先问"这只同伴、这个会话是不是你的",再交给
+ * ({@link #offer}),主线程每刻取几条处理({@link #tick});这里对每一条先问"这只同伴、这个会话是不是你用得了的"(问的是她的主人表;
+ * 清空记忆另问是不是创建者),再交给
  * 聊天、命令共用的那些入口——客户端什么判断都不替服务端做。
  *
  * <p>线程:{@link #offer} 任何线程,其余服务端主线程。
@@ -116,10 +118,11 @@ public final class OwnerInputs {
                 if (conv == null) {
                     yield Applied.refused("no such conversation");
                 }
-                yield rooms.say(conv, say.text(), venue).reached() ? Applied.done() : Applied.refused("nobody heard it");
+                yield rooms.say(conv, say.text(), new Spoken(owner, venue)).reached()
+                        ? Applied.done() : Applied.refused("nobody heard it");
             }
             case OwnerInput.Command command -> loop(server, owner, command.companion(),
-                    brain -> brain.submitCommand(command.echo(), skillBody(command.companion(), command.echo())));
+                    brain -> brain.submitCommand(command.echo(), skillBody(command.companion(), command.echo()), owner));
             case OwnerInput.Stop stop -> {
                 Conversation conv = conversation(rooms, owner, stop.conversation(), server);
                 if (conv == null) {
@@ -132,10 +135,10 @@ public final class OwnerInputs {
                     brain -> brain.requestCompact(compact.focus()));
             case OwnerInput.Clear clear -> loop(server, owner, clear.companion(), CompanionLoop::requestClearContext);
             case OwnerInput.SetGoal goal -> loop(server, owner, goal.companion(), brain ->
-                    brain.setGoal(GoalState.of(goal.objective(), System.currentTimeMillis()), goal.echo()));
+                    brain.setGoal(GoalState.of(goal.objective(), System.currentTimeMillis()), goal.echo(), owner));
             case OwnerInput.ClearGoal goal -> loop(server, owner, goal.companion(), brain -> brain.clearGoal(null));
             case OwnerInput.Bind bind -> {
-                if (!owns(server, owner, bind.companion())) {
+                if (!usable(server, owner, bind.companion())) {
                     yield Applied.refused("not your companion");
                 }
                 String problem = CompanionBinding.apply(server, owner, bind.companion(), bind.slot(), bind.entry());
@@ -145,8 +148,9 @@ public final class OwnerInputs {
                     brain.exportMemory().whenComplete((zip, failure) -> server.execute(() ->
                             Replies.exported(server, owner, export.companion(), zip, failure))));
             case OwnerInput.Wipe wipe -> {
-                if (!owns(server, owner, wipe.companion())) {
-                    yield Applied.refused("not your companion");
+                // 清空她的记忆只有创建者能做
+                if (!Companions.owns(server, owner, wipe.companion())) {
+                    yield Applied.refused("only her creator may wipe her memory");
                 }
                 Optional<CompanionLoop> brain = CompanionLoops.get(wipe.companion());
                 if (brain.isEmpty()) {
@@ -168,22 +172,22 @@ public final class OwnerInputs {
                 }
                 yield loop(server, owner, emit.companion(), brain -> {
                     if (EventTypes.QUERY.equals(emit.type())) {
-                        brain.submitPrompt(emit.text());
+                        brain.submitPrompt(emit.text(), new Spoken(owner, venue));
                     } else {
                         brain.submitEvent(emit.type(), emit.text());
                     }
                 });
             }
             case OwnerInput.Speaking s -> {
-                if (!owns(server, owner, s.companion())) {
+                if (!usable(server, owner, s.companion())) {
                     yield Applied.refused("not your companion");
                 }
-                CompanionLoops.voicePlaying(s.companion(), s.playing());
+                CompanionLoops.voicePlaying(s.companion(), owner, s.playing());
                 yield Applied.done();
             }
             case OwnerInput.Pull pull -> {
                 Conversation conv = conversation(rooms, owner, pull.conversation(), server);
-                if (conv == null || !owns(server, owner, pull.companion())) {
+                if (conv == null || !usable(server, owner, pull.companion())) {
                     yield Applied.refusedResync("no such conversation or companion");
                 }
                 // 从"就他俩"拉人要起一个新群,号由客户端起,核过没撞号才用
@@ -221,7 +225,7 @@ public final class OwnerInputs {
         };
     }
 
-    /** 这个会话:落过盘的,或者"就他俩";而且成员里没有别人的同伴。 */
+    /** 这个会话:落过盘的,或者"就他俩";而且成员里没有他用不了的同伴。 */
     private static Conversation conversation(Conversations rooms, UUID owner, String id, MinecraftServer server) {
         Conversation conv = id == null ? null : rooms.find(id);
         if (conv == null) {
@@ -229,21 +233,22 @@ public final class OwnerInputs {
         }
         for (UUID member : conv.members()) {
             CompanionRegistry.Entry entry = CompanionRegistry.get(server).find(member);
-            if (entry != null && !owner.equals(entry.owner())) {
+            if (entry != null && !entry.usableBy(owner)) {
                 return null;
             }
         }
         return conv;
     }
 
-    private static boolean owns(MinecraftServer server, UUID owner, UUID companion) {
+    /** 这只同伴他用不用得了:他在她的主人表上。 */
+    private static boolean usable(MinecraftServer server, UUID owner, UUID companion) {
         CompanionRegistry.Entry entry = CompanionRegistry.get(server).find(companion);
-        return entry != null && owner.equals(entry.owner());
+        return entry != null && entry.usableBy(owner);
     }
 
     private static Applied loop(MinecraftServer server, UUID owner, UUID companion,
                                 java.util.function.Consumer<CompanionLoop> action) {
-        if (!owns(server, owner, companion)) {
+        if (!usable(server, owner, companion)) {
             return Applied.refused("not your companion");
         }
         Optional<CompanionLoop> loop = CompanionLoops.get(companion);

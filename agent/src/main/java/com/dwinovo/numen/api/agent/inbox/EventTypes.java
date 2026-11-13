@@ -163,6 +163,12 @@ public final class EventTypes {
     public static final String LEFT = "left";
 
     /**
+     * 她的主人表变了:多了一位主人(创建者把她分享给了他),或少了一位(创建者收回了,或他自己退出)。关系上的变化她得知道;
+     * 捎带投递——知道就行,不为此醒来,新主人开口的那一句会带上它。
+     */
+    public static final String KEEPERS = "keepers";
+
+    /**
      * 一类条目怎么交给大脑。每一档自己声明两件事——{@link #wakes} 与 {@link #joins}——队列与循环只读这两件,
      * 不按档名判断,所以加一档只改这里。
      *
@@ -367,6 +373,7 @@ public final class EventTypes {
         // 旁听到的话:捎带投递、不进聊天流,其余与世界的事同一行(原文、打断不清、不是主人说的)。
         register(new Type(TALK, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
         register(new Type(LEFT, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
+        register(new Type(KEEPERS, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
         // 服务端对她说的话:同一行,捎带投递,随下一次调模型交出去,自己不开一轮。
         register(new Type(SERVER_MESSAGE, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
         // 被切断的程序交出的回执:同一行,捎带投递

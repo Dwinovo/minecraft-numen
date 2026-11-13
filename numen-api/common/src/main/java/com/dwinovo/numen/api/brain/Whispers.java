@@ -9,7 +9,7 @@ import java.util.UUID;
  * 原版 {@code /msg}(与 {@code /tell}、{@code /w})发给她的话。她是真玩家,私聊的包会到她的"客户端"({@code FakeClient}),
  * 在这里按谁发的分开:
  * <ul>
- *   <li><b>她的主人</b>:他的话进她的单聊会话,走和面板输入框同一个入口({@link OwnerInputs}),她私信回({@link Venue#WHISPER});</li>
+ *   <li><b>她的主人</b>(主人表上的任一位):他的话进她的单聊会话,走和面板输入框同一个入口({@link OwnerInputs}),她私信回({@link Venue#WHISPER});</li>
  *   <li><b>别的玩家</b>:按群聊的旁听档({@link EventTypes#TALK},捎带投递)进她的收件箱,标着是谁说的——
  *       不叫醒她,不花主人的钱。</li>
  * </ul>
@@ -30,7 +30,7 @@ public final class Whispers {
         if (text == null || text.isBlank()) {
             return;
         }
-        if (companion.isOwnedByPlayer(sender)) {
+        if (companion.usableBy(sender)) {
             OwnerInputs.handle(companion.server, sender, new OwnerInput.Say(companion.getUUID().toString(), text),
                     Venue.WHISPER);
             return;

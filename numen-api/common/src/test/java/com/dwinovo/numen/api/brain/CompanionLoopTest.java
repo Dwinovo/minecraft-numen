@@ -121,4 +121,50 @@ class CompanionLoopTest {
         assertEquals(2, her.mind.asked.size(), "the owner's next word did not wake her");
         assertNull(her.loop.status().hold());
     }
+
+    /**
+     * 她不止一位主人时,{@code <query>} 的开标签上写明是谁说的,她在回的就是那一位;只有一位主人时不写。那一位不在表上了,
+     * 她退回"没有人说过话"的样子:回的是创建者,回在面板。
+     */
+    @Test
+    void withSeveralOwnersAQueryNamesWhoSaidItAndSheAnswersThatOwner() throws IOException {
+        BrainFixture her = new BrainFixture();
+        java.util.UUID creator = her.keepers.get(0);
+        java.util.UUID friend = java.util.UUID.randomUUID();
+        her.mind.say("在");
+        her.mind.say("来了");
+
+        her.loop.submitPrompt("一个人时", new Spoken(creator, Venue.PANEL));
+        her.tick(5);
+        her.keepers.add(friend);
+        her.loop.submitPrompt("两个人时", new Spoken(friend, Venue.WHISPER));
+        her.tick(5);
+
+        String told = her.toldIn(her.mind.asked.get(1));
+        assertTrue(java.util.regex.Pattern.compile("<query day=\"[^\"]*\" t=\"[^\"]*\">一个人时</query>").matcher(told).find(),
+                "with one owner nobody needs telling apart: " + told);
+        String label = "player@" + friend.toString().substring(0, 6) + " (p1)";
+        assertTrue(told.contains(" from=\"" + label + "\">两个人时</query>"), told);
+        assertEquals(friend, her.loop.speaker());
+        assertEquals(Venue.WHISPER, her.loop.venue());
+
+        her.keepers.remove(friend);
+        her.loop.keeperLeft(friend);
+        assertEquals(creator, her.loop.speaker(), "he is no longer one of her owners");
+        assertEquals(Venue.PANEL, her.loop.venue());
+    }
+
+    /** 没有哪一位亲口说的话(不带说话人的输入)按创建者办,多位主人时开标签上也不写是谁。 */
+    @Test
+    void wordsNobodySpokeInPersonAreAnsweredToTheCreator() throws IOException {
+        BrainFixture her = new BrainFixture();
+        her.keepers.add(java.util.UUID.randomUUID());
+        her.mind.say("在");
+
+        her.loop.submitPrompt("在吗");
+        her.tick(5);
+
+        assertEquals(her.keepers.get(0), her.loop.speaker());
+        assertNull(com.dwinovo.numen.api.agent.llm.ConvoLog.speaker(her.toldIn(her.mind.asked.get(0))));
+    }
 }

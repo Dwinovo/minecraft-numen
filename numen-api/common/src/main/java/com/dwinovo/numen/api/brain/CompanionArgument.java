@@ -19,7 +19,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 指令里"他名下的一只同伴"这个参数:补全列他名下各只的名字,读出来要么是唯一的一只、要么说清为什么不行。
+ * 指令里"他用得了的一只同伴"(他创建的、分享给他的)这个参数:补全列这些同伴的名字,读出来要么是唯一的一只、要么说清为什么不行。
  * {@code /numen group}、{@code /numen companion} 共用,名字带空格或不是英文字母的要加引号。
  */
 final class CompanionArgument {
@@ -36,7 +36,7 @@ final class CompanionArgument {
         if (player == null) {
             return builder.buildFuture();
         }
-        return SharedSuggestionProvider.suggest(CompanionRegistry.get(player.server).ownedBy(player.getUUID()).stream()
+        return SharedSuggestionProvider.suggest(CompanionRegistry.get(player.server).usableBy(player.getUUID()).stream()
                 .map(entry -> StringArgumentType.escapeIfRequired(entry.getValue().name())), builder);
     }
 
@@ -45,7 +45,7 @@ final class CompanionArgument {
                                                            ServerPlayer owner) {
         String given = StringArgumentType.getString(ctx, name);
         List<Map.Entry<UUID, CompanionRegistry.Entry>> named = CompanionRegistry.get(owner.server)
-                .ownedBy(owner.getUUID()).stream().filter(entry -> entry.getValue().name().equalsIgnoreCase(given))
+                .usableBy(owner.getUUID()).stream().filter(entry -> entry.getValue().name().equalsIgnoreCase(given))
                 .toList();
         if (named.size() == 1) {
             return named.get(0);

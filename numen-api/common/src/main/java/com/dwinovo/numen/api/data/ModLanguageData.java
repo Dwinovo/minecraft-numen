@@ -1077,6 +1077,7 @@ public final class ModLanguageData {
         adder.add(com.dwinovo.numen.api.permission.ConsentDesk.Withdrawal.OWNER_STOPPED.key(), "you pressed Stop");
         adder.add(com.dwinovo.numen.api.permission.ConsentDesk.Withdrawal.BODY_LEFT.key(), "she left the world");
         adder.add(com.dwinovo.numen.api.permission.ConsentDesk.Withdrawal.DIED.key(), "she died");
+        adder.add(com.dwinovo.numen.api.permission.ConsentDesk.Withdrawal.ANSWERED.key(), "%s answered it");
         adder.add(Keys.CONSENT_DENY_NOTE,      "Deny with a note");
         adder.add(Keys.CONSENT_REMEMBER_SCOPE, "“Always allow” remembers: %s");
         adder.add(Keys.CONSENT_CHOSE,          "You chose “%s”");
@@ -1852,6 +1853,7 @@ public final class ModLanguageData {
         adder.add(com.dwinovo.numen.api.permission.ConsentDesk.Withdrawal.OWNER_STOPPED.key(), "你按了停止");
         adder.add(com.dwinovo.numen.api.permission.ConsentDesk.Withdrawal.BODY_LEFT.key(), "她离开了世界");
         adder.add(com.dwinovo.numen.api.permission.ConsentDesk.Withdrawal.DIED.key(), "她死了");
+        adder.add(com.dwinovo.numen.api.permission.ConsentDesk.Withdrawal.ANSWERED.key(), "%s 已经答复了");
         adder.add(Keys.CONSENT_DENY_NOTE,      "说一句再拒绝");
         adder.add(Keys.CONSENT_REMEMBER_SCOPE, "「以后都允许」会记下:%s");
         adder.add(Keys.CONSENT_CHOSE,          "你选了「%s」");

@@ -14,6 +14,7 @@ import com.dwinovo.numen.api.sdk.EntityLabel;
 import com.dwinovo.numen.api.task.TaskResult;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -99,22 +100,29 @@ public final class NumenEvents {
     }
 
     /**
-     * 主人挨打了。急不急按血线分档:安全区只是消息(攒着搭车,她下次开口自然带一句);
+     * 她的一位主人挨打了。急不急按血线分档:安全区只是消息(攒着搭车,她下次开口自然带一句);
      * 跌进危险区(与饥饿同一条"原版跑不动"的线)才是急件。这条事件<b>不碰身体</b>——
-     * 去不去救永远是她的决定。检测与去抖在 {@code OwnerHurtWatch}。
+     * 去不去救永远是她的决定。检测与去抖在 {@code OwnerHurtWatch}。她不止一位主人时写明是哪一位({@code owner});
+     * 只有一位时不写,没人要区分。
      */
-    public static void ownerHurt(NumenPlayer companion, String attacker,
-                                 float hp, float maxHp, double distance, boolean urgent) {
+    public static void ownerHurt(NumenPlayer companion, ServerPlayer owner, String attacker,
+                                 float hp, float maxHp, boolean urgent) {
+        long distance = Math.round(companion.distanceTo(owner));
+        boolean several = companion.keepers().size() > 1;
+        String who = several ? "your owner " + EntityLabel.shown(owner) : "your owner";
         Map<String, String> attrs = new LinkedHashMap<>();
+        if (several) {
+            attrs.put("owner", EntityLabel.shown(owner));
+        }
         attrs.put("by", attacker);
         attrs.put("owner_hp", Math.round(hp) + "/" + Math.round(maxHp));
-        attrs.put("distance", String.valueOf(Math.round(distance)));
+        attrs.put("distance", String.valueOf(distance));
         String text = urgent
-                ? "your owner is in DANGER: " + attacker + " has them down to " + Math.round(hp)
-                        + "/" + Math.round(maxHp) + " HP, about " + Math.round(distance)
+                ? who + " is in DANGER: " + attacker + " has them down to " + Math.round(hp)
+                        + "/" + Math.round(maxHp) + " HP, about " + distance
                         + " blocks from you — decide now whether to go help"
-                : "your owner just took a hit from " + attacker + " (" + Math.round(hp) + "/"
-                        + Math.round(maxHp) + " HP, about " + Math.round(distance)
+                : who + " just took a hit from " + attacker + " (" + Math.round(hp) + "/"
+                        + Math.round(maxHp) + " HP, about " + distance
                         + " blocks from you) — they can likely handle it; your call";
         emit(companion, EventTypes.OWNER_HURT, attrs, text, urgent);
     }

@@ -206,14 +206,14 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
     }
 
     /**
-     * 跟着谁。没点名就是主人;点名了就按 UUID 现查——每次都查,因为它随时可能死掉或者
+     * 跟着谁。没点名就是眼前的主人({@code NumenPlayer#keeperAtHand});点名了就按 UUID 现查——每次都查,因为它随时可能死掉或者
      * 走出加载范围,而那两件事对我们是同一个答案:不在了。
      *
      * <p>不同维度天然落进 null:{@code ServerLevel.getEntity} 只认自己这一层。
      */
     private Entity target(NumenPlayer companion) {
         if (r.target == null) {
-            var owner = companion.resolveOwnerPlayer();
+            var owner = companion.keeperAtHand();
             return owner == null || owner.level() != companion.level() ? null : owner;
         }
         Entity e = ((ServerLevel) companion.level()).getEntity(r.target);

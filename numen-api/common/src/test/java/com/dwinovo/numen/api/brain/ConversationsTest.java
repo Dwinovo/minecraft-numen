@@ -101,4 +101,17 @@ class ConversationsTest {
         assertTrue(line.contains("小柚") && line.contains("团子") && !line.contains("阿岚"), line);
         assertEquals("", rooms.audienceLine(A, null), "就他俩时没人听得见");
     }
+
+    @Test
+    void aCompanionNoLongerSharedWithHimIsGoneFromHisConversations(@TempDir Path dir) {
+        Conversations rooms = open(dir);
+        Conversation group = rooms.pullIn(rooms.of(A), B);
+
+        roster.remove(B);   // 他用得了的同伴里没有她了
+        rooms.withdrawn(B, "小柚");
+
+        assertNull(rooms.get(group.id()), "只剩一个人的群随即解散");
+        assertNull(rooms.find(B.toString()), "他和她的私聊也不在了");
+        assertFalse(rooms.all().stream().anyMatch(c -> c.members().contains(B)), "他的会话里哪儿都没有她了");
+    }
 }

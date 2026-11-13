@@ -23,11 +23,11 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p>挂在身体上({@link NumenPlayer#state}):身体没了登记处跟着没,关服时没有一张静态表需要清。
  *
  * <h2>征询</h2>
- * 同一只同伴同时只挂一条;新的顶掉旧的,旧的按拒绝收尾({@link #SUPERSEDED})。发起那一刻主人
- * 不在线,或者挂着的时候主人下线、到了 {@link #TIMEOUT_TICKS},都按拒绝收尾({@link #OWNER_ABSENT})。
- * 请求与撤回都交给主人({@link Replies#consent}:装了客户端的是推给他的 {@link ConsentRequestPayload},没装的是带按钮的聊天消息,
+ * 同一只同伴同时只挂一条;新的顶掉旧的,旧的按拒绝收尾({@link #SUPERSEDED})。发起那一刻她的主人一位也
+ * 不在场,或者挂着的时候都不在场了、到了 {@link #TIMEOUT_TICKS},都按拒绝收尾({@link #OWNER_ABSENT})。
+ * 请求与撤回交给她的主人表上在场的每一位({@link Replies#consent}:装了客户端的是推给他的 {@link ConsentRequestPayload},没装的是带按钮的聊天消息,
  * 见 {@link ConsentChat}),撤回带着为什么撤({@link Withdrawal});答复经
- * {@link #answer} 回来。发起者每刻读自己那张 {@link Ticket},模型不参与。
+ * {@link #answer} 回来,先答的算数,其余各位那边撤回并写明是谁答了。发起者每刻读自己那张 {@link Ticket},模型不参与。
  *
  * <h2>附言</h2>
  * 附言只随拒绝:主人要她换个做法才会说,那句话就是拒绝的理由,随发起的任务收场送达。允许不带附言。
@@ -38,8 +38,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * 清掉它名下的授权与没答复的请求——各任务不各存一份。
  *
  * <h2>记住</h2>
- * 主人选"允许并记住"时,除了记成本任务的授权,清单每一条的 {@link ConsentItem#remember} 写进主人的
- * allow 表({@link PermissionStore#remember}),往后同类的事由主人层直接放行,不再问。
+ * 主人选"允许并记住"时,除了记成本任务的授权,清单每一条的 {@link ConsentItem#remember} 写进创建者的
+ * allow 表({@link PermissionStore#remember};规则本只有创建者的那一本,哪位主人点的都写进它),往后同类的事由主人层直接放行,不再问。
  */
 public final class ConsentDesk {
 
@@ -75,7 +75,9 @@ public final class ConsentDesk {
         /** 她离开了世界(休眠、遣散)。 */
         BODY_LEFT,
         /** 她死了。 */
-        DIED;
+        DIED,
+        /** 她的另一位主人答复了;文案里带他的名字。 */
+        ANSWERED;
 
         /** 给主人看的文案在语言文件里的键。 */
         public String key() {
@@ -93,16 +95,26 @@ public final class ConsentDesk {
         NOT_PENDING
     }
 
-    /** 登记处与外界的接线:时钟、主人在不在、把请求推给主人或撤回、把记住的规则写进主人的表。 */
+    /** 登记处与外界的接线:时钟、主人在不在、把请求推给各位主人或撤回、把记住的规则写进创建者的表。 */
     interface Line {
+        /** 她的名字,写在给主人看的请求上。 */
+        String name();
+
         long gameTime();
 
         boolean ownerPresent();
 
         void show(ConsentRequest request);
 
-        /** 撤掉主人那边挂着的请求。{@code why} 是撤回的原因;主人自己答复的撤回为 null。 */
+        /** 撤掉各位主人那边挂着的请求。{@code why} 是撤回的原因。 */
         void clear(long id, Withdrawal why);
+
+        /**
+         * 一位主人答复了:他那边收起,其余各位那边撤回并写明是他答了({@link Withdrawal#ANSWERED})。
+         *
+         * @param by 答复的那一位;{@code null} = 不经 {@link #reply} 直接答的,各位那边都只是收起
+         */
+        void answered(long id, UUID by);
 
         void remember(List<Rule> allow);
     }
@@ -145,7 +157,7 @@ public final class ConsentDesk {
         if (!line.ownerPresent()) {
             ticket.answer = new ConsentAnswer(ConsentAnswer.Decision.DENY, OWNER_ABSENT);
             line.clear(ticket.request.id(), Withdrawal.OWNER_ABSENT);
-            Constants.LOG.info("[numen-consent] {} ask #{} refused at once: owner offline", companion,
+            Constants.LOG.info("[numen-consent] {} ask #{} refused at once: no owner present", companion,
                     ticket.request.id());
             return ticket;
         }
@@ -157,7 +169,7 @@ public final class ConsentDesk {
     }
 
     /**
-     * 答复从外面进来的唯一入口:答复框的网络载荷与 {@code /numen consent} 命令都落这里。只认主人;认下的交给
+     * 答复从外面进来的唯一入口:答复框的网络载荷与 {@code /numen consent} 命令都落这里。只认她的主人表上的人;认下的交给
      * 这只同伴的登记处 {@link #answer}。
      */
     public static Reply reply(ServerPlayer from, NumenPlayer companion, long requestId,
@@ -168,21 +180,25 @@ public final class ConsentDesk {
     /** 同上,答复的人只有 id——外部大脑客户端上的人(elicitation)、渠道上的人不是游戏里的玩家。 */
     public static Reply reply(UUID from, NumenPlayer companion, long requestId,
                              ConsentAnswer.Decision decision, String note) {
-        if (!companion.isOwnedByPlayer(from)) {
+        if (!companion.usableBy(from)) {
             return Reply.NOT_OWNER;
         }
-        return of(companion).answer(requestId, decision, note) ? Reply.ANSWERED : Reply.NOT_PENDING;
+        return of(companion).answer(requestId, decision, note, from) ? Reply.ANSWERED : Reply.NOT_PENDING;
     }
 
     /** 主人进游戏了:他不在时挂着的征询那时没有地方显示给他,现在补推。 */
     public static void resendTo(ServerPlayer owner) {
         for (ServerPlayer player : owner.server.getPlayerList().getPlayers()) {
-            if (player instanceof NumenPlayer companion && companion.isOwnedByPlayer(owner.getUUID())) {
-                ConsentRequest pending = of(companion).pending();
-                if (pending != null) {
-                    Replies.consent(owner, companion.getName().getString(), ConsentRequestPayload.of(pending));
-                }
+            if (player instanceof NumenPlayer companion && companion.usableBy(owner.getUUID())) {
+                of(companion).keeperJoined(owner);
             }
+        }
+    }
+
+    /** 这位主人到了她面前(进了游戏,或她刚分享给他):她挂着的那条请求补推给他。 */
+    public void keeperJoined(ServerPlayer keeper) {
+        if (pending != null) {
+            Replies.consent(keeper, line.name(), ConsentRequestPayload.of(pending.request));
         }
     }
 
@@ -199,15 +215,21 @@ public final class ConsentDesk {
         return null;
     }
 
+    /** 同 {@link #answer(long, ConsentAnswer.Decision, String, UUID)},不说是哪一位答的(测试直接调)。 */
+    public boolean answer(long requestId, ConsentAnswer.Decision decision, String note) {
+        return answer(requestId, decision, note, null);
+    }
+
     /**
-     * 这只同伴的主人的答复(经 {@link #reply} 进来;测试直接调)。允许就把清单记进发起任务的授权,允许并
-     * 记住再把记住的规则写进主人的 allow 表;拒绝的附言就是理由,没有附言时理由是 {@link #OWNER_SAID_NO}。
+     * 这只同伴的一位主人的答复(经 {@link #reply} 进来)。先答的算数:允许就把清单记进发起任务的授权,允许并
+     * 记住再把记住的规则写进创建者的 allow 表;拒绝的附言就是理由,没有附言时理由是 {@link #OWNER_SAID_NO}。
      *
      * @param note 附言;只有拒绝带
-     * @return 答的是不是挂着的那一条(过期、被顶替的号一律忽略)
+     * @param by   答复的那一位主人
+     * @return 答的是不是挂着的那一条(过期、被顶替、别的主人已经答过的号一律忽略)
      * @throws IllegalArgumentException 允许的答复带了附言
      */
-    public boolean answer(long requestId, ConsentAnswer.Decision decision, String note) {
+    public boolean answer(long requestId, ConsentAnswer.Decision decision, String note, UUID by) {
         String said = note == null ? "" : note.strip();
         if (decision != ConsentAnswer.Decision.DENY && !said.isEmpty()) {
             throw new IllegalArgumentException("a note only goes with a deny");
@@ -228,13 +250,13 @@ public final class ConsentDesk {
             answer = new ConsentAnswer(decision, "");
         }
         settle(ticket, answer);
-        line.clear(requestId, null);
+        line.answered(requestId, by);
         Constants.LOG.info("[numen-consent] {} #{} answered {}{}", companion, requestId, decision,
                 said.isEmpty() ? "" : " (带一句 " + said.length() + " 字的话)");
         return true;
     }
 
-    /** 每服务端 tick 一次:主人下线或到点,挂着的那条按拒绝收尾。 */
+    /** 每服务端 tick 一次:她的主人都不在场了或到点,挂着的那条按拒绝收尾。 */
     public void tick() {
         if (pending == null) {
             return;
@@ -319,8 +341,20 @@ public final class ConsentDesk {
         }
     }
 
-    /** 真身体的接线:游戏刻、主人在线与否、载荷推给主人、记住的规则进主人的存档。 */
+    /** 这位主人不再是她的主人了:她挂着的那条请求在他那边收起。 */
+    public void keeperLeft(ServerPlayer former) {
+        if (pending != null) {
+            Replies.consent(former, line.name(), ConsentRequestPayload.none(companion, Withdrawal.UNNEEDED));
+        }
+    }
+
+    /** 真身体的接线:游戏刻、她的主人在不在场、载荷推给各位主人、记住的规则进创建者的存档。 */
     private record BodyLine(NumenPlayer body) implements Line {
+        @Override
+        public String name() {
+            return body.getName().getString();
+        }
+
         @Override
         public long gameTime() {
             return body.level().getGameTime();
@@ -328,27 +362,45 @@ public final class ConsentDesk {
 
         @Override
         public boolean ownerPresent() {
-            return OwnerPresence.present(body.getServer(), body.getOwnerUuid());
+            return OwnerPresence.present(body.getServer(), body.keepers());
         }
 
-        /** 主人在游戏里就在游戏里问;不在游戏里(外部大脑连着、渠道在说话)交给游戏之外的场所。 */
+        /** 问她的每一位主人:在游戏里的就在游戏里问;不在游戏里的(外部大脑连着、渠道在说话)交给游戏之外的场所。 */
         @Override
         public void show(ConsentRequest request) {
-            ServerPlayer owner = body.resolveOwnerPlayer();
-            if (owner != null) {
-                Replies.consent(owner, body.getName().getString(), ConsentRequestPayload.of(request));
-            } else {
-                ConsentVenues.show(body.getOwnerUuid(), ConsentVenues.Offer.of(body.getName().getString(), request));
+            for (UUID keeper : body.keepers()) {
+                ServerPlayer player = body.getServer().getPlayerList().getPlayer(keeper);
+                if (player != null) {
+                    Replies.consent(player, body.getName().getString(), ConsentRequestPayload.of(request));
+                } else {
+                    ConsentVenues.show(keeper, ConsentVenues.Offer.of(body.getName().getString(), request));
+                }
             }
         }
 
         @Override
         public void clear(long id, Withdrawal why) {
-            ServerPlayer owner = body.resolveOwnerPlayer();
-            if (owner != null) {
-                Replies.consent(owner, body.getName().getString(), ConsentRequestPayload.none(body.getUUID(), why));
+            for (UUID keeper : body.keepers()) {
+                withdraw(keeper, id, ConsentRequestPayload.none(body.getUUID(), why));
             }
-            ConsentVenues.clear(body.getOwnerUuid(), id, why);
+        }
+
+        @Override
+        public void answered(long id, UUID by) {
+            String name = by == null ? "" : NumenPlayer.playerName(body.getServer(), by);
+            for (UUID keeper : body.keepers()) {
+                withdraw(keeper, id, by == null || keeper.equals(by) ? ConsentRequestPayload.none(body.getUUID(), null)
+                        : ConsentRequestPayload.answeredBy(body.getUUID(), name));
+            }
+        }
+
+        /** 一位主人那边挂着的请求撤掉:游戏里的他,和游戏之外问着他的场所。 */
+        private void withdraw(UUID keeper, long id, ConsentRequestPayload gone) {
+            ServerPlayer player = body.getServer().getPlayerList().getPlayer(keeper);
+            if (player != null) {
+                Replies.consent(player, body.getName().getString(), gone);
+            }
+            ConsentVenues.clear(keeper, id, gone.withdrawnBecause());
         }
 
         @Override

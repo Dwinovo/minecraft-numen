@@ -35,7 +35,7 @@ public record OfflineRequestPayload(UUID uuid) implements CustomPacketPayload {
     public static void handle(OfflineRequestPayload p, ServerPlayer owner) {
         MinecraftServer server = ((ServerLevel) owner.level()).getServer();
         if (server == null || p.uuid() == null) return;
-        if (!Companions.owns(server, owner.getUUID(), p.uuid())) return;
-        Companions.offline(server, owner.getUUID(), List.of(p.uuid()));
+        if (!Companions.usableBy(server, owner.getUUID(), p.uuid())) return;
+        Companions.offline(server, List.of(p.uuid()));
     }
 }

@@ -138,9 +138,6 @@ public class BrainGameTests {
             told.add(said);
         }
 
-        @Override
-        public void activities(java.util.Map<UUID, com.dwinovo.numen.api.agent.loop.LoopStatus.Doing> doing) {
-        }
     }
 
     /** 札记的落点已经换成测试的了。 */

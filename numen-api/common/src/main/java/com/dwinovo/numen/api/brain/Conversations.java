@@ -24,17 +24,18 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 一位主人在这个世界里的会话:<b>一张成员表加一个名字</b>(见 {@code docs/group-chat.md})。成员表落在世界存档里
+ * 一位主人在这个世界里的会话:<b>一张成员表加一个名字</b>(见 {@code docs/group-chat.md})。会话按人:成员只能是他用得了的同伴
+ * (他创建的、分享给他的),"就他俩"是她每一位主人都看得到的同一份记录。成员表落在世界存档里
  * ({@code players/<主人>/conversations.json}),路由、旁听、停止都读这一份;选中谁、置顶、文件夹、草稿、已读是客户端自己的
  * 展示偏好,不在这里。群没有自己的对话历史:一个会话的记录是成员各自日志里盖着它印的那些行({@code History})。
  *
- * <p>同时是循环读的"谁在场"({@link CompanionLoop.Rooms}):她收到主人一句话那一刻得知道还有谁在听、这是第几句。
+ * <p>循环读的"谁在场"({@link CompanionLoop.Rooms})也在这里答({@link #audienceLine}):她收到主人一句话那一刻得知道还有谁在听、这是第几句。
  *
  * <p>线程:服务端主线程。拨发言号、定场面、送话三步之间不许插进第二句,所以 {@link #say} 只在主线程上跑。
  */
-public final class Conversations extends JsonLibrary<Conversation> implements CompanionLoop.Rooms {
+public final class Conversations extends JsonLibrary<Conversation> {
 
-    /** 名册那一侧:主人名下有哪几只,她们叫什么。遣散掉的名册上没有。 */
+    /** 名册那一侧:这位主人用得了哪几只,她们叫什么。遣散掉的、不再分享给他的名册上没有。 */
     public interface Roster {
         List<UUID> companions();
 
@@ -79,13 +80,13 @@ public final class Conversations extends JsonLibrary<Conversation> implements Co
             return new Conversations(home.file("conversations.json"), home.io(), new Roster() {
                 @Override
                 public List<UUID> companions() {
-                    return registry.ownedBy(id).stream().map(Map.Entry::getKey).toList();
+                    return registry.usableBy(id).stream().map(Map.Entry::getKey).toList();
                 }
 
                 @Override
                 public String name(UUID companion) {
                     CompanionRegistry.Entry entry = registry.find(companion);
-                    return entry == null || !id.equals(entry.owner()) ? null : entry.name();
+                    return entry == null || !entry.usableBy(id) ? null : entry.name();
                 }
             }, CompanionLoops::get, () -> {
                 ServerPlayer player = server.getPlayerList().getPlayer(id);
@@ -294,9 +295,9 @@ public final class Conversations extends JsonLibrary<Conversation> implements Co
      * 在这个会话里说一句话——主人说话的唯一入口(面板输入框、快捷对话、语音转写、命令都经它)。点了名的醒,其余的旁听;
      * 旁听走 {@link EventTypes#TALK},是捎带投递,不会把人叫醒——群聊唯一的那条不变量。
      *
-     * @param venue 主人是在哪儿说的:被叫醒的那几只回话回到那里
+     * @param spoken 是哪位主人(这份会话表的那一位)、在哪儿说的:被叫醒的那几只回话回给他、回到那里
      */
-    public Said say(Conversation conv, String text, Venue venue) {
+    public Said say(Conversation conv, String text, Spoken spoken) {
         List<Mentions.Member> members = named(conv);
         if (members.isEmpty() || text == null || text.isBlank()) {
             return new Said(conv, false);
@@ -319,7 +320,7 @@ public final class Conversations extends JsonLibrary<Conversation> implements Co
                 continue;
             }
             if (routing.awake().contains(m.uuid())) {
-                loop.get().submitPrompt(text, venue);
+                loop.get().submitPrompt(text, spoken);
             } else {
                 loop.get().submitEvent(EventTypes.TALK, heard);
             }
@@ -354,14 +355,25 @@ public final class Conversations extends JsonLibrary<Conversation> implements Co
      * 同一个人和她同在几个会话里也只说一次。她走后只剩一个人(或没人)的群随即解散。
      */
     public void left(UUID gone, String name) {
+        gone(gone, name + " was dismissed by the owner and is gone");
+    }
+
+    /**
+     * 她不再是这位主人用得了的同伴了(创建者收回了分享,或他自己退出):他的会话里没有她了,告诉和她同过会话、还在的成员;
+     * 只剩一个人(或没人)的群随即解散。她还在,只是不在他的这些场面里。
+     */
+    public void withdrawn(UUID gone, String name) {
+        gone(gone, name + " is no longer kept by " + ownerName.get() + " and has left this conversation");
+    }
+
+    private void gone(UUID gone, String told) {
         List<Conversation> hers = containing(gone);
         Set<UUID> tell = new LinkedHashSet<>();
         for (Conversation c : hers) {
             tell.addAll(membersAlive(c));
         }
         for (UUID m : tell) {
-            loops.apply(m).ifPresent(l -> l.submitEvent(EventTypes.LEFT,
-                    name + " was dismissed by the owner and is gone"));
+            loops.apply(m).ifPresent(l -> l.submitEvent(EventTypes.LEFT, told));
         }
         for (Conversation c : hers) {
             if (dissolvesAfterLeaving(c, membersAlive(c).size())) {
@@ -386,7 +398,7 @@ public final class Conversations extends JsonLibrary<Conversation> implements Co
 
     // ---- 循环读的"谁在场" ----
 
-    @Override
+    /** 见 {@link CompanionLoop.Rooms#audienceLine}:说话的是这份会话表的那位主人。 */
     public String audienceLine(UUID companion, String conversation) {
         if (conversation == null) {
             return "";

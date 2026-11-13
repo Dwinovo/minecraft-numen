@@ -63,7 +63,7 @@ public final class Replies {
     }
 
     /**
-     * 客户端报了它提供哪些联动({@code ClientCapsPayload}),报到齐了:回答是否管理员、是否房主,推名册,补给他名下各大脑此刻的样子和会话列表。
+     * 客户端报了它提供哪些联动({@code ClientCapsPayload}),报到齐了:回答是否管理员、是否房主,推名册,补给他用得了的各大脑此刻的样子和会话列表。
      * 没有先报过对得上的版本就什么也不做。
      */
     public static void ready(ServerPlayer player, java.util.Set<String> provided) {
@@ -73,11 +73,19 @@ public final class Replies {
         NumenNetwork.sendToPlayer(player, new HelloAckPayload(Authority.isAdmin(player),
                 Homes.of(player.server).isHost(player.getUUID())));
         Companions.syncRosterToOwner(player.server, player);
-        CompanionLoops.sendSnapshots(player.getUUID(), link(player.server, player.getUUID()));
+        snapshots(player.server, player.getUUID());
         conversations(player.server, player.getUUID());
         ConsentDesk.resendTo(player);
         HostNotices.deliver(player);
         SkinHandover.offer(player.server, player);
+    }
+
+    /** 这位主人用得了的各只同伴(他创建的、分享给他的)的大脑此刻的样子,补给他的客户端。 */
+    static void snapshots(MinecraftServer server, UUID owner) {
+        CompanionLoops.Link link = link(server, owner);
+        for (Map.Entry<UUID, CompanionRegistry.Entry> hers : CompanionRegistry.get(server).usableBy(owner)) {
+            CompanionLoops.sendSnapshot(hers.getKey(), link);
+        }
     }
 
     /** 这位主人落过盘的会话(成员表与名字),整份。"就他俩"不用推:客户端按名册自己有。 */
@@ -175,7 +183,26 @@ public final class Replies {
         } else if (!request.withdrawn()) {
             owner.sendSystemMessage(ConsentChat.ask(companion, request));
         } else if (request.withdrawnBecause() != null) {
-            owner.sendSystemMessage(ConsentChat.withdrawn(companion, request.withdrawnBecause()));
+            owner.sendSystemMessage(ConsentChat.withdrawn(companion, request.withdrawnBecause(), request.withdrawnBy()));
+        }
+    }
+
+    /**
+     * 这位主人没装客户端:他用得了的各只此刻在干什么,合成一行放在他的动作栏上,按他客户端的语言。只含正在干着具体活的。
+     */
+    static void activities(ServerPlayer player, Map<UUID, LoopStatus.Doing> doing) {
+        MinecraftServer server = player.server;
+        ServerLang lang = ServerLang.of(player.clientInformation().language());
+        MutableComponent bar = Component.empty();
+        for (Map.Entry<UUID, LoopStatus.Doing> each : doing.entrySet()) {
+            CompanionRegistry.Entry entry = CompanionRegistry.get(server).find(each.getKey());
+            if (entry != null) {
+                bar.append(bar.getSiblings().isEmpty() ? "" : " | ").append(entry.name() + ": ")
+                        .append(DoingText.of(each.getValue(), lang::has));
+            }
+        }
+        if (!bar.getSiblings().isEmpty()) {
+            player.displayClientMessage(bar, true);
         }
     }
 
@@ -224,26 +251,6 @@ public final class Replies {
                     return;
                 }
                 player.sendSystemMessage(Voice.line(venue, entry.name(), conversation, said));
-            }
-
-            @Override
-            public void activities(Map<UUID, LoopStatus.Doing> doing) {
-                ServerPlayer player = server.getPlayerList().getPlayer(owner);
-                if (player == null) {
-                    return;
-                }
-                ServerLang lang = ServerLang.of(player.clientInformation().language());
-                MutableComponent bar = Component.empty();
-                for (Map.Entry<UUID, LoopStatus.Doing> each : doing.entrySet()) {
-                    CompanionRegistry.Entry entry = CompanionRegistry.get(server).find(each.getKey());
-                    if (entry != null) {
-                        bar.append(bar.getSiblings().isEmpty() ? "" : " | ").append(entry.name() + ": ")
-                                .append(DoingText.of(each.getValue(), lang::has));
-                    }
-                }
-                if (!bar.getSiblings().isEmpty()) {
-                    player.displayClientMessage(bar, true);
-                }
             }
         };
     }

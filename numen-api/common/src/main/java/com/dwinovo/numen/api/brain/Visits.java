@@ -45,7 +45,7 @@ public final class Visits {
         @Override
         public void show(UUID owner, ConsentVenues.Offer offer) {
             Visit visit = VISITS.get(offer.companion());
-            if (visit != null) {
+            if (visit != null && visit.owner.equals(owner)) {
                 visit.channel.ask(offer);
             }
         }

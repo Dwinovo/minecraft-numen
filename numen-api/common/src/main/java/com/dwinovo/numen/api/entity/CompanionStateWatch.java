@@ -11,6 +11,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -95,10 +96,11 @@ public final class CompanionStateWatch {
     }
 
     private void tickOne(NumenPlayer companion, long serverTick) {
-        // 主人不在线、或他没有报到过的客户端(收不到我们的包)就直接走,而且<b>不碰镜像</b>:走一趟把变化吃掉的话,
+        // 她的主人里没有一位在线且有报到过的客户端(收得到我们的包)就直接走,而且<b>不碰镜像</b>:走一趟把变化吃掉的话,
         // 他回来时镜像已经是最新的,再也检测不出那段时间发生过什么,她的背包就一直是他离线前那份。
-        ServerPlayer owner = companion.resolveOwnerPlayer();
-        if (owner == null || !Presence.hasClient(owner.getUUID())) {
+        List<ServerPlayer> owners = companion.keepersInGame().stream()
+                .filter(owner -> Presence.hasClient(owner.getUUID())).toList();
+        if (owners.isEmpty()) {
             return;
         }
         // 节流先行:没到间隔连遍历都省了。只对"已经推过一次"成立——第一次必须放行,
@@ -119,7 +121,7 @@ public final class CompanionStateWatch {
         boolean first = !everSent;
         everSent = true;
         NumenStatePayload payload = RequestStatePayload.snapshot(companion);
-        NumenNetwork.sendToPlayer(owner, payload);
+        owners.forEach(owner -> NumenNetwork.sendToPlayer(owner, payload));
         // 一次推送一行。链路是"服务端推 → 客户端缓存 → 渲染进请求",出问题时得能一眼看出
         // 断在哪一节;只记开始不记结果的日志已经害过我们一次。
         com.dwinovo.numen.api.Constants.LOG.info(

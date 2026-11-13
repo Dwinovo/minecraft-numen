@@ -57,6 +57,8 @@ public final class ConsentCards {
         private String note = "";
         /** 没等到主人答复就撤了的原因;{@code null} = 不是这么收的(在这里按了键,或在别处答了)。 */
         private ConsentDesk.Withdrawal gone;
+        /** 答复了的另一位主人的名字({@link ConsentDesk.Withdrawal#ANSWERED} 的文案用);别的时候是空串。 */
+        private String goneBy = "";
         /** 收起的时刻;{@code 0} = 还挂着。 */
         private long settledAt;
 
@@ -113,6 +115,11 @@ public final class ConsentCards {
 
         public ConsentDesk.Withdrawal gone() {
             return gone;
+        }
+
+        /** 为什么撤的那一句,按本机的语言。 */
+        public String goneText() {
+            return I18n.get(gone.key(), goneBy);
         }
 
         /** 这个键写着什么。 */
@@ -178,10 +185,11 @@ public final class ConsentCards {
             return;   // 主人在这里答过了:答的那一刻已经收起
         }
         card.gone = p.withdrawnBecause();
+        card.goneBy = p.withdrawnBy();
         card.settle();
         if (card.gone != null) {
             NumenHudToasts.push(NumenToasts.Severity.WARN, I18n.get(ModLanguageData.Keys.CONSENT_WITHDRAWN,
-                    name(companion), I18n.get(card.gone.key())));
+                    name(companion), card.goneText()));
         }
     }
 

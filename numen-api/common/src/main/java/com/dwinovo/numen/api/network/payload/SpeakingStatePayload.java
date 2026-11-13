@@ -33,11 +33,11 @@ public record SpeakingStatePayload(UUID entityUuid, boolean speaking) implements
         return TYPE;
     }
 
-    /** Server main thread. 只认主人本人发来的状态。 */
+    /** Server main thread. 只认她的主人发来的状态。 */
     public static void handle(SpeakingStatePayload p, ServerPlayer sender) {
         var companion = com.dwinovo.numen.api.entity.NumenPlayer.findByUuid(
                 sender.level().getServer(), p.entityUuid());
-        if (companion == null || !companion.isOwnedByPlayer(sender.getUUID())) return;
+        if (companion == null || !companion.usableBy(sender.getUUID())) return;
         CompanionSpeech.setSpeaking(p.entityUuid(), p.speaking());
     }
 }

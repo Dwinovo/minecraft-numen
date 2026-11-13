@@ -184,7 +184,7 @@ public final class Libraries {
 
         OwnerPrefs prefs(UUID owner);
 
-        /** 主人名下的同伴。 */
+        /** 这位主人用得了的同伴(他创建的、分享给他的):她的札记、定时他看得到、管得了。 */
         List<UUID> companions(UUID owner);
 
         /** 服务器目录里 jar 同步的清单。 */
@@ -249,7 +249,7 @@ public final class Libraries {
 
             @Override
             public List<UUID> companions(UUID owner) {
-                return CompanionRegistry.get(server).ownedBy(owner).stream().map(java.util.Map.Entry::getKey).toList();
+                return CompanionRegistry.get(server).usableBy(owner).stream().map(java.util.Map.Entry::getKey).toList();
             }
 
             @Override

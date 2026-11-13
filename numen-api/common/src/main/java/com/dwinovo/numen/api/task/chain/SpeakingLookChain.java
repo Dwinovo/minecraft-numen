@@ -9,7 +9,7 @@ import net.minecraft.server.level.ServerPlayer;
 
 /**
  * 说话看人——Numen API 自带的唯一姿态链:大脑在输出(思考/生成/跑工具/语音在播,
- * 客户端经 SpeakingStatePayload 报状态)且主人在近旁时,身体停下面向主人;
+ * 客户端经 SpeakingStatePayload 报状态)且眼前的主人({@code NumenPlayer#keeperAtHand})在近旁时,身体停下面向他;
  * 其余时刻恒休眠。排在当前任务之下(第 4 层):任务在跑时自然让位
  * (挖着矿说话不回头,合理),任何反射更是随时抢得走。
  */
@@ -20,14 +20,14 @@ public final class SpeakingLookChain implements Task, Reflex {
     @Override
     public boolean canRun(NumenPlayer companion) {
         if (!CompanionSpeech.isSpeaking(companion.getUUID())) return false;
-        ServerPlayer owner = companion.resolveOwnerPlayer();
+        ServerPlayer owner = companion.keeperAtHand();
         return owner != null && owner.level() == companion.level()
                 && companion.blockPosition().closerThan(owner.blockPosition(), LOOK_RANGE);
     }
 
     @Override
     public TaskState tick(NumenPlayer companion) {
-        ServerPlayer owner = companion.resolveOwnerPlayer();
+        ServerPlayer owner = companion.keeperAtHand();
         if (owner == null) return TaskState.RUNNING;
         companion.controls().stop();
         companion.look().at(owner.getEyePosition());

@@ -268,7 +268,16 @@ public final class EventQueue {
      * 面板与日志认它只在 {@code ConvoLog.queries} 一处。
      */
     public static String query(String words, long dayTime) {
-        return "<query" + EventClock.stamp(dayTime) + ">" + words + "</query>";
+        return query(words, dayTime, null);
+    }
+
+    /**
+     * 同 {@link #query(String, long)},开标签上另带是哪位主人说的({@link ConvoLog#speakerAttr});{@code speaker} 为 {@code null} 就不带
+     * (她只有一位主人,没人要区分)。
+     */
+    public static String query(String words, long dayTime, String speaker) {
+        return "<query" + EventClock.stamp(dayTime) + (speaker == null ? "" : ConvoLog.speakerAttr(speaker)) + ">"
+                + words + "</query>";
     }
 
     /** 同 {@link #query},这句话是主人给她定的定时到点说的:开标签上带 {@link ConvoLog#SCHEDULED_ATTR},面板据此标"定时"。 */

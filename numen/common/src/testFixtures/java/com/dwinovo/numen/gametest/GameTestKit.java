@@ -350,9 +350,6 @@ public final class GameTestKit {
                                  String conversation) {
                 }
 
-                @Override
-                public void activities(java.util.Map<UUID, com.dwinovo.numen.api.agent.loop.LoopStatus.Doing> doing) {
-                }
             };
 
     /**

@@ -577,4 +577,18 @@ class EventQueueTest {
         assertEquals(List.of(false, false, true, true), q.entries().stream().map(EventQueue.Entry::urgent).toList(),
                 "旁听与控制命令不急;世界的事照发送方;主人的话恒急");
     }
+
+    @Test
+    void aQueryNamesItsSpeakerOnTheOpeningTagOnlyWhenGivenOne() {
+        String said = EventQueue.query("过来", 3 * 24000L + 15250L, "player@ab12cd (Steve)");
+
+        assertEquals("<query day=\"3\" t=\"21:15\" from=\"player@ab12cd (Steve)\">过来</query>", said);
+        assertEquals("player@ab12cd (Steve)", com.dwinovo.numen.api.agent.llm.ConvoLog.speaker(said));
+        assertEquals(List.of("过来"), com.dwinovo.numen.api.agent.llm.ConvoLog.queries(said));
+        assertEquals(EventQueue.query("过来", 0L), EventQueue.query("过来", 0L, null), "no speaker, no mark");
+        assertEquals(null, com.dwinovo.numen.api.agent.llm.ConvoLog.speaker(EventQueue.query("过来", 0L)));
+        assertEquals(null, com.dwinovo.numen.api.agent.llm.ConvoLog.speaker(
+                        said + "\n" + EventQueue.query("好", 0L, "player@ffffff (Alex)")),
+                "two owners' words in one message are not marked as one owner's");
+    }
 }

@@ -245,7 +245,7 @@ class ServerProgramsTest {
         assertEquals(com.dwinovo.numen.script.ScriptCall.Status.ERROR, over.outcome().ending().status());
         assertTrue(over.message().contains("the most one owner may have at a time"), over.message());
 
-        ServerPrograms.ownerLeft(owner);
+        all.forEach(ServerPrograms::keepersGone);
         pumpUntil(() -> all.stream().noneMatch(ServerPrograms::running));
     }
 
@@ -267,7 +267,7 @@ class ServerProgramsTest {
         Started over = start(UUID.randomUUID(), late, "return 1", held);
         assertTrue(over.message().contains("as many programs as it allows"), over.message());
 
-        owners.forEach(ServerPrograms::ownerLeft);
+        companions.forEach(ServerPrograms::keepersGone);
         pumpUntil(() -> companions.stream().noneMatch(ServerPrograms::running));
     }
 
@@ -411,9 +411,9 @@ class ServerProgramsTest {
         pumpUntil(() -> a.result.get() != null);
         assertEquals(List.of(a.id + "#1"), held.cancelled, "the cut-off program's request was dropped");
 
-        ServerPrograms.ownerLeft(owner);
+        ServerPrograms.keepersGone(leaver);
         pumpUntil(() -> b.result.get() != null);
-        assertEquals(2, held.cancelled.size(), "the program that ended with its owner dropped its request too");
+        assertEquals(2, held.cancelled.size(), "the program that ended with its owners gone dropped its request too");
 
         held.answer(0, 2);
         held.answer(1, 4);

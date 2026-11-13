@@ -953,6 +953,13 @@ public final class ChatView {
                         notice(out, I18n.get(com.dwinovo.numen.api.data.ModLanguageData.Keys.CHAT_SCHEDULED), bubbleMaxW);   // 主人定的定时到点说的,不是他此刻开的口
                         f.last = null;
                     }
+                    String speaker = ConvoLog.speaker(u.content());
+                    var me = net.minecraft.client.Minecraft.getInstance().player;
+                    if (speaker != null && (me == null
+                            || !speaker.startsWith(com.dwinovo.numen.api.sdk.EntityLabel.shown(me.getUUID(), null)))) {
+                        notice(out, speaker, bubbleMaxW);   // 她的另一位主人说的,不是本机的玩家
+                        f.last = null;
+                    }
                     Quote q = Quote.parse(shown);   // 引用回复:第一行画成气泡顶上的引用条
                     out.add(bubble(true, null, rich(q.body(), true), TXT,
                             OWN_FILL, innerW, null,

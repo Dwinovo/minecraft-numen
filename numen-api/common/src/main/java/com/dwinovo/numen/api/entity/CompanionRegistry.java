@@ -247,6 +247,12 @@ public final class CompanionRegistry extends SavedData {
         return out;
     }
 
+    /** 她分享给了谁(不含创建者),按加进来的先后;名册上没有她是空表。 */
+    public List<UUID> sharedWith(UUID companionUuid) {
+        Entry e = entries.get(companionUuid);
+        return e == null ? List.of() : e.sharedWith();
+    }
+
     /**
      * 把她分享给一个人。
      *

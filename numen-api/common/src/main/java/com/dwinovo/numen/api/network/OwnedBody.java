@@ -15,7 +15,7 @@ import java.util.function.Consumer;
  *
  * <ol>
  *   <li>在所有维度里找(同伴可能在下界干活,主人在主世界等);没加载就把休眠的唤起来;</li>
- *   <li>发包的必须是它的主人(UUID 比较,跨维度也成立)。</li>
+ *   <li>发包的必须在它的主人表上(UUID 比较,跨维度也成立)。</li>
  * </ol>
  * 故意不查主人离它多远:区块票让她在远处照常干活,动作在<em>她</em>的位置、以她自己的能力执行,主人的距离不授予任何东西。
  */
@@ -31,13 +31,13 @@ public final class OwnedBody {
         return of(sender.level().getServer(), sender.getUUID(), entityUuid, refuse);
     }
 
-    /** 同上,不是玩家发的包而是服务端大脑替这位主人办事:{@code ownerUuid} 是该是她主人的那一位。 */
+    /** 同上,不是玩家发的包而是服务端大脑替这位主人办事:{@code ownerUuid} 是该在她主人表上的那一位。 */
     public static NumenPlayer of(MinecraftServer server, UUID ownerUuid, UUID entityUuid, Consumer<String> refuse) {
         NumenPlayer companion = NumenPlayer.findByUuid(server, entityUuid);
         if (companion == null) {
             // 该在线的她由对账带回来(登入的那一刻还没轮到推迟的对账时,这一问就是它的时机);留在外面的回来只能是主人再召唤
             // (Companions.summon),不是一个包把她拉起来
-            Companions.reconcile(server, ownerUuid);
+            Companions.reconcileCompanion(server, entityUuid);
             companion = NumenPlayer.findByUuid(server, entityUuid);
             CompanionRegistry.Entry reg = CompanionRegistry.get(server).find(entityUuid);
             if (companion == null && reg != null) {
@@ -59,8 +59,8 @@ public final class OwnedBody {
             refuse.accept("companion not found (never summoned, or its data is gone)");
             return null;
         }
-        if (!companion.isOwnedByPlayer(ownerUuid)) {
-            refuse.accept("not the owner");
+        if (!companion.usableBy(ownerUuid)) {
+            refuse.accept("not one of her owners");
             return null;
         }
         return companion;

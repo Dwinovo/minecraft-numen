@@ -18,6 +18,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -245,31 +246,38 @@ public final class NumenPlayer extends ServerPlayer {
         return List.copyOf(brokenGear.subList(brokenGear.size() - fresh, brokenGear.size()));
     }
 
-    /** 主人血量的看护(纯判定在 {@link OwnerHurtWatch},便于无头单测)。 */
-    private final OwnerHurtWatch ownerWatch = new OwnerHurtWatch();
+    /** 各位主人血量的看护,一位一份(纯判定在 {@link OwnerHurtWatch},便于无头单测)。 */
+    private final java.util.Map<UUID, OwnerHurtWatch> keeperWatches = new java.util.HashMap<>();
 
-    /** 一次"主人挨打"报告:攻击者、血量与档位(urgent = 跌进危险区)。 */
-    public record OwnerHurt(String attacker, float hp, float maxHp, boolean urgent) {}
+    /** 一次"主人挨打"报告:哪一位、攻击者、血量与档位(urgent = 跌进危险区)。 */
+    public record OwnerHurt(ServerPlayer owner, String attacker, float hp, float maxHp, boolean urgent) {}
 
     /**
-     * 主人这一刻有没有挨打值得说。每服务端 tick 问一次(见 {@code CompanionTickDispatcher});
-     * 主人不在线传 null,基线即重置。只报实体攻击,分档与去抖全在 {@link OwnerHurtWatch}。
+     * 她的各位主人这一刻谁挨打值得说。每服务端 tick 问一次(见 {@code CompanionTickDispatcher});不在游戏里的那一位基线重置,
+     * 回来重新校准;不在表上了的那一位不再看。只报实体攻击,分档与去抖全在 {@link OwnerHurtWatch}。
      */
-    public OwnerHurt pollOwnerHurt(ServerPlayer owner, long now) {
-        if (owner == null) {
-            ownerWatch.reset();
-            return null;
+    public List<OwnerHurt> pollOwnersHurt(long now) {
+        List<UUID> keepers = keepers();
+        keeperWatches.keySet().retainAll(keepers);
+        List<OwnerHurt> out = new ArrayList<>();
+        for (UUID keeper : keepers) {
+            OwnerHurtWatch watch = keeperWatches.computeIfAbsent(keeper, id -> new OwnerHurtWatch());
+            ServerPlayer owner = getServer().getPlayerList().getPlayer(keeper);
+            if (owner == null) {
+                watch.reset();
+                continue;
+            }
+            net.minecraft.world.damagesource.DamageSource src = owner.getLastDamageSource();
+            net.minecraft.world.entity.Entity attacker = src == null ? null : src.getEntity();
+            OwnerHurtWatch.Verdict verdict = watch.poll(keeper, owner.getHealth(), attacker != null, now);
+            if (verdict == OwnerHurtWatch.Verdict.NONE) {
+                continue;
+            }
+            vigil.follow(attacker);
+            out.add(new OwnerHurt(owner, EntityLabel.shown(attacker), owner.getHealth(), owner.getMaxHealth(),
+                    verdict == OwnerHurtWatch.Verdict.DANGER));
         }
-        net.minecraft.world.damagesource.DamageSource src = owner.getLastDamageSource();
-        net.minecraft.world.entity.Entity attacker = src == null ? null : src.getEntity();
-        OwnerHurtWatch.Verdict verdict = ownerWatch.poll(
-                owner.getUUID(), owner.getHealth(), attacker != null, now);
-        if (verdict == OwnerHurtWatch.Verdict.NONE) {
-            return null;
-        }
-        vigil.follow(attacker);
-        return new OwnerHurt(EntityLabel.shown(attacker), owner.getHealth(), owner.getMaxHealth(),
-                verdict == OwnerHurtWatch.Verdict.DANGER);
+        return out;
     }
 
     /** 她自己挨打的看护(纯判定在 {@link CompanionHurtWatch})。 */
@@ -375,9 +383,50 @@ public final class NumenPlayer extends ServerPlayer {
         return ownerUuid != null && ownerUuid.equals(playerUuid);
     }
 
-    /** The owner as an online player, server-wide; null when offline. */
+    /** The owner (her creator) as an online player, server-wide; null when offline. */
     public ServerPlayer resolveOwnerPlayer() {
         return ownerUuid == null ? null : level().getServer().getPlayerList().getPlayer(ownerUuid);
+    }
+
+    /**
+     * 她的主人表,创建者在前(见 {@code docs/adr/runtime/0006-keepers-ownership-use-provenance.md}):创建者记在身体上,
+     * 分享给了谁只在名册里({@link CompanionRegistry#sharedWith})。
+     */
+    public List<UUID> keepers() {
+        List<UUID> out = new ArrayList<>();
+        if (ownerUuid != null) {
+            out.add(ownerUuid);
+        }
+        out.addAll(CompanionRegistry.get(getServer()).sharedWith(getUUID()));
+        return out;
+    }
+
+    /** 这个人用不用得了她:他在她的主人表上。归属(是不是创建者)问 {@link #isOwnedByPlayer}。 */
+    public boolean usableBy(UUID person) {
+        return keepers().contains(person);
+    }
+
+    /** 表上此刻在游戏里的各位主人,创建者在前。 */
+    public List<ServerPlayer> keepersInGame() {
+        List<ServerPlayer> out = new ArrayList<>();
+        for (UUID keeper : keepers()) {
+            ServerPlayer player = getServer().getPlayerList().getPlayer(keeper);
+            if (player != null) {
+                out.add(player);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * 眼前的主人——<b>只在这一处算</b>:最后跟她说话、此刻在游戏里的那位主人;没有就是创建者(他不在游戏里是 {@code null})。
+     * 跟随的默认对象、说话时看向谁、{@code numen.status.owner} 报的是谁,都问这里。
+     */
+    public ServerPlayer keeperAtHand() {
+        UUID spoke = com.dwinovo.numen.api.brain.CompanionLoops.get(getUUID())
+                .map(com.dwinovo.numen.api.brain.CompanionLoop::speaker).orElse(null);
+        ServerPlayer last = spoke == null ? null : getServer().getPlayerList().getPlayer(spoke);
+        return last != null ? last : resolveOwnerPlayer();
     }
 
     /**

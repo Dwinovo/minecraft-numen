@@ -104,7 +104,7 @@ public class RemoteBrainGameTests {
             } else {
                 // 同样的产品线路,只是模型换成用例脚本化的;"主人在不在""驾驶席"仍是产品里真算的
                 CompanionBrains.create(server, companion.getUUID(), owner, Homes.of(server).companion(companion.getUUID()),
-                        mind, Replies.link(server, owner), () -> OwnerPresence.present(server, owner),
+                        mind, Replies.link(server, owner), () -> OwnerPresence.present(server, java.util.List.of(owner)),
                         () -> McpMode.instance().driving(owner, companion.getUUID()));
             }
             this.loop = CompanionLoops.get(companion.getUUID()).orElseThrow();

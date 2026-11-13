@@ -44,7 +44,7 @@ public record RequestStatePayload(UUID uuid) implements CustomPacketPayload {
     /** Server main thread. */
     public static void handle(RequestStatePayload p, ServerPlayer player) {
         NumenPlayer numen = NumenPlayer.findByUuid(player.level().getServer(), p.uuid());
-        if (numen == null || !numen.isOwnedByPlayer(player.getUUID())) {
+        if (numen == null || !numen.usableBy(player.getUUID())) {
             NumenNetwork.sendToPlayer(player, absent(p.uuid()));
             return;
         }

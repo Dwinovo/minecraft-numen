@@ -52,7 +52,7 @@ public record LocateNumenPayload(List<UUID> entityUuids) implements CustomPacket
         CompanionRegistry registry = CompanionRegistry.get(player.level().getServer());
         for (UUID uuid : p.entityUuids()) {
             NumenPlayer numen = NumenPlayer.findByUuid(player.level().getServer(), uuid);
-            if (numen != null && numen.isOwnedByPlayer(player.getUUID())) {
+            if (numen != null && numen.usableBy(player.getUUID())) {
                 out.add(NumenLocationsPayload.Snapshot.live(uuid,
                         numen.getX(), numen.getY(), numen.getZ(),
                         numen.level().dimension().location().toString(),
@@ -64,7 +64,7 @@ public record LocateNumenPayload(List<UUID> entityUuids) implements CustomPacket
             // it sleeps instead of a useless "offline". Owner-gated — the registry
             // carries ownership and the respawn-hint position.
             CompanionRegistry.Entry entry = registry.find(uuid);
-            if (numen == null && entry != null && entry.owner().equals(player.getUUID())) {
+            if (numen == null && entry != null && entry.usableBy(player.getUUID())) {
                 var pos = entry.pos();
                 out.add(NumenLocationsPayload.Snapshot.lastSeen(uuid,
                         pos.getX(), pos.getY(), pos.getZ(),

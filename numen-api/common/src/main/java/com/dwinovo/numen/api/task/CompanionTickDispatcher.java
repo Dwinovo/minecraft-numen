@@ -122,7 +122,7 @@ public final class CompanionTickDispatcher {
         com.dwinovo.numen.api.brain.SkinHandover.tick(server);  // 旧皮肤库里的原图往主人客户端推下一段
         com.dwinovo.numen.api.mcp.server.McpMode.instance().tick();   // 外脑失联、回归的播报
         com.dwinovo.numen.api.brain.Visits.tick(server);   // 渠道来访:做完这一轮的结束
-        com.dwinovo.numen.api.brain.CompanionLoops.tick();   // 服务端大脑:停牌变化、攒够时长的熟度、推给主人的事件
+        com.dwinovo.numen.api.brain.CompanionLoops.tick(server);   // 服务端大脑:停牌变化、攒够时长的熟度、推给主人的事件
         Companions.respawnDead(server);    // 死了的同伴经原版重生流程回到世界
         TimerRegistry.tick(server);        // 她自己定的表,到点发事件
         com.dwinovo.numen.api.permission.PermissionFeed.tick(server);   // 规则表变了,合并推给主人的面板
@@ -132,9 +132,6 @@ public final class CompanionTickDispatcher {
                 // NumenPlayer.tick():实体 tick 只在她所在区块已经进入实体刻时才跑,而换维度刚落地的
                 // 那片区块还没进,回执与区块会互相等。真客户端答话不看服务端在不在 tick 她。
                 ap.fakeClient().answer();
-                UUID owner = ap.getOwnerUuid();
-                net.minecraft.server.level.ServerPlayer ownerPlayer =
-                        owner == null ? null : server.getPlayerList().getPlayer(owner);
                 // 背包变了就推给主人一份。变化由原版的 ContainerListener 报,这里每 tick
                 // 只有一次引用比较(菜单换没换),见 CompanionStateWatch。
                 com.dwinovo.numen.api.entity.CompanionStateWatch.tick(ap, server.getTickCount());
@@ -153,10 +150,9 @@ public final class CompanionTickDispatcher {
                     com.dwinovo.numen.api.event.NumenEvents.inventoryFull(ap, leftBehind);
                 }
                 // 主人挨打了说一声——通知不接管,去不去救是她的决定。
-                NumenPlayer.OwnerHurt hurt = ap.pollOwnerHurt(ownerPlayer, server.getTickCount());
-                if (hurt != null) {
-                    com.dwinovo.numen.api.event.NumenEvents.ownerHurt(ap, hurt.attacker(),
-                            hurt.hp(), hurt.maxHp(), ap.distanceTo(ownerPlayer), hurt.urgent());
+                for (NumenPlayer.OwnerHurt hurt : ap.pollOwnersHurt(server.getTickCount())) {
+                    com.dwinovo.numen.api.event.NumenEvents.ownerHurt(ap, hurt.owner(), hurt.attacker(),
+                            hurt.hp(), hurt.maxHp(), hurt.urgent());
                 }
                 // 她自己挨打了说一声——远处的弓箭手她看不见,不叫醒她就一直挨着。
                 NumenPlayer.CompanionHurt selfHurt = ap.pollCompanionHurt(server.getTickCount());

@@ -29,7 +29,7 @@ public final class PlayerSessions {
 
     private PlayerSessions() {}
 
-    /** 一位玩家登入了:他名下的同伴排队等着对账(该回来的回来),对他的客户端开场。 */
+    /** 一位玩家登入了:他用得了的同伴排队等着对账(该回来的回来),对他的客户端开场。 */
     public static void joined(ServerPlayer player) {
         if (player instanceof NumenPlayer) {
             return;
@@ -58,12 +58,12 @@ public final class PlayerSessions {
     }
 
     /**
-     * 主人断线:他名下在服务端跑着的程序收掉,等他答复的反向请求失败,他的模块缓存清掉;他名下的同伴排队等着对账
+     * 主人断线:等他的客户端答复的反向请求失败;他用得了的同伴里,表上已无人在场的收掉在跑的程序,都排队等着对账
      * (登出事件跑在原版 {@code PlayerList.remove} 内部,他还在玩家表里,到下一个服务端刻才算得准他在不在场)。
      */
     public static void left(ServerPlayer player) {
         if (!(player instanceof NumenPlayer)) {
-            OwnerPresence.playerLeft(player.getUUID());
+            OwnerPresence.playerLeft(player.server, player.getUUID());
             Companions.scheduleReconcile(player.getUUID());
             ANNOUNCED.remove(player.getUUID());
         }

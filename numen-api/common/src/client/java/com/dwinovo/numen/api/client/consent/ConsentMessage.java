@@ -364,7 +364,7 @@ public final class ConsentMessage {
             return I18n.get(ModLanguageData.Keys.CONSENT_ANSWERED_ELSEWHERE);
         }
         return I18n.get(ModLanguageData.Keys.CONSENT_WITHDRAWN, ConsentCards.name(card.companion()),
-                I18n.get(card.gone().key()));
+                card.goneText());
     }
 
     // ---- 小工具 ----

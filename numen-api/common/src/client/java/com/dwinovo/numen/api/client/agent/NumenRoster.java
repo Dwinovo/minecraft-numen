@@ -27,13 +27,15 @@ public final class NumenRoster {
 
     /**
      * 一只存在的同伴。{@code creative} 是服务端推来的此刻游戏模式,编辑卡的模式格显示当前值用。{@code outside} 是她被留在外面的
-     * 状态与原因(主人让她下线、服务器把她请出去):留在外面的不在世界里,等主人再召唤。
+     * 状态与原因(主人让她下线、服务器把她请出去):留在外面的不在世界里,等主人再召唤。{@code creator} 是创建她的那位玩家
+     * (不是本机的玩家,她就是分享来的),{@code creatorName} 是他的名字,服务端查不到是空串。
      */
-    public record Entry(UUID uuid, String name, boolean creative, Attendance.Outside outside) {
+    public record Entry(UUID uuid, String name, boolean creative, Attendance.Outside outside,
+                        UUID creator, String creatorName) {
 
-        /** 在册的一行,没有被留在外面。 */
+        /** 在册的一行,没有被留在外面;是谁创建的没有说。 */
         public Entry(UUID uuid, String name) {
-            this(uuid, name, false, Attendance.Outside.NONE);
+            this(uuid, name, false, Attendance.Outside.NONE, null, "");
         }
     }
 

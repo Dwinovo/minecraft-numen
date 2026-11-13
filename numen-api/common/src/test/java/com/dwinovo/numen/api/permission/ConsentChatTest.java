@@ -34,7 +34,7 @@ class ConsentChatTest {
 
     private static ConsentRequestPayload request(long id, ConsentRequestPayload.Line... lines) {
         return new ConsentRequestPayload(UUID.randomUUID(), id, List.of(lines), List.of("allow break(oak_log)"),
-                List.of(), List.of(), 0L, null);
+                List.of(), List.of(), 0L, null, "");
     }
 
     private static List<String> commands(Component message) {
@@ -73,7 +73,7 @@ class ConsentChatTest {
 
     @Test
     void aWithdrawalSaysWhoseRequestWentAwayAndWhy() {
-        Component message = ConsentChat.withdrawn("小柚", ConsentDesk.Withdrawal.TASK_ENDED);
+        Component message = ConsentChat.withdrawn("小柚", ConsentDesk.Withdrawal.TASK_ENDED, "");
         TranslatableContents contents = (TranslatableContents) message.getContents();
         assertEquals(Keys.CONSENT_WITHDRAWN, contents.getKey());
         assertEquals("小柚", contents.getArgs()[0]);

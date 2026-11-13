@@ -13,8 +13,11 @@ import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.api.network.payload.RequestStatePayload;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
 import com.dwinovo.numen.api.program.LocalPrograms;
+import com.dwinovo.numen.api.sdk.EntityLabel;
 import net.minecraft.server.MinecraftServer;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
@@ -23,8 +26,8 @@ import java.util.function.IntSupplier;
 /**
  * 一只同伴的服务端大脑怎么从服务器的各处接起来——这个接线只在这里,产品和 GameTest 走同一个 {@link #create}:
  * 家在世界存档里({@link Homes})、模型用服主的档案({@link LlmMind})、人设从主人的库里现取、主动性是主人的偏好
- * ({@link OwnerPrefs})、程序在本进程里跑({@link LocalPrograms})、身体状态直接读身体、谁在场读主人的会话
- * ({@link Conversations})、驾驶席归外接大脑宿主。
+ * ({@link OwnerPrefs})、程序在本进程里跑({@link LocalPrograms})、身体状态直接读身体、谁在场读说话那位主人的会话
+ * ({@link Conversations})、驾驶席归外接大脑宿主。她的主人表(创建者加名册上分享给的人)现问名册。
  *
  * <p>{@link #ensure} 是"她存在,她就有大脑":名册上有、大脑表里没有就建。
  *
@@ -39,6 +42,7 @@ public final class CompanionBrains {
      *
      * @param home        她的家(产品是世界里的 {@code companions/<uuid>/})
      * @param mind        怎么跟模型说话
+     * @param owner       她的创建者
      * @param link        主人那一头:事件推给谁、没有客户端时她的话怎么告诉他
      * @param ownerOnline 主人在不在场({@link OwnerPresence})
      * @param driving     驾驶席是不是在外接大脑手里
@@ -65,7 +69,7 @@ public final class CompanionBrains {
                                        BooleanSupplier driving, IntSupplier initiative,
                                        Function<String, String> persona) {
         CompanionRegistry registry = CompanionRegistry.get(server);
-        Conversations rooms = Conversations.of(server, owner);
+        Function<UUID, Conversations> roomsOf = who -> Conversations.of(server, who);
         CompanionLoop loop = new CompanionLoop(new CompanionLoop.Parts(companion, home, server, mind,
                 new LocalPrograms(server),
                 toolsOf(server, owner),
@@ -85,9 +89,29 @@ public final class CompanionBrains {
                     };
                 },
                 ownerOnline, driving, initiative, persona,
-                () -> server.overworld().getDayTime(), () -> server.overworld().getGameTime(), rooms));
-        CompanionLoops.install(owner, loop, link, rooms);
+                () -> server.overworld().getDayTime(), () -> server.overworld().getGameTime(),
+                (speaker, her, conversation) -> roomsOf.apply(speaker).audienceLine(her, conversation),
+                new CompanionLoop.Keepers() {
+                    @Override
+                    public List<UUID> list() {
+                        return keepers(registry, owner, companion);
+                    }
+
+                    @Override
+                    public String shown(UUID keeper) {
+                        return EntityLabel.shown(keeper, NumenPlayer.playerName(server, keeper));
+                    }
+                }));
+        CompanionLoops.install(owner, loop, link, roomsOf);
         return loop;
+    }
+
+    /** 她的主人表,创建者在前:创建者是建大脑时给的那一位,分享给了谁现问名册。 */
+    private static List<UUID> keepers(CompanionRegistry registry, UUID owner, UUID companion) {
+        List<UUID> out = new ArrayList<>();
+        out.add(owner);
+        out.addAll(registry.sharedWith(companion));
+        return out;
     }
 
     /** 这位主人的同伴看得到的工具:内置大脑与外接大脑(MCP 端点)问的是同一份。 */
@@ -103,7 +127,8 @@ public final class CompanionBrains {
         if (have.isPresent()) {
             return have.get();
         }
-        CompanionRegistry.Entry entry = CompanionRegistry.get(server).find(companion);
+        CompanionRegistry registry = CompanionRegistry.get(server);
+        CompanionRegistry.Entry entry = registry.find(companion);
         if (entry == null) {
             return null;
         }
@@ -112,8 +137,9 @@ public final class CompanionBrains {
         McpClients.of(server).owner(owner);   // 他自己接进来的 MCP 服务器,从这一刻起连着
         CompanionLoop loop = create(server, companion, owner, homes.companion(companion),
                 new LlmMind(ModelServices.of(server).providers(owner), owner, ModelServices.of(server).quota()),
-                Replies.link(server, owner),
-                () -> OwnerPresence.present(server, owner),
+                new KeeperLinks(() -> keepers(registry, owner, companion), who -> Replies.link(server, who),
+                        () -> CompanionLoops.get(companion).map(CompanionLoop::speaker).orElse(null)),
+                () -> OwnerPresence.present(server, keepers(registry, owner, companion)),
                 () -> com.dwinovo.numen.api.mcp.server.McpMode.instance().driving(owner, companion));
         return loop;
     }
@@ -126,7 +152,7 @@ public final class CompanionBrains {
         }
         var player = server.getPlayerList().getPlayer(owner);
         if (player != null && Presence.hasClient(owner)) {
-            CompanionLoops.sendSnapshots(owner, Replies.link(server, owner));
+            Replies.snapshots(server, owner);
         }
     }
 }

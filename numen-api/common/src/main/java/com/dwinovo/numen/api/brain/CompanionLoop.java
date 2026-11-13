@@ -78,16 +78,27 @@ import java.util.function.Supplier;
  */
 public final class CompanionLoop {
 
-    /** 会话成员表那一侧:这句话还有谁听得见(群聊),见 {@code docs/group-chat.md}。 */
+    /** 会话成员表那一侧:这句话还有谁听得见(群聊),见 {@code docs/group-chat.md}。会话按人,所以到说话那位的会话表里找。 */
     @FunctionalInterface
     public interface Rooms {
 
         /**
          * 挂在 {@code <query>} 标记外面的"谁在场"那一行:模型看得到,聊天流不画。就他俩时没人听得见,说了反而是噪音:空串。
          *
-         * @param conversation 她此刻在哪个会话里;{@code null} = 就他俩
+         * @param speaker      说这句话的那位主人
+         * @param conversation 她此刻在哪个会话里(他的会话表里的);{@code null} = 就他俩
          */
-        String audienceLine(UUID companion, String conversation);
+        String audienceLine(UUID speaker, UUID companion, String conversation);
+    }
+
+    /** 主人表那一侧(见 {@code docs/adr/runtime/0006-keepers-ownership-use-provenance.md}):现问现答,表变了循环不用重建。 */
+    public interface Keepers {
+
+        /** 她的主人表,创建者在前。 */
+        List<UUID> list();
+
+        /** 一位主人写给模型读的身份({@code player@短码 (名字)},见 {@code EntityLabel#shown})。 */
+        String shown(UUID keeper);
     }
 
     /**
@@ -105,11 +116,13 @@ public final class CompanionLoop {
      * @param tools       她看得到的工具
      * @param dayTime     游戏内时刻,给事件盖时间戳
      * @param gameTime    主世界的游戏刻(世界不跑它就不走,{@code /time set} 改不了它),主人的定时按它算到期
+     * @param keepers     她的主人表
      */
     public record Parts(UUID companion, Home home, Executor main, Mind mind, ProgramHost programs, ToolBook tools,
                         Supplier<NumenPlayer> body, Supplier<BodySnapshot> snapshot, Supplier<HaltReason> absent,
                         BooleanSupplier ownerOnline, BooleanSupplier driving, IntSupplier initiative,
-                        Function<String, String> persona, LongSupplier dayTime, LongSupplier gameTime, Rooms rooms) {}
+                        Function<String, String> persona, LongSupplier dayTime, LongSupplier gameTime, Rooms rooms,
+                        Keepers keepers) {}
 
     private static final String CHAT = "chat.jsonl";
     private static final String INBOX = "inbox.jsonl";
@@ -143,10 +156,10 @@ public final class CompanionLoop {
      */
     private String conversation;
     /**
-     * 主人最后一句话是在哪儿说的({@link Venue})——她的回话回到那里({@link Voice})。和 {@link #conversation} 一样是
-     * "最后一次被怎么叫醒"的会话态,不落盘。
+     * 主人最后一句话是谁、在哪儿说的({@link Spoken})——她的回话回给那一位、回到那里({@link Voice}),{@link #conversation}
+     * 也是他的会话表里的。和 {@link #conversation} 一样是"最后一次被怎么叫醒"的会话态,不落盘。
      */
-    private Venue venue = Venue.PANEL;
+    private Spoken from = Spoken.NOBODY;
     /** 绑定的档案 id;{@code null} = 没绑。落盘在 {@code binding.json},四项绑定一个文件。 */
     private String providerId;
     /** 绑定的人设 id;{@code null} = 默认人格。人设正文每轮现取,没有副本。 */
@@ -376,7 +389,27 @@ public final class CompanionLoop {
 
     /** 主人最后一句话是在哪儿说的。 */
     public Venue venue() {
-        return venue;
+        return from.venue();
+    }
+
+    /**
+     * 她在回谁的话:最后跟她说话的那位主人;还没有哪一位亲口说过(刚重进、定时到点),或者他已经不在她的主人表上,就是创建者。
+     * 她一位主人也没有是 {@code null}。
+     */
+    public UUID speaker() {
+        List<UUID> keepers = parts.keepers().list();
+        if (from.who() != null && keepers.contains(from.who())) {
+            return from.who();
+        }
+        return keepers.isEmpty() ? null : keepers.get(0);
+    }
+
+    /** 这一位不再是她的主人了:她若还站在他的场面里(最后一句是他说的),退回"没有人说过话"的样子。 */
+    public void keeperLeft(UUID who) {
+        if (who.equals(from.who())) {
+            from = Spoken.NOBODY;
+            conversation = null;
+        }
     }
 
     /** 与自动整理同一口径的上下文窗口,取自她绑定的档案解析出的端点;没绑是 0。 */
@@ -392,37 +425,47 @@ public final class CompanionLoop {
      * @return 这句话有没有被压着(内脑没能当场把请求发出去);只是观察,不是预测
      */
     public boolean submitPrompt(String text) {
-        return submitPrompt(text, Venue.PANEL);
+        return submitPrompt(text, Spoken.NOBODY);
     }
 
-    /** 同上,指明是在哪儿说的:她的回话回到那里。 */
-    public boolean submitPrompt(String text, Venue spokenIn) {
-        this.venue = spokenIn;
-        return enqueueOwnerWords(EventQueue.query(text, parts.dayTime().getAsLong()));
+    /** 同上,指明是谁、在哪儿说的:她的回话回给他、回到那里。 */
+    public boolean submitPrompt(String text, Spoken spoken) {
+        this.from = spoken;
+        return enqueueOwnerWords(EventQueue.query(text, parts.dayTime().getAsLong(), speakerShown()));
     }
 
     /**
      * 主人打了一条斜杠命令。{@code echo} 进 {@code <query>}(聊天流画的就是它),{@code expanded}(技能正文等)
      * 跟在标记外面:模型看得到,聊天流不画。
+     *
+     * @param who 打这条命令的那位主人
      */
-    public boolean submitCommand(String echo, String expanded) {
-        this.venue = Venue.PANEL;
-        return enqueueOwnerWords(EventQueue.query(echo, parts.dayTime().getAsLong())
+    public boolean submitCommand(String echo, String expanded, UUID who) {
+        this.from = new Spoken(who, Venue.PANEL);
+        return enqueueOwnerWords(EventQueue.query(echo, parts.dayTime().getAsLong(), speakerShown())
                 + (expanded == null || expanded.isBlank() ? "" : "\n" + expanded));
     }
 
     /**
      * 主人给她定的定时到点了,说那句话:和主人的话同一条路进收件箱(同样走停牌、停止、外接大脑),开标签上带来源,面板据此标"定时"。
-     * 是私聊里说的,所以不属于任何群会话,回话回到面板。
+     * 是私聊里说的,所以不属于任何群会话,回话回到面板;不是哪一位此刻亲口说的。
      */
     private boolean submitScheduled(String text) {
-        this.venue = Venue.PANEL;
+        this.from = Spoken.NOBODY;
         this.conversation = null;
         return enqueueOwnerWords(EventQueue.scheduledQuery(text, parts.dayTime().getAsLong()));
     }
 
+    /**
+     * 这句话的 {@code <query>} 开标签上写不写是谁说的:她不止一位主人、又知道是哪一位说的才写;只有一位主人时没人要区分,
+     * 说了是噪音(与"就他俩时不写谁在场"同一个道理)。
+     */
+    private String speakerShown() {
+        return from.who() != null && parts.keepers().list().size() > 1 ? parts.keepers().shown(from.who()) : null;
+    }
+
     private boolean enqueueOwnerWords(String wire) {
-        String audience = parts.rooms().audienceLine(companion, conversation);
+        String audience = parts.rooms().audienceLine(speaker(), companion, conversation);
         return deliver(new EventQueue.Entry(EventTypes.QUERY,
                 wire + (audience.isEmpty() ? "" : "\n" + audience), System.currentTimeMillis(), false));
     }
@@ -627,10 +670,14 @@ public final class CompanionLoop {
         return goals.goal();
     }
 
-    /** 定一个目标。整份目标只在这里交给她一次;走 {@link #submitCommand} 是为了聊天里有主人打的那行字。 */
-    public void setGoal(GoalState next, String echo) {
+    /**
+     * 定一个目标。整份目标只在这里交给她一次;走 {@link #submitCommand} 是为了聊天里有主人打的那行字。
+     *
+     * @param who 定这个目标的那位主人
+     */
+    public void setGoal(GoalState next, String echo, UUID who) {
         if (goals.set(next)) {
-            submitCommand(echo, GoalPrompts.initialDirective(next));
+            submitCommand(echo, GoalPrompts.initialDirective(next), who);
         }
     }
 

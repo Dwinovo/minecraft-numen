@@ -54,7 +54,7 @@ class NumenRosterTest {
     void aCompanionRemovedFromTheServerIsShownAsOut() {
         NumenRoster.instance().replaceAll("w1", List.of(
                 new NumenRoster.Entry(A, "小焰", false,
-                        com.dwinovo.numen.api.entity.Attendance.Outside.byServer("cheating at cards"))));
+                        com.dwinovo.numen.api.entity.Attendance.Outside.byServer("cheating at cards"), null, "")));
 
         assertTrue(NumenRoster.instance().outside(A).server());
         assertEquals("cheating at cards", NumenRoster.instance().outside(A).reason());
