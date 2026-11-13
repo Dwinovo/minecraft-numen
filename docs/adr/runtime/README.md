@@ -10,3 +10,4 @@
 | [0003](0003-network-off-main-thread.md) | 10-16 | 我们的客户端只走 MC 的连接,网络包不拖慢刻 | 已接受,在落地 |
 | [0004](0004-host-library-is-the-server-directory.md) | 10-21 | 房主的"我的"就是服务器目录,"内置"改叫"服务器提供" | 已接受,已落地 |
 | [0005](0005-skins-are-pngs-in-a-folder-signed-on-use.md) | 10-21 | 皮肤是文件夹里的 png,用时才签,签名缓存按内容寻址 | 已接受,已落地 |
+| [0006](0006-keepers-ownership-use-provenance.md) | 11-13 | 她有一张主人表:归属只认创建者,使用问主人表,每项绑定记着是谁绑的 | 已接受,在落地 |
