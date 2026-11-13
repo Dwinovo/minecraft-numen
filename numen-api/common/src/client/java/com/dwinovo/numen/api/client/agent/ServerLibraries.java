@@ -5,6 +5,7 @@ import com.dwinovo.numen.api.agent.catalog.ThinkingLevel;
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
 import com.dwinovo.numen.api.agent.loop.Cause;
 import com.dwinovo.numen.api.agent.provider.ThinkingPlan;
+import com.dwinovo.numen.api.brain.Bound;
 import com.dwinovo.numen.api.brain.CompanionState;
 import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig;
@@ -490,6 +491,27 @@ public final class ServerLibraries {
     public static Voice voice(String id) {
         for (Voice v : voicesInUse()) {
             if (v.id().equals(id)) {
+                return v;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 她绑的这条声线在我看到的库里是哪一条;我看不到的是 {@code null}。绑定的条目在<b>绑的那个人</b>看到的库里解析:我绑的,就是我叠起来之后
+     * 在用的那一条;别人绑的,只有服务器提供的那一条我也看得到(房主看到的每一行都在服务器目录里)——他"我的"里的我看不到,
+     * 我"我的"里同名的是另一条。
+     *
+     * @param viewer 这台客户端的玩家
+     */
+    public static Voice voice(Bound bound, java.util.UUID viewer) {
+        String id = bound.id().toString();
+        if (bound.by().equals(viewer)) {
+            return voice(id);
+        }
+        for (Voice v : voices()) {
+            if (v.id().equals(id) && (v.base().server() || RemoteCompanions.host()) && v.base().enabled()
+                    && v.profile() != null) {
                 return v;
             }
         }

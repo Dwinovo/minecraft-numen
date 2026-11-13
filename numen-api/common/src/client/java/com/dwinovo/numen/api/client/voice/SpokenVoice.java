@@ -1,10 +1,13 @@
 package com.dwinovo.numen.api.client.voice;
 
+import com.dwinovo.numen.api.brain.CompanionState;
+import com.dwinovo.numen.api.brain.Slot;
 import com.dwinovo.numen.api.client.ClientKeys;
 import com.dwinovo.numen.api.client.agent.RemoteCompanions;
 import com.dwinovo.numen.api.client.agent.ServerLibraries;
 import com.dwinovo.numen.api.client.data.ClientPrefs;
 import com.dwinovo.numen.api.voice.VoiceProfile;
+import net.minecraft.client.Minecraft;
 
 import java.util.UUID;
 
@@ -20,13 +23,16 @@ public record SpokenVoice(VoiceProfile profile, String apiKey) {
 
     /**
      * 语音管线的唯一入口:这个同伴此刻应该用哪条声线。读她的绑定(服务端推来的状态)、声线库(服务端推来的表)和本机钥匙串;
-     * 语音总开关关了、她没绑声线、绑的那条被删了或被玩家关掉了,都是 {@code null}(= 静音)。
+     * 语音总开关关了、她没绑声线、绑的那条被删了或被玩家关掉了、绑的是别的主人"我的"里的一条(这台电脑看不到它,由他的客户端念),
+     * 都是 {@code null}(= 静音)。
      */
     public static SpokenVoice of(UUID companion) {
-        if (!ClientPrefs.voiceEnabled() || companion == null) {
+        var me = Minecraft.getInstance().player;
+        if (!ClientPrefs.voiceEnabled() || companion == null || me == null) {
             return null;
         }
-        ServerLibraries.Voice voice = ServerLibraries.voice(RemoteCompanions.getOrCreate(companion).voiceId());
+        CompanionState.Binding bound = RemoteCompanions.getOrCreate(companion).binding(Slot.VOICE);
+        ServerLibraries.Voice voice = bound == null ? null : ServerLibraries.voice(bound.bound(), me.getUUID());
         return voice == null ? null : new SpokenVoice(voice.profile(), ClientKeys.keychain().get(voice.profile().keyService()));
     }
 
