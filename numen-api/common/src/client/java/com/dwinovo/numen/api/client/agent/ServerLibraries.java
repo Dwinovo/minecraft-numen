@@ -453,6 +453,36 @@ public final class ServerLibraries {
         return skills().stream().filter(s -> effective(s.base())).toList();
     }
 
+    /** 她用得了的一个技能,给命令补全与 {@code /skills} 看的:名字与描述。 */
+    public record HerSkill(String name, String description) {}
+
+    /**
+     * 这只同伴用得了的技能——她读的永远是创建者的那一份:我创建的,就是我技能库里叠起来算数、没关掉的;分享来的,是服务端说的
+     * 她创建者的那一份({@link Libraries#COMPANION_SKILLS}),我自己的技能库管不着她。没指明哪一只({@code null}:会话没有单一的主)
+     * 给的是我自己技能库里的。
+     *
+     * @param viewer 这台客户端的玩家
+     */
+    public static List<HerSkill> skillsOf(java.util.UUID companion, java.util.UUID viewer) {
+        NumenRoster.Entry her = companion == null ? null : NumenRoster.instance().entry(companion);
+        List<HerSkill> out = new ArrayList<>();
+        if (her != null && her.sharedWith(viewer)) {
+            for (JsonElement e : entries(Libraries.COMPANION_SKILLS)) {
+                JsonObject o = e.getAsJsonObject();
+                if (companion.toString().equals(text(o, "companion"))) {
+                    out.add(new HerSkill(text(o, "skill"), text(o, "description")));
+                }
+            }
+            return out;
+        }
+        for (Skill skill : skillsEffective()) {
+            if (skill.enabled()) {
+                out.add(new HerSkill(skill.name(), skill.description()));
+            }
+        }
+        return out;
+    }
+
     // ---- 插件 ----
 
     /**

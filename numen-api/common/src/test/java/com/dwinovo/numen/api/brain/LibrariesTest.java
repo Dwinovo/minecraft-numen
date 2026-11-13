@@ -83,6 +83,8 @@ class LibrariesTest {
     private final java.util.concurrent.atomic.AtomicInteger signCalls = new java.util.concurrent.atomic.AtomicInteger();
     private final Map<UUID, PermissionStore> permissionStores = new HashMap<>();
     private final Map<UUID, Map<UUID, String>> companionsOf = new HashMap<>();
+    /** 分享给各位玩家的同伴(创建者另有其人)。 */
+    private final Map<UUID, List<UUID>> sharedWith = new HashMap<>();
     private PluginRoster plugins;
 
     private Libraries libraries(Path dir) {
@@ -164,6 +166,11 @@ class LibrariesTest {
             @Override
             public List<UUID> companions(UUID owner) {
                 return List.copyOf(companionsOf.getOrDefault(owner, Map.of()).keySet());
+            }
+
+            @Override
+            public List<UUID> sharedCompanions(UUID owner) {
+                return sharedWith.getOrDefault(owner, List.of());
             }
 
             @Override
@@ -738,6 +745,37 @@ class LibrariesTest {
                 "没有这个技能才是没有");
         assertNotNull(libraries.handle(ADMIN, true, Libraries.SKILL, Libraries.PUT, body("name", "x", "text", "y")).problem(),
                 "技能是目录,不经协议存");
+    }
+
+    @Test
+    void aCompanionSharedWithAPlayerShowsHimHerCreatorsSkillsNamesAndDescriptionsOnly(@TempDir Path dir)
+            throws IOException {
+        Libraries libraries = libraries(dir);
+        UUID her = UUID.randomUUID();
+        // 她是 OTHER 创建的、分享给了 PLAYER:她读的技能是 OTHER 的那一份
+        SkillRegistry.init(companion -> hub.library(SkillRegistry.KIND, OTHER));
+        sharedWith.put(PLAYER, List.of(her));
+        Path skills = dir.resolve("server").resolve("skills").resolve("gt");
+        write(skills.resolve("lumber").resolve(SkillRegistry.SKILL_FILENAME),
+                "---\nname: lumber\ndescription: Fell a tree.\n---\n\n# Felling\nsecret body\n");
+        write(skills.resolve("fishing").resolve(SkillRegistry.SKILL_FILENAME),
+                "---\nname: fishing\ndescription: Catch fish.\n---\nbody\n");
+        libraries.handle(OTHER, false, Libraries.SKILL, Libraries.RELOAD, new JsonObject());
+        // 创建者关掉一个,被分享的人自己关掉另一个:她听创建者的
+        libraries.handle(OTHER, false, Libraries.SKILL, Libraries.DISABLE, body("id", "gt:fishing"));
+        libraries.handle(PLAYER, false, Libraries.SKILL, Libraries.DISABLE, body("id", "gt:lumber"));
+
+        JsonArray hers = array(libraries.view(PLAYER, false, Libraries.COMPANION_SKILLS));
+        assertEquals(1, hers.size(), "创建者关掉的不在,被分享的人自己的开关管不着她: " + hers);
+        JsonObject row = hers.get(0).getAsJsonObject();
+        assertEquals(her.toString(), row.get("companion").getAsString());
+        assertEquals("lumber", row.get("skill").getAsString());
+        assertEquals("Fell a tree.", row.get("description").getAsString());
+        assertFalse(hers.toString().contains("secret body"), "正文不下行");
+
+        assertEquals("[]", libraries.view(OTHER, false, Libraries.COMPANION_SKILLS), "自己创建的同伴读的就是自己的技能库,不在这张表里");
+        assertNotNull(libraries.handle(PLAYER, false, Libraries.COMPANION_SKILLS, Libraries.DISABLE, body("id", "gt:lumber")).problem(),
+                "只读:她的技能由创建者管理");
     }
 
     @Test

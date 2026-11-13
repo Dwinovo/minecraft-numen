@@ -76,6 +76,8 @@ import java.util.UUID;
  *       {@link #DELETE} 删除,条数与间隔的限制在 {@link OwnerSchedules},状态以服务端为准;
  *   <li><b>权限</b>({@link #PERMISSION}):主人自己的规则与他名下每只同伴的模式,只有他读写他那一份(管理员也一样),
  *       见 {@link PermissionLibrary};</li>
+ *   <li><b>分享来的她的技能</b>({@link #COMPANION_SKILLS}):分享给这位玩家的各只同伴此刻用得了的技能——她创建者的那一份
+ *       (她读的技能永远是创建者的),只有名字与描述,正文不下行;只读,要改得创建者在他自己的技能库里改;</li>
  *   <li><b>外接大脑</b>({@link #MCP_SERVER}):接入地址、令牌、局域网、开关都是管理员的事,别人看到的是空表;</li>
  *   <li><b>接进来的 MCP 服务器</b>({@link #MCP_CLIENT}):地址、令牌、命令行都是管理员的事(stdio 起的是服务器机器上的进程),
  *       别人只看得到名字、连没连上、有几个工具。授权网址只给管理员,授权回来的网址也由管理员贴回({@link #AUTH})。</li>
@@ -93,6 +95,8 @@ public final class Libraries {
     public static final String MCP_SERVER = "mcp-server";
     public static final String PREFS = "prefs";
     public static final String SKILL = "skill";
+    /** 分享给这位玩家的各只同伴用得了的技能(她创建者的那一份):一行一条(companion、skill、description),只读。 */
+    public static final String COMPANION_SKILLS = "companion-skills";
     public static final String NOTES = "notes";
     /** 一条札记的全文:按 {@code companion}、{@code name} 问,答一行;问不到(不是他的同伴、没有这条)是空表。 */
     public static final String NOTE = "note";
@@ -187,6 +191,9 @@ public final class Libraries {
         /** 这位主人用得了的同伴(他创建的、分享给他的):她的札记、定时他看得到、管得了。 */
         List<UUID> companions(UUID owner);
 
+        /** 分享给这位玩家的同伴(他用得了、创建者另有其人):她读的技能是她创建者的。 */
+        List<UUID> sharedCompanions(UUID owner);
+
         /** 服务器目录里 jar 同步的清单。 */
         Shipped.Manifest manifest();
 
@@ -250,6 +257,12 @@ public final class Libraries {
             @Override
             public List<UUID> companions(UUID owner) {
                 return CompanionRegistry.get(server).usableBy(owner).stream().map(java.util.Map.Entry::getKey).toList();
+            }
+
+            @Override
+            public List<UUID> sharedCompanions(UUID owner) {
+                return CompanionRegistry.get(server).usableBy(owner).stream()
+                        .filter(e -> !e.getValue().owner().equals(owner)).map(java.util.Map.Entry::getKey).toList();
             }
 
             @Override
@@ -392,7 +405,7 @@ public final class Libraries {
             case PREFS -> Done.of(prefs(owner, op, body), false);
             case NOTES -> notes(owner, op, body);
             case SCHEDULES -> schedules(owner, op, body);
-            case NOTE, CATALOG, SKIN_FILES -> Done.of(LIST.equals(op) ? null : "unknown operation", false);
+            case NOTE, CATALOG, SKIN_FILES, COMPANION_SKILLS -> Done.of(LIST.equals(op) ? null : "unknown operation", false);
             default -> Done.of("unknown library", false);
         };
         JsonArray entries = JsonParser.parseString(view(owner, admin, kind, body)).getAsJsonArray();
@@ -485,6 +498,17 @@ public final class Libraries {
                     .forEach(note -> out.add(noteRow(companion, note, false))));
             case SCHEDULES -> sources.companions(owner).forEach(companion -> CompanionLoops.get(companion)
                     .ifPresent(loop -> loop.schedules().forEach(s -> out.add(scheduleRow(companion, s)))));
+            case COMPANION_SKILLS -> sources.sharedCompanions(owner).forEach(companion -> {
+                // 技能命令在服务端认的就是这一份(SkillRegistry.get):她创建者没关掉的
+                SkillRegistry hers = SkillRegistry.of(companion);
+                hers.all().stream().filter(skill -> hers.get(skill.name()).isPresent()).forEach(skill -> {
+                    JsonObject row = new JsonObject();
+                    row.addProperty("companion", companion.toString());
+                    row.addProperty("skill", skill.name());
+                    row.addProperty("description", skill.description());
+                    out.add(row);
+                });
+            });
             case NOTE -> {
                 UUID companion = ownedCompanion(owner, ask);
                 NoteBook.Note note = companion == null ? null : NoteBook.of(companion).read(string(ask, "name"));

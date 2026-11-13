@@ -418,8 +418,31 @@ public final class SettingsView {
     private int secX() { return innerLeft() + INNER; }
     /** Width of the section content area. */
     private int secW() { return innerRight() - INNER - secX(); }
-    /** Top y of section content;首页第一行与分区抬头行同一条顶边。 */
-    private int secY0() { return innerTop() + INNER; }
+    /** Top y of section content;首页第一行与分区抬头行同一条顶边。分区顶上有"由创建者管理"那一句时让到它下面。 */
+    private int secY0() { return innerTop() + INNER + managedNoteH(); }
+
+    /** 那一句的行距与它下面留的空。 */
+    private static final int NOTE_LINE_H = 10;
+    private static final int NOTE_GAP = 5;
+
+    /**
+     * 面板对着一只分享来的同伴时,技能、工具、权限这三页顶上的那一句:她用的是创建者的那一份、由创建者管理;这一页列的是看的人
+     * 自己的,管他创建的同伴。别的分区,或面板对着的不是分享来的,没有这一句(空表)。按分区内容宽折好。
+     */
+    private List<String> managedNote() {
+        if (section != Section.SKILLS && section != Section.MCP && section != Section.PERMISSION) return List.of();
+        var her = host.uuid() == null ? null : com.dwinovo.numen.api.client.agent.NumenRoster.instance().entry(host.uuid());
+        if (her == null || !her.sharedWith(RemoteCompanions.viewer())) return List.of();
+        String key = section == Section.SKILLS ? ModLanguageData.Keys.SHARE_SKILLS_BY
+                : section == Section.MCP ? ModLanguageData.Keys.SHARE_TOOLS_BY : ModLanguageData.Keys.SHARE_RULES_BY;
+        return com.dwinovo.numen.api.client.ui.TextWrap.wrap(I18n.get(key, her.name(), her.creator().shown()), secW(),
+                font()::width, 0);
+    }
+
+    private int managedNoteH() {
+        int lines = managedNote().size();
+        return lines == 0 ? 0 : lines * NOTE_LINE_H + NOTE_GAP;
+    }
     /** Bottom y a list row may reach. */
     private int secBottom() { return innerBottom() - INNER; }
     private int secH() { return secBottom() - secY0(); }
@@ -1336,6 +1359,11 @@ public final class SettingsView {
         if (formActive()) {
             mouseX = -10000;
             mouseY = -10000;
+        }
+        int noteY = innerTop() + INNER;
+        for (String line : managedNote()) {
+            txt(g, Component.literal(line), secX(), noteY, TXT_MUTED);
+            noteY += NOTE_LINE_H;
         }
         switch (section) {
             case MCP -> renderMcpSection(g, mouseX, mouseY);

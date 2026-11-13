@@ -3,6 +3,7 @@ package com.dwinovo.numen.api.client.command;
 import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.client.agent.RemoteCompanion;
+import com.dwinovo.numen.api.client.agent.RemoteCompanions;
 import com.dwinovo.numen.api.client.agent.ServerLibraries;
 
 import java.util.ArrayList;
@@ -12,19 +13,19 @@ import java.util.List;
  * 每个技能一条命令:{@code /build 在河边盖个木屋}。
  *
  * <p>按服务器上当前的技能表现算(技能目录是服务器全局的)——往 {@code config/numen/server/skills} 里丢个目录、或者管理员在面板里
- * 把某个技能关掉,命令表跟着变,不用重启也不用去哪儿登记。
+ * 把某个技能关掉,命令表跟着变,不用重启也不用去哪儿登记。列的是<b>这只同伴</b>用得了的({@link ServerLibraries#skillsOf}):
+ * 分享来的她读的是创建者的技能,命令表就是创建者的那一份,和服务端展开时认的同一份。
  */
 final class SkillCommandSource implements CommandSource {
 
     @Override
     public List<ChatCommand> commands(RemoteCompanion loop) {
         List<ChatCommand> out = new ArrayList<>();
-        for (ServerLibraries.Skill skill : ServerLibraries.skillsEffective()) {
-            // 关掉的技能不该还在补全里躺着:面板上把它关了,命令就得跟着消失,
-            // 否则打得出来、按下去却说"已经不在了"。
-            if (skill.enabled()) {
-                out.add(new SkillCommand(skill.name()));
-            }
+        // 关掉的技能不该还在补全里躺着:面板上把它关了,命令就得跟着消失,
+        // 否则打得出来、按下去却说"已经不在了"。
+        for (ServerLibraries.HerSkill skill : ServerLibraries.skillsOf(loop == null ? null : loop.entityUuid(),
+                RemoteCompanions.viewer())) {
+            out.add(new SkillCommand(skill.name(), skill.description()));
         }
         return out;
     }
@@ -35,7 +36,7 @@ final class SkillCommandSource implements CommandSource {
      * <p>只记名字:正文由服务端在<b>执行那一刻</b>从技能目录里现取并展开,否则
      * 主人刚改过的 SKILL.md 不会生效,而补全列表是很早以前建的。
      */
-    private record SkillCommand(String skill) implements ChatCommand {
+    private record SkillCommand(String skill, String about) implements ChatCommand {
 
         @Override
         public String name() {
@@ -44,9 +45,7 @@ final class SkillCommandSource implements CommandSource {
 
         @Override
         public String description() {
-            String desc = ServerLibraries.skillsEffective().stream().filter(s -> s.name().equals(skill))
-                    .map(ServerLibraries.Skill::description).findFirst().orElse(null);
-            return desc == null || desc.isBlank() ? I18n.get(Keys.CMD_SKILL) : desc;
+            return about == null || about.isBlank() ? I18n.get(Keys.CMD_SKILL) : about;
         }
 
         @Override
@@ -68,7 +67,8 @@ final class SkillCommandSource implements CommandSource {
          */
         @Override
         public String run(RemoteCompanion loop, String args) {
-            boolean there = ServerLibraries.skillsEffective().stream().anyMatch(s -> s.name().equals(skill) && s.enabled());
+            boolean there = ServerLibraries.skillsOf(loop.entityUuid(), RemoteCompanions.viewer()).stream()
+                    .anyMatch(s -> s.name().equals(skill));
             if (!there) {
                 return I18n.get(Keys.CMD_SKILL_GONE, skill);
             }

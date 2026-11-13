@@ -148,6 +148,10 @@ public final class Replies {
         if (result.shared()) {
             share(server, player, kind);
         }
+        if (Libraries.SKILL.equals(kind) && !Libraries.LIST.equals(op)) {
+            // 技能库动了:分享来的她读的是创建者的那一份,被分享的各位面板上她的技能名单跟着换
+            share(server, null, Libraries.COMPANION_SKILLS);
+        }
     }
 
     /**

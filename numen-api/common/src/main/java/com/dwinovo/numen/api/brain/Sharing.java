@@ -67,6 +67,7 @@ public final class Sharing {
         ServerPlayer added = server.getPlayerList().getPlayer(person);
         if (added != null) {
             CompanionLoops.sendSnapshot(companion, Replies.link(server, person));
+            Replies.pushTo(server, person, Libraries.COMPANION_SKILLS);   // 她读的技能是创建者的那一份,给他看名单
             NumenPlayer body = NumenPlayer.findByUuid(server, companion);
             if (body != null) {
                 ConsentDesk.of(body).keeperJoined(added);

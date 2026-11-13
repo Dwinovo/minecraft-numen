@@ -198,8 +198,8 @@ public final class RemoteCompanions {
         admin = p.admin();
         host = p.host();
         // 召唤卡、设置页要用的这几张表先要来;页面打开时再要一次拿最新的
-        for (String kind : List.of(Libraries.PERSONA, Libraries.PROVIDER, Libraries.PREFS, Libraries.SKILL, Libraries.NOTES,
-                Libraries.SCHEDULES, Libraries.MCP_CLIENT, Libraries.MCP_SERVER)) {
+        for (String kind : List.of(Libraries.PERSONA, Libraries.PROVIDER, Libraries.PREFS, Libraries.SKILL,
+                Libraries.COMPANION_SKILLS, Libraries.NOTES, Libraries.SCHEDULES, Libraries.MCP_CLIENT, Libraries.MCP_SERVER)) {
             LIBRARY.ask(kind);
         }
     }
