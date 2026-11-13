@@ -789,6 +789,17 @@ public final class CompanionLoop {
     }
 
     /**
+     * 这个人绑的那几项退回未绑定(他不再是她的主人了:他的库、他的 key 不该再被她用)。每一项的后果同 {@link #bind} 不绑时的。
+     *
+     * @return 退掉了哪几项;他什么都没绑是空表
+     */
+    public List<Slot> releaseBoundBy(UUID person) {
+        List<Slot> released = bindings.boundBy(person);
+        released.forEach(slot -> bind(slot, null));
+        return released;
+    }
+
+    /**
      * 库条目改了名(id 就是名字):她这一项绑的正是 {@code was}(同一个人绑的同一条)就改指 {@code to}。
      *
      * @return 改了

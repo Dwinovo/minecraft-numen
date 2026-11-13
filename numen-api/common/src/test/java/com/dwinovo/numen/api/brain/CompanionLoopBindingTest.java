@@ -16,8 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 她的每项绑定记着是谁绑的({@link Bound}),这一个值从绑定文件一路到模型口、人设解析和推给客户端的状态;
- * 库条目改名只动改名的那个人绑的。{@link BrainFixture} 是无头的宿主。
+ * 她的每项绑定记着是谁绑的({@link Bound}),这一个值从绑定文件一路到模型口、人设解析和推给客户端的状态;绑的人不再是她的主人时,
+ * 他绑的那几项退回未绑定;库条目改名只动改名的那个人绑的。{@link BrainFixture} 是无头的宿主。
  */
 class CompanionLoopBindingTest {
 
@@ -88,6 +88,26 @@ class CompanionLoopBindingTest {
         assertEquals("", state.binding(Slot.PERSONA).byName(), "不知道名字的是空串");
         assertNull(state.binding(Slot.VOICE));
         assertEquals(state, CompanionState.fromJson(JsonParser.parseString(state.toJson().toString()).getAsJsonObject()));
+    }
+
+    /** 一位主人退出:他绑的那几项退回未绑定并报出是哪几项,别人绑的不动;退掉的落了盘,重载之后也不回来。 */
+    @Test
+    void whatALeavingKeeperBoundGoesBackToUnboundAndTheRestStays() throws IOException {
+        BrainFixture her = new BrainFixture();
+        her.loop.bind(Slot.PROVIDER, new Bound(FRIEND, PROFILE));
+        her.loop.bind(Slot.VOICE, new Bound(FRIEND, VOICE));
+
+        assertEquals(List.of(), her.loop.releaseBoundBy(UUID.randomUUID()), "他什么都没绑");
+        assertEquals(List.of(Slot.PROVIDER, Slot.VOICE), her.loop.releaseBoundBy(FRIEND));
+
+        assertNull(her.loop.bound(Slot.PROVIDER));
+        assertNull(her.loop.bound(Slot.VOICE));
+        assertEquals(her.creator, her.loop.bound(Slot.PERSONA).by(), "创建者绑的人设不动");
+        assertEquals(List.of(), her.loop.releaseBoundBy(FRIEND), "退过了,没有可退的");
+        BrainFixture again = her.reloaded();
+        assertNull(again.loop.bound(Slot.PROVIDER));
+        assertNull(again.loop.bound(Slot.VOICE));
+        assertFalse(bindingFile(again).has("provider"));
     }
 
     /** 库条目改名只动改名的那个人绑的:别人绑的同名条目是别人库里的另一条。 */

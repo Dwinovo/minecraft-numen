@@ -5,6 +5,7 @@ import com.dwinovo.numen.api.library.Library;
 import com.dwinovo.numen.api.library.LibraryHub;
 import net.minecraft.server.MinecraftServer;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -48,5 +49,15 @@ public final class CompanionBinding {
      */
     public static Library.Entry find(MinecraftServer server, UUID by, Slot slot, String entry) {
         return LibraryHub.of(server).library(slot.kind(), by).find(EntryId.parse(entry));
+    }
+
+    /**
+     * 这个人不再是她的主人了:他绑的那几项退回未绑定——她不该再用他的库、他的 key、记他的账。
+     *
+     * @return 退掉了哪几项(调用方据此告诉在场的主人少了什么);名册上没有她、或他什么都没绑是空表
+     */
+    public static List<Slot> releaseBoundBy(MinecraftServer server, UUID companion, UUID person) {
+        CompanionLoop loop = CompanionBrains.ensure(server, companion);
+        return loop == null ? List.of() : loop.releaseBoundBy(person);
     }
 }
