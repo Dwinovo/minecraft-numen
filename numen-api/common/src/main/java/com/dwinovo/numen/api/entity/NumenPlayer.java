@@ -445,6 +445,19 @@ public final class NumenPlayer extends ServerPlayer {
     }
 
     /**
+     * The profile of the player called {@code name}: the online player's (a companion is one too), else the server's
+     * profile cache (whoever joined before; an online-mode server also asks Mojang); {@code null} when nobody is known
+     * by that name.
+     */
+    public static com.mojang.authlib.GameProfile profileNamed(net.minecraft.server.MinecraftServer server, String name) {
+        ServerPlayer online = server.getPlayerList().getPlayerByName(name);
+        if (online != null) {
+            return online.getGameProfile();
+        }
+        return java.util.Optional.ofNullable(server.getProfileCache()).flatMap(cache -> cache.get(name)).orElse(null);
+    }
+
+    /**
      * A player's profile: the online player's (a companion is one too), else the server's profile cache, else what is
      * known of him without it — his id and no name (op lists are keyed by id).
      */

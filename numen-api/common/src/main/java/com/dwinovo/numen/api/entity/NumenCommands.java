@@ -2,6 +2,7 @@ package com.dwinovo.numen.api.entity;
 
 import com.dwinovo.numen.api.agent.scope.Handle;
 import com.dwinovo.numen.api.brain.Presence;
+import com.dwinovo.numen.api.brain.Sharing;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.network.payload.ClientUiActionPayload;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
@@ -49,6 +50,9 @@ import java.util.function.Predicate;
  *   /numen player summon &lt;name&gt;    summon the named companion (idempotent — reuses an existing one)
  *   /numen player despawn &lt;name&gt;   take the named companion offline (she logs out; her things stay, summon brings her back)
  *   /numen player delete &lt;name&gt;    permanently delete the named companion (gone for good)
+ *   /numen player share &lt;name&gt; &lt;player&gt;    (her creator) let that player use her too; he may be offline
+ *   /numen player unshare &lt;name&gt; &lt;player&gt;  (her creator) take that back
+ *   /numen player leave &lt;name&gt;     give back a companion that was shared with the caller
  *   /numen settings                  open the settings GUI on the caller's client
  *   /numen reset                     clear the caller's conversation loops
  *   /numen debug                     toggle debug mode (the caller's chat UI shows text unfiltered)
@@ -80,7 +84,7 @@ import java.util.function.Predicate;
  * <h2>权限命令是底层接口</h2>
  * 卡片、面板与以后聊天里的可点击按钮都落到同一组公开接口:模式经 {@link Permission},规则经
  * {@link PermissionStore},答复只经 {@link ConsentDesk#reply}(与卡片的网络载荷同一个入口)。这里只解析参数、
- * 回话,不复制任何判断。规则写在调用者自己名下,模式只能设自己的同伴,答复只认主人——都是主人专用。
+ * 回话,不复制任何判断。规则写在调用者自己名下,模式只能设自己创建的同伴,答复认她的主人表上的人。
  */
 @com.dwinovo.numen.api.Internal
 public final class NumenCommands {
@@ -196,7 +200,16 @@ public final class NumenCommands {
                                 .executes(ctx -> despawn(ctx, StringArgumentType.getString(ctx, "name")))))
                 .then(Commands.literal("delete")
                         .then(Commands.argument("name", StringArgumentType.word())
-                                .executes(ctx -> delete(ctx, StringArgumentType.getString(ctx, "name"))))));
+                                .executes(ctx -> delete(ctx, StringArgumentType.getString(ctx, "name")))))
+                .then(Commands.literal("share")
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .then(playerArgument().executes(ctx -> share(ctx, true)))))
+                .then(Commands.literal("unshare")
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .then(playerArgument().executes(ctx -> share(ctx, false)))))
+                .then(Commands.literal("leave")
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .executes(NumenCommands::leave))));
         graft(dispatcher, Commands.literal("settings")
                 .executes(ctx -> clientAction(ctx, ClientUiActionPayload.Action.OPEN_SETTINGS)));
         graft(dispatcher, Commands.literal("reset").executes(NumenCommands::resetBrains));
@@ -343,6 +356,69 @@ public final class NumenCommands {
                 ? Component.translatable(Keys.COMMAND_DISMISSED_DUPLICATES, name, dismissed)
                 : Component.translatable(Keys.COMMAND_DISMISSED, name), false);
         return dismissed;
+    }
+
+    /** 指令里"一位玩家"这个参数:写名字,补全列在线的玩家(同伴不算);不在线的也认,见 {@link NumenPlayer#profileNamed}。 */
+    private static com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack, String> playerArgument() {
+        return Commands.argument("player", StringArgumentType.word())
+                .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(ctx.getSource().getServer().getPlayerList()
+                        .getPlayers().stream().filter(player -> !(player instanceof NumenPlayer))
+                        .map(player -> player.getGameProfile().getName()), builder));
+    }
+
+    /**
+     * {@code /numen player share|unshare <同伴> <玩家>}:创建者把自己名下叫这个名字的同伴分享给一位玩家,或收回。玩家写名字,
+     * 不在线的也行。改表与它的后果都在 {@link Sharing}。
+     */
+    private static int share(CommandContext<CommandSourceStack> ctx, boolean add) throws CommandSyntaxException {
+        ServerPlayer owner = ctx.getSource().getPlayerOrException();
+        MinecraftServer server = owner.getServer();
+        String name = StringArgumentType.getString(ctx, "name");
+        List<java.util.UUID> hers = Sharing.named(server, owner.getUUID(), name, true);
+        if (hers.isEmpty()) {
+            ctx.getSource().sendFailure(Component.translatable(Keys.COMMAND_NO_SUCH_COMPANION, name));
+            return 0;
+        }
+        com.mojang.authlib.GameProfile profile = NumenPlayer.profileNamed(server, StringArgumentType.getString(ctx, "player"));
+        if (profile == null) {
+            ctx.getSource().sendFailure(Component.translatable("argument.player.unknown"));
+            return 0;
+        }
+        int changed = 0;
+        for (java.util.UUID companion : hers) {
+            Sharing.Outcome outcome = add ? Sharing.share(server, owner.getUUID(), companion, profile.getId())
+                    : Sharing.unshare(server, owner.getUUID(), companion, profile.getId());
+            if (outcome == Sharing.Outcome.DONE) {
+                changed++;
+                ctx.getSource().sendSuccess(() -> Component.translatable(
+                        add ? Keys.COMMAND_SHARED : Keys.COMMAND_UNSHARED, name, profile.getName()), false);
+            } else if (outcome == Sharing.Outcome.NOT_A_PLAYER) {
+                ctx.getSource().sendFailure(Component.translatable(Keys.COMMAND_SHARE_NOT_PLAYER, profile.getName()));
+            } else {
+                ctx.getSource().sendFailure(Component.translatable(
+                        add ? Keys.COMMAND_SHARE_UNCHANGED : Keys.COMMAND_NOT_SHARED, name, profile.getName()));
+            }
+        }
+        return changed;
+    }
+
+    /** {@code /numen player leave <同伴>}:被分享的人把自己从她的主人表上移出去。 */
+    private static int leave(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer caller = ctx.getSource().getPlayerOrException();
+        MinecraftServer server = caller.getServer();
+        String name = StringArgumentType.getString(ctx, "name");
+        int left = 0;
+        for (java.util.UUID companion : Sharing.named(server, caller.getUUID(), name, false)) {
+            if (Sharing.unshare(server, caller.getUUID(), companion, caller.getUUID()) == Sharing.Outcome.DONE) {
+                left++;
+            }
+        }
+        if (left == 0) {
+            ctx.getSource().sendFailure(Component.translatable(Keys.COMMAND_NONE_SHARED_WITH_YOU, name));
+            return 0;
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable(Keys.COMMAND_LEFT, name), false);
+        return left;
     }
 
     /** {@code /numen debug}:翻转调试模式,主人的客户端聊天 UI 切到不过滤直出。 */
