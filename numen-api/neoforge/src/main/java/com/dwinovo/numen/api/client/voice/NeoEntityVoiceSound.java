@@ -13,7 +13,7 @@ import java.util.concurrent.CompletableFuture;
  * {@code SoundInstance.getStream(SoundBufferLibrary, Sound, boolean)} 官方钩子,
  * {@code SoundEngine.play} 直接调它——覆写返回 {@link #openStream()} 即可,
  * 零 mixin,这已是官方钩子的最终形态。(vanilla 形状的取数 INVOKE 在 NeoForge
- * 运行时不存在,所以 Fabric 那个 @Redirect mixin 不能用在这侧。)
+ * 运行时不存在,所以 Fabric 那个包住取数的 mixin 不能用在这侧。)
  */
 public final class NeoEntityVoiceSound extends EntityVoiceSound {
 

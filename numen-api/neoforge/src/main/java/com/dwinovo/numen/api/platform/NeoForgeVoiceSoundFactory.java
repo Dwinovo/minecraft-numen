@@ -14,7 +14,7 @@ import java.util.UUID;
  * NeoForge 侧的语音声音工厂:返回覆写了 NeoForge 补丁版
  * {@code SoundInstance.getStream} 官方钩子的子类,零 mixin
  * (vanilla 形状的取数 INVOKE 在 NeoForge 运行时不存在,Fabric 的
- * @Redirect 在这侧扫不到目标——分家的原因)。
+ * mixin 在这侧扫不到目标——分家的原因)。
  */
 public class NeoForgeVoiceSoundFactory implements IVoiceSoundFactory {
 

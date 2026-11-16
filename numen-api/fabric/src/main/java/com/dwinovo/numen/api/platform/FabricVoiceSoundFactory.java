@@ -10,7 +10,7 @@ import java.util.UUID;
 
 /**
  * Fabric 侧的语音声音工厂:运行 vanilla 字节码,取数由 fabric 模块的
- * {@code MixinSoundEngine} 重定向到 {@code VoicePcmSource.openStream()},
+ * {@code MixinSoundEngine} 换成 {@code VoicePcmSource.openStream()},
  * 所以直接返回 common 原类,无需子类。
  */
 public class FabricVoiceSoundFactory implements IVoiceSoundFactory {

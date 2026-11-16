@@ -18,7 +18,7 @@ import java.util.UUID;
  *       ({@code NeoEntityVoiceSound} / {@code NeoVoicePreviewSound}),零 mixin;</li>
  *   <li><b>Fabric</b> — 运行 vanilla 字节码,取数仍是
  *       {@code SoundBufferLibrary.getStream(ResourceLocation, boolean)} 调用,
- *       由 fabric 侧的 {@code MixinSoundEngine} @Redirect 到
+ *       由 fabric 侧的 {@code MixinSoundEngine} 包住,换成
  *       {@code VoicePcmSource.openStream()}。该侧直接返回 common 原类。</li>
  * </ul>
  * 客户端专用(声音引擎只存在于客户端);服务端永远不该调这两个方法。

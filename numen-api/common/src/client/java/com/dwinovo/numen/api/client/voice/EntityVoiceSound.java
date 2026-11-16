@@ -39,7 +39,7 @@ import java.util.concurrent.CompletableFuture;
  *       {@code NeoEntityVoiceSound},零 mixin——这已是官方钩子的最终形态;</li>
  *   <li><b>Fabric</b> — 运行 vanilla 字节码,取数仍是
  *       {@code SoundBufferLibrary.getStream(ResourceLocation, boolean)} 调用,
- *       由 fabric 模块的 {@code MixinSoundEngine} @Redirect 到
+ *       由 fabric 模块的 {@code MixinSoundEngine} 包住,换成
  *       {@link #openStream()},工厂返回本类。vanilla 正式引入官方钩子的
  *       版本再删该 mixin 改覆写。</li>
  * </ul>
