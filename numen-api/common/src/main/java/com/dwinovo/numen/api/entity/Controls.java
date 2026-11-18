@@ -132,8 +132,8 @@ public final class Controls {
         jumpedBefore = held(Key.JUMP);
         push(body);
         pushOutOfBlocks(body);
-        float forward = impulse(Key.FORWARD, Key.BACK);
-        float left = impulse(Key.LEFT, Key.RIGHT);
+        float forward = axis(Key.FORWARD, Key.BACK);
+        float left = axis(Key.LEFT, Key.RIGHT);
         if (body.isCrouching() || body.isVisuallyCrawling()) {
             float slow = (float) body.getAttributeValue(Attributes.SNEAKING_SPEED);
             forward *= slow;
@@ -251,7 +251,7 @@ public final class Controls {
         return body.isFallFlying();
     }
 
-    private float impulse(Key positive, Key negative) {
+    private float axis(Key positive, Key negative) {
         boolean p = held(positive);
         boolean n = held(negative);
         return p == n ? 0 : p ? 1 : -1;
