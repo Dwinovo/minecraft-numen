@@ -77,24 +77,6 @@ public final class Kinematics {
         return groundAcceleration(speed, friction) / (1 - groundDrag(friction));
     }
 
-    /**
-     * 地上以 {@code speed}(格每刻)冲着,要停下来最少滑出多远(格):决定得晚一刻,先按惯性滑一刻(速度乘地上的阻力),
-     * 之后每刻按住反向键减去一刻的加速度({@link #groundAcceleration},按走的速度,反向键没有疾跑加成),直到停住。
-     * 步态拿它判冲劲接不接得住:停下的距离要小于身体在落点格里能多滑出去而不碰到邻格的余量。
-     */
-    public static double stopDistance(BodyStats body, double speed) {
-        double drag = groundDrag(DEFAULT_FRICTION);
-        double brake = groundAcceleration(body.movementSpeed(), DEFAULT_FRICTION);
-        double v = speed * drag;
-        double distance = v;
-        while (v > REST) {
-            v = Math.max(0, v - brake);
-            distance += v;
-            v *= drag;
-        }
-        return distance;
-    }
-
     /** 平地一直按前进键,疾跑({@code sprinting})或平走时每刻加的速度。 */
     public static double pushAcceleration(BodyStats body, boolean sprinting) {
         return groundAcceleration(body.movementSpeed() * (sprinting ? SPRINT_MULTIPLIER : 1), DEFAULT_FRICTION);
@@ -132,8 +114,15 @@ public final class Kinematics {
     public static double wadeTicksPerBlock(BodyStats body, double efficiency) {
         efficiency = Math.max(0, Math.min(1, efficiency));
         double friction = WATER_FRICTION + (WATER_FRICTION_EFFICIENT - WATER_FRICTION) * efficiency;
-        double acceleration = (WATER_ACCELERATION + (body.movementSpeed() - WATER_ACCELERATION) * efficiency) * INPUT;
-        return 1 / (acceleration / (1 - friction));
+        return 1 / (waterAcceleration(body.movementSpeed(), efficiency) / (1 - friction));
+    }
+
+    /**
+     * 水里按前进键一刻加的速度:{@code speed} 是移动速度,水下移动效率 {@code efficiency}(夹在 0 到 1)把水里的基础加速度向它插过去。
+     */
+    public static double waterAcceleration(double speed, double efficiency) {
+        efficiency = Math.max(0, Math.min(1, efficiency));
+        return (WATER_ACCELERATION + (speed - WATER_ACCELERATION) * efficiency) * INPUT;
     }
 
     // ==================== 竖直 ====================
@@ -497,7 +486,7 @@ public final class Kinematics {
      * 自己的水平挪动——原版先处理竖直方向落到地上,再接着水平挪,落在边上的会被这一挪带出支撑):地上这一刻挪 {@code move},之后
      * 每刻先乘惯性({@link #groundDrag})再加 {@code groundAccel}(按着前进键是 {@link #groundAcceleration},松着为 0),挪过
      * {@code toEdge} 就离了地;空中每刻加 {@code airAccel}(按着前进键是 {@link #airAcceleration},松着为 0)再乘阻力({@link #AIR_DRAG}),
-     * 直到落下 {@code drop} 格({@link #ticksToLand},从站着时的竖直速度起)。步态与走出边沿的控制拿它预判落点:冲出去太快就落过了落点那一列。
+     * 直到落下 {@code drop} 格({@link #ticksToLand},从站着时的竖直速度起)。步态拿它预判落点:冲出去太快就落过了落点那一列。
      *
      * @param move   这一刻身体会挪的距离:上一刻留下的速度加这一刻按键的加速度
      * @param toEdge 身体中心此刻离"身子整个离开支撑"那一点的距离(整块的边沿是半格加半个身宽)

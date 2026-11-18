@@ -6,8 +6,8 @@ import com.dwinovo.numen.pathing.plan.Maneuver;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 跑酷:朝落点跑(规划要疾跑就疾跑),在起步那一块的边上起跳——下一刻身子就要离开边沿的那一刻;腾空之后照原版空中的
- * 那一点加速度朝落点修正,落地不冲过头。
+ * 跑酷:朝落点跑(规划要疾跑就疾跑),在起步那一块的边上起跳——下一刻身子就要离开边沿的那一刻;腾空之后接着朝落点
+ * 冲,要收脚时停在落点上({@link Steering#stop})。
  */
 final class ParkourControl extends Control {
 
@@ -33,7 +33,7 @@ final class ParkourControl extends Control {
         if (stride.flows()) {
             Steering.pass(rig, target.x, target.z);
         } else {
-            Steering.stop(rig, target.x, target.z, m.landing().feetY());
+            Steering.stop(rig, target.x, target.z);
         }
         return Beat.IDLE;
     }

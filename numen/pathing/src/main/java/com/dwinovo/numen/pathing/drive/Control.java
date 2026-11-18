@@ -117,7 +117,7 @@ abstract class Control {
             keys().release(Key.BACK);
             return true;
         }
-        Steering.stop(rig, c.x, c.z, m.start().feetY());
+        Steering.stop(rig, c.x, c.z);
         return false;
     }
 

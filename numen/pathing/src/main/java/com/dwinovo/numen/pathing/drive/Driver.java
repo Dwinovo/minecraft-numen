@@ -433,7 +433,7 @@ public final class Driver implements Segment {
             }
         }
         if (best != null) {
-            Steering.stop(rig, best.x, best.z, body.getY());
+            Steering.stop(rig, best.x, best.z);
         }
     }
 
@@ -515,7 +515,7 @@ public final class Driver implements Segment {
                 rig.keys.press(Key.JUMP);
             }
             Vec3 c = Control.center(end);
-            still = Steering.stop(rig, c.x, c.z, endStance.feetY())
+            still = Steering.stop(rig, c.x, c.z)
                     || Math.sqrt(horizontalSpeedSqr()) < Control.STILL && distanceSqr(c) < 0.3 * 0.3;
         }
         // 路线走完了,没有该走的路:停稳在终点上是收场的事,不是卡在哪儿推不动("在推进"只问有路该走而没动)。停不稳有自己的期限:

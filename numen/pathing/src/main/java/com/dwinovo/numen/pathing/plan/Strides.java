@@ -74,8 +74,8 @@ final class Strides {
 
     /**
      * 从高处落下去的落点站得下:不是站着的(水、梯子)不看;站着的,落点那一列里沿前进方向的滑行余量({@link Stepping#slideRoom})不比
-     * {@link Stepping#MIN_LANDING_ROOM} 小——炼药锅、堆肥桶、漏斗里只比身体宽一点点,身子从上面落进去,冲劲收不住,弹出来。
-     * 平着走进去的不看这个:步态已经为窄落点收了脚({@code Gait})。
+     * {@link Stepping#MIN_LANDING_ROOM} 小——炼药锅、堆肥桶、漏斗里只比身体宽一点点,不当成从上面落进去的落点。
+     * 平着走进去的不看这个。
      */
     static boolean roomyLanding(BlockGetter level, BodyStats body, BlockPos to, Stance landing, Heading heading) {
         return !landing.grounded() || Stepping.slideRoom(level, body, to.getX(), landing.feetY(), to.getZ(), heading.dx(), heading.dz())
@@ -83,8 +83,8 @@ final class Strides {
     }
 
     /**
-     * 落点是个坑:某个水平轴向上,两头滑出去都不到 {@link Stepping#MIN_LANDING_ROOM} 就撞上(炼药锅、漏斗、堆肥桶)。直着走进去步态为它收脚
-     * ({@code Gait}),斜着进去两个轴向上都带着冲劲,停不稳。
+     * 落点是个坑:某个水平轴向上,两头滑出去都不到 {@link Stepping#MIN_LANDING_ROOM} 就撞上(炼药锅、漏斗、堆肥桶)。直着走进去可以,
+     * 斜着进去的不取。
      */
     static boolean pit(BlockGetter level, BodyStats body, BlockPos to, Stance landing) {
         if (!landing.grounded()) {

@@ -6,7 +6,6 @@ import com.dwinovo.numen.pathing.plan.MoveKind;
 import com.dwinovo.numen.pathing.world.Kinematics;
 import com.dwinovo.numen.pathing.world.Semantics;
 
-import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -71,27 +70,13 @@ final class StrideControl extends Control {
                 && (rig.entity.horizontalCollision
                         || rig.entity.getY() < m.landing().feetY() - 0.01 && ahead() >= jumpPoint());
         keys().set(Key.JUMP, jump);
-        if (stride.flows() || perched()) {
+        if (stride.flows()) {
             Steering.pass(rig, target.x, target.z);
         } else {
-            Steering.stop(rig, target.x, target.z, m.landing().feetY());
+            Steering.stop(rig, target.x, target.z);
         }
         keys().set(Key.SPRINT, stride.sprint());
     }
-
-    /**
-     * 身体已经进了落点这一列,脚却还踩在比落点高的东西上(开着的活板门的薄板顶、贴着落点边沿的矮墙):还没到落点,不收脚,接着朝中心走下来。
-     * 收脚的停点是中心,可停在差一点的地方就下不来——薄板宽 3/16,身子的另一侧离开板的内沿离中心只剩 1/80 格,而收脚能停准的精度远不到这个数;
-     * 到了落点的高度再收脚。
-     */
-    private boolean perched() {
-        var body = rig.entity;
-        return body.onGround() && body.getY() > m.landing().feetY() + PERCHED
-                && Mth.floor(body.getX()) == m.to().getX() && Mth.floor(body.getZ()) == m.to().getZ();
-    }
-
-    /** 脚比落点高出这么多,算还踩在别的东西上。 */
-    private static final double PERCHED = 0.05;
 
     /**
      * 身体中心走出这么远就起跳:从离地到脚升过这一级的高度要几刻({@link Kinematics#riseTicks}),这几刻里身子每刻往前挪的距离按

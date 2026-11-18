@@ -77,7 +77,7 @@ final class SwimControl extends Control {
         if (stride.flows()) {
             Steering.pass(rig, c.x, c.z);
         } else {
-            Steering.stop(rig, c.x, c.z, m.landing().feetY());
+            Steering.stop(rig, c.x, c.z);
         }
         return Beat.IDLE;
     }

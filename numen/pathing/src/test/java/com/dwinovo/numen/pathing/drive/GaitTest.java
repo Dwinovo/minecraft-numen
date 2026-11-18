@@ -95,7 +95,7 @@ class GaitTest {
     @Test
     void climbingStairsOfFullBlocksRunsUphillWithoutStoppingAtEachStep() {
         TestWorld world = flat();
-        // 台阶之间隔着三格平地:落点前面没有墙贴着,余量够
+        // 台阶之间隔着三格平地
         for (int i = 1; i <= 4; i++) {
             world.fill(i * 4, Y, -8, 40, Y + i - 1, 8, Blocks.STONE.defaultBlockState());
         }
@@ -153,7 +153,7 @@ class GaitTest {
 
     @Test
     void aStaircaseWhoseRisersFaceEachOtherIsRunUpWithoutStopping() {
-        // 每级立面紧贴着上一级的落点:落点前面是堵墙,冲劲撞停在墙前,用不着在每一级的落点上收脚
+        // 每级立面紧贴着上一级的落点
         TestWorld world = flat();
         for (int i = 1; i <= 6; i++) {
             world.fill(i, Y, -8, 40, Y + i - 1, 8, Blocks.STONE.defaultBlockState());
@@ -198,13 +198,13 @@ class GaitTest {
     }
 
     @Test
-    void aRightAngleTurnStopsButADiagonalTurnCarries() {
-        // 落点前一格是堵墙,格里往前只剩 0.15 格的余量:直角要停下全部速度(滑出去 0.21),停不住;斜着拐四十五度只有侧向那一份(0.12),停得住
+    void aTurnOnTheGroundCarriesTheMomentumThrough() {
+        // 落点前一格是堵墙,格里往前只剩 0.15 格的余量。拐弯的那一刻不朝着新方向的速度就去掉了(Steering),用不着在拐弯前收脚
         TestWorld world = new TestWorld().floor(-4, -4, 4, 4, Y - 1).fill(2, Y, 0, 2, Y + 1, 0, Blocks.STONE.defaultBlockState());
         Maneuver east = walk(world, 1, 0);
-        assertFalse(stride(world, true, east, walk(world, 0, -1)).flows(), "直角弯收脚");
-        assertTrue(stride(world, true, east, walk(world, 1, -1)).flows(), "斜着拐四十五度,侧向的那一份停得住");
-        assertFalse(stride(world, true, east, walk(world, -1, 0)).flows(), "掉头比直角更停不住");
+        assertTrue(stride(world, true, east, walk(world, 0, -1)).flows(), "直角弯");
+        assertTrue(stride(world, true, east, walk(world, 1, -1)).flows(), "斜着拐四十五度");
+        assertTrue(stride(world, true, east, walk(world, -1, 0)).flows(), "掉头");
     }
 
     /** 平地上朝 (dx, dz) 走一格的平走或斜走。 */
@@ -245,16 +245,16 @@ class GaitTest {
     }
 
     @Test
-    void aLandingTooNarrowToStopOnIsNotRunInto() {
-        // 炼药锅里只比身体宽一点点:冲进去就撞出来。落点是它的上一级不跑,前一步也不把冲劲带进来
+    void aLandingOnlyJustWiderThanTheBodyIsRunIntoLikeAnyOther() {
+        // 炼药锅里只比身体宽一点点。收脚停在正点上(Steering),不会冲过头撞出来:落点是它的这一步照跑,前一步也带着冲劲进来
         TestWorld world = flat().set(6, Y, 0, Blocks.CAULDRON.defaultBlockState());
         List<Maneuver> steps = route(world, new BlockPos(0, Y, 0), new BlockPos(6, Y, 0));
         List<Gait.Stride> strides = strides(world, steps, true);
         int last = steps.size() - 1;
         assertEquals(new BlockPos(6, Y, 0), steps.get(last).to());
-        assertFalse(strides.get(last).sprint(), "落点里没有余量,跑不起来");
-        assertFalse(strides.get(last - 1).flows(), "前一步在落点上收脚,不带冲劲进来");
-        assertTrue(strides.get(0).sprint(), "前面宽敞的路照跑");
+        assertTrue(strides.get(last).sprint(), "窄落点照跑");
+        assertFalse(strides.get(last).flows(), "最后一步在落点上收脚");
+        assertTrue(strides.get(last - 1).flows(), "前一步带着冲劲进来");
     }
 
     @Test

@@ -155,15 +155,14 @@ public final class Stepping {
     }
 
     /**
-     * 落点那一列里,沿前进方向至少要有这么多滑行余量({@link #slideRoom})才算落得稳:执行停下的精度到不了更细,
-     * 余量比它还小的落点(炼药锅里只比身体宽 0.15,滑一小步就撞上锅沿),身子一落进去就弹出来。
+     * 落点那一列里,沿前进方向至少要有这么多余量({@link #slideRoom}),规划才把它当成从上面落进去、斜着走进去的落点:
+     * 余量比它还小的(炼药锅里只比身体宽 0.15)只取直着走进去的那一种。
      */
     public static final double MIN_LANDING_ROOM = 0.1;
 
     /**
      * 站着的身体脚在 {@code (x, feetY, z)},朝 {@code (dx, dz)} 方向借着冲劲滑出去,身体中心从列中心起最远能滑出多远(格):每滑一小步,
-     * 脚底下还有东西托着(顶面不比脚低过迈步高度),身体也不撞上东西。冲得快就停不住、滑过了头——落点格里的余量比停下来要滑的距离
-     * ({@link Kinematics#stopDistance})小,冲劲就接不住。按 {@link #LEAN_STEP} 一步一步试,再退一步留余量;整块的顶上约 0.75 格(身体碰撞盒还压着边沿就托得住),
+     * 脚底下还有东西托着(顶面不比脚低过迈步高度),身体也不撞上东西。按 {@link #LEAN_STEP} 一步一步试,再退一步留余量;整块的顶上约 0.75 格(身体碰撞盒还压着边沿就托得住),
      * 炼药锅里只比身体宽一点点,是 0。
      */
     public static double slideRoom(BlockGetter level, BodyStats body, int x, double feetY, int z, int dx, int dz) {

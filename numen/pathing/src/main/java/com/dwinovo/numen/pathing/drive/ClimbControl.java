@@ -38,7 +38,7 @@ final class ClimbControl extends Control {
                 && (!onPlate || feet > m.start().feetY() - PAST_PLATE));
         keys().set(Key.JUMP, up && (!onPlate || feet < m.landing().feetY()));
         Vec3 c = center(m.to());
-        Steering.stop(rig, c.x, c.z, m.landing().feetY());
+        Steering.stop(rig, c.x, c.z);
         return Beat.IDLE;
     }
 
