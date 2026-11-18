@@ -655,6 +655,32 @@ public class CombatGameTests {
                 .thenSucceed();
     }
 
+    /**
+     * 她正自己把水平速度往回收(每刻把速度抵成零,像收脚时那样)也照样被打飞:击退带着她走到落地为止,那一段她不改自己的速度。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
+    public static void a_hit_carries_her_off_even_while_she_holds_herself_still(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_knocked", new BlockPos(8, 2, 8), false);
+        Zombie zombie = still(helper, new BlockPos(8, 2, 3));
+        net.minecraft.world.phys.Vec3 stood = companion.position();
+        helper.onEachTick(() -> {
+            var motion = companion.getDeltaMovement();
+            companion.controls().impulse(-motion.x, -motion.z);
+        });
+
+        steps(helper)
+                .thenIdle(70)   // 刚进世界的玩家有一小段出生保护
+                .thenExecute(() -> companion.hurt(zombie.damageSources().mobAttack(zombie), 1.0f))
+                .thenIdle(25)
+                .thenExecute(() -> {
+                    double carried = Math.hypot(companion.getX() - stood.x, companion.getZ() - stood.z);
+                    helper.assertTrue(carried >= 1.0, "the knock did not carry her: she moved " + carried);
+                    zombie.discard();
+                    CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
     /** 只带远程武器的她:背包清空,换成 {@code items}。 */
     private static NumenPlayer shooter(GameTestHelper helper, BlockPos rel, net.minecraft.world.item.ItemStack... items) {
         NumenPlayer companion = armedCompanion(helper, rel);

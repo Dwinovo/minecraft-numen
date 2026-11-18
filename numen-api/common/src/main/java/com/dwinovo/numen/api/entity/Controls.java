@@ -34,6 +34,9 @@ import net.minecraft.world.phys.Vec3;
  *       {@link #unfurl} 是同一件事,不等按键。</li>
  * </ul>
  * 视角不在这里:朝向由执行层的瞄准直接转。
+ *
+ * <p>键之外还有一样:{@link #impulse},她自己这一刻给水平速度加的一份。按键只能加减加速度,惯性让它停不准、拐弯时带着侧滑;
+ * 这几刻由驱动她的一方直接改速度,和键一样在 {@link Physics#step} 里落一次。
  */
 public final class Controls {
 
@@ -60,6 +63,13 @@ public final class Controls {
     private boolean jumpedBefore;
     /** 第一下跳之后还剩几刻能接第二下;0 是没有在等第二下。 */
     private int doubleTap;
+    /** 下一次落键时加到水平速度上的那一份({@link #impulse});没有是 0。 */
+    private double impulseX;
+    private double impulseZ;
+    /** 身体上一次物理步进做完时的速度;还没走过一刻是 null。下一次落键时速度不是它了,就是这之间别的东西动过她({@link #push})。 */
+    private Vec3 settled;
+    /** 别的东西动过她的速度之后,她还被它带着、没重新有依托。 */
+    private boolean carried;
 
     public void press(Key key) {
         held.add(key);
@@ -89,14 +99,28 @@ public final class Controls {
         return doubleTap > 0 && !held(Key.JUMP);
     }
 
+    /**
+     * 她自己改一下水平速度:下一次落键时给身体的水平速度加上 {@code (x, z)},只这一次;再调一次是换掉,不是累加。键做不到的那几刻用
+     * (收脚的最后一刻、空中对准落点、拐弯时去掉侧滑);加多少由调的人照原版物理算。
+     *
+     * <p>别的东西动了她的速度(挨打的击退、爆炸、被推)时不加:从那一刻到身体重新有依托(落地、进水、攀住)为止,由那一下带着她走,
+     * 和真玩家挨打飞出去一样。
+     */
+    public void impulse(double x, double z) {
+        impulseX = x;
+        impulseZ = z;
+    }
+
     /** 松开所有键。 */
     public void releaseAll() {
         held.clear();
+        impulse(0, 0);
     }
 
     /** 停下脚步:松开前后左右、跳与疾跑,潜行照旧按着(蹲在边沿上干活时停下不站起来)。 */
     public void stop() {
         held.removeAll(MOVING);
+        impulse(0, 0);
     }
 
     private static final EnumSet<Key> MOVING = EnumSet.of(Key.FORWARD, Key.BACK, Key.LEFT, Key.RIGHT, Key.JUMP,
@@ -106,6 +130,7 @@ public final class Controls {
     void apply(ServerPlayer body) {
         boolean pressed = held(Key.JUMP) && !jumpedBefore;
         jumpedBefore = held(Key.JUMP);
+        push(body);
         pushOutOfBlocks(body);
         float forward = impulse(Key.FORWARD, Key.BACK);
         float left = impulse(Key.LEFT, Key.RIGHT);
@@ -145,6 +170,7 @@ public final class Controls {
         if (body.getAbilities().flying && body.onGround()) {
             new ClientPackets(body).flying(false);
         }
+        settled = body.getDeltaMovement();
     }
 
     /**
@@ -171,6 +197,30 @@ public final class Controls {
         }
         doubleTap = 0;
         return true;
+    }
+
+    /**
+     * 把 {@link #impulse} 那一份加到水平速度上。身体的速度和它上一次物理步进做完时不一样了,就是这之间别的东西动过她(挨打的击退、
+     * 爆炸、被推——她自己的速度只在物理步进里变):这一刻不加,之后到身体重新有依托为止也不加。
+     */
+    private void push(ServerPlayer body) {
+        double x = impulseX;
+        double z = impulseZ;
+        impulseX = 0;
+        impulseZ = 0;
+        if (settled != null && !settled.equals(body.getDeltaMovement())) {
+            carried = true;
+            return;
+        }
+        if (carried) {
+            if (!body.onGround() && !body.isInWater() && !body.onClimbable()) {
+                return;
+            }
+            carried = false;
+        }
+        if (x != 0 || z != 0) {
+            body.setDeltaMovement(body.getDeltaMovement().add(x, 0, z));
+        }
     }
 
     /** 飞着按跳往上、按潜行往下:这一刻往竖直速度里加 ±3 × 飞行速度。 */

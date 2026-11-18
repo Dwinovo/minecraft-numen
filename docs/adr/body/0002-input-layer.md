@@ -1,6 +1,6 @@
 # 0002 身体只经输入层驱动:键盘、视角、鼠标、快捷栏
 
-- 状态:已接受
+- 状态:已接受;被 [0009](0009-entities-are-clicked-by-reach.md)(点实体)、[0010](0010-she-sets-her-own-horizontal-speed.md)(收脚、落点、拐弯处她自己改水平速度)修订
 - 日期:2026-06-13 起;09-28 收成一副键盘;10-07 归 Numen API
 - 提交:`5d23e3984`、`d529eab10`、`6ba1f8540`
 - 另见:`docs/input-pipeline.md` §七
