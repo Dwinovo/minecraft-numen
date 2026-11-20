@@ -287,7 +287,7 @@ public final class EventQueue {
 
     /** 溢出丢弃的说明文本——服务端暂存与客户端收件共用一句话。kind 就是这条条目的类型 {@link EventTypes#DROPPED}。 */
     public static String droppedNote(int n, long dayTime) {
-        return "<event kind=\"" + EventTypes.DROPPED + "\"" + EventClock.stamp(dayTime) + ">期间还发生了约 " + n + " 件事,没能记下来</event>";
+        return "<event kind=\"" + EventTypes.DROPPED + "\"" + EventClock.stamp(dayTime) + ">about " + n + " more things happened meanwhile and were not recorded</event>";
     }
 
     // ---- 一次模型调用带走什么:只按投递档的声明取 ----

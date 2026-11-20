@@ -184,7 +184,7 @@ public final class LegacyLibraries {
                 }
             }
         } catch (IOException e) {
-            throw new StoreException("读不了旧的人设目录 " + flat + ": " + e, e);
+            throw new StoreException("cannot read the old persona directory " + flat + ": " + e, e);
         }
         if (!toCopy.isEmpty()) {
             LegacyMigration.stage(hostMy, staging -> Trees.copy(flat, staging, toCopy::contains));
@@ -206,7 +206,7 @@ public final class LegacyLibraries {
                 }
             }
         } catch (IOException e) {
-            throw new StoreException("读不了 " + libraryDir + ": " + e, e);
+            throw new StoreException("cannot read " + libraryDir + ": " + e, e);
         }
         return null;
     }
@@ -236,7 +236,7 @@ public final class LegacyLibraries {
                     }
                 }
             } catch (IOException e) {
-                throw new StoreException("整理不了 " + staging + ": " + e, e);
+                throw new StoreException("cannot tidy up " + staging + ": " + e, e);
             }
             deleteEmptyDirs(staging);
         });
@@ -265,7 +265,7 @@ public final class LegacyLibraries {
                 }
             }
         } catch (IOException e) {
-            throw new StoreException("整理不了 " + root + ": " + e, e);
+            throw new StoreException("cannot tidy up " + root + ": " + e, e);
         }
     }
 
@@ -311,7 +311,7 @@ public final class LegacyLibraries {
                     }
                 }
             } catch (IOException e) {
-                throw new StoreException("读不了 " + root + ": " + e, e);
+                throw new StoreException("cannot read " + root + ": " + e, e);
             }
         }
     }
@@ -380,7 +380,7 @@ public final class LegacyLibraries {
             }
         }
         if (changed > 0) {
-            Constants.LOG.info("[numen-migrate] {} 只同伴的绑定换成了新的库名字", changed);
+            Constants.LOG.info("[numen-migrate] the bindings of {} companion(s) now use the new library names", changed);
         }
         return changed;
     }

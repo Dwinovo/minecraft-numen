@@ -178,7 +178,7 @@ public final class CraftOps {
             } catch (RuntimeException broken) {
                 // 坏一条丢一条,记下 id 方便去上游反馈;绝不让它杀掉整个调用
                 com.dwinovo.numen.Constants.LOG.debug(
-                        "[numen-craft] 配方 {} 坏了,跳过: {}", holder.id(), broken.toString());
+                        "[numen-craft] recipe {} is broken, skipped: {}", holder.id(), broken.toString());
             }
         }
         return recipes;

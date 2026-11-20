@@ -74,7 +74,7 @@ public final class McpTokens {
             // 服主修好或挪走文件,下次起服再读
             byHash.clear();
             unreadable = new Unreadable(doc.file(), e.toString());
-            LOG.warn("[numen-mcp] 令牌库 {} 读不了,原样留着不动,这一局拒绝所有令牌: {}", doc.file(), e.toString());
+            LOG.warn("[numen-mcp] the token store {} cannot be read; it is left as it is and every token is refused for this session: {}", doc.file(), e.toString());
         }
     }
 

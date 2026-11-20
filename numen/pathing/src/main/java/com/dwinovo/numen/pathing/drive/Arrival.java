@@ -46,11 +46,11 @@ final class Arrival {
     static Verdict judge(Goal goal, WorldView world, BodyStats stats, BlockPos node, boolean flying, Vec3 eye, double reach) {
         Stance here = Stance.at(world, stats, node, flying);
         if (here == null || !goal.contains(node.getX(), node.getY(), node.getZ(), here)) {
-            return new Verdict.Replan("停在终点 " + PathLog.pos(node) + " 却不在目标 " + goal + " 里");
+            return new Verdict.Replan("stopped at the end " + PathLog.pos(node) + " but it is not inside the goal " + goal);
         }
         if (!Double.isFinite(goal.arrival(world, node.getX(), node.getY(), node.getZ(), here))) {
             // 规划之后世界变了,停在这儿办不成了(挖一格时看得见它的面都隔着清不掉的格):按活世界重搜,换一处站位
-            return new Verdict.Replan("停在终点 " + PathLog.pos(node) + " 却办不成 " + goal);
+            return new Verdict.Replan("stopped at the end " + PathLog.pos(node) + " but cannot do " + goal);
         }
         Goal.Sighting sighting = goal.sight(node.getX(), node.getY(), node.getZ(), here);
         if (sighting == null) {

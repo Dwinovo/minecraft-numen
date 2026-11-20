@@ -86,7 +86,7 @@ public final class McpClients {
 
     public static synchronized McpClients of(MinecraftServer server) {
         if (current == null || current.server != server) {
-            throw new IllegalStateException("MCP 连接还没开张——服务器起好时 McpClients.start 该被调用");
+            throw new IllegalStateException("MCP connections are not started — McpClients.start should be called once the server is up");
         }
         return current;
     }
@@ -139,7 +139,7 @@ public final class McpClients {
             try {
                 out.put(item.id().toString(), McpServerSpec.read(item.id().name(), item.text()));
             } catch (RuntimeException unreadable) {
-                Constants.LOG.warn("[numen-mcp-client] {} 读不通,跳过: {}", item.path(), unreadable.toString());
+                Constants.LOG.warn("[numen-mcp-client] {} cannot be parsed, skipped: {}", item.path(), unreadable.toString());
             }
         }
         return out;

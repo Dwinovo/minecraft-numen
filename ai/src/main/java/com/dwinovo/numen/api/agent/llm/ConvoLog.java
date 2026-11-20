@@ -153,7 +153,7 @@ public final class ConvoLog {
     public void appendCompactSummary(String wrappedSummary, int keptTail, JsonObject meta) {
         State s = state();
         if (keptTail < 0 || keptTail > s.context.size()) {
-            throw new IllegalArgumentException("要保留最近 " + keptTail + " 条,上下文里只有 " + s.context.size() + " 条");
+            throw new IllegalArgumentException("asked to keep the last " + keptTail + " but the context holds only " + s.context.size());
         }
         JsonObject body = new JsonObject();
         body.addProperty("content", wrappedSummary);
@@ -223,7 +223,7 @@ public final class ConvoLog {
      */
     public void appendCustom(String type, JsonObject data) {
         if (!CUSTOM_TYPE.matcher(type).matches()) {
-            throw new IllegalArgumentException("插件记录的类型要写成 命名空间:名字,拿到 " + type);
+            throw new IllegalArgumentException("a plugin record's type must be written namespace:name, got " + type);
         }
         JsonObject body = new JsonObject();
         body.add("data", data);

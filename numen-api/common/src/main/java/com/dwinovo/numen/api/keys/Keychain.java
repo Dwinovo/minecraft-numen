@@ -58,7 +58,7 @@ public final class Keychain {
                 }
             }
         } catch (IOException e) {
-            Constants.LOG.warn("[numen-keys] 读不了钥匙串 {}: {}", dir(), e.toString());
+            Constants.LOG.warn("[numen-keys] cannot read the keychain {}: {}", dir(), e.toString());
         }
     }
 
@@ -70,7 +70,7 @@ public final class Keychain {
     /** 存下(换掉)这个服务的 key;空 key 等于删掉。 */
     public synchronized void put(String service, String key) {
         if (!EntryId.segment(service)) {
-            throw new IllegalArgumentException("服务名不能当文件名: " + service);
+            throw new IllegalArgumentException("the service name cannot be a file name: " + service);
         }
         String clean = key == null ? "" : key.strip();
         Path file = dir().resolve(service + SUFFIX);

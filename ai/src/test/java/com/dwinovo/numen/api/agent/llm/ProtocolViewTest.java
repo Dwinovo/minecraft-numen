@@ -112,7 +112,7 @@ class ProtocolViewTest {
                 user("去挖铁"), calls("c1"), result("c1"), halt("被主人打断"), user("<query>算了</query>")));
 
         assertEquals(4, wire.size(), "Halt 本身不发");
-        assertEquals("（上一轮被打断：被主人打断）\n<query>算了</query>",
+        assertEquals("(the previous turn was cut short: 被主人打断)\n<query>算了</query>",
                 ((ConvoState.Msg.User) wire.get(3)).content());
     }
 
@@ -146,7 +146,7 @@ class ProtocolViewTest {
         List<ConvoState.Msg> wire = ProtocolView.forWire(List.of(
                 user("去挖铁"), halt("被主人打断"), user("算了回来")));
 
-        assertEquals(List.of(user("去挖铁\n\n（上一轮被打断：被主人打断）\n算了回来")), wire);
+        assertEquals(List.of(user("去挖铁\n\n(the previous turn was cut short: 被主人打断)\n算了回来")), wire);
     }
 
     // ---- 正常序列 ----

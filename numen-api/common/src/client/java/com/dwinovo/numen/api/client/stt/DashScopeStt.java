@@ -217,7 +217,7 @@ public final class DashScopeStt implements SttBackend {
         private void fail(Throwable error) {
             if (settled.compareAndSet(false, true)) {
                 // 握手失败(key/模型不对)也走这里,不打就只剩界面上一闪而过的一句
-                Constants.LOG.warn("[numen-stt] 百炼识别失败 model={}", model, error);
+                Constants.LOG.warn("[numen-stt] DashScope recognition failed model={}", model, error);
                 listener.onError(error);
             }
         }

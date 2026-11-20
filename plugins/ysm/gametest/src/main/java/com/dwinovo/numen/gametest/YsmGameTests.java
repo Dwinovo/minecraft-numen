@@ -107,7 +107,7 @@ public class YsmGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(switched.done() && switched.succeeded(), "switch did not finish: " + switched.reply());
-            helper.assertTrue(switched.reply().contains("原来的动作停了"),
+            helper.assertTrue(switched.reply().contains("the emote that was playing stopped"),
                     "the receipt does not say the emote stopped: " + switched.reply());
             helper.assertTrue(YsmStub.sentTo(name).equals(List.of("play " + name + " extra1",
                             "model " + name + " misc/1_alex alex", "play " + name + " stop")),
@@ -126,7 +126,7 @@ public class YsmGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(switched.done() && switched.succeeded(), "switch did not finish: " + switched.reply());
-            helper.assertTrue(!switched.reply().contains("动作"), "the receipt mentions an emote: " + switched.reply());
+            helper.assertTrue(!switched.reply().contains("emote"), "the receipt mentions an emote: " + switched.reply());
             helper.assertTrue(YsmStub.sentTo(name).equals(List.of("model " + name + " misc/1_alex alex")),
                     "unexpected commands: " + YsmStub.sentTo(name));
             despawn(helper, her);

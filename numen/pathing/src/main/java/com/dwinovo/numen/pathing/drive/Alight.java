@@ -38,7 +38,7 @@ final class Alight implements Segment {
         }
         rig.keys.release(Key.SNEAK);
         rig.ledger.alighted(body.blockPosition());
-        PathLog.info("{} 走路开始时在飞,先落到地上 {} {}", rig.who, PathLog.pos(body.blockPosition()), PathLog.body(body));
+        PathLog.info("{} was flying when the walk began; landing first {} {}", rig.who, PathLog.pos(body.blockPosition()), PathLog.body(body));
         state = Driver.State.ARRIVED;
         return state;
     }

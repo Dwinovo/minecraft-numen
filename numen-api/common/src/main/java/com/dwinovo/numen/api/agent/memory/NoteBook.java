@@ -106,7 +106,7 @@ public final class NoteBook {
     public static NoteBook of(UUID entityUuid) {
         if (homes == null || today == null) {
             throw new IllegalStateException(
-                    "NoteBook.init(...) 还没被调用——loader 的客户端入口该在启动时注入落点与天数");
+                    "NoteBook.init(...) has not been called — the loader's entry point should inject the location and the day count at startup");
         }
         return OPEN.computeIfAbsent(entityUuid, uuid -> new NoteBook(homes.apply(uuid)));
     }
@@ -135,7 +135,7 @@ public final class NoteBook {
                         }
                     }
                 } catch (IOException e) {
-                    Constants.LOG.warn("[numen-memory] 札记目录读不了 {}: {}", dir, e.toString());
+                    Constants.LOG.warn("[numen-memory] cannot read the notes directory {}: {}", dir, e.toString());
                 }
             }
         }
@@ -236,7 +236,7 @@ public final class NoteBook {
             try {
                 Files.deleteIfExists(file);
             } catch (IOException e) {
-                throw new StoreException("删不掉 " + file + ": " + e, e);
+                throw new StoreException("cannot delete " + file + ": " + e, e);
             }
         });
         return true;
@@ -263,7 +263,7 @@ public final class NoteBook {
                     Files.readString(p, StandardCharsets.UTF_8));
             String description = parsed.frontmatter().get("description");
             if (description == null || description.isBlank()) {
-                Constants.LOG.warn("[numen-memory] {} 没有 description:,不进索引", p);
+                Constants.LOG.warn("[numen-memory] {} has no description:, left out of the index", p);
                 return null;
             }
             String type = parsed.frontmatter().getOrDefault("type", "world");
@@ -275,7 +275,7 @@ public final class NoteBook {
             }
             return new Note(stem, description.strip(), type, day, parsed.content().strip());
         } catch (IOException e) {
-            Constants.LOG.warn("[numen-memory] 读不了 {}: {}", p, e.toString());
+            Constants.LOG.warn("[numen-memory] cannot read {}: {}", p, e.toString());
             return null;
         }
     }

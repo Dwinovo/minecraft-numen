@@ -39,116 +39,121 @@ public final class Compactor implements MemoryPort {
 
     /** 摘要请求的系统提示:只写摘要,不接着对话往下说。 */
     static final String SUMMARIZATION_SYSTEM_PROMPT =
-            "你是上下文摘要助手。你的任务是读一段 Minecraft 里的同伴(她是由大语言模型驱动的服务端假玩家)与她的主人之间的对话,"
-            + "然后严格按指定的格式写出结构化摘要。\n\n"
-            + "不要接着对话往下说。不要回答对话里的任何问题。只输出结构化摘要。";
+            "You are a context summarization assistant. Your task is to read a conversation between a companion in Minecraft "
+            + "(a server-side player driven by a large language model) and her owner, "
+            + "then produce a structured summary following the exact format specified.\n\n"
+            + "Do NOT continue the conversation. Do NOT respond to any questions in the conversation. "
+            + "ONLY output the structured summary.";
+
+    /** 摘要用哪种语言写、主人说的话怎么留:三份提示词末尾共用的一句。 */
+    private static final String KEEP_EXACT = "Write the summary in English. Preserve exactly: coordinates, item and block "
+            + "names, task and skill names, error messages, and anything the owner said that is quoted — in the language it was said in.";
 
     /** 第一次整理的提示词:摘要是供另一个 LLM 接着干活用的检查点。 */
     static final String SUMMARIZATION_PROMPT = """
-            以上消息是要摘要的对话。写一份结构化的上下文检查点摘要,供另一个 LLM 据此接着干活。
+            The messages above are a conversation to summarize. Create a structured context checkpoint summary that another LLM will use to continue the work.
 
-            严格使用这个格式:
+            Use this EXACT format:
 
-            ## 目标
-            [主人想让她完成什么?这段对话涉及不同的事时可以列多项。]
+            ## Goal
+            [What does the owner want her to accomplish? Can be multiple items if the conversation covers different things.]
 
-            ## 约束与偏好
-            - [主人提过的任何约束、偏好或要求,包括没写进札记的口头约定]
-            - [没有就写"(无)"]
+            ## Constraints & Preferences
+            - [Any constraints, preferences, or requirements the owner mentioned, including spoken agreements that are not in her notes and the language the owner asked her to speak]
+            - [Or "(none)" if none were mentioned]
 
-            ## 进展
-            ### 已完成
-            - [x] [做完的事]
+            ## Progress
+            ### Done
+            - [x] [Completed things]
 
-            ### 进行中
-            - [ ] [她手上正在做的事]
+            ### In Progress
+            - [ ] [What she is working on now]
 
-            ### 受阻
-            - [阻碍进展的问题,有的话]
+            ### Blocked
+            - [Issues preventing progress, if any]
 
-            ## 关键决定
-            - **[决定]**: [简短理由]
+            ## Key Decisions
+            - **[Decision]**: [Brief rationale]
 
-            ## 下一步
-            1. [接下来该做什么,按顺序]
+            ## Next Steps
+            1. [Ordered list of what should happen next]
 
-            ## 关键信息
-            - [继续下去需要的数据、示例或参照:坐标与维度、基地和地标的位置、背包里的关键物品与数量、失败过的路线与教训]
-            - [没有就写"(无)"]
+            ## Critical Context
+            - [Data, examples, or references needed to continue: coordinates and dimensions, where bases and landmarks are, key items in the inventory and how many, routes that failed and what was learned]
+            - [Or "(none)" if not applicable]
 
-            每一节保持简洁。原样保留坐标、物品与方块的名字、任务与技能的名字、错误信息。""";
+            Keep each section concise.\s""" + KEEP_EXACT;
 
     /** 第二次起的提示词:在 {@code <previous-summary>} 里的上一份摘要之上合并新消息。 */
     static final String UPDATE_SUMMARIZATION_PROMPT = """
-            以上消息是要并入已有摘要的新对话,已有摘要在 <previous-summary> 标签里。
+            The messages above are NEW conversation messages to incorporate into the existing summary provided in <previous-summary> tags.
 
-            在已有的结构化摘要之上用新信息更新。规则:
-            - 保留已有摘要里的全部信息
-            - 把新消息里的进展、决定和上下文加进去
-            - 更新"进展":做完的从"进行中"挪到"已完成"
-            - 按已经做成的事更新"下一步"
-            - 原样保留坐标、物品与方块的名字、任务与技能的名字、错误信息
-            - 确实不再相关的可以删掉
+            Update the existing structured summary with new information. RULES:
+            - PRESERVE all existing information from the previous summary
+            - ADD new progress, decisions, and context from the new messages
+            - UPDATE the Progress section: move items from "In Progress" to "Done" when completed
+            - UPDATE "Next Steps" based on what was accomplished
+            - PRESERVE exact coordinates, item and block names, task and skill names, and error messages
+            - If something is no longer relevant, you may remove it
 
-            严格使用这个格式:
+            Use this EXACT format:
 
-            ## 目标
-            [保留已有的目标,事情扩大了就加上新的]
+            ## Goal
+            [Preserve existing goals, add new ones if the task expanded]
 
-            ## 约束与偏好
-            - [保留已有的,把新发现的加上]
+            ## Constraints & Preferences
+            - [Preserve existing, add new ones discovered]
 
-            ## 进展
-            ### 已完成
-            - [x] [之前做完的和新做完的都写上]
+            ## Progress
+            ### Done
+            - [x] [Include previously done items AND newly completed items]
 
-            ### 进行中
-            - [ ] [手上正在做的,按进展更新]
+            ### In Progress
+            - [ ] [Current work - update based on progress]
 
-            ### 受阻
-            - [眼下的阻碍,解决了就删掉]
+            ### Blocked
+            - [Current blockers - remove if resolved]
 
-            ## 关键决定
-            - **[决定]**: [简短理由](之前的都保留,新的加上)
+            ## Key Decisions
+            - **[Decision]**: [Brief rationale] (preserve all previous, add new)
 
-            ## 下一步
-            1. [按现在的状态更新]
+            ## Next Steps
+            1. [Update based on current state]
 
-            ## 关键信息
-            - [保留重要的信息,需要的话加上新的]
+            ## Critical Context
+            - [Preserve important context, add new if needed]
 
-            每一节保持简洁。原样保留坐标、物品与方块的名字、任务与技能的名字、错误信息。""";
+            Keep each section concise.\s""" + KEEP_EXACT;
 
     /** 切点劈在一轮中间时,那一轮切点之前的半截用的提示词:只写这半截里有的,不去推后面的。 */
     static final String TURN_PREFIX_SUMMARIZATION_PROMPT = """
-            以上消息是一段进行中的对话里较早的部分。较晚的消息另外存着,不需要在这里重建。
+            The messages above are the earlier part of a conversation that is still going on. The later messages are kept separately and do not need to be rebuilt here.
 
-            写一份简洁的检查点,说明主人交代的事和上面这些消息里能看到的进展。这份检查点会放在较晚的消息之前,
-            让对话带着必要的背景接着往下走。
+            Write a concise checkpoint of what the owner asked for and the progress visible in the messages above. It will be placed before the later messages so the conversation goes on with the background it needs.
 
-            ## 原始请求
-            [主人交代了什么?]
+            ## Original Request
+            [What did the owner ask for?]
 
-            ## 目前的进展
-            - [这些消息里的关键决定和做完的事]
+            ## Progress So Far
+            - [Key decisions and completed things in these messages]
 
-            ## 接着做所需的背景
-            - [理解较晚的内容需要从这些消息里带上的信息]
+            ## Context Needed To Continue
+            - [What the later messages need carried over from these]
 
-            只摘要上面明确出现过的信息。不要推断或重建较晚的消息。""";
+            Summarize only what explicitly appears above. Do not infer or rebuild the later messages.\s""" + KEEP_EXACT;
 
     /** 主人给了关注点({@code /compact <关注点>})时拼在提示词末尾的前缀。 */
-    private static final String FOCUS_PREFIX = "\n\n额外关注点:";
+    private static final String FOCUS_PREFIX = "\n\nAdditional focus: ";
 
     /** 一轮被切开时,历史摘要与前缀摘要合成一份用的分隔。 */
-    private static final String TURN_CONTEXT_HEADER = "\n\n---\n\n**本轮上下文(被切开的一轮):**\n\n";
+    private static final String TURN_CONTEXT_HEADER = "\n\n---\n\n**Turn Context (split turn):**\n\n";
 
     /** 没有更早的历史、只有被切开的一轮前缀时,代替历史摘要的那句话。 */
-    private static final String NO_PRIOR_HISTORY = "(此前没有历史。)";
+    private static final String NO_PRIOR_HISTORY = "(No prior history.)";
 
     /** Wrapper that turns the raw summary into the new history's first user message. */
     private static final String SUMMARY_HEADER =
-            "[对话历史已压缩] 以下是此前全部对话的摘要，请将其作为既成事实继续工作：\n\n";
+            "[Conversation history compacted] The following is a summary of everything before this point; treat it as established and carry on:\n\n";
 
     /**
      * Tokens the history estimate can't see: system prompt (persona + skills
@@ -404,7 +409,7 @@ public final class Compactor implements MemoryPort {
     public void clear() {
         log.appendClearBoundary();
         convo.replaceAll(List.of());
-        AiLog.LOG.info("[numen-entity#{}] 上下文清空(记录留档)", name);
+        AiLog.LOG.info("[numen-entity#{}] context cleared (the record is kept)", name);
     }
 
     /**

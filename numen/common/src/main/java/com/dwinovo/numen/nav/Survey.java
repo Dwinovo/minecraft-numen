@@ -50,7 +50,7 @@ public final class Survey {
         this.navigator = navigator;
         this.legs = List.copyOf(legs);
         if (this.legs.isEmpty()) {
-            throw new IllegalArgumentException("规划至少要有一段");
+            throw new IllegalArgumentException("a plan needs at least one segment");
         }
     }
 

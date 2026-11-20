@@ -181,15 +181,15 @@ public final class TimerRegistry extends SavedData {
                 continue;
             }
             NumenEvents.emit(body, com.dwinovo.numen.api.agent.inbox.EventTypes.TIMER, Map.of("id", t.id()),
-                    "你定的表到点了:" + t.reason()
-                            + "。表只负责提醒,不代表那件事已经完成——先看清现在的状况再决定下一步。",
+                    "The timer you set is up: " + t.reason()
+                            + ". A timer only reminds you; it does not mean the thing is done — look at how things stand now before you decide what to do.",
                     true);
             spent.add(t.id());
         }
         if (!spent.isEmpty()) {
             spent.forEach(timers::remove);
             setDirty();
-            Constants.LOG.info("[numen-task] {} 个表到点", spent.size());
+            Constants.LOG.info("[numen-task] {} timer(s) up", spent.size());
         }
     }
 

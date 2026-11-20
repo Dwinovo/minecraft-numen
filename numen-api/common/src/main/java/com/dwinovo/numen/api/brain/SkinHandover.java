@@ -74,7 +74,7 @@ public final class SkinHandover {
             try {
                 png = SkinProfile.read(Files.readString(file, StandardCharsets.UTF_8)).png();
             } catch (IOException | RuntimeException unreadable) {
-                Constants.LOG.warn("[numen-migrate] 旧皮肤 {} 读不了,留着不动: {}", file, unreadable.toString());
+                Constants.LOG.warn("[numen-migrate] the old skin {} cannot be read and is left as it is: {}", file, unreadable.toString());
                 continue;
             }
             if (png.length == 0) {
@@ -137,7 +137,7 @@ public final class SkinHandover {
                 }
             }
         } catch (IOException e) {
-            Constants.LOG.warn("[numen-migrate] 读不了旧皮肤库 {}: {}", root, e.toString());
+            Constants.LOG.warn("[numen-migrate] cannot read the old skin library {}: {}", root, e.toString());
         }
         return out;
     }

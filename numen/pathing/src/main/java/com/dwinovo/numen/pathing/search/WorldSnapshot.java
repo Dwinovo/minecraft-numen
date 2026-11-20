@@ -140,7 +140,7 @@ public final class WorldSnapshot implements SearchView {
     public static WorldSnapshot capture(LevelHeightAccessor heights, WorldBorder border, boolean ultraWarm,
                                         Sections source, int centerX, int centerZ, int radius) {
         if (radius < 0) {
-            throw new IllegalArgumentException("半径不能为负:" + radius);
+            throw new IllegalArgumentException("the radius must not be negative: " + radius);
         }
         return new WorldSnapshot(heights, border, ultraWarm, source, centerX, centerZ, radius);
     }

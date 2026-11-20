@@ -74,8 +74,8 @@ public final class Shipped {
         for (Bundle other : registered) {
             for (String path : files(other.root()).keySet()) {
                 if (mine.containsKey(path)) {
-                    throw new IllegalArgumentException("内置内容 " + path + " 被 " + other.source() + " 和 "
-                            + candidate.source() + " 都带了——同一个文件只能有一个来源");
+                    throw new IllegalArgumentException("built-in content " + path + " is shipped by both " + other.source() + " and "
+                            + candidate.source() + " — one file can only have one source");
                 }
             }
         }
@@ -126,7 +126,7 @@ public final class Shipped {
                 out.put(slashed(root.relativize(file)), file);
             }
         } catch (IOException e) {
-            throw new UncheckedIOException("读不了内置内容 " + root, e);
+            throw new UncheckedIOException("cannot read built-in content " + root, e);
         }
         return out;
     }
@@ -141,7 +141,7 @@ public final class Shipped {
         try {
             return Fingerprint.of(Files.readAllBytes(file));
         } catch (IOException e) {
-            throw new UncheckedIOException("读不了 " + file, e);
+            throw new UncheckedIOException("cannot read " + file, e);
         }
     }
 
@@ -296,7 +296,7 @@ public final class Shipped {
             try {
                 Atomic.write(to, Files.readAllBytes(from));
             } catch (IOException e) {
-                throw new UncheckedIOException("读不了 " + from, e);
+                throw new UncheckedIOException("cannot read " + from, e);
             }
         }
 

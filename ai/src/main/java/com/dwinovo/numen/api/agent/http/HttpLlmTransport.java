@@ -319,13 +319,13 @@ public final class HttpLlmTransport {
         JsonElement tools = body.get("tools");
         int messages = body.has("messages") && body.get("messages").isJsonArray()
                 ? body.getAsJsonArray("messages").size() : -1;
-        AiLog.LOG.warn("[numen-http][{}] 被拒的是我们发的请求 — status={} model={} 消息 {} 条,"
-                        + " 工具 {} 个,请求体 {} 字节",
+        AiLog.LOG.warn("[numen-http][{}] the request we sent was rejected — status={} model={} {} message(s),"
+                        + " {} tool(s), body {} bytes",
                 requestId, status, body.has("model") ? body.get("model").getAsString() : "?",
                 messages, tools != null && tools.isJsonArray() ? tools.getAsJsonArray().size() : 0,
                 body.toString().length());
         if (tools != null && tools.isJsonArray() && !tools.getAsJsonArray().isEmpty()) {
-            AiLog.LOG.warn("[numen-http][{}] 当时发出去的工具定义: {}", requestId, tools);
+            AiLog.LOG.warn("[numen-http][{}] the tool definitions sent with it: {}", requestId, tools);
         }
     }
 

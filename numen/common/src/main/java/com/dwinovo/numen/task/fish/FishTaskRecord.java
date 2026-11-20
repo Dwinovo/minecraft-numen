@@ -22,7 +22,7 @@ public final class FishTaskRecord extends TaskRecord<List<String>> {
      */
     @Override
     public String describe() {
-        return "钓鱼,抛了一竿";
+        return "fishing, line cast";
     }
 
     /** 给主人看的一句(头顶气泡、档案页),客户端按当前语言翻;{@link #describe()} 是给模型的。 */

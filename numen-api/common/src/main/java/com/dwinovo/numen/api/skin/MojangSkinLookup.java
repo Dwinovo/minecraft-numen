@@ -55,12 +55,12 @@ public final class MojangSkinLookup {
             if (skin == null) {
                 return remember(playerName, new Result(null, SkinError.of(SkinError.NO_SKIN)));
             }
-            Constants.LOG.info("[numen-skin] 借到 {} 的皮肤", playerName);
+            Constants.LOG.info("[numen-skin] borrowed the skin of {}", playerName);
             return remember(playerName, new Result(skin, null));
         } catch (RuntimeException e) {
             // 网络问题不进缓存:换个网络/开了代理就该能成
             SkinError why = SkinError.fromError(e);
-            Constants.LOG.warn("[numen-skin] 查 {} 的皮肤失败: {}", playerName, why.getMessage());
+            Constants.LOG.warn("[numen-skin] looking up the skin of {} failed: {}", playerName, why.getMessage());
             return new Result(null, why);
         }
     }

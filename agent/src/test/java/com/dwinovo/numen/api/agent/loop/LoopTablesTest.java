@@ -8,7 +8,7 @@ class LoopTablesTest {
 
     @Test
     void haltWordsCarryTheDetail() {
-        assertEquals("你死了(掉进岩浆)", HaltReason.DEATH.words("掉进岩浆"));
-        assertEquals("被主人打断", HaltReason.OWNER_STOP.words(null));
+        assertEquals("you died (掉进岩浆)", HaltReason.DEATH.words("掉进岩浆"));
+        assertEquals("interrupted by the owner", HaltReason.OWNER_STOP.words(null));
     }
 }

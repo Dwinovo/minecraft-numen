@@ -145,7 +145,7 @@ public final class HostMerge {
             }
             EntryId fresh = unique(kind, id, targetSpace);
             renamed.add(new Renamed(kind, id, fresh));
-            Constants.LOG.info("[numen-migrate] 房主的 {} {} 和服务器目录里的同名,改名 {} 并入", kind.dir(), id, fresh);
+            Constants.LOG.info("[numen-migrate] the host's {} {} has the same name as one in the server directory; merged in as {}", kind.dir(), id, fresh);
             target = targetSpace.resolve(leaf(kind, fresh.name()));
         }
         place(source, target);
@@ -187,7 +187,7 @@ public final class HostMerge {
                 Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException e) {
-            throw new StoreException("搬不动 " + source + ": " + e, e);
+            throw new StoreException("cannot move " + source + ": " + e, e);
         }
     }
 
@@ -217,7 +217,7 @@ public final class HostMerge {
         try (Stream<Path> walk = Files.walk(dir)) {
             return walk.filter(Files::isRegularFile).toList();
         } catch (IOException e) {
-            throw new StoreException("读不了 " + dir + ": " + e, e);
+            throw new StoreException("cannot read " + dir + ": " + e, e);
         }
     }
 
@@ -225,7 +225,7 @@ public final class HostMerge {
         try (Stream<Path> list = Files.list(dir)) {
             return list.sorted().toList();
         } catch (IOException e) {
-            throw new StoreException("读不了 " + dir + ": " + e, e);
+            throw new StoreException("cannot read " + dir + ": " + e, e);
         }
     }
 
@@ -233,7 +233,7 @@ public final class HostMerge {
         try {
             return Files.readAllBytes(file);
         } catch (IOException e) {
-            throw new StoreException("读不了 " + file + ": " + e, e);
+            throw new StoreException("cannot read " + file + ": " + e, e);
         }
     }
 

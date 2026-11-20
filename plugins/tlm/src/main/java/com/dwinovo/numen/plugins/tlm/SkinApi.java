@@ -29,7 +29,7 @@ import java.util.Optional;
  */
 public final class SkinApi {
 
-    private static final String ABSENT = "这里没装车万女仆,换不了模型";
+    private static final String ABSENT = "Touhou Little Maid is not installed here, so the model cannot be changed";
 
     private SkinApi() {}
 
@@ -99,7 +99,7 @@ public final class SkinApi {
         String model = args.model().toString();
         if (!Maids.hasModel(model)) {
             // 不把全量清单塞回去(两百多个,一次两万 token),指回清单去搜
-            throw new ApiError(ErrorKind.NOT_FOUND, "没有叫 " + model + " 的模型;搜一下正确的 id",
+            throw new ApiError(ErrorKind.NOT_FOUND, "no model named " + model + "; search for the right id",
                     Call.of("tlm.skin.list", Map.of("search", args.model().getPath())));
         }
         Outfit.wear(call.her(), model);

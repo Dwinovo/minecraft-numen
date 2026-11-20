@@ -36,13 +36,13 @@ public record Search(SearchView view, CostModel model, BlockPos start, Goal goal
         Objects.requireNonNull(deadline, "deadline");
         start = start.immutable();
         if (budget <= 0) {
-            throw new IllegalArgumentException("展开预算要是正数:" + budget);
+            throw new IllegalArgumentException("the expansion budget must be positive: " + budget);
         }
         if (!(advance > 0)) {
-            throw new IllegalArgumentException("一段要推进的估价要是正数:" + advance);
+            throw new IllegalArgumentException("the estimate to advance per segment must be positive: " + advance);
         }
         if (arrival != null && !arrival.to().equals(start)) {
-            throw new IllegalArgumentException("起点 " + start + " 不是那一步的落点 " + arrival.to());
+            throw new IllegalArgumentException("the start " + start + " is not the landing of that step " + arrival.to());
         }
     }
 

@@ -58,6 +58,6 @@ public final class FloatChain implements Reflex {
 
     @Override
     public String describe() {
-        return "在水里不动手时浮在水面上不往下沉;整个人已经在水下时不会自己浮上来";
+        return "while idle in water you float at the surface instead of sinking; once fully under water you do not rise on your own";
     }
 }

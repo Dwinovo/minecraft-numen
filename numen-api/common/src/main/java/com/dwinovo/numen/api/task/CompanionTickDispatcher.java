@@ -174,7 +174,7 @@ public final class CompanionTickDispatcher {
                     // 见 OwnedBody。
                     if (duplicateWarned.add(ap.getUUID())) {
                         com.dwinovo.numen.api.Constants.LOG.warn(
-                                "[numen-task] {} 同时有两具身体在玩家列表里,忽略后来的那具", ap.getUUID());
+                                "[numen-task] {} has two bodies in the player list at once; ignoring the later one", ap.getUUID());
                     }
                     continue;
                 }
@@ -182,7 +182,7 @@ public final class CompanionTickDispatcher {
                     // 到不了这里（关服已经清过表）—— 到了就是哪处漏了，大声记一笔。
                     // 整个大脑作废：里面的任务都绑在旧身体上，一个都不能再 tick。
                     com.dwinovo.numen.api.Constants.LOG.warn(
-                            "[numen-task] {} 换了身体但旧大脑还在，整个作废重建", ap.getUUID());
+                            "[numen-task] {} has a new body but the old brain is still there; discarded and rebuilt", ap.getUUID());
                     BRAINS.remove(ap.getUUID());
                     brain = brainFor(ap.getUUID());
                 }

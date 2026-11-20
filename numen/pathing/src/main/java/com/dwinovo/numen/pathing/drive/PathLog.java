@@ -81,7 +81,7 @@ public final class PathLog {
     /** 主线程上一次做完的寻路活 {@code what} 用了 {@code nanos}:超过 {@link #MAIN_THREAD_WARN_NANOS} 记 WARN。 */
     public static void mainThread(String who, String what, long nanos) {
         if (nanos > MAIN_THREAD_WARN_NANOS) {
-            warn("{} 主线程上{}用了 {}(阈值 {})", who, what, ms(nanos), ms(MAIN_THREAD_WARN_NANOS));
+            warn("{} main thread: {} took {} (threshold {})", who, what, ms(nanos), ms(MAIN_THREAD_WARN_NANOS));
         }
     }
 
@@ -117,11 +117,11 @@ public final class PathLog {
      * (JIT 大是冷启动)、每节点微秒;两者都正常而每节点仍慢,是地形或实现。池线程数与机器核数一并写出。
      */
     public static String load(Pending<?> done, int expanded) {
-        String cpu = done.cpuNanos() < 0 ? "不可用"
+        String cpu = done.cpuNanos() < 0 ? "n/a"
                 : String.format(Locale.ROOT, "%.0f%%", 100.0 * done.cpuNanos() / Math.max(1, done.ranNanos()));
-        String jit = done.jitMillis() < 0 ? "不可用" : "+" + done.jitMillis() + "ms";
+        String jit = done.jitMillis() < 0 ? "n/a" : "+" + done.jitMillis() + "ms";
         String perNode = expanded <= 0 ? "-" : String.format(Locale.ROOT, "%.0fμs", done.ranNanos() / 1.0e3 / expanded);
-        return String.format(Locale.ROOT, "CPU/墙钟 %s JIT %s GC +%dms 每节点 %s 池 %d 线程/%d 核", cpu, jit, done.gcMillis(), perNode,
+        return String.format(Locale.ROOT, "CPU/wall %s JIT %s GC +%dms per node %s pool %d threads/%d cores", cpu, jit, done.gcMillis(), perNode,
                 Searches.poolSize(), Runtime.getRuntime().availableProcessors());
     }
 
@@ -160,7 +160,7 @@ public final class PathLog {
             left = Math.min(left, dive.left());
         }
         if (!under.isEmpty()) {
-            dives = " 水下 " + under.size() + " 段 最长憋 " + num(held) + " 刻 最少还剩 " + num(left) + " 刻";
+            dives = " underwater " + under.size() + " stretch(es) longest breath " + num(held) + " ticks least left " + num(left) + " ticks";
         }
         return steps(route) + dives;
     }
@@ -170,14 +170,14 @@ public final class PathLog {
         for (Route.Leg leg : route.legs()) {
             kinds.merge(leg.maneuver().kind(), 1, Integer::sum);
         }
-        StringBuilder out = new StringBuilder().append(route.legs().size()).append(" 步 [");
+        StringBuilder out = new StringBuilder().append(route.legs().size()).append(" steps [");
         boolean first = true;
         for (Map.Entry<MoveKind, Integer> e : kinds.entrySet()) {
             out.append(first ? "" : " ").append(e.getKey()).append('×').append(e.getValue());
             first = false;
         }
-        return out.append("] 代价 ").append(num(route.cost())).append(" 改 ").append(route.alterations())
-                .append(" 格 ").append(pos(route.start())).append("→").append(pos(route.end())).toString();
+        return out.append("] cost ").append(num(route.cost())).append(" alters ").append(route.alterations())
+                .append(" cells ").append(pos(route.start())).append("→").append(pos(route.end())).toString();
     }
 
     /** 路线上的每一步:走法与落点,排障时还原她走的是哪条路。 */
@@ -197,13 +197,13 @@ public final class PathLog {
 
     /** 搜索里离目标最近的节点上朝目标的一步被拒:哪种走法、从哪个节点、卡在哪一格、哪条前提。 */
     public static String blocking(SearchResult.Blocking b) {
-        return b.move() + " 从 " + pos(b.from()) + " 卡在 " + pos(b.fails().cell()) + " 前提=" + b.fails().reason();
+        return b.move() + " from " + pos(b.from()) + " blocked at " + pos(b.fails().cell()) + " premise=" + b.fails().reason();
     }
 
     /** 一步走不下去:哪种走法、哪一格、什么方块、哪条前提或执行里出的事。 */
     public static String blockage(Blockage b) {
-        return b.move() + " 卡在 " + pos(b.cell()) + " " + block(b.block()) + " "
-                + (b.reason() != null ? "前提=" + b.reason() : "执行=" + b.hitch());
+        return b.move() + " blocked at " + pos(b.cell()) + " " + block(b.block()) + " "
+                + (b.reason() != null ? "premise=" + b.reason() : "execution=" + b.hitch());
     }
 
     /** 一趟里按原因分的重规划次数,如 "往前核不成立 2 一步超时 1";一次也没有为 "-"。 */
@@ -215,9 +215,9 @@ public final class PathLog {
 
     /** 身体此刻的状态:精确位置、在地上还是空中、泡没泡水、眼睛在不在水里、氧气、血量。 */
     public static String body(ServerPlayer body) {
-        return "身体 " + at(body.position()) + (body.onGround() ? " 地上" : " 空中") + (body.isInWater() ? " 水里" : "")
-                + (body.isEyeInFluid(net.minecraft.tags.FluidTags.WATER) ? " 眼在水里" : "")
-                + " 氧气 " + body.getAirSupply() + "/" + body.getMaxAirSupply() + " 血 " + num(body.getHealth());
+        return "body " + at(body.position()) + (body.onGround() ? " ground" : " air") + (body.isInWater() ? " water" : "")
+                + (body.isEyeInFluid(net.minecraft.tags.FluidTags.WATER) ? " eyes-under" : "")
+                + " air " + body.getAirSupply() + "/" + body.getMaxAirSupply() + " hp " + num(body.getHealth());
     }
 
     /**
@@ -232,31 +232,31 @@ public final class PathLog {
             }
         }
         BlockPos digging = mouse.pressing();
-        return "按键 " + (pressed.isEmpty() ? "-" : pressed) + " 主手 " + stack(body.getMainHandItem()) + " 准星 " + crosshair(body, mouse.pick())
-                + " 鼠标 " + (digging == null ? "没在挖" : "挖 " + pos(digging) + " 进度 " + num(mouse.progress()))
-                + " 在做 " + (working == null ? "-" : edit(working));
+        return "keys " + (pressed.isEmpty() ? "-" : pressed) + " main hand " + stack(body.getMainHandItem()) + " crosshair " + crosshair(body, mouse.pick())
+                + " mouse " + (digging == null ? "not digging" : "digging " + pos(digging) + " progress " + num(mouse.progress()))
+                + " doing " + (working == null ? "-" : edit(working));
     }
 
     private static String stack(ItemStack stack) {
-        return stack.isEmpty() ? "空手" : BuiltInRegistries.ITEM.getKey(stack.getItem()) + "×" + stack.getCount();
+        return stack.isEmpty() ? "empty" : BuiltInRegistries.ITEM.getKey(stack.getItem()) + "×" + stack.getCount();
     }
 
     private static String crosshair(ServerPlayer body, HitResult hit) {
         return switch (hit) {
-            case BlockHitResult block when block.getType() == HitResult.Type.BLOCK -> "方块 " + pos(block.getBlockPos()) + " "
-                    + block(body.serverLevel().getBlockState(block.getBlockPos())) + " 面 " + block.getDirection();
-            case EntityHitResult entity -> "实体 " + BuiltInRegistries.ENTITY_TYPE.getKey(entity.getEntity().getType());
-            default -> "空";
+            case BlockHitResult block when block.getType() == HitResult.Type.BLOCK -> "block " + pos(block.getBlockPos()) + " "
+                    + block(body.serverLevel().getBlockState(block.getBlockPos())) + " face " + block.getDirection();
+            case EntityHitResult entity -> "entity " + BuiltInRegistries.ENTITY_TYPE.getKey(entity.getEntity().getType());
+            default -> "nothing";
         };
     }
 
     /** 一件改动:做什么、哪一格、原来是什么。 */
     private static String edit(Edit edit) {
         return switch (edit) {
-            case Edit.Dig dig -> "挖 " + pos(dig.pos()) + " " + block(dig.state());
-            case Edit.Place place -> "放 " + pos(place.pos()) + " " + BuiltInRegistries.BLOCK.getKey(place.block());
-            case Edit.Door door -> "开关 " + pos(door.pos()) + " " + block(door.state());
-            case Edit.Catch caught -> "倒水 " + pos(caught.pos());
+            case Edit.Dig dig -> "dig " + pos(dig.pos()) + " " + block(dig.state());
+            case Edit.Place place -> "place " + pos(place.pos()) + " " + BuiltInRegistries.BLOCK.getKey(place.block());
+            case Edit.Door door -> "door " + pos(door.pos()) + " " + block(door.state());
+            case Edit.Catch caught -> "pour water " + pos(caught.pos());
         };
     }
 }

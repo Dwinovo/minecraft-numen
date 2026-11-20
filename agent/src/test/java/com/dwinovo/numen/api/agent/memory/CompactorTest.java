@@ -150,7 +150,7 @@ class CompactorTest {
         String all = lastUser(c.compaction(false, "").orElseThrow());
         assertTrue(all.contains("<previous-summary>\n主人要铁;基地在 0,64,0\n</previous-summary>"),
                 "上一份摘要要单独给:" + all);
-        assertFalse(all.substring(0, all.indexOf("<previous-summary>")).contains("[对话历史已压缩]"),
+        assertFalse(all.substring(0, all.indexOf("<previous-summary>")).contains("[Conversation history compacted]"),
                 "它不该再作为一条普通消息混在待整理的历史里");
         assertTrue(all.endsWith(Compactor.UPDATE_SUMMARIZATION_PROMPT), "提示词要换成更新那一份");
     }
@@ -213,7 +213,7 @@ class CompactorTest {
     void whenOnlyTheLastSummaryIsOlderThanTheKeptSpanThereIsNothingToCompact(@TempDir Path dir) {
         ConvoLog log = logIn(dir);
         ConvoState convo = new ConvoState(m -> log.append(m, null));
-        convo.addUser("[对话历史已压缩] 以下是此前全部对话的摘要，请将其作为既成事实继续工作：\n\n" + "旧".repeat(8_000));
+        convo.addUser("[Conversation history compacted] The following is a summary of everything before this point; treat it as established and carry on:\n\n" + "旧".repeat(8_000));
         for (int i = 0; i < 4; i++) {
             convo.addUser("话".repeat(2_400));
             convo.addAssistant(new AssistantTurn("答".repeat(2_400), List.of(), null));
@@ -355,13 +355,13 @@ class CompactorTest {
         String history = ((ConvoState.Msg.User) cut.requests().get(0).messages().get(0)).content();
         String prefix = ((ConvoState.Msg.User) cut.requests().get(1).messages().get(0)).content();
         assertTrue(history.startsWith("<conversation>") && history.endsWith(Compactor.SUMMARIZATION_PROMPT
-                + "\n\n额外关注点:坐标别丢"));
+                + "\n\nAdditional focus: 坐标别丢"));
         assertTrue(prefix.startsWith("# Conversation\n[User]: 长") && prefix.endsWith(
-                "# Instructions\n" + Compactor.TURN_PREFIX_SUMMARIZATION_PROMPT + "\n\n额外关注点:坐标别丢"), prefix);
+                "# Instructions\n" + Compactor.TURN_PREFIX_SUMMARIZATION_PROMPT + "\n\nAdditional focus: 坐标别丢"), prefix);
 
         assertTrue(cut.apply(answered("历史摘要", "前缀摘要")));
         String first = ((ConvoState.Msg.User) convo.snapshot().get(0)).content();
-        assertTrue(first.endsWith("历史摘要\n\n---\n\n**本轮上下文(被切开的一轮):**\n\n前缀摘要"), first);
+        assertTrue(first.endsWith("历史摘要\n\n---\n\n**Turn Context (split turn):**\n\n前缀摘要"), first);
         assertFalse(cut.apply(answered("历史摘要", " ")), "任何一份是空的就算没压成");
     }
 
@@ -382,6 +382,6 @@ class CompactorTest {
         assertEquals(1, cut.requests().size(), "没有更早的历史就只有前缀这一份");
         assertTrue(cut.apply(answered("前缀摘要")));
         assertTrue(((ConvoState.Msg.User) convo.snapshot().get(0)).content()
-                .contains("(此前没有历史。)\n\n---\n\n**本轮上下文(被切开的一轮):**\n\n前缀摘要"));
+                .contains("(No prior history.)\n\n---\n\n**Turn Context (split turn):**\n\n前缀摘要"));
     }
 }

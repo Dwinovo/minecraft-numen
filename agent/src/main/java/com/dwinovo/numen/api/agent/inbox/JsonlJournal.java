@@ -63,7 +63,7 @@ public final class JsonlJournal implements EventQueue.Journal {
                     && r.json().get("urgent").getAsBoolean(), null, r.id()));
         }
         if (skipped > 0) {
-            AiLog.LOG.warn("[numen-queue] 跳过 {} 条坏记录 {}", skipped, log.file().getFileName());
+            AiLog.LOG.warn("[numen-queue] skipped {} bad record(s) in {}", skipped, log.file().getFileName());
         }
         return out;
     }

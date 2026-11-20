@@ -249,12 +249,12 @@ public final class NumenPlugins {
             try {
                 String x = f.apply(subject);
                 if (FAILING.remove(f)) {
-                    Constants.LOG.info("[numen] 插件的运行期状态又算得出来了");
+                    Constants.LOG.info("[numen] plugin runtime state can be computed again");
                 }
                 if (x != null && !x.isBlank()) sb.append(x);
             } catch (RuntimeException e) {
                 if (FAILING.add(f)) {
-                    Constants.LOG.error("[numen] 插件的运行期状态算不出来,这一段跳过(接着出错不再重复记)", e);
+                    Constants.LOG.error("[numen] plugin runtime state could not be computed; this segment is skipped (further failures are not logged again)", e);
                 }
             }
         }
@@ -267,7 +267,7 @@ public final class NumenPlugins {
         try {
             r.run();
         } catch (RuntimeException e) {
-            Constants.LOG.error("[numen] 插件的客户端初始化出错", e);
+            Constants.LOG.error("[numen] a plugin's client initialization failed", e);
         }
     }
 

@@ -237,7 +237,7 @@ public final class Stepping {
 
     private static void checkDirection(int dx, int dz) {
         if (dx < -1 || dx > 1 || dz < -1 || dz > 1 || (dx == 0 && dz == 0)) {
-            throw new IllegalArgumentException("相邻一列的方向只能是正方向或斜向:" + dx + "," + dz);
+            throw new IllegalArgumentException("the direction to a neighbouring column must be cardinal or diagonal: " + dx + "," + dz);
         }
     }
 

@@ -344,7 +344,7 @@ class EventQueueTest {
         String block = out.get(0);
         assertTrue(block.contains("第2件"), "丢的是最老的");
         assertFalse(block.contains("第1件"), "最老的两条该没了");
-        assertTrue(block.contains("2 件事"), "丢了几条要说得出来:" + block);
+        assertTrue(block.contains("about 2 more things"), "丢了几条要说得出来:" + block);
     }
 
     @Test

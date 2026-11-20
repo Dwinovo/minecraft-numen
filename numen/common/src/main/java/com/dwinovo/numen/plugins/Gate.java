@@ -108,11 +108,11 @@ public final class Gate {
     private void install(String plugin, Runnable run) {
         try {
             run.run();
-            Constants.LOG.info("[numen] 联动已接上:{}", plugin);
+            Constants.LOG.info("[numen] integration connected: {}", plugin);
         } catch (Throwable t) {
             // 一个联动接不上不能带倒整个模组,也不能带倒别的联动;原因记进花名册,界面上看得到
             NumenPlugins.failed(plugin, t);
-            Constants.LOG.warn("[numen] 联动 {} 没接上,其余照常:{}", plugin, t.toString());
+            Constants.LOG.warn("[numen] integration {} did not connect, the rest go on: {}", plugin, t.toString());
         }
     }
 
@@ -131,7 +131,7 @@ public final class Gate {
         String path = "plugins/" + plugin + "/numen";
         Path root = inJar.apply(path);
         if (root == null) {
-            Constants.LOG.warn("[numen] 联动 {} 的内容目录 {} 不在 jar 里,工具照常、内容不带", plugin, path);
+            Constants.LOG.warn("[numen] integration {}: content directory {} is not in the jar; tools as usual, no content", plugin, path);
         }
         return root;
     }

@@ -29,7 +29,7 @@ final class SkinHandovers {
         Segments.Assembler parts = INCOMING.computeIfAbsent(segment.name(), name -> new Segments.Assembler());
         if (!parts.accept(segment.index(), segment.total(), segment.bytes())) {
             INCOMING.remove(segment.name());
-            Constants.LOG.warn("[numen-skin] 服务端交还的皮肤 {} 段序不对,这一张作废", segment.name());
+            Constants.LOG.warn("[numen-skin] the skin {} handed back by the server has its segments out of order; this one is dropped", segment.name());
             return;
         }
         if (parts.complete()) {

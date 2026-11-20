@@ -102,13 +102,13 @@ public final class YsmApi {
         String texture = args.texture().orElse(null);
         if (texture == null) {
             if (!ysm.models(her).contains(model)) {
-                throw new ApiError(ErrorKind.NOT_FOUND, "YSM 不认 '" + model + "' 这个模型;看清单里的 id",
+                throw new ApiError(ErrorKind.NOT_FOUND, "YSM does not know the model '" + model + "'; use an id from the list",
                         Call.of("ysm.model.options"));
             }
             List<String> textures = ysm.textures(her, model);
             if (textures.isEmpty()) {
-                throw new ApiError(ErrorKind.FAILED, "YSM 没给 '" + model + "' 列出贴图,定不了默认贴图;用 {texture = ...} "
-                        + "指定一个", null);
+                throw new ApiError(ErrorKind.FAILED, "YSM lists no textures for '" + model + "', so there is no default; "
+                        + "name one with {texture = ...}", null);
             }
             texture = textures.get(0);
         }

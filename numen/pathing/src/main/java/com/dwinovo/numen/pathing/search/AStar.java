@@ -393,7 +393,7 @@ public final class AStar {
             return;
         }
         if (!(cost > 0) || Double.isInfinite(cost)) {
-            throw new IllegalStateException(move.kind() + " 从 " + BlockPos.of(nodes.pos[from]) + " 算出了非法的代价 " + cost);
+            throw new IllegalStateException(move.kind() + " from " + BlockPos.of(nodes.pos[from]) + " produced an illegal cost " + cost);
         }
         Breath.Air air = nodes.air[from];
         if (submerged || !breath.rested(air)) {
@@ -641,7 +641,7 @@ public final class AStar {
         WorldView here = faced(done);
         Premise premise = move.premise(model, here, BlockPos.of(nodes.pos[parent]), nodes.stance[parent], heading);
         if (!(premise instanceof Premise.Holds holds)) {
-            throw new IllegalStateException(move.kind() + " " + heading + " 从 " + BlockPos.of(nodes.pos[parent]) + " 快判断成立,精确判断不成立:" + premise);
+            throw new IllegalStateException(move.kind() + " " + heading + " from " + BlockPos.of(nodes.pos[parent]) + " passed the quick check but failed the exact one: " + premise);
         }
         m = holds.maneuver();
         nodes.via[n] = m;

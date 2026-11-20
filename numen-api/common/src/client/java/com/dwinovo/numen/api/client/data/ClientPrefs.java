@@ -49,7 +49,7 @@ public final class ClientPrefs {
                 for (var el : o.getAsJsonArray("recentCommands")) recentCommands.add(el.getAsString());
             }
         } catch (Exception e) {
-            Constants.LOG.warn("[numen-prefs] ui.json 读不了,用默认值", e);
+            Constants.LOG.warn("[numen-prefs] ui.json cannot be read, using defaults", e);
         }
     }
 

@@ -233,7 +233,7 @@ public final class Trip {
                         : new Route(rest.get(0).maneuver().from(), rest.get(0).maneuver().start(), rest);
                 consent = covered(unasked.item(), rest);
                 phase = Phase.CONSENT;
-                com.dwinovo.numen.Constants.LOG.info("[numen-task] 走到 {} 要问主人({}),停下等答复",
+                com.dwinovo.numen.Constants.LOG.info("[numen-task] reaching {} needs the owner's answer ({}); stopped to wait for it",
                         denied.cell().toShortString(), unasked.verdict().reason());
                 return;
             }
@@ -249,7 +249,7 @@ public final class Trip {
                 uses = EnumSet.of(PositionCosts.Use.DIG, PositionCosts.Use.PLACE);
             }
             if (wall(denied.cell(), uses)) {
-                com.dwinovo.numen.Constants.LOG.info("[numen-task] {} 动手被拒,这一趟里当墙,重新规划",
+                com.dwinovo.numen.Constants.LOG.info("[numen-task] {} was refused; treated as a wall for this trip, replanning",
                         denied.cell().toShortString());
                 seed = null;
                 drive();

@@ -218,8 +218,8 @@ public final class BoatNav {
         }
         java.util.Collections.reverse(cells);
         com.dwinovo.numen.Constants.LOG.debug(
-                "[numen-boat] 航线 {} 点,{} 展开,{}", cells.size(), expanded,
-                goalKey != null ? "直达目标水域" : "至最近靠岸点");
+                "[numen-boat] course of {} point(s), {} expanded, {}", cells.size(), expanded,
+                goalKey != null ? "straight to the target water" : "to the nearest landing");
         return new Chart(cells, goalKey != null, null);
     }
 

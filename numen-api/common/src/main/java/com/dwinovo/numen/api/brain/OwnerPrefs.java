@@ -56,7 +56,7 @@ public final class OwnerPrefs implements Switches {
                 }
             });
         } catch (RuntimeException unreadable) {
-            Constants.LOG.warn("[numen-prefs] {} 读不了,用默认值: {}", doc.file().getFileName(), unreadable.toString());
+            Constants.LOG.warn("[numen-prefs] {} cannot be read, using defaults: {}", doc.file().getFileName(), unreadable.toString());
         }
     }
 

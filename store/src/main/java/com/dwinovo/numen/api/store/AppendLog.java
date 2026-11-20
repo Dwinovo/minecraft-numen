@@ -67,7 +67,7 @@ public final class AppendLog {
 
         private Format(int current) {
             if (current < 1) {
-                throw new IllegalArgumentException("版本从 1 起");
+                throw new IllegalArgumentException("versions start at 1");
             }
             this.current = current;
         }
@@ -89,7 +89,7 @@ public final class AppendLog {
         void check() {
             for (int v = 1; v < current; v++) {
                 if (!steps.containsKey(v)) {
-                    throw new IllegalStateException("缺第 " + v + " 版往上升的那一步");
+                    throw new IllegalStateException("the upgrade step from version " + v + " is missing");
                 }
             }
         }
@@ -169,7 +169,7 @@ public final class AppendLog {
         try {
             text = Files.readString(file, StandardCharsets.UTF_8);
         } catch (IOException e) {
-            throw new StoreException("读不了 " + file + ": " + e, e);
+            throw new StoreException("cannot read " + file + ": " + e, e);
         }
         JsonObject head = null;
         List<JsonObject> records = new ArrayList<>();
@@ -213,7 +213,7 @@ public final class AppendLog {
             }
             chained = chain(upgraded);
         } catch (RuntimeException e) {
-            throw new StoreException("升级 " + file + " 失败(从第 " + from + " 版): " + e, e);
+            throw new StoreException("upgrading " + file + " failed (from version " + from + "): " + e, e);
         }
         Path bak = file.resolveSibling(file.getFileName() + ".v" + from + ".bak");
         try {
@@ -221,7 +221,7 @@ public final class AppendLog {
                 Files.copy(file, bak);
             }
         } catch (IOException e) {
-            throw new StoreException("留不了备份 " + bak + ": " + e, e);
+            throw new StoreException("cannot keep the backup " + bak + ": " + e, e);
         }
         Atomic.write(file, render(chained));
         index(chained);
@@ -251,7 +251,7 @@ public final class AppendLog {
         } catch (java.nio.file.NoSuchFileException absent) {
             return new Loaded(List.of(), 0);
         } catch (IOException e) {
-            throw new StoreException("读不了 " + file + ": " + e, e);
+            throw new StoreException("cannot read " + file + ": " + e, e);
         }
         List<Record> out = new ArrayList<>();
         int skipped = 0;
@@ -298,7 +298,7 @@ public final class AppendLog {
                 chunk.limit(size);
                 while (chunk.hasRemaining()) {
                     if (channel.read(chunk, position + chunk.position()) < 0) {
-                        throw new IOException("文件在读的时候变短了");
+                        throw new IOException("the file got shorter while it was being read");
                     }
                 }
                 chunk.limit(chunk.capacity());
@@ -317,7 +317,7 @@ public final class AppendLog {
                 skipped += takeBackward(carry, 0, carry.length, beforeId, passed, newestFirst);
             }
         } catch (IOException e) {
-            throw new StoreException("读不了 " + file + ": " + e, e);
+            throw new StoreException("cannot read " + file + ": " + e, e);
         }
         java.util.Collections.reverse(newestFirst);
         return new Loaded(newestFirst, skipped);
@@ -364,7 +364,7 @@ public final class AppendLog {
     public Record append(String type, JsonObject body) {
         for (String key : RESERVED) {
             if (body.has(key)) {
-                throw new IllegalArgumentException("记录体里不许用 " + key);
+                throw new IllegalArgumentException("a record body may not use " + key);
             }
         }
         JsonObject record = new JsonObject();
@@ -430,7 +430,7 @@ public final class AppendLog {
             Files.writeString(file, text, StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.APPEND);
         } catch (IOException e) {
-            throw new StoreException("追加不进 " + file + ": " + e, e);
+            throw new StoreException("cannot append to " + file + ": " + e, e);
         }
     }
 
@@ -438,7 +438,7 @@ public final class AppendLog {
         try {
             Files.deleteIfExists(file);
         } catch (IOException e) {
-            throw new StoreException("删不了 " + file + ": " + e, e);
+            throw new StoreException("cannot delete " + file + ": " + e, e);
         }
     }
 
@@ -474,7 +474,7 @@ public final class AppendLog {
         for (JsonObject src : records) {
             String type = typeOf(src);
             if (type == null) {
-                throw new IllegalArgumentException("记录没有类型: " + src);
+                throw new IllegalArgumentException("the record has no type: " + src);
             }
             String id = idOf(src);
             if (id == null) {

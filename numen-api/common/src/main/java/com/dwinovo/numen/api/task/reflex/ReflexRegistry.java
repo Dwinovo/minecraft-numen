@@ -47,9 +47,9 @@ public final class ReflexRegistry {
             lines.add(r.describe());
         }
         if (lines.isEmpty()) return "";
-        return "你的身体有这些本能,会自动发生,不需要用工具去做:"
-                + String.join(";", lines)
-                + "。你的显式动作永远优先。";
+        return "Your body has these instincts; they happen on their own and need no tool: "
+                + String.join("; ", lines)
+                + ". What you explicitly do always comes first.";
     }
 
     /** Test hook: wipe the roster. */

@@ -49,6 +49,6 @@ public final class SpeakingLookChain implements Task, Reflex {
 
     @Override
     public String describe() {
-        return "说话时会停下面向主人";
+        return "you stop and face your owner while speaking";
     }
 }

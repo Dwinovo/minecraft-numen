@@ -13,7 +13,7 @@ public record EntryId(String namespace, String name) {
 
     public EntryId {
         if (!segment(namespace) || !segment(name)) {
-            throw new IllegalArgumentException("命名空间与名字不能为空、不能含路径符号: " + namespace + ":" + name);
+            throw new IllegalArgumentException("namespace and name must not be empty or contain path characters: " + namespace + ":" + name);
         }
     }
 

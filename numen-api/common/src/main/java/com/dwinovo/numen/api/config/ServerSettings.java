@@ -60,7 +60,7 @@ public final class ServerSettings {
                 unknownAsOther = other.getAsBoolean();
             }
         } catch (RuntimeException unreadable) {
-            Constants.LOG.warn("[numen-server] {} 读不了,用缺省设置: {}", doc.file(), unreadable.toString());
+            Constants.LOG.warn("[numen-server] {} cannot be read, using default settings: {}", doc.file(), unreadable.toString());
         }
     }
 

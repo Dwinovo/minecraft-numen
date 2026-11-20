@@ -91,7 +91,7 @@ public final class ServerLifecycle {
         try {
             start.accept(server);
         } catch (RuntimeException e) {
-            com.dwinovo.numen.api.Constants.LOG.error("[numen] 服务器起来时有一项失败,其余继续", e);
+            com.dwinovo.numen.api.Constants.LOG.error("[numen] one step failed while the server was starting; the rest go on", e);
         }
     }
 
@@ -108,7 +108,7 @@ public final class ServerLifecycle {
             try {
                 reload.accept(server);
             } catch (RuntimeException e) {
-                com.dwinovo.numen.api.Constants.LOG.error("[numen] 重载时有一项失败,其余继续", e);
+                com.dwinovo.numen.api.Constants.LOG.error("[numen] one step failed during reload; the rest go on", e);
             }
         }
     }
@@ -120,7 +120,7 @@ public final class ServerLifecycle {
             try {
                 drop.run();
             } catch (RuntimeException e) {
-                com.dwinovo.numen.api.Constants.LOG.warn("[numen] 关服清理有一项失败,其余继续", e);
+                com.dwinovo.numen.api.Constants.LOG.warn("[numen] one cleanup step failed at shutdown; the rest go on", e);
             }
         }
     }

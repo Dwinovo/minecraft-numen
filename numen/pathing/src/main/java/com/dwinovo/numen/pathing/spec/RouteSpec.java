@@ -70,10 +70,10 @@ public record RouteSpec(boolean dig, boolean place, boolean consent, double cons
         Objects.requireNonNull(bans, "bans");
         excluded = Collections.unmodifiableSet(excluded.isEmpty() ? EnumSet.noneOf(Kind.class) : EnumSet.copyOf(excluded));
         if (maxFallDamage < 0) {
-            throw new IllegalArgumentException("愿意承受的摔伤不能为负:" + maxFallDamage);
+            throw new IllegalArgumentException("the fall damage to accept must not be negative: " + maxFallDamage);
         }
         if (alterBudget < 0) {
-            throw new IllegalArgumentException("改动预算不能为负:" + alterBudget);
+            throw new IllegalArgumentException("the alteration budget must not be negative: " + alterBudget);
         }
         requirePenalty("placeCost", placeCost);
         requirePenalty("breakPenalty", breakPenalty);
@@ -81,13 +81,13 @@ public record RouteSpec(boolean dig, boolean place, boolean consent, double cons
         requirePenalty("wadePenalty", wadePenalty);
         requirePenalty("exposurePenalty", exposurePenalty);
         if (!(consentMultiplier >= 1) || Double.isInfinite(consentMultiplier)) {
-            throw new IllegalArgumentException("consentMultiplier 要是不小于 1 的有限数:" + consentMultiplier);
+            throw new IllegalArgumentException("consentMultiplier must be a finite number of at least 1: " + consentMultiplier);
         }
     }
 
     private static void requirePenalty(String name, double value) {
         if (!(value >= 0) || Double.isInfinite(value)) {
-            throw new IllegalArgumentException(name + " 要是非负的有限数:" + value);
+            throw new IllegalArgumentException(name + " must be a non-negative finite number: " + value);
         }
     }
 

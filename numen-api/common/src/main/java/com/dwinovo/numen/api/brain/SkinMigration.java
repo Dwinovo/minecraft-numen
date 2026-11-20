@@ -67,7 +67,7 @@ public final class SkinMigration {
                     ref = carryOver(name, SkinProfile.read(Files.readString(file, StandardCharsets.UTF_8)), skins, cache,
                             exportImages);
                 } catch (IOException | RuntimeException unreadable) {
-                    Constants.LOG.warn("[numen-migrate] 旧皮肤 {} 读不了,跳过: {}", file, unreadable.toString());
+                    Constants.LOG.warn("[numen-migrate] the old skin {} cannot be read, skipped: {}", file, unreadable.toString());
                     continue;
                 }
                 if (ref != null) {
@@ -155,7 +155,7 @@ public final class SkinMigration {
         try (Stream<Path> list = Files.list(dir)) {
             return list.sorted().toList();
         } catch (IOException e) {
-            throw new StoreException("读不了 " + dir + ": " + e, e);
+            throw new StoreException("cannot read " + dir + ": " + e, e);
         }
     }
 
@@ -163,7 +163,7 @@ public final class SkinMigration {
         try {
             return Files.readAllBytes(file);
         } catch (IOException e) {
-            throw new StoreException("读不了 " + file + ": " + e, e);
+            throw new StoreException("cannot read " + file + ": " + e, e);
         }
     }
 }

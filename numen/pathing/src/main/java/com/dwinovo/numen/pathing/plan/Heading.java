@@ -20,7 +20,7 @@ public record Heading(int dx, int dy, int dz) {
 
     public Heading {
         if (dx < -1 || dx > 1 || dy < -1 || dy > 1 || dz < -1 || dz > 1 || (dx == 0 && dy == 0 && dz == 0)) {
-            throw new IllegalArgumentException("方向各轴只能取 -1、0、1,且不能全为 0:" + dx + "," + dy + "," + dz);
+            throw new IllegalArgumentException("each axis of a heading must be -1, 0 or 1, and not all 0: " + dx + "," + dy + "," + dz);
         }
     }
 

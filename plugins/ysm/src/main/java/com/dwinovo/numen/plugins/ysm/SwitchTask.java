@@ -40,11 +40,11 @@ final class SwitchTask implements Task {
         if (now != null && model.equals(now.model())) {
             // 换了模型,旧动作会在新模型上重放;真人换模型时 YSM 也是顺手停掉
             boolean stopped = emotes.isPlaying(her.getUUID()) && emotes.stop(her, r.her);
-            outcome = "换好了:" + model + (stopped ? ";原来的动作停了" : "");
+            outcome = "switched to " + model + (stopped ? "; the emote that was playing stopped" : "");
             return TaskState.SUCCESS;
         }
-        outcome = "没换成 '" + model + "'。" + (said.isEmpty() ? "YSM 没有说原因" : "YSM 说:" + String.join(" ", said))
-                + ";现在穿的还是 " + (now == null ? "(读不到)" : now.model());
+        outcome = "could not switch to '" + model + "'. " + (said.isEmpty() ? "YSM gave no reason" : "YSM said: " + String.join(" ", said))
+                + "; still wearing " + (now == null ? "(unreadable)" : now.model());
         return TaskState.FAILED;
     }
 
@@ -56,8 +56,8 @@ final class SwitchTask implements Task {
     public TaskResult result(TaskState terminal) {
         return switch (terminal) {
             case SUCCESS -> TaskResult.ok(outcome);
-            case TIMEOUT -> TaskResult.timeout("没轮到换成 '" + r.look.model() + "' 就到期了,模型没动");
-            case CANCELLED -> TaskResult.cancelled("换成 '" + r.look.model() + "' 之前被叫停了,模型没动");
+            case TIMEOUT -> TaskResult.timeout("timed out before the switch to '" + r.look.model() + "' got its turn; the model is unchanged");
+            case CANCELLED -> TaskResult.cancelled("stopped before the switch to '" + r.look.model() + "'; the model is unchanged");
             default -> TaskResult.fail(outcome);
         };
     }

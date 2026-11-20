@@ -657,7 +657,7 @@ public final class NumenPlayer extends ServerPlayer {
         }
         tickFailureLogged = true;
         com.dwinovo.numen.api.Constants.LOG.error(
-                "[numen] 同伴 {} 的 tick 抛了异常,这一 tick 跳过(之后不再重复记这一条)",
+                "[numen] the tick of companion {} threw; this tick is skipped (not logged again after this)",
                 getUUID(), ex);
     }
 

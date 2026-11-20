@@ -105,8 +105,8 @@ public final class GoalSteward {
         if (goal == null) {
             return;
         }
-        AiLog.LOG.info("[numen-entity#{}] 目标收工({} 轮,{})",
-                name, goal.turnsExecuted(), why == null ? "主人清掉" : "评估后收工");
+        AiLog.LOG.info("[numen-entity#{}] goal ended ({} turns, {})",
+                name, goal.turnsExecuted(), why == null ? "cleared by the owner" : "ended after evaluation");
         cancelJudging();
         goal = null;
         persist.accept(null);
@@ -128,7 +128,7 @@ public final class GoalSteward {
                 if (halted.reason().endsGoal() && goal != null) {
                     // 主人按停止 = 不要她接着跑了。目标跟着收工,否则这一轮刚断下一轮又自己续上,
                     // 停止键就成了摆设。想接着做再说一次 /goal,成本就是一句话。
-                    clear("按停止收工了:" + goal.objective());
+                    clear("ended by the stop button: " + goal.objective());
                 }
             }
             // 目标的账单:主人得看得见这个目标到现在烧了多少。评估自己的用量在判完那一刻记给被判的那个目标
@@ -164,7 +164,7 @@ public final class GoalSteward {
         //
         // 常驻任务(跟随这种)要放行:它永远不报完成,等它等于永远不续。
         if (bodyOnFiniteTask.getAsBoolean()) {
-            AiLog.LOG.debug("[numen-entity#{}] 目标续跑让位:身体手上有活", name);
+            AiLog.LOG.debug("[numen-entity#{}] goal continuation yields: the body has a job running", name);
             return;
         }
         // 额度不在这儿拦:每一轮的成果都要判过再说。拦在判定前面的话,最后一轮白干——
@@ -204,7 +204,7 @@ public final class GoalSteward {
         }
         if (outcome instanceof ModelOutcome.Failed failed) {
             // 判不出来不等于做完了。歇一轮,下次做完再判。
-            AiLog.LOG.warn("[numen-entity#{}] 目标评估失败,这一轮先不续:{}", name, failed.cause().forModel());
+            AiLog.LOG.warn("[numen-entity#{}] goal evaluation failed, not continuing this turn: {}", name, failed.cause().forModel());
             return;
         }
         ModelOutcome.Answered answered = (ModelOutcome.Answered) outcome;
@@ -212,23 +212,23 @@ public final class GoalSteward {
         var verdict = GoalPrompts.readVerdict(answered.turn().content());
         goal.setLastReason(verdict.reason());
         boolean giveUp = goal.noteStuck(verdict.stuck());
-        AiLog.LOG.info("[numen-entity#{}] 目标评估 第{}轮 {}", name, goal.turnsExecuted(),
-                verdict.met() ? "达成" : verdict.stuck() ? "打转 x" + goal.stuckStreak() : "还差");
+        AiLog.LOG.info("[numen-entity#{}] goal evaluation, turn {}: {}", name, goal.turnsExecuted(),
+                verdict.met() ? "met" : verdict.stuck() ? "stuck x" + goal.stuckStreak() : "not yet");
         if (verdict.met()) {
-            clear("目标达成:" + verdict.reason());
+            clear("goal met: " + verdict.reason());
             return;
         }
         if (giveUp) {
             // 连着几轮同一堵墙:告诉主人卡在哪,别再转了。判"没进展"的是评估器,不是她自报
             // ——她报不准,前面验过。
-            clear("过不去,先收工了:" + verdict.reason() + " —— 换个说法或者搭把手再 /goal");
+            clear("cannot get past this, ended: " + verdict.reason() + " — rephrase it or lend a hand, then /goal again");
             return;
         }
         if (!goal.hasTurnsLeft()) {
             // 还没做完,但额度到顶了:停下来告诉主人,不是闷头继续——她"以为没做完"是
             // 会一直转的,而每轮主请求两万 token 起。
-            clear("跑够 " + GoalState.MAX_GOAL_TURNS
-                    + " 轮还没完,先收工了(还差:" + verdict.reason() + ")—— 想接着做再说一次 /goal");
+            clear("ran " + GoalState.MAX_GOAL_TURNS
+                    + " turns without finishing, ended (still missing: " + verdict.reason() + ") — say /goal again to go on");
             return;
         }
         long now = System.currentTimeMillis();

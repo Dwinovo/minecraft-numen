@@ -31,11 +31,11 @@ public final class Moves {
     static {
         for (Move move : FLYING) {
             if (BY_KIND.put(move.kind(), move) != null) {
-                throw new IllegalStateException("走法 " + move.kind() + " 有两个实现");
+                throw new IllegalStateException("move " + move.kind() + " has two implementations");
             }
         }
         if (BY_KIND.size() != MoveKind.values().length) {
-            throw new IllegalStateException("有走法没有实现");
+            throw new IllegalStateException("a move has no implementation");
         }
     }
 

@@ -48,7 +48,7 @@ public final class CompanionEvents {
             try {
                 ((Consumer<T>) h).accept(payload);
             } catch (RuntimeException e) {
-                Constants.LOG.error("[numen] 插件处理 {} 事件时出错", event, e);
+                Constants.LOG.error("[numen] a plugin failed handling the {} event", event, e);
             }
         }
     }

@@ -107,7 +107,7 @@ public final class SttProviders {
         // 密钥必填与否由后端定:云端流式(doubao/dashscope)缺钥握手必败;
         // whisper-http 兼容端点常见自建无鉴权,空钥放行(请求侧空钥不带 Authorization)。
         if (key.isBlank() && !BACKEND_WHISPER_HTTP.equals(opt.backend())) {
-            Constants.LOG.warn("[numen-stt] provider '{}' 没填 API Key,语音输入没开", opt.id());
+            Constants.LOG.warn("[numen-stt] provider '{}' has no API key; voice input stays off", opt.id());
             return null;
         }
         String base = cfg.getSttBaseUrl();
@@ -131,7 +131,7 @@ public final class SttProviders {
             case BACKEND_DASHSCOPE -> new DashScopeStt(base, key, model);
             case BACKEND_STEPFUN -> new StepFunStt(base, key, model);
             default -> {
-                Constants.LOG.warn("[numen-stt] provider '{}' 的 backend='{}' 不认识,按 {} 处理",
+                Constants.LOG.warn("[numen-stt] provider '{}' has an unknown backend='{}'; treated as {}",
                         opt.id(), opt.backend(), BACKEND_WHISPER_HTTP);
                 yield new WhisperHttpStt(base, key, model);
             }

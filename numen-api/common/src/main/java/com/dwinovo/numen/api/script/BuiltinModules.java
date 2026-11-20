@@ -65,7 +65,7 @@ public final class BuiltinModules {
             // 一批里有一个登记不了:已经登记的这几个一起撤回,不留半批
             registered.close();
             if (e instanceof IOException io) {
-                throw new UncheckedIOException("读不了目录 " + root, io);
+                throw new UncheckedIOException("cannot read the directory " + root, io);
             }
             throw (RuntimeException) e;
         }
@@ -80,17 +80,17 @@ public final class BuiltinModules {
      */
     public static synchronized Handle register(String name, String code) {
         ScriptEngine engine = ScriptEngine.IN_USE;
-        String what = "内置模块 " + name;
+        String what = "built-in module " + name;
         String badName = Modules.problem(name);
         if (badName != null) {
-            throw new IllegalArgumentException(what + " 的名字不行: " + badName);
+            throw new IllegalArgumentException(what + " has a bad name: " + badName);
         }
         if (MODULES.containsKey(name)) {
-            throw new IllegalArgumentException(what + " 登记了两次——名字谁先登记归谁");
+            throw new IllegalArgumentException(what + " is registered twice — a name belongs to whoever registers it first");
         }
         String problem = engine.check(name, code);
         if (problem != null) {
-            throw new IllegalArgumentException(what + " 读不通: " + problem);
+            throw new IllegalArgumentException(what + " cannot be parsed: " + problem);
         }
         Builtin made = new Builtin(code, engine.summary(code));
         MODULES.put(name, made);

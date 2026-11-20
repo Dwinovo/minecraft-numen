@@ -52,7 +52,7 @@ abstract class Control {
             case DOWNWARD -> new DownwardControl(rig, m, stride);
             case CLIMB -> new ClimbControl(rig, m, stride);
             case SWIM -> new SwimControl(rig, m, stride);
-            case TAKEOFF, FLY, LAND -> throw new IllegalArgumentException("飞行的步由 AirControl 跟整段,不进单步控制器:" + m.kind());
+            case TAKEOFF, FLY, LAND -> throw new IllegalArgumentException("flight steps are followed as a whole segment by AirControl, not by a single-step control: " + m.kind());
         };
     }
 

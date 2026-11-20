@@ -78,7 +78,7 @@ final class Allowance {
     /** @param fixed 调用方指定的总预算;0 是按估价定 */
     Allowance(int fixed, SearchClock clock) {
         if (fixed < 0) {
-            throw new IllegalArgumentException("总预算不能为负:" + fixed);
+            throw new IllegalArgumentException("the total budget must not be negative: " + fixed);
         }
         this.fixed = fixed;
         this.total = fixed;

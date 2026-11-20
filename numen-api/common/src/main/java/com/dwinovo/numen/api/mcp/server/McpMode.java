@@ -158,7 +158,7 @@ public final class McpMode {
             startServer();
         } else {
             this.enabled = false;
-            Constants.LOG.info("[numen-mcp] 远程端点关闭(服主在 {} 里开)", CONFIG_FILE);
+            Constants.LOG.info("[numen-mcp] the remote endpoint is off (the server owner turns it on in {})", CONFIG_FILE);
         }
     }
 
@@ -230,7 +230,7 @@ public final class McpMode {
         home = null;
         connectedOwners = Set.of();
         config = McpConfig.disabledDefault();
-        Constants.LOG.info("[numen-mcp] 远程端点宿主随这一端关停");
+        Constants.LOG.info("[numen-mcp] the remote endpoint host shuts down with this side");
     }
 
     private boolean startServer() {
@@ -242,17 +242,17 @@ public final class McpMode {
             s.start();
         } catch (Exception ex) {
             lastError = ex.getMessage() == null ? ex.toString() : ex.getMessage();
-            Constants.LOG.error("[numen-mcp] 起服失败 {}:{} — {}", config.host(), config.port(), ex.toString());
+            Constants.LOG.error("[numen-mcp] failed to start on {}:{} — {}", config.host(), config.port(), ex.toString());
             enabled = false;
             return false;
         }
         endpoint = s;
         enabled = true;
         ConsentVenues.register(elicitation);
-        Constants.LOG.info("[numen-mcp] 远程端点已开启,{};每张令牌由 /numen token 发", endpoint());
+        Constants.LOG.info("[numen-mcp] the remote endpoint is on, {}; each token is issued with /numen token", endpoint());
         if (config.lanExposed()) {
-            Constants.LOG.warn("[numen-mcp] 端点绑在 {},是明文 HTTP:令牌会在网上明文传输。"
-                    + "建议在前面放反向代理加 HTTPS,端点本身只绑回环", config.host());
+            Constants.LOG.warn("[numen-mcp] the endpoint is bound to {} over plain HTTP: tokens travel the network in clear text. "
+                    + "Put a reverse proxy with HTTPS in front of it and bind the endpoint itself to loopback only", config.host());
         }
         return true;
     }
@@ -265,7 +265,7 @@ public final class McpMode {
         }
         GameWaits.clear();
         enabled = false;
-        Constants.LOG.info("[numen-mcp] 远程端点已关闭");
+        Constants.LOG.info("[numen-mcp] the remote endpoint is closed");
     }
 
     // ---- 状态查询(UI / 闸门) ----

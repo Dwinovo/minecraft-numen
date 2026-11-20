@@ -74,7 +74,7 @@ public final class Shelf {
                     scanSpace(space, next);
                 }
             } catch (IOException e) {
-                Constants.LOG.warn("[numen-library] 扫不了 {}: {}", dir, e.toString());
+                Constants.LOG.warn("[numen-library] cannot scan {}: {}", dir, e.toString());
             }
         }
         replace(next);
@@ -107,7 +107,7 @@ public final class Shelf {
         try {
             into.put(id, new Item(id, file, Files.readString(file, StandardCharsets.UTF_8)));
         } catch (IOException e) {
-            Constants.LOG.warn("[numen-library] 读不了 {}: {}", file, e.toString());
+            Constants.LOG.warn("[numen-library] cannot read {}: {}", file, e.toString());
         }
     }
 
@@ -130,7 +130,7 @@ public final class Shelf {
     /** 写一条文件型的条目(新建或换掉)。 */
     public synchronized Item write(EntryId id, String text) {
         if (kind.isDirectory()) {
-            throw new IllegalStateException(kind.dir() + " 的条目是目录,用 copyIn");
+            throw new IllegalStateException(kind.dir() + " entries are directories; use copyIn");
         }
         Path file = pathOf(id);
         Item item = new Item(id, file, text);
@@ -142,7 +142,7 @@ public final class Shelf {
     /** 把一个目录整个放成一条目录型的条目(新建或换掉)。 */
     public synchronized Item copyIn(EntryId id, Path source) {
         if (!kind.isDirectory()) {
-            throw new IllegalStateException(kind.dir() + " 的条目是文件,用 write");
+            throw new IllegalStateException(kind.dir() + " entries are files; use write");
         }
         Path target = pathOf(id);
         Item item = new Item(id, target, null);

@@ -179,13 +179,13 @@ public final class VoicePipeline {
                     if (gen != generation) return;   // 本轮已被打断,结果作废
                     if (fail != null) {
                         target.failed = true;
-                        Constants.LOG.warn("[numen-voice#{}] 合成失败({}), 跳过该句({} 字): {}",
+                        Constants.LOG.warn("[numen-voice#{}] synthesis failed ({}), skipping this sentence ({} chars): {}",
                                 entityUuid, backend.describe(), target.text.length(), unwrap(fail));
                     } else {
                         target.audio = audio;
                         // INFO 而非 debug:每句一行,是"流式分句确实在 LLM 说完前就开始
                         // 合成"的唯一运行时证据,也是合成延迟的常驻观测点。
-                        Constants.LOG.info("[numen-voice#{}] 合成完成 {}ms, {}ms 音频, {} 字",
+                        Constants.LOG.info("[numen-voice#{}] synthesized in {}ms, {}ms of audio, {} chars",
                                 entityUuid, (System.nanoTime() - t0) / 1_000_000,
                                 audio.durationMs(), target.text.length());
                     }
@@ -213,7 +213,7 @@ public final class VoicePipeline {
         AbstractClientPlayer body = ClientNumenLookup.resolve(entityUuid);
         if (body == null) {
             // 同伴不在世:只清不播。
-            Constants.LOG.info("[numen-voice#{}] 实体不在场,丢弃 {} 段待播语音",
+            Constants.LOG.info("[numen-voice#{}] the entity is not here; dropped {} queued voice clip(s)",
                     entityUuid, queue.size());
             stopAndClear();
             return;
@@ -225,7 +225,7 @@ public final class VoicePipeline {
         playing = com.dwinovo.numen.api.client.platform.ClientServices.VOICE
                 .entityVoice(entityUuid, body, head.audio, 1.0f);
         mc.getSoundManager().play(playing);
-        Constants.LOG.info("[numen-voice#{}] 开播 {}ms, {} 字",
+        Constants.LOG.info("[numen-voice#{}] playing {}ms, {} chars",
                 entityUuid, head.audio.durationMs(), head.text.length());
         pumpSynthesis();
     }

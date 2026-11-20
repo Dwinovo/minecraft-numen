@@ -213,7 +213,7 @@ public final class OpenAIResponsesProvider implements LlmProvider {
                     includeEncryptedReasoning(body);
                 }
             }
-            case ON, BUDGET -> throw new IllegalStateException("ThinkingPlan 不会给 Responses 排出 " + wire.kind());
+            case ON, BUDGET -> throw new IllegalStateException("ThinkingPlan does not produce this for Responses: " + wire.kind());
         }
     }
 

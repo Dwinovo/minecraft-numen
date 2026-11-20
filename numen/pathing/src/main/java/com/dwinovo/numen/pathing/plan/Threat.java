@@ -9,7 +9,7 @@ public record Threat(double x, double y, double z, double radius) {
 
     public Threat {
         if (!(radius >= 0) || Double.isInfinite(radius)) {
-            throw new IllegalArgumentException("危险半径要是非负的有限数:" + radius);
+            throw new IllegalArgumentException("the threat radius must be a non-negative finite number: " + radius);
         }
     }
 

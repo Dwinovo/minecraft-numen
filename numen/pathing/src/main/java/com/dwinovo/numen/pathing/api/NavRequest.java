@@ -29,7 +29,7 @@ public record NavRequest(Goal goal, RouteSpec spec, int budget, Route route, boo
         Objects.requireNonNull(spec, "spec");
         Objects.requireNonNull(travel, "travel");
         if (budget < 0) {
-            throw new IllegalArgumentException("展开预算不能为负:" + budget);
+            throw new IllegalArgumentException("the expansion budget must not be negative: " + budget);
         }
     }
 

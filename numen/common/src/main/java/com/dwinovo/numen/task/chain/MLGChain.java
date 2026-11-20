@@ -194,7 +194,7 @@ public final class MLGChain implements Task, com.dwinovo.numen.api.task.reflex.R
 
     @Override
     public String describe() {
-        return "高处坠落时会用水桶或软方块自救,落地后把水收回来";
+        return "falling from a height you save yourself with a water bucket or a soft block, and take the water back after landing";
     }
 
     /** 水会落在哪一格 —— 与 {@code BucketItem.use} 同一个算法(可含水的方块就地灌,否则贴面)。 */

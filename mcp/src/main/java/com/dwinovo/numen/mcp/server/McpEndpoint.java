@@ -136,7 +136,7 @@ public final class McpEndpoint {
             executor.shutdownNow();
             try {
                 if (!executor.awaitTermination(STOP_WAIT_SECONDS, TimeUnit.SECONDS)) {
-                    LOG.warn("[numen-mcp] 停服后还有处理线程没散:宿主的调用不响应打断");
+                    LOG.warn("[numen-mcp] handler threads are still alive after shutdown: a host call does not respond to interruption");
                 }
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();

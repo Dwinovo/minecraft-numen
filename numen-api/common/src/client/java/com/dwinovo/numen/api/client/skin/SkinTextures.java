@@ -46,7 +46,7 @@ public final class SkinTextures {
                             + Integer.toHexString(hash));
             Minecraft.getInstance().getTextureManager().register(rl, new DynamicTexture(img));
         } catch (IOException | RuntimeException e) {
-            Constants.LOG.warn("[numen-skin] 预览纹理加载失败 {}: {}", key, e.toString());
+            Constants.LOG.warn("[numen-skin] loading the preview texture failed {}: {}", key, e.toString());
         }
         CACHE.put(key, new Cached(hash, rl));
         return rl;

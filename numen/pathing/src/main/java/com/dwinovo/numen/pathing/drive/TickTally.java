@@ -53,7 +53,7 @@ final class TickTally {
     void end(String who) {
         long total = System.nanoTime() - start;
         if (total > PathLog.MAIN_THREAD_WARN_NANOS) {
-            PathLog.warn("{} 主线程这一刻寻路用了 {}(阈值 {}):派搜索 {} 次(拷快照 {} 组成本模型 {}) 复核 {} 次 {} 动手 {} 其余 {} 回收停顿 {} 次共 {} 毫秒",
+            PathLog.warn("{} pathing took {} on the main thread this tick (threshold {}): searches dispatched {} (snapshot copy {} cost model {}) rechecks {} {} acting {} other {} GC pauses {} totalling {} ms",
                     who, PathLog.ms(total), PathLog.ms(PathLog.MAIN_THREAD_WARN_NANOS), searches, PathLog.ms(snapshot),
                     PathLog.ms(model), rechecks, PathLog.ms(recheck), PathLog.ms(acted),
                     PathLog.ms(total - snapshot - model - recheck - acted), JvmLoad.gcCount() - gcCount, JvmLoad.gcMillis() - gcMillis);

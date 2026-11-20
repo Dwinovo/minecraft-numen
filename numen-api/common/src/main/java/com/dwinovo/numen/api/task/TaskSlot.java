@@ -128,7 +128,7 @@ final class TaskSlot {
     void dropNoResult(NumenPlayer companion) {
         if (record != null && record.isAsync()) {
             com.dwinovo.numen.api.event.NumenEvents.taskFinished(companion, record.publicId(),
-                    record.getToolName(), "interrupted", TaskResult.cancelled("任务因她死亡而中断"), record.function());
+                    record.getToolName(), "interrupted", TaskResult.cancelled("the task was interrupted by her death"), record.function());
         }
         if (record != null) {
             com.dwinovo.numen.api.permission.ConsentDesk.of(companion).release(record,

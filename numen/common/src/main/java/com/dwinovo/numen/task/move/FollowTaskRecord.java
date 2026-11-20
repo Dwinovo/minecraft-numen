@@ -47,7 +47,7 @@ public final class FollowTaskRecord extends TaskRecord<Walked> {
     public FollowTaskRecord(ServerCall source, double keepWithin, UUID target, String targetName, long forTicks) {
         super(source, source.her().level().getGameTime() + forTicks + GRACE_TICKS);
         if (forTicks <= 0) {
-            throw new IllegalArgumentException("跟随总有时长:" + forTicks);
+            throw new IllegalArgumentException("a follow always has a duration: " + forTicks);
         }
         this.keepWithin = keepWithin;
         this.target = target;
@@ -66,8 +66,8 @@ public final class FollowTaskRecord extends TaskRecord<Walked> {
      */
     @Override
     public String describe() {
-        String who = target == null ? "你" : targetName;
-        return "跟着" + who + ",保持 " + (int) keepWithin + " 米,跟 " + forTicks / 20 + " 秒";
+        String who = target == null ? "you" : targetName;
+        return "following " + who + " within " + (int) keepWithin + " m for " + forTicks / 20 + " s";
     }
 
     /** 给主人看的一句(头顶气泡、档案页),客户端按当前语言翻;{@link #describe()} 是给模型的。 */

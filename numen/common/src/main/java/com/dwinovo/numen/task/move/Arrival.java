@@ -114,12 +114,12 @@ public record Arrival(Where to, How how, int range) {
     public String describe() {
         String where = to.words();
         return switch (how) {
-            case AT -> "走向 " + where;
-            case NEAR, BESIDE -> "走到 " + where + " " + range + " 格内";
-            case USE -> "去用 " + where;
-            case DIG -> "走到够得着 " + where + " 的地方";
-            case PLACE -> "走到够得着 " + where + "、往里放方块的地方";
-            case AWAY -> "离开 " + where + " " + range + " 格以外";
+            case AT -> "walking to " + where;
+            case NEAR, BESIDE -> "walking to within " + range + " blocks of " + where;
+            case USE -> "going to use " + where;
+            case DIG -> "walking to where " + where + " is within reach";
+            case PLACE -> "walking to where a block can be placed into " + where;
+            case AWAY -> "getting more than " + range + " blocks away from " + where;
         };
     }
 

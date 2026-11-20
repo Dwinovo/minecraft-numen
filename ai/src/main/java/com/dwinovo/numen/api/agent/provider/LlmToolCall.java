@@ -58,7 +58,7 @@ public record LlmToolCall(String id, String name, String arguments) {
         } catch (RuntimeException notJson) {
             // 落到下面统一处理
         }
-        AiLog.LOG.warn("[numen-llm] 工具参数不是合法 JSON 对象({} 字符),按无参处理", trimmed.length());
+        AiLog.LOG.warn("[numen-llm] tool arguments are not a valid JSON object ({} chars); treated as no arguments", trimmed.length());
         return NO_ARGS;
     }
 

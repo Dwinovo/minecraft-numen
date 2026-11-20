@@ -252,7 +252,7 @@ public final class ChatCommands {
         } catch (RuntimeException ex) {
             // 不是给外部输入兜底,是防自己人的失误:命令实现抛出来的话,静默失败比多一行
             // 日志难查得多,而主人还会以为命令生效了。
-            Constants.LOG.warn("[numen-cmd] {}{} 抛了异常", PREFIX, p.name(), ex);
+            Constants.LOG.warn("[numen-cmd] {}{} threw", PREFIX, p.name(), ex);
             return I18n.get(Keys.CMD_CRASHED, PREFIX + p.name(), ex.toString());
         }
     }

@@ -25,14 +25,14 @@ public final class MaidLook {
         String name = MaidCatalog.nameOf(id);
         String desc = MaidCatalog.descOf(id);
 
-        StringBuilder sb = new StringBuilder("<maid_look>你现在的样子是「").append(name).append("」");
-        if (!desc.isEmpty()) sb.append(",介绍是:").append(desc);
-        sb.append("。说话行事可以带点这个角色的味道,但你还是你自己,别把人设整个换掉。");
+        StringBuilder sb = new StringBuilder("<maid_look>You currently look like \"").append(name).append("\"");
+        if (!desc.isEmpty()) sb.append(", described as: ").append(desc);
+        sb.append(". You may let a little of this character into how you talk and act, but you are still yourself; do not swap your whole persona for it.");
         // 这一句是必须的:女仆模型接管了整个身体渲染,别的外观(YSM 之类)在它底下
         // 一点都露不出来。不说的话,她换了别的外观会照样回报"换好了",而主人画面上
         // 什么都没发生——命令确实成功了,只是被盖着。
-        sb.append("这套模型盖住了你的整个身体,别的外观(比如 YSM 的模型)在它底下看不见;"
-                + "要露出别的外观,得先用 tlm.skin.remove() 把它脱下来。");
+        sb.append("This model covers your whole body, so any other look (a YSM model, say) is hidden under it; "
+                + "to show another look, take this one off first with tlm.skin.remove().");
 
         return sb.append("</maid_look>").toString();
     }

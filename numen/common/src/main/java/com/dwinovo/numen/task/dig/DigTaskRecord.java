@@ -114,7 +114,7 @@ public final class DigTaskRecord extends TaskRecord<DigCompanionTask.Dug> {
     /** 一行给模型看的:{@code <current_task>} 与 task status 印的是它,主人看的是 {@link #activity()}。 */
     @Override
     public String describe() {
-        return count == ALL ? "挖 " + label + ",已挖 " + dug + " 格" : "挖 " + label + " " + dug + "/" + count + " 格";
+        return count == ALL ? "digging " + label + ", " + dug + " dug" : "digging " + label + " " + dug + "/" + count;
     }
 
     /** 给主人看的一句(头顶气泡、档案页),客户端按当前语言翻;{@link #describe()} 是给模型的。 */

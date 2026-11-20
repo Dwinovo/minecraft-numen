@@ -74,7 +74,7 @@ public final class ServerBrains {
             try {
                 CompanionBrains.ensure(server, companion);
             } catch (RuntimeException ex) {
-                Constants.LOG.error("[numen] 同伴 {} 的大脑没能起来,跳过", companion, ex);
+                Constants.LOG.error("[numen] the brain of companion {} failed to start, skipped", companion, ex);
             }
         }
         // 旧版为主人离线攒下的事件:一次性倒进她们的收件箱
@@ -91,7 +91,7 @@ public final class ServerBrains {
         LibraryHub.of(server).reloadAll();
         ModelServices.of(server).reload();
         McpClients.of(server).reconcileAll();
-        Constants.LOG.info("[numen] 库与钥匙串已从磁盘重新读");
+        Constants.LOG.info("[numen] libraries and the keychain were re-read from disk");
     }
 
     /** 这只同伴的主人,以名册为准;名册上没有她是 null。 */
@@ -104,7 +104,7 @@ public final class ServerBrains {
     private static UUID ownerOf(CompanionRegistry registry, UUID companion) {
         UUID owner = ownerOrNull(registry, companion);
         if (owner == null) {
-            throw new IllegalStateException("没有这只同伴: " + companion);
+            throw new IllegalStateException("no such companion: " + companion);
         }
         return owner;
     }

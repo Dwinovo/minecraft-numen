@@ -103,23 +103,23 @@ public record Cause(String code, List<String> args) {
      */
     public String forModel() {
         String what = switch (code) {
-            case UNAUTHORIZED -> "密钥无效";
-            case NOT_FOUND -> "地址不对或型号不存在";
-            case RATE_LIMITED -> "被限流了";
-            case SERVER_ERROR -> "服务端出错了";
-            case BAD_REQUEST -> "请求被拒绝(HTTP " + arg(0) + ")";
-            case NETWORK -> "连不上";
-            case STREAM_FAILED -> "回应中途出错:" + arg(0);
-            case CONTEXT_OVERFLOW -> "上下文超出了模型的窗口";
-            case EMPTY_REPLY -> "服务端返回了空回应";
-            case UNBOUND -> "没绑模型配置";
-            case NO_KEY -> "模型配置没填密钥";
-            case NO_URL -> "模型配置没有地址";
-            case QUOTA -> "服主提供的模型额度今天用完了";
+            case UNAUTHORIZED -> "the API key is invalid";
+            case NOT_FOUND -> "wrong address or no such model";
+            case RATE_LIMITED -> "rate limited";
+            case SERVER_ERROR -> "the provider had a server error";
+            case BAD_REQUEST -> "the request was rejected (HTTP " + arg(0) + ")";
+            case NETWORK -> "cannot connect";
+            case STREAM_FAILED -> "the reply broke off midway: " + arg(0);
+            case CONTEXT_OVERFLOW -> "the context exceeds the model's window";
+            case EMPTY_REPLY -> "the provider returned an empty reply";
+            case UNBOUND -> "no model profile is bound";
+            case NO_KEY -> "the model profile has no API key";
+            case NO_URL -> "the model profile has no address";
+            case QUOTA -> "the server-provided model quota is used up for today";
             default -> code;
         };
         if (code.startsWith("llm.") && !arg(2).isEmpty()) {
-            return what + " · " + arg(1) + " 回复:" + arg(2);
+            return what + " · " + arg(1) + " replied: " + arg(2);
         }
         return what;
     }

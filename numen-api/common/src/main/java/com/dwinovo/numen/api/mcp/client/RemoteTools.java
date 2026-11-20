@@ -55,7 +55,7 @@ public final class RemoteTools implements McpConnections.Registry {
                 register.accept(wrapped);
                 registered.add(wrapped.name());
             } catch (RuntimeException ex) {
-                Constants.LOG.warn("[numen-mcp-client] '{}' 跳过工具 {}: {}", server.name(), wrapped.name(),
+                Constants.LOG.warn("[numen-mcp-client] '{}' skips tool {}: {}", server.name(), wrapped.name(),
                         ex.getMessage());
             }
         }

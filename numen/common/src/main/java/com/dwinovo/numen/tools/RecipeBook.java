@@ -122,7 +122,7 @@ public final class RecipeBook {
                 }
             } catch (RuntimeException broken) {
                 com.dwinovo.numen.Constants.LOG.debug(
-                        "[numen-recipe] 配方 {} 坏了,跳过: {}", holder.id(), broken.toString());
+                        "[numen-recipe] recipe {} is broken, skipped: {}", holder.id(), broken.toString());
             }
         }
         described.addAll(skeletons);

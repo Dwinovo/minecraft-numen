@@ -58,7 +58,7 @@ public final class TokenLedger {
                         readLong(o, "cacheRead"), readLong(o, "cacheWrite"));
             });
         } catch (RuntimeException ex) {
-            Constants.LOG.warn("[numen-entity#{}] token 统计读取失败: {}", entityUuid, ex.toString());
+            Constants.LOG.warn("[numen-entity#{}] reading the token ledger failed: {}", entityUuid, ex.toString());
         }
     }
 

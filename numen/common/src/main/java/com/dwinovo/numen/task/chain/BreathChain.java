@@ -237,6 +237,6 @@ public final class BreathChain implements Task, Reflex {
 
     @Override
     public String describe() {
-        return "在水里游到最近能呼吸处的工夫快超过肺里的氧气时会自己浮上来换气,换满再放手让你的活接着做;头顶被冰面/岩层封住时会游向最近的透气口";
+        return "in water you come up for air on your own when reaching the nearest breathable spot would take almost as long as your air lasts, then let your job carry on once your lungs are full; when ice or rock seals the surface above you, you swim to the nearest opening";
     }
 }

@@ -20,7 +20,7 @@ public record Deadline(SearchClock clock, long nanos) {
     public Deadline {
         Objects.requireNonNull(clock, "clock");
         if (nanos <= 0) {
-            throw new IllegalArgumentException("时限要是正数:" + nanos);
+            throw new IllegalArgumentException("the deadline must be positive: " + nanos);
         }
     }
 

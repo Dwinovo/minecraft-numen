@@ -107,7 +107,7 @@ final class Sortie implements Segment {
             descending = true;
             spot = plan.landing();
         }
-        PathLog.info("{} 滑翔 从 {} 朝 {} 水平 {} 格 {}", craft.who(), PathLog.pos(plan.takeoff()), PathLog.num(plan.aim().x()) + "," + PathLog.num(plan.aim().z()),
+        PathLog.info("{} glide from {} toward {} horizontal {} blocks {}", craft.who(), PathLog.pos(plan.takeoff()), PathLog.num(plan.aim().x()) + "," + PathLog.num(plan.aim().z()),
                 PathLog.num(plan.blocks()), craft.describe());
     }
 
@@ -159,7 +159,7 @@ final class Sortie implements Segment {
         boolean drop = plan.drop();
         if (aligning == 0 && craft.mobility().fireworks() > 0) {
             if (!craft.holdRocket() && !drop) {
-                abort(plan.takeoff(), "手上拿不到烟花");
+                abort(plan.takeoff(), "cannot get a firework in hand");
                 return;
             }
         }
@@ -173,12 +173,12 @@ final class Sortie implements Segment {
         if (takeoffTicks == 0 && !facing) {
             craft.keys().release(Key.FORWARD);
             if (aligning > ALIGN_LIMIT) {
-                abort(plan.takeoff(), "视线转不到起飞的方向");
+                abort(plan.takeoff(), "cannot turn to face the takeoff direction");
             }
             return;
         }
         if (takeoffTicks++ > TAKEOFF_LIMIT) {
-            abort(plan.takeoff(), "展开不了鞘翅");
+            abort(plan.takeoff(), "cannot unfurl the elytra");
             return;
         }
         if (drop) {
@@ -219,22 +219,22 @@ final class Sortie implements Segment {
         descended |= plan.aim().distance(body.position()) <= Glide.DESCENT_RANGE;
         if (!descending) {
             if (descended) {
-                descend("进入目标 " + (int) Glide.DESCENT_RANGE + " 格,开始降落");
+                descend("within " + (int) Glide.DESCENT_RANGE + " blocks of the goal, starting the descent");
             } else if (mobility.fireworks() < Glide.ROCKET_FLOOR || mobility.gliderLife() < Glide.WEAR_FLOOR) {
                 // 烟花或鞘翅耐久低于下限(巡航的线指望着烟花):就近降落
-                descend("烟花或鞘翅耐久低于下限");
+                descend("fireworks or elytra durability below the minimum");
             }
         } else if (loitering) {
             if (ticks - loiterSince > LOITER_LIMIT) {
-                abort(plan.takeoff(), "盘旋了 " + LOITER_LIMIT + " 刻也找不到安全的落点");
+                abort(plan.takeoff(), "circled for " + LOITER_LIMIT + " ticks without finding a safe landing");
                 return;
             }
             if (ticks % LOITER_RETRY == 0) {
-                descend("盘旋中找到了安全的落点");
+                descend("found a safe landing while circling");
             }
         } else if (ticks % SPOT_CHECK == 0 && !landable()) {
             bar();
-            descend("选好的落点落不下了");
+            descend("the chosen landing can no longer be landed on");
         }
         if (descending && !loitering && spot != null) {
             if (!inShaft && Math.hypot(body.position().x - spot.getX() - 0.5, body.position().z - spot.getZ() - 0.5) <= Glide.TOLERANCE) {
@@ -253,7 +253,7 @@ final class Sortie implements Segment {
         } else if (beat instanceof Beat.Blocked blocked) {
             // 一刻都飞不了:被围住,换一个落点(降落中)或就近降落
             bar();
-            descend("前方推演全被否决,挡路的是 " + blocker(blocked.blockage().cell()));
+            descend("every rollout ahead was rejected; in the way: " + blocker(blocked.blockage().cell()));
         }
     }
 
@@ -264,7 +264,7 @@ final class Sortie implements Segment {
     private void blockedAhead(BlockPos hit) {
         if (descending) {
             bar();
-            descend("落点那一路有东西挡着:" + blocker(hit));
+            descend("something blocks the way to the landing: " + blocker(hit));
             return;
         }
         if (plan.aim().distance(Vec3.atCenterOf(hit)) <= Glide.DESCENT_RANGE) {
@@ -275,9 +275,9 @@ final class Sortie implements Segment {
             way = up;
             s = 0;
             helm.forget();
-            PathLog.info("{} 前方有东西挡着({}),沿航线往前拉升重排 {}", craft.who(), blocker(hit), craft.describe());
+            PathLog.info("{} something blocks the way ahead ({}); climbing along the course and replanning {}", craft.who(), blocker(hit), craft.describe());
         } else {
-            descend("前方有东西挡着:" + blocker(hit));
+            descend("something blocks the way ahead: " + blocker(hit));
         }
     }
 
@@ -334,7 +334,7 @@ final class Sortie implements Segment {
         loitering = false;
         inShaft = false;
         helm.forget();
-        PathLog.info("{} {}({}) 落点 {} {}", craft.who(), descended ? "降落" : "迫降", why, PathLog.pos(spot), craft.describe());
+        PathLog.info("{} {} ({}) landing {} {}", craft.who(), descended ? "descending" : "forced landing", why, PathLog.pos(spot), craft.describe());
     }
 
     /** 到了柱口:线换成只有落点这一个点,控制器的打分是到这一点的距离,沿柱下降。 */
@@ -343,15 +343,15 @@ final class Sortie implements Segment {
         s = 0;
         inShaft = true;
         helm.forget();
-        PathLog.info("{} 到了落点 {} 的柱口,沿柱下降 {}", craft.who(), PathLog.pos(spot), craft.describe());
+        PathLog.info("{} reached the top of the column over landing {}; descending along it {}", craft.who(), PathLog.pos(spot), craft.describe());
     }
 
     /** 掉到柱底(落点那一格的地面)以下还没落地:出了柱子,这个落点拉黑换下一个,日志与回执都写。 */
     private void leaveShaft() {
         fellOut++;
-        PathLog.info("{} 掉到柱底以下还没落地,拉黑落点 {} {}", craft.who(), PathLog.pos(spot), craft.describe());
+        PathLog.info("{} fell below the bottom of the column without landing; landing {} is blacklisted {}", craft.who(), PathLog.pos(spot), craft.describe());
         bar();
-        descend("掉到柱底以下");
+        descend("fell below the bottom of the column");
     }
 
     /** 找不到安全的落点:绕着前方的一点盘旋,隔一阵再找一次。盘旋只是等,不是办法:到了时限就收场。 */
@@ -363,7 +363,7 @@ final class Sortie implements Segment {
         loitering = true;
         loiterSince = ticks;
         helm.forget();
-        PathLog.info("{} 找不到安全的落点({}),盘旋等 {}", craft.who(), why, craft.describe());
+        PathLog.info("{} no safe landing ({}); circling {}", craft.who(), why, craft.describe());
     }
 
     // ==================== 收场 ====================
@@ -374,7 +374,7 @@ final class Sortie implements Segment {
         record(false);
         craft.keys().releaseAll();
         phase = Phase.SETTLE;
-        PathLog.info("{} 滑翔落地 {} 用了 {} 刻 放了 {} 支烟花 {}", craft.who(), PathLog.pos(body.cell()), ticks, helm.fired(), craft.describe());
+        PathLog.info("{} glide landed {} took {} ticks fired {} firework(s) {}", craft.who(), PathLog.pos(body.cell()), ticks, helm.fired(), craft.describe());
     }
 
     /** 落地之后按住潜行,直到水平速度消失(最多 {@link #SETTLE_LIMIT} 刻);然后这一段就结束了。 */
@@ -396,7 +396,7 @@ final class Sortie implements Segment {
         var body = craft;
         BlockPos cell = touching();
         trapped = true;
-        PathLog.info("{} 滑翔卡住:身体一秒没离开原地,顶着它的是 {} 放了 {} 支烟花 {}", craft.who(), blocker(cell), helm.fired(), craft.describe());
+        PathLog.info("{} glide stuck: the body has not left the spot for a second, pressed against {} fired {} firework(s) {}", craft.who(), blocker(cell), helm.fired(), craft.describe());
         record(true);
         craft.keys().releaseAll();
         halt = new Halt.Blocked(new Blockage(cell, craft.world().getBlockState(cell), com.dwinovo.numen.pathing.plan.MoveKind.FLY, null, Blockage.Hitch.PINNED));
@@ -423,7 +423,7 @@ final class Sortie implements Segment {
     }
 
     private void abort(BlockPos cell, String why) {
-        PathLog.info("{} 滑翔中止:{} {}", craft.who(), why, craft.describe());
+        PathLog.info("{} glide aborted: {} {}", craft.who(), why, craft.describe());
         record(!craft.onGround());
         craft.keys().releaseAll();
         halt = new Halt.Blocked(new Blockage(cell, craft.world().getBlockState(cell), com.dwinovo.numen.pathing.plan.MoveKind.FLY, null,

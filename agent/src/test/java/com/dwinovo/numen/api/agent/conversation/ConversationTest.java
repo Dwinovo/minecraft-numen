@@ -28,14 +28,14 @@ class ConversationTest {
     void aNewGroupHasNoName() {
         Conversation g = Conversation.of(List.of(YOU, LAN));
         assertNull(g.name(), "建群那一步不问名字");
-        assertEquals("小柚、阿岚", g.displayName(ConversationTest::nameOf));
+        assertEquals("小柚, 阿岚", g.displayName(ConversationTest::nameOf));
     }
 
     /** 默认名跟着成员走,主人一旦改名就固定——不会出现"群里早没有阿岚了,群名还叫阿岚"。 */
     @Test
     void theDefaultNameFollowsTheMembersUntilTheOwnerRenamesIt() {
         Conversation g = Conversation.of(List.of(YOU, LAN));
-        assertEquals("小柚、小梅",
+        assertEquals("小柚, 小梅",
                 g.withMembers(List.of(YOU, MEI)).displayName(ConversationTest::nameOf));
 
         Conversation named = g.withName("挖矿队");
@@ -47,7 +47,7 @@ class ConversationTest {
     void clearingTheNameFallsBackToTheMembers() {
         Conversation g = Conversation.of(List.of(YOU, LAN)).withName("挖矿队").withName("  ");
         assertNull(g.name());
-        assertEquals("小柚、阿岚", g.displayName(ConversationTest::nameOf));
+        assertEquals("小柚, 阿岚", g.displayName(ConversationTest::nameOf));
     }
 
     @Test

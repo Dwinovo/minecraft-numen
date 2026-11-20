@@ -221,7 +221,7 @@ public final class Driver implements Segment {
     private State advance() {
         DiveLog.Dive surfaced = rig.dives.observe(rig.entity);
         if (surfaced != null) {
-            PathLog.info("{} 出水 从 {} 到 {} 憋了 {} 刻 氧气最低 {}/{}", rig.who, PathLog.pos(surfaced.from()),
+            PathLog.info("{} surfaced from {} to {} held breath {} ticks lowest air {}/{}", rig.who, PathLog.pos(surfaced.from()),
                     PathLog.pos(surfaced.to()), surfaced.ticks(), surfaced.lowestAir(), surfaced.maxAir());
         }
         collect();
@@ -240,10 +240,10 @@ public final class Driver implements Segment {
         }
         moving = now;
         if (now) {
-            PathLog.debug("{} 恢复推进 {}", rig.who, PathLog.at(rig.entity.position()));
+            PathLog.debug("{} moving again {}", rig.who, PathLog.at(rig.entity.position()));
         } else {
-            PathLog.info("{} 不在推进(一秒没挪也没干活) {} {} {}", rig.who,
-                    step != null ? PathLog.step(step.planned()) : "没有在走的步", PathLog.body(rig.entity),
+            PathLog.info("{} not progressing (a second without moving or working) {} {} {}", rig.who,
+                    step != null ? PathLog.step(step.planned()) : "no step in progress", PathLog.body(rig.entity),
                     PathLog.hands(rig.entity, rig.keys, rig.mouse, step == null ? null : step.working()));
         }
     }
@@ -366,7 +366,7 @@ public final class Driver implements Segment {
         if (flown.to() > course.cur()) {
             finishLegs(flown.to(), flown.ticks());
         } else if (watchdog.overran()) {
-            PathLog.info("{} 卡住 {} 飞了 {} 刻,超过期限 {} 刻 {}", rig.who, PathLog.step(course.current()), watchdog.stepTicks(),
+            PathLog.info("{} stuck {} flew {} ticks, over the limit of {} ticks {}", rig.who, PathLog.step(course.current()), watchdog.stepTicks(),
                     PathLog.num(watchdog.allowance()), PathLog.body(body));
             failed(new Beat.Blocked(new Blockage(course.current().to(), rig.world().getBlockState(course.current().to()),
                     course.current().kind(), null, Blockage.Hitch.STUCK)));
@@ -462,7 +462,7 @@ public final class Driver implements Segment {
             case Tracker.Fix.Lost lost -> {
                 if (step == null) {
                     // 还没开始走这一步(上一步的冲劲把身子带出了路线):不怪它,从这里重新搜
-                    replan(Journal.Replan.OFF_ROUTE, "落在 " + PathLog.pos(node) + ",该在 " + PathLog.step(course.current()));
+                    replan(Journal.Replan.OFF_ROUTE, "landed at " + PathLog.pos(node) + ", should be at " + PathLog.step(course.current()));
                     return true;
                 }
                 // 走着这一步,身体落在了路线之外:这一步没把身体带到它的落点,和走不下去一样记一次。只重搜不记的话,规划看不见的墙前面
@@ -499,7 +499,7 @@ public final class Driver implements Segment {
         step = null;
         boolean flying = Snapshots.flying(body);
         if (passing && node != null && Arrival.passes(trip.goal(), rig.world(), rig.snapshot().stats(), node, flying)) {
-            PathLog.debug("{} 路过 {},不停", rig.who, PathLog.pos(node));
+            PathLog.debug("{} passing {}, not stopping", rig.who, PathLog.pos(node));
             state = State.ARRIVED;
             return;
         }
@@ -525,9 +525,9 @@ public final class Driver implements Segment {
             if (node != null && !node.equals(end) && (settled(Stance.Kind.GROUND) || endStance.kind() == Stance.Kind.FLYING && settled(Stance.Kind.FLYING))
                     && tracker.strays()) {
                 // 最后一步没把身体停在它的落点上:记为不通。只重搜不记的话,同一处终点一圈圈地冲过头、重搜、再冲过头
-                missedEnd(rig.who + " 没停在终点 " + PathLog.pos(end) + ",落在 " + PathLog.pos(node));
+                missedEnd(rig.who + " did not stop at the end " + PathLog.pos(end) + ", landed at " + PathLog.pos(node));
             } else if (++unsettled > SETTLE_TICKS) {
-                missedEnd(rig.who + " " + SETTLE_TICKS + " 刻还没在终点 " + PathLog.pos(end) + " 停稳 " + PathLog.body(body));
+                missedEnd(rig.who + " " + SETTLE_TICKS + " ticks without settling at the end " + PathLog.pos(end) + " " + PathLog.body(body));
             }
             return;
         }

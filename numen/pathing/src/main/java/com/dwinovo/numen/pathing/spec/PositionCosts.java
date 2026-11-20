@@ -194,7 +194,7 @@ public final class PositionCosts {
          */
         public Builder add(Use use, long cell, double cost) {
             if (!(cost >= 0) || Double.isInfinite(cost)) {
-                throw new IllegalArgumentException("加价要是非负的有限数,禁止用 forbid:" + cost);
+                throw new IllegalArgumentException("a surcharge must be a non-negative finite number; to ban a cell use forbid: " + cost);
             }
             extra.computeIfAbsent(use, u -> new Long2DoubleOpenHashMap()).addTo(cell, cost);
             return this;

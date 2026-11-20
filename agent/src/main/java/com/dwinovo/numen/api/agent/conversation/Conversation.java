@@ -63,7 +63,7 @@ public record Conversation(String id, String name, List<UUID> members, int turn)
                 names.add(n);
             }
         }
-        return String.join("、", names);
+        return String.join(", ", names);
     }
 
     /** 主人起的名(空白 = 退回拼成员名)。 */

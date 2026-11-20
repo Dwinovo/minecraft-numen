@@ -380,7 +380,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             return;   // 走不到但射得到:顶层下一刻自然改判远程
         }
         r.unreachable(foe.getId());
-        Constants.LOG.info("[numen-attack] 放弃 目标={} 走不到,也没有弹道", foe.getId());
+        Constants.LOG.info("[numen-attack] giving up target={}: cannot walk to it and no line of fire", foe.getId());
     }
 
     /** 这一刻手上这件武器算不算得出一条能打到它的弹道。射不到的角落里的怪就是无解。 */
@@ -423,9 +423,9 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         if (move.action() == lastLoggedAction && player.tickCount - lastPlanLogTick < 40) return;
         lastLoggedAction = move.action();
         lastPlanLogTick = player.tickCount;
-        Constants.LOG.info("[numen-attack] {} foe={} dist={} melee={} ranged={} hp_eff={} 场上={}",
+        Constants.LOG.info("[numen-attack] {} foe={} dist={} melee={} ranged={} hp_eff={} field={}",
                 move.action(),
-                move.foeId() == AttackPlan.NO_FOE ? "全场" : move.foeId(),
+                move.foeId() == AttackPlan.NO_FOE ? "all" : move.foeId(),
                 move.foeId() == AttackPlan.NO_FOE ? "-"
                         : String.format("%.1f", distanceOf(field, move.foeId())),
                 field.hasMelee(), field.hasRanged(),
@@ -634,7 +634,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             // 别的失败也要留声:走位导航当刻就失败、下一刻重建,在日志里是一片安静的
             // SKIRMISH——站着不动却什么都没说,排查时只能靠猜。
             if (!noRoute) {
-                Constants.LOG.info("[numen-attack] 走位导航失败({}),重建: {}",
+                Constants.LOG.info("[numen-attack] positioning navigation failed ({}), rebuilding: {}",
                         nav.failType(), nav.failReason());
             }
             stopNav();
@@ -776,13 +776,13 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             }
         }
         String line = target == null || target.isRemoved()
-                ? String.format("无目标(只拉开) 太近=%d 场上=%d", tooClose, field.size())
-                : String.format("%s 目标=%d 距离=%.1f 带=[%.2f, %.2f] 太近=%d 场上=%d",
-                        bowFighting ? rangedName : "剑", target.getId(), player.distanceTo(target),
+                ? String.format("no target (only backing off) too_close=%d field=%d", tooClose, field.size())
+                : String.format("%s target=%d dist=%.1f band=[%.2f, %.2f] too_close=%d field=%d",
+                        bowFighting ? rangedName : "sword", target.getId(), player.distanceTo(target),
                         skirmishInner(), skirmishOuter(), tooClose, field.size());
         if (!line.equals(lastStandoffLog)) {
             lastStandoffLog = line;
-            Constants.LOG.info("[numen-attack] 站位 {}", line);
+            Constants.LOG.info("[numen-attack] stance {}", line);
         }
     }
 

@@ -277,12 +277,12 @@ public final class AgentLoop {
         int level = host.initiativeLevel();
         EventQueue.Ripeness ripeness = inbox.ripeness(host.now(), level);
         if (hold == null && ripeness.ripe()) {
-            AiLog.LOG.info("[numen-queue#{}] 主动开轮:{}(攒了 {} 条/阈值 {},最老 {}s/上限 {}s,档位 {})",
+            AiLog.LOG.info("[numen-queue#{}] opening a turn on her own: {} ({} queued / threshold {}, oldest {}s / limit {}s, initiative {})",
                     name,
                     switch (ripeness.why()) {
-                        case URGENT -> "有急件";
-                        case ENOUGH -> "攒够了";
-                        case LONG_ENOUGH -> "攒久了";
+                        case URGENT -> "something urgent";
+                        case ENOUGH -> "enough queued";
+                        case LONG_ENOUGH -> "queued long enough";
                     },
                     ripeness.waiting(), EventQueue.thresholdOf(level),
                     ripeness.oldestAge() / 1000L, EventQueue.maxWaitMsOf(level) / 1000L, level);
@@ -464,7 +464,7 @@ public final class AgentLoop {
         run = null;
         if (end instanceof RunEnd.Failed failed) {
             // 失败的回应不进历史;记一条切断点,之后的请求里模型知道上一轮没连上
-            writeHalt("这一轮没连上(" + failed.cause().forModel() + ")", failed.cause());
+            writeHalt("this turn did not reach the model (" + failed.cause().forModel() + ")", failed.cause());
         }
         emit(new LoopEvent.RunEnded(finished.id, end));
         if (end instanceof RunEnd.Failed failed) {
@@ -513,12 +513,12 @@ public final class AgentLoop {
             // 排在清空前面、没叫醒她的旁听是她在清空之前听见的,属于被清掉的那段上下文,一并清掉;要她回应的条目
             // 留着,清完进新的上下文。整理不丢:它只把历史换成摘要,排着的条目还没进历史,照旧跟下一次调用走。
             int heard = inbox.discardQuietAhead();
-            AiLog.LOG.info("[numen-entity#{}] 清空上下文:排到了(之前听见、还没交给她的 {} 条一并清掉)", name, heard);
+            AiLog.LOG.info("[numen-entity#{}] clearing the context: its turn came ({} heard but not yet delivered are cleared with it)", name, heard);
             memory.clear();
             emit(new LoopEvent.TranscriptBoundary(LoopEvent.Boundary.CLEAR));
             return true;   // 排在清空后面的话,推进的下一步里进全新的上下文
         }
-        AiLog.LOG.info("[numen-entity#{}] 整理记忆:排到了,开始", name);
+        AiLog.LOG.info("[numen-entity#{}] compacting memory: its turn came, starting", name);
         run = new Run(++lastRunId, true, false, false);
         // 连着按的几次整理算一次,各次附的关注点都留着
         String focus = controls.stream().filter(e -> EventTypes.COMPACT.equals(e.type()))
@@ -554,7 +554,7 @@ public final class AgentLoop {
             if (compaction.apply(answers)) {
                 emit(new LoopEvent.TranscriptBoundary(LoopEvent.Boundary.COMPACT));
             } else {
-                compaction.failed("摘要是空的");
+                compaction.failed("the summary is empty");
             }
             then.run();
             return;
@@ -729,7 +729,7 @@ public final class AgentLoop {
             dead = false;
         }
         if (stopped != null && stopped.releasedBy(release)) {
-            AiLog.LOG.info("[numen-entity#{}] {} 解开停牌 {}", name, release, stopped);
+            AiLog.LOG.info("[numen-entity#{}] {} lifts the hold {}", name, release, stopped);
             stopped = null;
             stoppedReason = null;
         }
@@ -776,7 +776,7 @@ public final class AgentLoop {
                 failing = false;
             } catch (RuntimeException e) {
                 if (!failing) {
-                    AiLog.LOG.error("[numen-entity#{}] 事件订阅者处理 {} 时出错,其余订阅者照常收(它连续出错不再重复记)", name,
+                    AiLog.LOG.error("[numen-entity#{}] an event subscriber failed on {}; the others still get it (its repeated failures are not logged again)", name,
                             event.getClass().getSimpleName(), e);
                 }
                 failing = true;

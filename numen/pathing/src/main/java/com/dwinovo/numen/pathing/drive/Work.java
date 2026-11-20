@@ -104,12 +104,12 @@ final class Work {
             case Mouse.Strike.Broke broke -> {
                 rig.ledger.dug(broke.pos(), broke.before());
                 if (PathLog.debugging()) {
-                    PathLog.debug("{} 挖掉 {} {}{}", rig.who, PathLog.pos(broke.pos()), PathLog.block(broke.before()),
-                            broke.pos().equals(pos) ? "" : "(要挖的是 " + PathLog.pos(pos) + ")");
+                    PathLog.debug("{} dug {} {}{}", rig.who, PathLog.pos(broke.pos()), PathLog.block(broke.before()),
+                            broke.pos().equals(pos) ? "" : " (meant to dig " + PathLog.pos(pos) + ")");
                 }
                 yield Beat.WORKED;
             }
-            case Mouse.Strike.Refused refused -> refused(rig, "挖", refused.pos(), refused.reason());
+            case Mouse.Strike.Refused refused -> refused(rig, "dig", refused.pos(), refused.reason());
         };
     }
 
@@ -141,11 +141,11 @@ final class Work {
             case Mouse.Use.Pressed pressed when !pressed.changes().isEmpty() -> {
                 rig.ledger.used(pressed.changes());
                 if (PathLog.debugging()) {
-                    PathLog.debug("{} 放下 {} {}", rig.who, PathLog.pos(pos), changes(pressed));
+                    PathLog.debug("{} placed {} {}", rig.who, PathLog.pos(pos), changes(pressed));
                 }
                 yield Beat.WORKED;
             }
-            case Mouse.Use.Refused refused -> refused(rig, "放", refused.pos(), refused.reason());
+            case Mouse.Use.Refused refused -> refused(rig, "place", refused.pos(), refused.reason());
             case Mouse.Use.Pressed pressed -> Beat.IDLE;
             case Mouse.Use.Waiting waiting -> Beat.IDLE;
         };
@@ -177,11 +177,11 @@ final class Work {
             case Mouse.Use.Pressed pressed when !pressed.changes().isEmpty() -> {
                 rig.ledger.used(pressed.changes());
                 poured = rig.world().getBlockState(caught.pos()).is(Blocks.WATER);
-                PathLog.info("{} 倒水接坠落 {} 脚离落点还有 {} 格{}", rig.who, changes(pressed),
-                        PathLog.num(body.getY() - caught.pos().getY()), poured ? "" : ",水没落在落点 " + PathLog.pos(caught.pos()));
+                PathLog.info("{} poured water to break the fall {} feet {} blocks above the landing{}", rig.who, changes(pressed),
+                        PathLog.num(body.getY() - caught.pos().getY()), poured ? "" : ", the water did not land on the landing " + PathLog.pos(caught.pos()));
                 yield Beat.WORKED;
             }
-            case Mouse.Use.Refused refused -> refused(rig, "倒水", refused.pos(), refused.reason());
+            case Mouse.Use.Refused refused -> refused(rig, "pour water", refused.pos(), refused.reason());
             default -> Beat.IDLE;
         };
     }
@@ -210,17 +210,17 @@ final class Work {
             case Mouse.Use.Pressed pressed when !pressed.changes().isEmpty() -> {
                 rig.ledger.used(pressed.changes());
                 scooped = !rig.world().getBlockState(pos).is(Blocks.WATER);
-                PathLog.info("{} 收回水 {}{}", rig.who, changes(pressed), scooped ? "" : "," + PathLog.pos(pos) + " 还是水");
+                PathLog.info("{} took the water back {}{}", rig.who, changes(pressed), scooped ? "" : ", " + PathLog.pos(pos) + " is still water");
                 yield Beat.WORKED;
             }
-            case Mouse.Use.Refused refused -> refused(rig, "收水", refused.pos(), refused.reason());
+            case Mouse.Use.Refused refused -> refused(rig, "take water back", refused.pos(), refused.reason());
             default -> Beat.IDLE;
         };
     }
 
     /** 动手被拒:记一行,交出拒绝方自己的理由。 */
     static Beat refused(Rig rig, String what, BlockPos pos, Mouse.Refusal reason) {
-        PathLog.info("{} 动手被拒 {} {} {}:{}", rig.who, what, PathLog.pos(pos), PathLog.block(rig.world().getBlockState(pos)),
+        PathLog.info("{} refused: {} {} {}: {}", rig.who, what, PathLog.pos(pos), PathLog.block(rig.world().getBlockState(pos)),
                 reason);
         return new Beat.Denied(pos, reason);
     }

@@ -112,7 +112,7 @@ public final class ProviderLibrary {
         try {
             return new Entry(item.id().toString(), item.id().name(), read(item.text()));
         } catch (RuntimeException unreadable) {
-            com.dwinovo.numen.api.Constants.LOG.warn("[numen-providers] {} 读不通,跳过: {}", item.path(),
+            com.dwinovo.numen.api.Constants.LOG.warn("[numen-providers] {} cannot be parsed, skipped: {}", item.path(),
                     unreadable.toString());
             return null;
         }

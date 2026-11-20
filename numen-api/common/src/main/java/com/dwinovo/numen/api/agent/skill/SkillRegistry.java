@@ -87,7 +87,7 @@ public final class SkillRegistry {
     /** 这只同伴能用的技能。{@link #init} 之前调用是编程错误。 */
     public static SkillRegistry of(UUID companion) {
         if (libraries == null) {
-            throw new IllegalStateException("SkillRegistry.init(...) 还没被调用——服务端该在启动时注入技能库");
+            throw new IllegalStateException("SkillRegistry.init(...) has not been called — the server should inject the skill library at startup");
         }
         return new SkillRegistry(libraries.apply(companion), companion);
     }

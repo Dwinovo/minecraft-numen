@@ -58,7 +58,7 @@ public final class NeoForgeNetworkChannel implements INetworkChannel {
         // 后面的清理全截断了。警告并丢包：丢一个本来就发不出去的包无害，截断清理有害。
         // 不静默：真有人在错的时机发包，日志里看得到。
         if (net.minecraft.client.Minecraft.getInstance().getConnection() == null) {
-            com.dwinovo.numen.api.Constants.LOG.warn("[numen] 无连接,丢弃 C2S 包 {}", payload.type().id());
+            com.dwinovo.numen.api.Constants.LOG.warn("[numen] no connection; dropped C2S packet {}", payload.type().id());
             return;
         }
         // 1.21.5: the dedicated client ClientPacketDistributor doesn't exist yet;

@@ -150,7 +150,7 @@ public final class GoalPrompts {
                 return new Verdict(true, false, tail(t, MET));
             }
         }
-        return new Verdict(false, false, text.isEmpty() ? "判不出来(评估器没回话)" : text);
+        return new Verdict(false, false, text.isEmpty() ? "cannot tell (the evaluator gave no answer)" : text);
     }
 
     /** 去掉前缀和它后面的冒号/空白。 */
@@ -159,7 +159,7 @@ public final class GoalPrompts {
         if (rest.startsWith(":") || rest.startsWith("：")) {
             rest = rest.substring(1).strip();
         }
-        return rest.isEmpty() ? "(没给理由)" : rest;
+        return rest.isEmpty() ? "(no reason given)" : rest;
     }
 
     /** 人读的时长。 */

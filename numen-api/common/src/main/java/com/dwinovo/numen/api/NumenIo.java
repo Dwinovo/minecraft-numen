@@ -42,11 +42,11 @@ public final class NumenIo {
     private static void drain() {
         try {
             if (!LANES.drain(DRAIN_SECONDS, TimeUnit.SECONDS)) {
-                Constants.LOG.warn("[numen-io] {} 秒内没有排空写盘的车道,最后几笔可能没落下去", DRAIN_SECONDS);
+                Constants.LOG.warn("[numen-io] the write lanes did not drain within {} seconds; the last few writes may not have landed", DRAIN_SECONDS);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            Constants.LOG.warn("[numen-io] 停机时等写盘被打断,最后几笔可能没落下去");
+            Constants.LOG.warn("[numen-io] waiting for writes at shutdown was interrupted; the last few writes may not have landed");
         }
     }
 }

@@ -84,7 +84,7 @@ public final class Conversations {
         try {
             doc(source).read().ifPresent(this::readPrefs);
         } catch (RuntimeException unreadable) {
-            Constants.LOG.warn("[numen-convo] {} 读不了,用空的展示偏好: {}", source.getFileName(), unreadable.toString());
+            Constants.LOG.warn("[numen-convo] {} cannot be read, using empty display preferences: {}", source.getFileName(), unreadable.toString());
         }
     }
 

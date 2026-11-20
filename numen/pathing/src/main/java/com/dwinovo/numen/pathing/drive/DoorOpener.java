@@ -44,11 +44,11 @@ final class DoorOpener {
             case Mouse.Use.Pressed pressed when !pressed.changes().isEmpty() -> {
                 rig.ledger.used(pressed.changes());
                 if (PathLog.debugging()) {
-                    PathLog.debug("{} 开关门 {}", rig.who, Work.changes(pressed));
+                    PathLog.debug("{} door {}", rig.who, Work.changes(pressed));
                 }
                 yield Beat.WORKED;
             }
-            case Mouse.Use.Refused refused -> Work.refused(rig, "开关门", refused.pos(), refused.reason());
+            case Mouse.Use.Refused refused -> Work.refused(rig, "door", refused.pos(), refused.reason());
             case Mouse.Use.Pressed pressed -> Beat.IDLE;
             case Mouse.Use.Waiting waiting -> Beat.IDLE;
         };

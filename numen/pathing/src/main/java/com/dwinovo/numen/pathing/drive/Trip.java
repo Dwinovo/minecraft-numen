@@ -72,9 +72,9 @@ public final class Trip {
     /** 为什么派这次搜索。 */
     private enum Purpose {
         /** 从身体脚下搜(首段,或走不下去之后重搜):身体站着等它。 */
-        FROM_BODY("从脚下", Searches.Urgency.NOW),
+        FROM_BODY("from the body", Searches.Urgency.NOW),
         /** 从当前路线的终点接着搜:身体边走边等它。 */
-        NEXT("接续", Searches.Urgency.AHEAD);
+        NEXT("continuation", Searches.Urgency.AHEAD);
 
         /** 日志里的叫法。 */
         final String label;
@@ -239,7 +239,7 @@ public final class Trip {
         CostModel model = ground.model();
         long t2 = System.nanoTime();
         ground.dispatched(t1 - t0, t2 - t1);
-        PathLog.debug("{} 派搜索 {} 从 {} 去 {} 时限 {} 拷快照 {} 组成本模型 {}", who, why.label, PathLog.pos(from), goal,
+        PathLog.debug("{} dispatch search {} from {} to {} deadline {} snapshot copy {} cost model {}", who, why.label, PathLog.pos(from), goal,
                 PathLog.ms(deadline.nanos()), PathLog.ms(t1 - t0), PathLog.ms(t2 - t1));
         Search search = new Search(view, model, from, goal, allowance.nodes(), favoring)
                 .advancing(Allowance.advance(model.body().stats())).remembering(memory.frozen()).after(ahead, course.cur())
@@ -289,17 +289,17 @@ public final class Trip {
             if (result.stop() == SearchResult.Stop.EXHAUSTED) {
                 // 从路线的终点往外走得到的地方都搜过了,没有目标:那里是死路,记进记忆了(估价无穷大)。身体还没走进去,
                 // 从此刻的位置重搜,绕开它——走进去就出不来了(往下挖的竖井、封死的坑)
-                replan(Journal.Replan.DEAD_END, "接续证明路线的终点 " + PathLog.pos(course.end()) + " 是死路");
+                replan(Journal.Replan.DEAD_END, "the continuation proves the route's end " + PathLog.pos(course.end()) + " is a dead end");
                 return Event.DISCARDED;
             }
             if (continuation.splice(course, result.route(), result.arrived())) {
                 return Event.EXTENDED;
             }
             if (result.route() == null) {
-                PathLog.info("{} 接续没搜出路线,走到终点 {} 再从脚下搜", who, PathLog.pos(course.end()));
+                PathLog.info("{} the continuation found no route; walking to the end {} and searching from the body", who, PathLog.pos(course.end()));
             } else {
                 // 接续的起点不是路线的终点:走到终点后从脚下再搜
-                PathLog.info("{} 接续接不上,走到终点 {} 再从脚下搜", who, PathLog.pos(course.end()));
+                PathLog.info("{} the continuation does not join; walking to the end {} and searching from the body", who, PathLog.pos(course.end()));
             }
             return Event.NONE;
         }
@@ -307,7 +307,7 @@ public final class Trip {
             Standing here = ground.standing();
             if (here != null && goalHas(here.node(), here.stance())) {
                 // 最后一步进了目标的同一刻,这次搜索没交出路:她已经到了
-                PathLog.debug("{} 搜索没交出路,可她已经站在目标里 {}", who, PathLog.pos(here.node()));
+                PathLog.debug("{} the search gave no route, but she already stands inside the goal {}", who, PathLog.pos(here.node()));
                 course.clear();
                 course.install(new Route(here.node(), here.stance(), List.of()), true);
                 return Event.EXTENDED;
@@ -354,7 +354,7 @@ public final class Trip {
 
     /** 这一趟的总预算用完了:以最后一次搜索的结论收场,交出原因。 */
     public Halt spentOut() {
-        PathLog.info("{} 这一趟的总预算 {} 个节点用完了,还没到,收场", who, allowance.used());
+        PathLog.info("{} this trip's total budget of {} nodes is used up without arriving; ending", who, allowance.used());
         end(new Halt.Searched(SearchResult.Stop.BUDGET, breathless, lastSearch, lastResult.blocking()));
         return halt;
     }
@@ -372,16 +372,16 @@ public final class Trip {
         Route route = result.route();
         journal.searched(result.expanded(), done.ranNanos(), !result.raised().isEmpty(), result.stop(), result.checks());
         String why = result.blocking() == null || result.arrived() ? ""
-                : " 离目标最近处朝目标的步被拒:" + PathLog.blocking(result.blocking());
-        String what = route == null ? "没交出路线"
-                : (result.arrived() ? "到目标 " : result.reached() ? "到这一段的终点 " : "往边界推进 ") + PathLog.route(route);
-        PathLog.info("{} 搜索 {} {} 去 {} {} 展开 {} 时限 {} 用时 {}({}) 排队 {} 停因 {} {}{}", who, purpose.label,
+                : " the step toward the goal from the nearest point was rejected: " + PathLog.blocking(result.blocking());
+        String what = route == null ? "no route"
+                : (result.arrived() ? "to the goal " : result.reached() ? "to this segment's end " : "toward the frontier ") + PathLog.route(route);
+        PathLog.info("{} search {} {} to {} {} expanded {} deadline {} took {} ({}) queued {} stop {} {}{}", who, purpose.label,
                 PathLog.pos(search.start()), search.goal(), PathLog.spec(search.model().spec()), result.expanded(),
                 search.deadline() == Deadline.NONE ? "-" : PathLog.ms(search.deadline().nanos()),
                 PathLog.ms(done.ranNanos()), PathLog.load(done, result.expanded()), PathLog.ms(done.queuedNanos()), result.stop(),
-                what, result.raised().isEmpty() ? why : " 抬高了 " + result.raised().size() + " 格的估价" + why);
+                what, result.raised().isEmpty() ? why : " raised the estimate of " + result.raised().size() + " cell(s)" + why);
         if (route != null && PathLog.debugging()) {
-            PathLog.debug("{} 路线 {}", who, PathLog.legs(route));
+            PathLog.debug("{} route {}", who, PathLog.legs(route));
         }
     }
 
@@ -406,13 +406,13 @@ public final class Trip {
     public void fail(Journal.Replan why, Maneuver m, Blockage blockage) {
         memory.block(m.kind(), m.from(), m.to());
         lastBlockage = blockage;
-        replan(why, PathLog.blockage(blockage) + " 这一步 " + PathLog.step(m) + " 记为不通");
+        replan(why, PathLog.blockage(blockage) + " this step " + PathLog.step(m) + " is marked impassable");
     }
 
     /** 按 {@code why} 重规划:记账、记日志({@code detail} 是这一次的经过),扔掉当前路线,下一刻从身体脚下重新搜,旧路打折。 */
     public void replan(Journal.Replan why, String detail) {
         journal.replanned(why);
-        PathLog.info("{} 重搜({}):{} 身体 {}", who, why.label, detail, ground.body());
+        PathLog.info("{} re-search ({}): {} body {}", who, why.label, detail, ground.body());
         discard();
     }
 
@@ -447,17 +447,17 @@ public final class Trip {
         if (course.isEmpty() && pending != null) {
             // 手上没有路、从脚下的搜索还在飞:让它搜完。跟着会动的东西时目标每刻都变,变一次就作废重派的话,在飞的那一次永远
             // 搜不完,她就一直站着;交回来的路照走,走到终点按那时的目标判,不在里面就从那儿重搜
-            PathLog.debug("{} 换目标 {} -> {},在飞的搜索搜完再说", who, before, next);
+            PathLog.debug("{} goal changed {} -> {}; waiting for the search in flight", who, before, next);
             return true;
         }
         BlockPos end = course.end();
         Stance endStance = course.endStance();
         if (course.complete() && end != null && endStance != null && Goal.keepsStop(world, before, next, end, endStance)) {
-            PathLog.debug("{} 换目标 {} -> {},在走的路终点还算数,照走", who, before, next);
+            PathLog.debug("{} goal changed {} -> {}; the end of the route being walked still counts, carrying on", who, before, next);
             return true;
         }
         // 跟随、战斗走位的目标随对方挪动一再换,记 DEBUG;换了之后的搜索照常记 INFO
-        PathLog.debug("{} 换目标 {} -> {},从脚下重搜", who, before, next);
+        PathLog.debug("{} goal changed {} -> {}; re-searching from the body", who, before, next);
         return false;
     }
 

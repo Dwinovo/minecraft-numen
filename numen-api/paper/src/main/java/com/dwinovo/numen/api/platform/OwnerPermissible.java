@@ -41,7 +41,7 @@ final class OwnerPermissible extends PermissibleBase {
             field.set(her, delegating);
             delegating.recalculatePermissions();
         } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("没能把 " + her.getName() + " 的权限换成主人的", e);
+            throw new IllegalStateException("could not replace the permissions of " + her.getName() + " with her owner's", e);
         }
     }
 

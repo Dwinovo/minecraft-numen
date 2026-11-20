@@ -46,7 +46,7 @@ public final class Planning {
         if (diagnosis != null) {
             Outcome outcome = diagnosis.poll();
             if (outcome != null) {
-                PathLog.info("{} 规划 {} 去 {} {} 没有路线 -> {} 诊断 {}", who, PathLog.pos(search.start()), search.goal(),
+                PathLog.info("{} plan {} to {} {} no route -> {} diagnosis {}", who, PathLog.pos(search.start()), search.goal(),
                         PathLog.spec(search.model().spec()), Navigation.describe(outcome), PathLog.ms(diagnosis.ranNanos()));
                 result = new PlanResult(null, outcome, partial);
             }
@@ -57,7 +57,7 @@ public final class Planning {
             return null;
         }
         if (found.arrived()) {
-            PathLog.info("{} 规划 {} 去 {} {} 用时 {} 排队 {}:{}", who, PathLog.pos(search.start()), search.goal(),
+            PathLog.info("{} plan {} to {} {} took {} queued {}: {}", who, PathLog.pos(search.start()), search.goal(),
                     PathLog.spec(search.model().spec()), PathLog.ms(planning.ranNanos()), PathLog.ms(planning.queuedNanos()),
                     PathLog.route(found.route()));
             result = new PlanResult(found.route(), null, null);

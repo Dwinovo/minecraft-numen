@@ -18,7 +18,7 @@ public record PlanQuery(Goal goal, RouteSpec spec, int budget, Route after) {
         Objects.requireNonNull(goal, "goal");
         Objects.requireNonNull(spec, "spec");
         if (budget <= 0) {
-            throw new IllegalArgumentException("展开预算要是正数:" + budget);
+            throw new IllegalArgumentException("the expansion budget must be positive: " + budget);
         }
     }
 

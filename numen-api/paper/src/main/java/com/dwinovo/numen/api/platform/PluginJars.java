@@ -33,7 +33,7 @@ public final class PluginJars {
             try {
                 fs = FileSystems.newFileSystem(jar);
             } catch (IOException e) {
-                throw new UncheckedIOException("读不开插件 jar " + jar, e);
+                throw new UncheckedIOException("cannot open the plugin jar " + jar, e);
             }
             OPEN.put(jar, fs);
         }
@@ -47,7 +47,7 @@ public final class PluginJars {
             try {
                 open.getValue().close();
             } catch (IOException e) {
-                throw new UncheckedIOException("关不掉插件 jar " + open.getKey(), e);
+                throw new UncheckedIOException("cannot close the plugin jar " + open.getKey(), e);
             }
         }
         OPEN.clear();
@@ -57,7 +57,7 @@ public final class PluginJars {
         try {
             return Path.of(plugin.getClass().getProtectionDomain().getCodeSource().getLocation().toURI());
         } catch (URISyntaxException e) {
-            throw new IllegalStateException("插件 " + plugin.getName() + " 的 jar 位置不是合法的 URI", e);
+            throw new IllegalStateException("the jar location of plugin " + plugin.getName() + " is not a valid URI", e);
         }
     }
 }

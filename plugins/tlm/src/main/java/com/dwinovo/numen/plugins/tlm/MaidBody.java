@@ -54,7 +54,7 @@ public final class MaidBody {
         try {
             renderer = new EntityMaidRenderer(ctx);
         } catch (Throwable t) {
-            LOG.warn("车万女仆的渲染器建不起来,同伴照常渲染成玩家: {}", t.toString());
+            LOG.warn("the Touhou Little Maid renderer could not be built; companions render as players as usual: {}", t.toString());
         }
     }
 

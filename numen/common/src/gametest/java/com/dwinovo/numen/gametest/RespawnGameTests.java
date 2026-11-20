@@ -79,7 +79,7 @@ public class RespawnGameTests {
             helper.assertTrue(events.stream().anyMatch(e -> e.type().equals(EventTypes.DEATH)),
                     "she was not told she died: " + events);
             helper.assertTrue(events.stream().anyMatch(e -> e.type().equals(EventTypes.RESPAWNED)
-                            && e.text().contains("世界出生点")),
+                            && e.text().contains("world spawn")),
                     "she was not told she landed at the world spawn: " + events);
             leave(watcher);
             CompanionFactory.despawn(server, now);
@@ -115,8 +115,8 @@ public class RespawnGameTests {
                             "she did not land beside her bed " + bed + ": " + now.blockPosition());
                     helper.assertTrue(owner.getUUID().equals(now.getOwnerUuid()), "the respawned body lost its owner");
                     var told = events(now).stream().filter(e -> e.type().equals(EventTypes.RESPAWNED)).toList();
-                    helper.assertTrue(told.size() == 1 && told.get(0).text().contains("重生点")
-                                    && told.get(0).text().contains("主人在你") && told.get(0).text().contains("格处"),
+                    helper.assertTrue(told.size() == 1 && told.get(0).text().contains("respawn point")
+                                    && told.get(0).text().contains("Your owner is to your") && told.get(0).text().contains("blocks away"),
                             "she was not told where she landed and where her owner is: " + told);
                 })
                 .thenExecute(() -> lua(NumenPlayer.findByUuid(server, uuid), "numen.move.walk(" + xyz(goal) + ")"))

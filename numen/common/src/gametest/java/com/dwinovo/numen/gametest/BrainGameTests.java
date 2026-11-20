@@ -448,7 +448,7 @@ public class BrainGameTests {
                     "her notes are still there");
             helper.assertTrue(CompanionRegistry.get(server).find(her.companion.getUUID()) != null,
                     "wiping her memory removed her from the roster");
-            helper.assertTrue(her.loop.inbox().entries().stream().anyMatch(e -> e.text().contains("清空了你的记忆")),
+            helper.assertTrue(her.loop.inbox().entries().stream().anyMatch(e -> e.text().contains("wiped your memory")),
                     "she was not told: " + her.loop.inbox().entries());
         }).thenWaitUntil(() -> helper.assertTrue(her.owner.events.stream().anyMatch(e -> e instanceof Feed.Wiped),
                 "the panel was not told")).thenExecute(her::close).thenSucceed();
@@ -479,7 +479,7 @@ public class BrainGameTests {
         helper.assertTrue(book.revision() > revision && book.formatXml().contains("铁在东边"),
                 "her index did not change: " + book.formatXml());
         helper.assertTrue(her.loop.inbox().entries().stream().anyMatch(e -> e.text().contains("note-1")
-                && e.text().contains("加了一条")), "she was not told of the new note: " + her.loop.inbox().entries());
+                && e.text().contains("added a note")), "she was not told of the new note: " + her.loop.inbox().entries());
 
         JsonObject edit = add.deepCopy();
         edit.addProperty("name", "note-1");
@@ -488,7 +488,7 @@ public class BrainGameTests {
                 .problem() == null, "the edit was refused");
         helper.assertTrue(book.formatXml().contains("铁在西边") && !book.formatXml().contains("铁在东边"),
                 "her index still has the old line: " + book.formatXml());
-        helper.assertTrue(her.loop.inbox().entries().stream().anyMatch(e -> e.text().contains("改了你的札记")),
+        helper.assertTrue(her.loop.inbox().entries().stream().anyMatch(e -> e.text().contains("changed your note")),
                 "she was not told of the edit: " + her.loop.inbox().entries());
 
         JsonObject stranger = edit.deepCopy();
@@ -505,7 +505,7 @@ public class BrainGameTests {
         helper.assertTrue(libraries.handle(owner, false, notes, com.dwinovo.numen.api.brain.Libraries.DELETE, drop)
                 .problem() == null, "the owner's delete was refused");
         helper.assertTrue(book.index().isEmpty(), "the note is still there: " + book.index());
-        helper.assertTrue(her.loop.inbox().entries().stream().anyMatch(e -> e.text().contains("删掉了你的札记")),
+        helper.assertTrue(her.loop.inbox().entries().stream().anyMatch(e -> e.text().contains("deleted your note")),
                 "she was not told of the delete: " + her.loop.inbox().entries());
         her.close();
         helper.succeed();

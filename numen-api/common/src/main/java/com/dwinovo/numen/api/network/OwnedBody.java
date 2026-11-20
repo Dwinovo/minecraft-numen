@@ -42,15 +42,15 @@ public final class OwnedBody {
             CompanionRegistry.Entry reg = CompanionRegistry.get(server).find(entityUuid);
             if (companion == null && reg != null) {
                 if (reg.outside().server()) {
-                    refuse.accept("她被请出了服务器(" + reg.removedFor() + "),要主人再召唤她才能回来");
+                    refuse.accept("she was removed from the server (" + reg.removedFor() + "); she only comes back when her owner summons her again");
                     return null;
                 }
                 if (reg.outside().isOutside()) {
-                    refuse.accept("她下线了(主人让她下线的),要主人再召唤她才能回来");
+                    refuse.accept("she is offline (her owner sent her offline); she only comes back when her owner summons her again");
                     return null;
                 }
                 if (CompanionFactory.isArriving(entityUuid)) {
-                    refuse.accept("她正在回到世界里(平台还在接纳她)——稍等一下再派");
+                    refuse.accept("she is on her way back into the world (the platform is still admitting her) — wait a moment and send it again");
                     return null;
                 }
             }

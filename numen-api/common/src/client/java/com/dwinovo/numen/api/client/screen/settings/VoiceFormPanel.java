@@ -348,7 +348,7 @@ public final class VoiceFormPanel {
             backend = probe.createBackend();
             synth = backend.synthesize(I18n.get(ModLanguageData.Keys.VOICE_TEST_SENTENCE));
         } catch (Exception ex) {
-            com.dwinovo.numen.api.Constants.LOG.warn("[numen-voice] 试音失败(同步): {}",
+            com.dwinovo.numen.api.Constants.LOG.warn("[numen-voice] voice preview failed (sync): {}",
                     com.dwinovo.numen.api.client.voice.VoiceError.fromError(ex).getMessage());
             resultAlert.show(InlineAlert.Severity.ERROR,
                     t2(ModLanguageData.Keys.VOICE_TEST_FAIL,
@@ -371,7 +371,7 @@ public final class VoiceFormPanel {
                 if (gen != testGen) return;   // 表单已离开/又点了一次:作废
                 if (fail != null) {
                     // 完整原因进日志(胶囊里被截短,排障全靠这行)。
-                    com.dwinovo.numen.api.Constants.LOG.warn("[numen-voice] 试音失败({}): {}",
+                    com.dwinovo.numen.api.Constants.LOG.warn("[numen-voice] voice preview failed ({}): {}",
                             backend.describe(), com.dwinovo.numen.api.client.voice.VoiceError.fromError(fail).getMessage());
                     resultAlert.show(InlineAlert.Severity.ERROR,
                             t2(ModLanguageData.Keys.VOICE_TEST_FAIL,

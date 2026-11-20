@@ -74,7 +74,7 @@ public final class OwnerInputs {
     public static boolean offer(UUID player, OwnerInput input) {
         boolean taken = BOX.offer(player, input);
         if (!taken) {
-            Constants.LOG.warn("[numen-net] {} 的信箱满了,丢弃一条 {}", player, input.getClass().getSimpleName());
+            Constants.LOG.warn("[numen-net] the mailbox of {} is full; dropped one {}", player, input.getClass().getSimpleName());
         }
         return taken;
     }
@@ -95,7 +95,7 @@ public final class OwnerInputs {
     public static Applied handle(MinecraftServer server, UUID owner, OwnerInput input, Venue venue) {
         Applied applied = apply(server, owner, input, venue);
         if (applied.problem() != null) {
-            Constants.LOG.info("[numen-net] {} 的 {} 没办成: {}", owner, input.getClass().getSimpleName(),
+            Constants.LOG.info("[numen-net] {}'s {} did not go through: {}", owner, input.getClass().getSimpleName(),
                     applied.problem());
         }
         if (applied.conversationsChanged()) {

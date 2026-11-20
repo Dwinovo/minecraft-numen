@@ -203,7 +203,7 @@ public final class ConversationCommands {
         ctx.getSource().sendFailure(found.isEmpty()
                 ? Component.translatable(Keys.COMMAND_GROUP_NO_CONVERSATION, given)
                 : Component.translatable(Keys.COMMAND_GROUP_AMBIGUOUS, given,
-                        String.join("、", found.stream().map(Conversation::id).toList())));
+                        String.join(", ", found.stream().map(Conversation::id).toList())));
         return null;
     }
 }

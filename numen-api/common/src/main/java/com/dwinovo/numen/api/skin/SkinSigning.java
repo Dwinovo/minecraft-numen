@@ -279,7 +279,7 @@ public final class SkinSigning implements AutoCloseable {
                 signed = sign(job);
             } catch (RuntimeException e) {
                 problem = SkinError.fromError(e);
-                Constants.LOG.warn("[numen-skin] 给 {} 签名失败: {}", job.request.name(), problem.getMessage());
+                Constants.LOG.warn("[numen-skin] signing {} failed: {}", job.request.name(), problem.getMessage());
             }
             if (Thread.currentThread().isInterrupted()) {
                 return;

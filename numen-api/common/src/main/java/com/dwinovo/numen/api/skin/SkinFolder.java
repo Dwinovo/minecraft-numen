@@ -87,7 +87,7 @@ public final class SkinFolder {
                 }
             }
         } catch (IOException e) {
-            Constants.LOG.warn("[numen-skin] 读不了皮肤文件夹 {}: {}", dir, e.toString());
+            Constants.LOG.warn("[numen-skin] cannot read the skin folder {}: {}", dir, e.toString());
         }
         return out;
     }

@@ -73,7 +73,7 @@ public final class LegacyMigration {
             verify(legacyHome, staging, "binding.json");
         });
         if (moved) {
-            Constants.LOG.info("[numen-migrate] 同伴的家 {} 搬进了世界", legacyHome.getFileName());
+            Constants.LOG.info("[numen-migrate] the companion home {} was moved into the world", legacyHome.getFileName());
         }
         return moved;
     }
@@ -131,10 +131,10 @@ public final class LegacyMigration {
             }
             Files.move(file, file.resolveSibling(file.getFileName() + ".migrated"), StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException | IllegalArgumentException unreadable) {
-            Constants.LOG.warn("[numen-migrate] 旧版的离线事件 {} 读不通,留着不动: {}", file, unreadable.toString());
+            Constants.LOG.warn("[numen-migrate] the old offline events {} cannot be parsed and are left as they are: {}", file, unreadable.toString());
             return Map.of();
         }
-        Constants.LOG.info("[numen-migrate] 旧版的离线事件 {} 条进了收件箱", out.values().stream().mapToInt(List::size).sum());
+        Constants.LOG.info("[numen-migrate] {} old offline event(s) went into the inbox", out.values().stream().mapToInt(List::size).sum());
         return out;
     }
 
@@ -191,7 +191,7 @@ public final class LegacyMigration {
             Files.createDirectories(target.getParent());
             Files.copy(legacy, staging, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
-            throw new StoreException("搬不动 " + legacy + ": " + e, e);
+            throw new StoreException("cannot move " + legacy + ": " + e, e);
         }
         place(staging, target);
         return true;
@@ -246,11 +246,11 @@ public final class LegacyMigration {
                 }
                 Path source = from.resolve(relative.toString());
                 if (!Files.isRegularFile(source) || Files.size(source) != Files.size(made)) {
-                    throw new StoreException("复制出来的 " + made + " 和旧的对不上");
+                    throw new StoreException("the copy " + made + " does not match the old one");
                 }
             }
         } catch (IOException e) {
-            throw new StoreException("核对不了 " + copy + ": " + e, e);
+            throw new StoreException("cannot verify " + copy + ": " + e, e);
         }
     }
 
@@ -259,7 +259,7 @@ public final class LegacyMigration {
             Files.createDirectories(target.getParent());
             Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException e) {
-            throw new StoreException("放不进 " + target + ": " + e, e);
+            throw new StoreException("cannot put into " + target + ": " + e, e);
         }
     }
 }

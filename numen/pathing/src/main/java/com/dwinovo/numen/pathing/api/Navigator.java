@@ -60,7 +60,7 @@ public final class Navigator {
                     : Origin.of(world, snapshot.stats(), entity.getX(), entity.getY(), entity.getZ());
             if (start.isEmpty()) {
                 BlockPos at = entity.blockPosition();
-                PathLog.info("{} 规划 去 {}:起点待不住 {}", who, query.goal(), PathLog.body(entity));
+                PathLog.info("{} plan to {}: the start cannot be stood on {}", who, query.goal(), PathLog.body(entity));
                 return new Planning(new PlanResult(null,
                         new Outcome.Stranded(at, entity.level().getBlockState(at)), null));
             }
@@ -69,7 +69,7 @@ public final class Navigator {
         long t0 = System.nanoTime();
         WorldSnapshot view = WorldSnapshot.around(entity.serverLevel(), from, WorldSnapshot.SEARCH_RADIUS);
         CostModel model = CostModel.of(query.spec(), snapshot, ports.terrain(), ports.materials(), ports.threats());
-        PathLog.mainThread(who, "规划时拷快照与组成本模型", System.nanoTime() - t0);
+        PathLog.mainThread(who, "copying the snapshot and building the cost model for planning", System.nanoTime() - t0);
         Search search = new Search(view, model, from, query.goal(), query.budget(), Favoring.NONE).after(query.after(), 0);
         return new Planning(Searches.submit(search, Searches.Urgency.NOW), search, who);
     }
@@ -85,9 +85,9 @@ public final class Navigator {
     /** 去:交出一次在走的导航,宿主每刻 {@link Navigation#tick} 一次。 */
     public Navigation drive(NavRequest request) {
         ServerPlayer entity = body.entity();
-        PathLog.debug("{} 出发 去 {} {} 预算 {}{} 刻速 {} {}", PathLog.who(entity), request.goal(),
+        PathLog.debug("{} setting out to {} {} budget {}{} tps {} {}", PathLog.who(entity), request.goal(),
                 PathLog.spec(request.spec()), request.budget(),
-                request.route() != null ? " 先照这条 " + PathLog.route(request.route()) : "",
+                request.route() != null ? " first along " + PathLog.route(request.route()) : "",
                 PathLog.num(entity.level().tickRateManager().tickrate()), PathLog.body(entity));
         return new Navigation(new Voyage(body, request.travel(), request.admission(), ports.terrain(), ports.materials(), ports.threats(),
                 request.goal(), request.spec(), request.budget(), request.route(), request.through(), ports.clock()),

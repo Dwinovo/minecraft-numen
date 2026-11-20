@@ -429,7 +429,7 @@ public final class LuaSandbox {
         public Builder function(String name, HostFunction fn) {
             checkName(name);
             if (tables.keySet().stream().anyMatch(t -> head(t).equals(name)) || globals.put(name, fn) != null) {
-                throw new IllegalArgumentException("全局名 " + name + " 登记了两次");
+                throw new IllegalArgumentException("global " + name + " is registered twice");
             }
             return this;
         }
@@ -441,10 +441,10 @@ public final class LuaSandbox {
             }
             checkName(name);
             if (globals.containsKey(head(table))) {
-                throw new IllegalArgumentException("全局名 " + head(table) + " 已经是一个函数");
+                throw new IllegalArgumentException("global " + head(table) + " is already a function");
             }
             if (tables.computeIfAbsent(table, t -> new LinkedHashMap<>()).put(name, fn) != null) {
-                throw new IllegalArgumentException(table + "." + name + " 登记了两次");
+                throw new IllegalArgumentException(table + "." + name + " is registered twice");
             }
             return this;
         }
@@ -478,10 +478,10 @@ public final class LuaSandbox {
 
         private static void checkName(String name) {
             if (!name.matches("[A-Za-z_][A-Za-z0-9_]*") || KEYWORDS.contains(name)) {
-                throw new IllegalArgumentException("在 Lua 里点不出来的名字: " + name);
+                throw new IllegalArgumentException("a name Lua cannot reach with a dot: " + name);
             }
             if (STANDARD_GLOBALS.contains(name)) {
-                throw new IllegalArgumentException("名字 " + name + " 是沙箱自带的全局");
+                throw new IllegalArgumentException("name " + name + " is a global the sandbox already has");
             }
         }
 

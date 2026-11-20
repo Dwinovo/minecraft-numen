@@ -60,7 +60,7 @@ public record Breath(int supply, int maxSupply, double oxygenBonus, double shiel
 
     public Breath {
         if (maxSupply <= 0) {
-            throw new IllegalArgumentException("氧气上限要是正数:" + maxSupply);
+            throw new IllegalArgumentException("the air supply maximum must be positive: " + maxSupply);
         }
     }
 

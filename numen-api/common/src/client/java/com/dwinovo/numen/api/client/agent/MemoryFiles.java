@@ -81,7 +81,7 @@ public final class MemoryFiles {
                     if (failure == null) {
                         ChatLines.notice(chunk.companionName(), I18n.get(Keys.EXPORT_SAVED, incoming.file().toString()));
                     } else {
-                        Constants.LOG.warn("[numen-export] 写不了 {}: {}", incoming.file(), failure.toString());
+                        Constants.LOG.warn("[numen-export] cannot write {}: {}", incoming.file(), failure.toString());
                         failed(chunk.companionName());
                     }
                 });

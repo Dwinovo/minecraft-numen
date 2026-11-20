@@ -169,7 +169,7 @@ final class RangedShot implements RangedWeapon.Shot {
     private void markFired(Aim aim, Entity target) {
         fired = true;
         if (target != null) {
-            Constants.LOG.info("[numen-attack] 射出 target={} weapon={} drawn={} dist={} eta={}",
+            Constants.LOG.info("[numen-attack] shot target={} weapon={} drawn={} dist={} eta={}",
                     target.getId(), crossbow ? "crossbow" : "bow", drawn,
                     String.format("%.1f", player.distanceTo(target)), Math.ceil(aim.travelTicks()));
         }

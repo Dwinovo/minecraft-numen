@@ -343,11 +343,11 @@ public final class NumenEvents {
         UUID uuid = companion.getUUID();
         var brain = CompanionLoops.get(uuid);
         if (brain.isEmpty()) {
-            Constants.LOG.warn("[numen-event] {} kind={} 没有大脑,这条事件没人收", uuid, entry.type());
+            Constants.LOG.warn("[numen-event] {} kind={} has no brain; nobody receives this event", uuid, entry.type());
             return;
         }
         brain.get().push(List.of(entry));
-        Constants.LOG.info("[numen-event] {} kind={}{} → 大脑", uuid, entry.type(), entry.urgent() ? " URGENT" : "");
+        Constants.LOG.info("[numen-event] {} kind={}{} → brain", uuid, entry.type(), entry.urgent() ? " URGENT" : "");
     }
 
     /**
@@ -374,10 +374,10 @@ public final class NumenEvents {
      */
     public static void requireWorldEvent(String type) {
         if (!EventTypes.isRegistered(type)) {
-            throw new IllegalArgumentException("事件种类没登记过:" + type);
+            throw new IllegalArgumentException("event kind is not registered: " + type);
         }
         if (EventTypes.get(type).fromOwner()) {
-            throw new IllegalArgumentException(type + " 不是世界上发生的事,不能当事件发");
+            throw new IllegalArgumentException(type + " is not something that happens in the world and cannot be sent as an event");
         }
     }
 

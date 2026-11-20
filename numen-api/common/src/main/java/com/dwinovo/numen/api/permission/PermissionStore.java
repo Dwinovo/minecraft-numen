@@ -169,7 +169,7 @@ public final class PermissionStore extends SavedData {
     static PermissionStore load(CompoundTag tag, HolderLookup.Provider registries) {
         boolean rewritten = migrate(tag);
         PermissionStore store = CODEC.parse(NbtOps.INSTANCE, tag)
-                .resultOrPartial(error -> Constants.LOG.error("[numen-permission] 权限存档有读不懂的内容: {}", error))
+                .resultOrPartial(error -> Constants.LOG.error("[numen-permission] the permission save has unreadable content: {}", error))
                 .orElseGet(PermissionStore::new);
         if (rewritten) {
             store.setDirty();
@@ -194,7 +194,7 @@ public final class PermissionStore extends SavedData {
                 String old = holder != null ? holder.getString("rule") : row.getAsString();
                 String now = RuleMigration.rewrite(old);
                 if (!now.equals(old)) {
-                    Constants.LOG.info("[numen-permission] 旧规则 {} {} 改写成 {}", table, old, now);
+                    Constants.LOG.info("[numen-permission] old rule {} {} rewritten as {}", table, old, now);
                     if (holder != null) {
                         holder.putString("rule", now);
                     } else {

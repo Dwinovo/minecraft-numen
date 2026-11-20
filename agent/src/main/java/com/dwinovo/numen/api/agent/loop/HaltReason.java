@@ -18,13 +18,13 @@ package com.dwinovo.numen.api.agent.loop;
  * 攒在收件箱里的 {@code task_finished} 回来照样叫得醒她。
  */
 public enum HaltReason {
-    OWNER_STOP("halt.owner_stop", "被主人打断", true, true, true, Hold.OWNER_STOP),
-    DEATH("halt.death", "你死了", false, false, false, Hold.DEAD),
-    REMOVED("halt.removed", "你的身体被请出了服务器", false, false, false, Hold.DEAD),
-    OFFLINE("halt.offline", "你下线了", false, false, false, Hold.DEAD),
-    DISCONNECT("halt.disconnect", "主人断线了", false, false, false, null),
-    EXTERNAL("halt.external", "外接模型接管了身体", false, false, false, null),
-    DISPOSE("halt.dispose", "大脑被重置", false, false, false, null);
+    OWNER_STOP("halt.owner_stop", "interrupted by the owner", true, true, true, Hold.OWNER_STOP),
+    DEATH("halt.death", "you died", false, false, false, Hold.DEAD),
+    REMOVED("halt.removed", "your body was removed from the server", false, false, false, Hold.DEAD),
+    OFFLINE("halt.offline", "you went offline", false, false, false, Hold.DEAD),
+    DISCONNECT("halt.disconnect", "the owner disconnected", false, false, false, null),
+    EXTERNAL("halt.external", "an external model took over the body", false, false, false, null),
+    DISPOSE("halt.dispose", "the brain was reset", false, false, false, null);
 
     private final String code;
     private final String words;
@@ -49,7 +49,7 @@ public enum HaltReason {
 
     /** 切断点上给模型看的原因;{@code detail}(死因等)非空时跟在括号里。 */
     public String words(String detail) {
-        return detail == null || detail.isBlank() ? words : words + "(" + detail + ")";
+        return detail == null || detail.isBlank() ? words : words + " (" + detail + ")";
     }
 
     /** 要不要连身体一起叫停。 */

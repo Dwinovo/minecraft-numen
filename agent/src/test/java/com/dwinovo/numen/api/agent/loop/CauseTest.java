@@ -16,7 +16,7 @@ class CauseTest {
         Cause cause = Cause.fromError(new CompletionException(new LlmStreamException("server_error: overloaded")));
 
         assertEquals(Cause.of(Cause.STREAM_FAILED, "server_error: overloaded"), cause);
-        assertEquals("回应中途出错:server_error: overloaded", cause.forModel());
+        assertEquals("the reply broke off midway: server_error: overloaded", cause.forModel());
     }
 
     /** 服务商说上下文超长(各家措辞不同,或是 413)是一个独立的原因码,内核据此整理再试;限流字眼像超长也不算。 */

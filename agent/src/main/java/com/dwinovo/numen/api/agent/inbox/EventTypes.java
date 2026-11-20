@@ -221,10 +221,10 @@ public final class EventTypes {
             // 会叫醒她的条目必须随它引起的那次调用交出去;只随自己那次走的条目必须叫得醒她——两样违背一样,
             // 就会开出一次取不到东西的调用,或者有一类条目永远取不出来。
             if (wakes ? joins == Joins.NONE : joins == Joins.OWN_CALL) {
-                throw new IllegalStateException("投递档 " + name() + " 的声明自相矛盾");
+                throw new IllegalStateException("delivery " + name() + " contradicts itself");
             }
             if (escalates && (wakes || joins != Joins.ANY_CALL)) {
-                throw new IllegalStateException("投递档 " + name() + " 升格后按插话办,本身得是随任何调用走、不叫醒她的档");
+                throw new IllegalStateException("delivery " + name() + " is handled as an interjection once promoted, so it must itself ride along with any call and not wake her");
             }
             this.wakes = wakes;
             this.joins = joins;
@@ -286,7 +286,7 @@ public final class EventTypes {
 
         public Type {
             if (alwaysUrgent && !delivery.wakes()) {
-                throw new IllegalArgumentException("类型 " + id + " 的投递档 " + delivery + " 不叫醒她,不能恒为急件");
+                throw new IllegalArgumentException("type " + id + " has delivery " + delivery + ", which does not wake her, so it cannot be always urgent");
             }
         }
 
@@ -391,10 +391,10 @@ public final class EventTypes {
      */
     public static synchronized Handle register(Type type) {
         if (type == null || type.id() == null || type.id().isBlank()) {
-            throw new IllegalArgumentException("类型没有 id");
+            throw new IllegalArgumentException("the type has no id");
         }
         if (TYPES.containsKey(type.id())) {
-            throw new IllegalArgumentException("事件类型 " + type.id() + " 已经登记过,换一个 id");
+            throw new IllegalArgumentException("event type " + type.id() + " is already registered; use another id");
         }
         TYPES.put(type.id(), type);
         return Handle.once(() -> {

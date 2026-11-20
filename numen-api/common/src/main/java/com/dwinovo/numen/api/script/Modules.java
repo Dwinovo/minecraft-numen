@@ -112,7 +112,7 @@ public final class Modules implements ScriptCatalog.ModuleSource {
     /** 这只同伴能用的模块。{@link #init} 之前调用是编程错误。 */
     public static Modules of(UUID companion) {
         if (libraries == null) {
-            throw new IllegalStateException("Modules.init(...) 还没被调用——服务端该在启动时注入模块库");
+            throw new IllegalStateException("Modules.init(...) has not been called — the server should inject the module library at startup");
         }
         return new Modules(libraries.apply(companion), companion);
     }
@@ -392,7 +392,7 @@ public final class Modules implements ScriptCatalog.ModuleSource {
 
     private void requireLibrary() {
         if (library == null) {
-            throw new IllegalStateException("只有随模组发布的那一套的模块存不进东西");
+            throw new IllegalStateException("the modules shipped with the mod cannot be written to");
         }
     }
 
@@ -409,7 +409,7 @@ public final class Modules implements ScriptCatalog.ModuleSource {
             try {
                 return ledgerDoc().read().orElseGet(JsonObject::new);
             } catch (StoreException unreadable) {
-                Constants.LOG.warn("[numen-script] 模块账本读不通,当作空的: {}", ledgerDoc().file());
+                Constants.LOG.warn("[numen-script] the module ledger cannot be parsed, treated as empty: {}", ledgerDoc().file());
                 return new JsonObject();
             }
         }

@@ -202,12 +202,12 @@ class ModulesTest {
             BuiltinModules.register("gt.twice", BASE);
             BuiltinModules.register("gt.twice", BASE);
         });
-        assertTrue(twice.getMessage().contains("登记了两次"), twice.getMessage());
+        assertTrue(twice.getMessage().contains("is registered twice"), twice.getMessage());
         assertTrue(assertThrows(IllegalArgumentException.class, () -> BuiltinModules.register("gt.broken_b",
                 "-- Broken.\nlocal x = = 1")).getMessage().contains("gt.broken_b:2:"));
         assertTrue(assertThrows(IllegalArgumentException.class, () -> BuiltinModules.register("gt.dash-x", BASE))
-                .getMessage().contains("名字不行"));
+                .getMessage().contains("has a bad name"));
         assertTrue(assertThrows(IllegalArgumentException.class, () -> BuiltinModules.register("string.x", BASE))
-                .getMessage().contains("名字不行"));
+                .getMessage().contains("has a bad name"));
     }
 }

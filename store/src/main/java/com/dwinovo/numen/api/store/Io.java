@@ -21,7 +21,7 @@ public record Io(Executor executor, Consumer<StoreException> onError) {
 
     public Io {
         if (executor == null || onError == null) {
-            throw new IllegalArgumentException("Io 需要执行器和出错的去处");
+            throw new IllegalArgumentException("Io needs an executor and somewhere for errors to go");
         }
     }
 

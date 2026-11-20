@@ -81,7 +81,7 @@ public final class Voyage {
         return switch (travel) {
             case FLY -> flightAdmission(rig);
             case GLIDE -> Glide.admit(rig, goal, Set.of());
-            case WALK -> throw new IllegalArgumentException("走不需要受理");
+            case WALK -> throw new IllegalArgumentException("walking needs no admission");
         };
     }
 
@@ -167,7 +167,7 @@ public final class Voyage {
                         start(asked.plan());
                     }
                 } else {
-                    PathLog.info("{} 走不到起飞点 {},换一个", rig.who, PathLog.pos(plan.takeoff()));
+                    PathLog.info("{} cannot walk to the takeoff point {}; trying another", rig.who, PathLog.pos(plan.takeoff()));
                     spent.add(plan.takeoff());
                     again();
                 }
@@ -230,7 +230,7 @@ public final class Voyage {
             current = new Sortie(rig, flight);
             phase = Phase.SORTIE;
         } else {
-            PathLog.info("{} 飞 先走到起飞点 {},水平 {} 格", rig.who, PathLog.pos(flight.takeoff()), PathLog.num(flight.blocks()));
+            PathLog.info("{} fly: walking to the takeoff point {} first, horizontal {} blocks", rig.who, PathLog.pos(flight.takeoff()), PathLog.num(flight.blocks()));
             current = new Driver(rig, Goals.at(flight.takeoff()), spec, 0, null, false, clock);
             phase = Phase.TO_TAKEOFF;
         }
@@ -238,7 +238,7 @@ public final class Voyage {
 
     /** 收工:飞不下去了,原因是 {@code lack}。 */
     private void grounded(Lack lack) {
-        PathLog.info("{} 飞不下去了:{} {}", rig.who, lack, PathLog.body(rig.entity));
+        PathLog.info("{} cannot fly on: {} {}", rig.who, lack, PathLog.body(rig.entity));
         halt = new Halt.Grounded(lack);
         state = Driver.State.HALTED;
     }

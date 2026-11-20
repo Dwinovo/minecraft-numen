@@ -44,7 +44,7 @@ public final class JsonDoc {
 
         private Format(int current) {
             if (current < 1) {
-                throw new IllegalArgumentException("版本从 1 起");
+                throw new IllegalArgumentException("versions start at 1");
             }
             this.current = current;
         }
@@ -66,7 +66,7 @@ public final class JsonDoc {
         void check() {
             for (int v = 1; v < current; v++) {
                 if (!steps.containsKey(v)) {
-                    throw new IllegalStateException("缺第 " + v + " 版往上升的那一步");
+                    throw new IllegalStateException("the upgrade step from version " + v + " is missing");
                 }
             }
         }
@@ -100,14 +100,14 @@ public final class JsonDoc {
         } catch (NoSuchFileException absent) {
             return Optional.empty();
         } catch (IOException e) {
-            throw new StoreException("读不了 " + file + ": " + e, e);
+            throw new StoreException("cannot read " + file + ": " + e, e);
         }
         JsonObject doc;
         int version;
         try {
             JsonElement root = JsonParser.parseString(text);
             if (!root.isJsonObject()) {
-                throw new StoreException(file + " 不是 JSON 对象");
+                throw new StoreException(file + " is not a JSON object");
             }
             doc = root.getAsJsonObject();
             // 版本号是数字;不是数字的 v 是第 1 版文档自己的内容(比如一张"名字 → 内容"的表里叫 v 的那项)
@@ -117,17 +117,17 @@ public final class JsonDoc {
             if (e instanceof StoreException se) {
                 throw se;
             }
-            throw new StoreException("读不懂 " + file + ": " + e, e);
+            throw new StoreException("cannot parse " + file + ": " + e, e);
         }
         if (version > format.current) {
-            throw new StoreException(file + " 是第 " + version + " 版,本程序只认到第 " + format.current + " 版");
+            throw new StoreException(file + " is version " + version + "; this program knows up to version " + format.current);
         }
         try {
             for (int v = version; v < format.current; v++) {
                 doc = format.steps.get(v).apply(doc);
             }
         } catch (RuntimeException e) {
-            throw new StoreException("升级 " + file + " 失败(从第 " + version + " 版): " + e, e);
+            throw new StoreException("upgrading " + file + " failed (from version " + version + "): " + e, e);
         }
         return Optional.of(doc);
     }
@@ -156,7 +156,7 @@ public final class JsonDoc {
             try {
                 Files.deleteIfExists(file);
             } catch (IOException e) {
-                throw new StoreException("删不了 " + file + ": " + e, e);
+                throw new StoreException("cannot delete " + file + ": " + e, e);
             }
         });
     }

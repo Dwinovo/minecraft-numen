@@ -47,11 +47,11 @@ public final class ConfigRootMigration {
                 Files.move(from, to, StandardCopyOption.ATOMIC_MOVE);
                 moved++;
             } catch (IOException e) {
-                Constants.LOG.warn("[numen] 迁移 {} 失败,原件还在 {}", name, from, e);
+                Constants.LOG.warn("[numen] migrating {} failed, the original is still at {}", name, from, e);
             }
         }
         if (moved > 0) {
-            Constants.LOG.info("[numen] 已把 {} 项配置从 config/{}/ 搬到 config/{}/",
+            Constants.LOG.info("[numen] moved {} config item(s) from config/{}/ to config/{}/",
                     moved, Constants.MOD_ID, Constants.CONFIG_ROOT);
         }
         // 旧根空了就删掉,别留一个让人以为还有用的空壳

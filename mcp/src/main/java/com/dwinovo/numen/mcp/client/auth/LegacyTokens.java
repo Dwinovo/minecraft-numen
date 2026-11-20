@@ -48,10 +48,10 @@ public final class LegacyTokens {
                 }
             }
             Files.delete(file);
-            LOG.info("[numen-mcp-oauth] 旧的 {} 搬进了钥匙串({} 台服务器),旧文件已删", file.getFileName(), moved);
+            LOG.info("[numen-mcp-oauth] the old {} was moved into the keychain ({} server(s)); the old file is deleted", file.getFileName(), moved);
             return moved;
         } catch (Exception unreadable) {
-            LOG.warn("[numen-mcp-oauth] 旧的 {} 读不通,原样留着不动: {}", file, unreadable.toString());
+            LOG.warn("[numen-mcp-oauth] the old {} cannot be read and is left as it is: {}", file, unreadable.toString());
             return 0;
         }
     }

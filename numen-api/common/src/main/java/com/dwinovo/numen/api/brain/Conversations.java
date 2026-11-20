@@ -90,7 +90,7 @@ public final class Conversations extends JsonLibrary<Conversation> {
                 }
             }, CompanionLoops::get, () -> {
                 ServerPlayer player = server.getPlayerList().getPlayer(id);
-                return player == null ? "主人" : player.getGameProfile().getName();
+                return player == null ? "the owner" : player.getGameProfile().getName();
             });
         });
     }
@@ -414,7 +414,7 @@ public final class Conversations extends JsonLibrary<Conversation> {
             }
         }
         return names.isEmpty() ? ""
-                : Audience.line(conv.turn(), NumenEvents.escape(String.join("、", names)));
+                : Audience.line(conv.turn(), NumenEvents.escape(String.join(", ", names)));
     }
 
     // ---- 拼 ----
@@ -432,6 +432,6 @@ public final class Conversations extends JsonLibrary<Conversation> {
                 names.add(m.name());
             }
         }
-        return String.join("、", names);
+        return String.join(", ", names);
     }
 }

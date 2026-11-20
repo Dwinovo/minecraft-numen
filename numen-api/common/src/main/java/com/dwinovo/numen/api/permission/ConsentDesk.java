@@ -47,11 +47,11 @@ public final class ConsentDesk {
     public static final long TIMEOUT_TICKS = 2 * 60 * 20;
 
     /** 主人按了拒绝、没有附言时回执里的理由。 */
-    public static final String OWNER_SAID_NO = "主人拒绝";
+    public static final String OWNER_SAID_NO = "the owner refused";
     /** 主人离线或超时没答复。 */
-    public static final String OWNER_ABSENT = "主人不在场,无法征得同意";
+    public static final String OWNER_ABSENT = "the owner is not present, so consent cannot be asked";
     /** 同一只同伴又发起了一条。 */
-    public static final String SUPERSEDED = "被新的请求顶替";
+    public static final String SUPERSEDED = "superseded by a newer request";
 
     /**
      * 一条征询没等到主人在答复框里答就撤掉了,为什么。这是给主人看的那一句:主人的客户端按自己的语言显示
@@ -252,7 +252,7 @@ public final class ConsentDesk {
         settle(ticket, answer);
         line.answered(requestId, by);
         Constants.LOG.info("[numen-consent] {} #{} answered {}{}", companion, requestId, decision,
-                said.isEmpty() ? "" : " (带一句 " + said.length() + " 字的话)");
+                said.isEmpty() ? "" : " (with a " + said.length() + "-char remark)");
         return true;
     }
 

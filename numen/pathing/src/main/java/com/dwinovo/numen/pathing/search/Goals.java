@@ -88,7 +88,7 @@ public final class Goals {
      */
     public static Goal within(Position center, double min, double max) {
         if (!(min >= 0) || !(max >= min)) {
-            throw new IllegalArgumentException("距离范围要 0 ≤ 最小 ≤ 最大:" + min + ".." + max);
+            throw new IllegalArgumentException("the distance range needs 0 ≤ min ≤ max: " + min + ".." + max);
         }
         return new Within(center, min, max);
     }
@@ -108,7 +108,7 @@ public final class Goals {
     public static Use use(BlockGetter level, BodyStats body, BlockPos target) {
         BlockPos at = target.immutable();
         if (!Sight.clickable(level, at)) {
-            throw new IllegalArgumentException(at + " 没有可点的轮廓");
+            throw new IllegalArgumentException(at + " has no outline to click");
         }
         List<Direction> open = new ArrayList<>();
         for (Direction side : Direction.values()) {
@@ -174,7 +174,7 @@ public final class Goals {
      */
     public static Goal dig(List<DigTarget> targets, BodyStats body, Clearing clearing) {
         if (targets.isEmpty()) {
-            throw new IllegalArgumentException("挖其中任意一格,至少要有一格");
+            throw new IllegalArgumentException("digging any one of them needs at least one cell");
         }
         List<Dig> members = new ArrayList<>(targets.size());
         double[] prices = new double[targets.size()];
@@ -219,7 +219,7 @@ public final class Goals {
      */
     public static Goal touch(AABB box, BodyStats body, double range) {
         if (!(range > 0) || Double.isInfinite(range)) {
-            throw new IllegalArgumentException("交互距离要是正的有限数:" + range);
+            throw new IllegalArgumentException("the interaction range must be a positive finite number: " + range);
         }
         return new Touch(box, body, range);
     }
@@ -229,7 +229,7 @@ public final class Goals {
     /** 远离一组生物:脚所在的列离每一只的水平距离都不小于它的危险半径。 */
     public static Goal awayFrom(List<Threat> threats) {
         if (threats.isEmpty()) {
-            throw new IllegalArgumentException("远离的目标至少要有一只");
+            throw new IllegalArgumentException("a goal to get away from needs at least one target");
         }
         return new AwayFrom(List.copyOf(threats));
     }
@@ -239,7 +239,7 @@ public final class Goals {
     /** 多个目标取其一:到了任何一个就算到;按"走过去加到了再付"挑最便宜的那个。 */
     public static Goal anyOf(List<Goal> goals) {
         if (goals.isEmpty()) {
-            throw new IllegalArgumentException("多个目标取其一,至少要有一个");
+            throw new IllegalArgumentException("any-of needs at least one goal");
         }
         return new AnyOf(List.copyOf(goals));
     }
@@ -250,7 +250,7 @@ public final class Goals {
      */
     public static Goal allOf(List<Goal> goals) {
         if (goals.isEmpty()) {
-            throw new IllegalArgumentException("几个目标同时成立,至少要有一个");
+            throw new IllegalArgumentException("all-of needs at least one goal");
         }
         return new AllOf(List.copyOf(goals));
     }
@@ -373,7 +373,7 @@ public final class Goals {
             out.append(i > 0 ? " " : "").append(members.get(i));
         }
         if (members.size() > shown) {
-            out.append(" …共 ").append(members.size()).append(" 个");
+            out.append(" … ").append(members.size()).append(" in all");
         }
         return out.append(")").toString();
     }
@@ -411,10 +411,10 @@ public final class Goals {
 
         public Position {
             if ((x == null) != (z == null)) {
-                throw new IllegalArgumentException("x 与 z 要一起给");
+                throw new IllegalArgumentException("x and z must be given together");
             }
             if (x == null && y == null) {
-                throw new IllegalArgumentException("位置至少要给高度,或者 x 与 z");
+                throw new IllegalArgumentException("a position needs at least a height, or x and z");
             }
         }
 
@@ -626,7 +626,7 @@ public final class Goals {
 
         @Override
         public String toString() {
-            return "use(" + xyz(target) + " 站位 " + stands.size() + ")";
+            return "use(" + xyz(target) + " stands " + stands.size() + ")";
         }
     }
 

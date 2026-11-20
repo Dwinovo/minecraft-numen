@@ -280,7 +280,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord<V>, V>
      */
     private void crashed(String phase, RuntimeException e) {
         com.dwinovo.numen.Constants.LOG.error(
-                "[numen-task] {} 在 {} 阶段抛出异常,本任务判失败(服务端不受影响)",
+                "[numen-task] {} threw in the {} phase; the task fails (the server is unaffected)",
                 getClass().getSimpleName(), phase, e);
         fail("the task hit an internal error and stopped: " + e.getClass().getSimpleName()
                 + (e.getMessage() == null ? "" : " — " + e.getMessage())

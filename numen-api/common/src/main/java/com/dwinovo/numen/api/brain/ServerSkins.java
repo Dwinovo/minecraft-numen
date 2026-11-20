@@ -75,7 +75,7 @@ public final class ServerSkins {
 
     public static synchronized ServerSkins of(MinecraftServer server) {
         if (current == null || currentServer != server) {
-            throw new IllegalStateException("皮肤还没开张——服务器起好时 ServerSkins.start 该被调用");
+            throw new IllegalStateException("skins are not started — ServerSkins.start should be called once the server is up");
         }
         return current;
     }

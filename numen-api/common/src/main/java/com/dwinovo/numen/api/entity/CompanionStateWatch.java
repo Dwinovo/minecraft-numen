@@ -125,13 +125,13 @@ public final class CompanionStateWatch {
         // 一次推送一行。链路是"服务端推 → 客户端缓存 → 渲染进请求",出问题时得能一眼看出
         // 断在哪一节;只记开始不记结果的日志已经害过我们一次。
         com.dwinovo.numen.api.Constants.LOG.info(
-                "[numen-state] {} → {} 种物品 / {} 格, 主手 {}, 副手 {}, 效果 {}{}{}{}",
+                "[numen-state] {} → {} item kind(s) / {} slot(s), main hand {}, off hand {}, effects {}{}{}{}",
                 companion.getName().getString(), kinds(payload), usedSlots(payload),
                 slotName(payload.selectedSlot(), payload.items()), name(payload.offhand()),
                 payload.effects().size(),
-                !payload.vehicle().isEmpty() ? ", 骑 " + payload.vehicle() : "",
-                payload.bodyState().isEmpty() ? "" : ", 插件片段 " + payload.bodyState().length() + " 字符",
-                first ? " (首次)" : "");
+                !payload.vehicle().isEmpty() ? ", riding " + payload.vehicle() : "",
+                payload.bodyState().isEmpty() ? "" : ", plugin segment " + payload.bodyState().length() + " chars",
+                first ? " (first)" : "");
     }
 
     /** 一趟遍历:顺便把镜像更新到最新。返回"有没有模型在乎的变化"。 */
@@ -205,11 +205,11 @@ public final class CompanionStateWatch {
     }
 
     private static String slotName(int selected, java.util.List<ItemStack> items) {
-        return selected < 0 || selected >= items.size() ? "空手" : name(items.get(selected));
+        return selected < 0 || selected >= items.size() ? "empty hand" : name(items.get(selected));
     }
 
     private static String name(ItemStack stack) {
-        return stack.isEmpty() ? "空手"
+        return stack.isEmpty() ? "empty hand"
                 : net.minecraft.core.registries.BuiltInRegistries.ITEM
                         .getKey(stack.getItem()).getPath();
     }

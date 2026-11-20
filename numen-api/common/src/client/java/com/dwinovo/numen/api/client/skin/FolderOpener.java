@@ -27,7 +27,7 @@ public final class FolderOpener {
         try {
             Files.createDirectories(dir);
         } catch (IOException e) {
-            Constants.LOG.warn("[numen-skin] 建不了皮肤文件夹 {}: {}", dir, e.toString());
+            Constants.LOG.warn("[numen-skin] cannot create the skin folder {}: {}", dir, e.toString());
             return;
         }
         Util.getPlatform().openFile(dir.toFile());

@@ -55,7 +55,7 @@ public final class ConfigMigrations {
         } else {
             Files.move(file, bak);
         }
-        Constants.LOG.info("[numen] 站点目录已内置化,移走旧文件 {}", file.getFileName());
+        Constants.LOG.info("[numen] the site catalogue is built in now; moved the old file {} away", file.getFileName());
     }
 
     /** 顶层有 {@code providers} 数组 = 旧站点目录。读不动/不是 JSON 一律算不是（宁可不搬）。 */

@@ -200,7 +200,7 @@ public final class AnthropicProvider implements LlmProvider {
                 maxTokens += wire.tokens();
                 thinking = true;
             }
-            case ON -> throw new IllegalStateException("ThinkingPlan 不会给 Anthropic 排出 " + wire.kind());
+            case ON -> throw new IllegalStateException("ThinkingPlan does not produce this for Anthropic: " + wire.kind());
         }
         body.addProperty("max_tokens", maxTokens);
 

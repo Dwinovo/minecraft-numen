@@ -55,13 +55,13 @@ public final class PaperNumenConfig implements INumenConfig {
         try (Reader in = Files.newBufferedReader(file)) {
             ConfigData parsed = GSON.fromJson(in, ConfigData.class);
             if (parsed == null) {
-                throw new IllegalStateException(file + " 是空的:填上内容,或删掉它让 Numen 重新写一份");
+                throw new IllegalStateException(file + " is empty: fill it in, or delete it and let Numen write a fresh one");
             }
             return parsed.withDefaults();
         } catch (JsonParseException e) {
-            throw new IllegalStateException(file + " 不是合法的 JSON:" + e.getMessage(), e);
+            throw new IllegalStateException(file + " is not valid JSON: " + e.getMessage(), e);
         } catch (IOException e) {
-            throw new UncheckedIOException("读不出 " + file, e);
+            throw new UncheckedIOException("cannot read " + file, e);
         }
     }
 

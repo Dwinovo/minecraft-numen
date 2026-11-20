@@ -139,7 +139,7 @@ class GoalStateTest {
 
     @Test
     void aVerdictWithoutAReasonStillSaysSomething() {
-        assertEquals("(没给理由)", GoalPrompts.readVerdict("MET:").reason());
+        assertEquals("(no reason given)", GoalPrompts.readVerdict("MET:").reason());
     }
 
     // ---- 提示词 ----

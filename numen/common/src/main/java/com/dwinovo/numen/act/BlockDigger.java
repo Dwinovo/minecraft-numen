@@ -31,7 +31,7 @@ import net.minecraft.world.phys.Vec3;
 public final class BlockDigger {
 
     /** 服务端把挖掘退回来时回执里的理由。 */
-    public static final String SERVER_REFUSED = "服务器没让挖掉这一格";
+    public static final String SERVER_REFUSED = "the server did not let this block be broken";
 
     private final NumenPlayer player;
     /** 最近一次 {@link DigResult#REFUSED} 的理由(权限层的裁决,或服务端退回的 {@link #SERVER_REFUSED});没被拒过是 null。 */

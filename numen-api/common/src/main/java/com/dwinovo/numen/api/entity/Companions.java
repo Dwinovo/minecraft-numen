@@ -282,17 +282,17 @@ public final class Companions {
 
     /** 回来那条事件的话:为什么离开、过了多久、落在哪;背包与位置都是离开时的样子。 */
     static String returnedText(NumenPlayer body, Outside was, long awayTicks) {
-        String why = was.why() == Attendance.Why.OWNER ? "主人让你下线了" : "主人不在游戏里,你被收了起来";
-        return "你回到了世界里:" + why + ",游戏里过了约 " + awayWords(awayTicks) + "。位置 "
+        String why = was.why() == Attendance.Why.OWNER ? "your owner sent you offline" : "your owner was not in the game, so you were put away";
+        return "You are back in the world: " + why + "; about " + awayWords(awayTicks) + " passed in the game. You are in "
                 + body.level().dimension().location() + " "
                 + com.dwinovo.numen.api.sdk.Positions.literal(body.blockPosition())
-                + ";背包和位置都是你离开时的样子,没有人替你挪动过。";
+                + "; your inventory and position are as you left them, nobody moved you.";
     }
 
     /** 游戏刻数说成人话:不到一分钟、几分钟、几小时(都是游戏里的时间)。 */
     static String awayWords(long ticks) {
         long minutes = Math.max(0L, ticks) / 1200L;
-        return minutes < 1 ? "不到一分钟" : minutes < 120 ? minutes + " 分钟" : minutes / 60 + " 小时";
+        return minutes < 1 ? "less than a minute" : minutes < 120 ? minutes + " minutes" : minutes / 60 + " hours";
     }
 
     /**
@@ -306,7 +306,7 @@ public final class Companions {
             return;
         }
         String why = reason.getString();
-        com.dwinovo.numen.api.Constants.LOG.warn("[numen] {} 没被接纳:{}", entry.name(), why);
+        com.dwinovo.numen.api.Constants.LOG.warn("[numen] {} was not admitted: {}", entry.name(), why);
         reg.markOutside(companionUuid, Outside.byServer(why));
         com.dwinovo.numen.api.brain.CompanionLoops.get(companionUuid).ifPresent(brain -> brain.onRemoved(why));
         for (UUID keeper : entry.keepers()) {
@@ -377,7 +377,7 @@ public final class Companions {
             try {
                 reconcile.accept(ownerUuid);
             } catch (RuntimeException ex) {
-                com.dwinovo.numen.api.Constants.LOG.error("[numen] 对 {} 的同伴对账时出错", ownerUuid, ex);
+                com.dwinovo.numen.api.Constants.LOG.error("[numen] reconciling the companions of {} failed", ownerUuid, ex);
             }
         }
     }
@@ -406,7 +406,7 @@ public final class Companions {
             try {
                 reconcileCompanion(server, e.getKey());
             } catch (RuntimeException ex) {
-                com.dwinovo.numen.api.Constants.LOG.error("[numen] 同伴 {} 没能修到该有的样子,跳过", e.getKey(), ex);
+                com.dwinovo.numen.api.Constants.LOG.error("[numen] companion {} could not be brought to its proper state, skipped", e.getKey(), ex);
             }
         }
     }
@@ -502,18 +502,18 @@ public final class Companions {
         if (cause == null || cause.isBlank()) {
             cause = body.getCombatTracker().getDeathMessage().getString();
         }
-        if (cause == null || cause.isBlank()) cause = "未知原因";
+        if (cause == null || cause.isBlank()) cause = "unknown cause";
         // 先让大脑停牌,再触发生命周期钩子——<b>顺序要紧</b>:大脑一停牌 DEAD,
         // 此后钩子里产生的收尾事件(异步任务的 task_finished status="interrupted")
         // 照样进队列,但不开 run,安静躺到重生。
         //
         // 反过来的话,那条 urgent 收尾事件会在停牌之前到达、当场开一轮,而紧接着的
         // 停牌又把那一轮整个作废——白烧一次请求,还多一条没人看的对话。
-        String where = "你死在 " + body.level().dimension().location() + " "
-                + com.dwinovo.numen.api.sdk.Positions.literal(body.blockPosition()) + "。"
+        String where = "You died in " + body.level().dimension().location() + " at "
+                + com.dwinovo.numen.api.sdk.Positions.literal(body.blockPosition()) + ". "
                 + (body.level().getGameRules().getBoolean(net.minecraft.world.level.GameRules.RULE_KEEPINVENTORY)
-                ? "这个世界开着 keepInventory,背包里的东西还在你身上。"
-                : "背包里的东西按原版规则掉在了死亡地点。");
+                ? "This world has keepInventory on, so everything in your inventory is still on you."
+                : "What was in your inventory dropped where you died, by the vanilla rules.");
         String diedOf = cause;
         com.dwinovo.numen.api.brain.CompanionLoops.get(uuid).ifPresent(brain -> brain.onDied(diedOf, where));
         CompanionEvents.fire(CompanionEvent.DEATH, body);   // 不发工具结果:那条 tool_call 已由死因结算
@@ -534,7 +534,7 @@ public final class Companions {
             try {
                 respawnBody(server, body);
             } catch (RuntimeException ex) {
-                com.dwinovo.numen.api.Constants.LOG.error("[numen] 同伴 {} 重生时出错", body.getUUID(), ex);
+                com.dwinovo.numen.api.Constants.LOG.error("[numen] respawning companion {} failed", body.getUUID(), ex);
             }
         }
     }
@@ -570,17 +570,17 @@ public final class Companions {
 
     /** 重生那条事件的话:落在哪、凭什么落在这儿、离主人多远。 */
     private static String respawnedText(NumenPlayer body, boolean hadRespawnPoint) {
-        String how = body.getRespawnPosition() != null ? "落在你的重生点(睡过的床或充能的重生锚)旁"
-                : hadRespawnPoint ? "你的重生点(床或重生锚)没了或被挡住,落在了世界出生点"
-                : "你没有重生点,落在了世界出生点";
+        String how = body.getRespawnPosition() != null ? "you landed beside your respawn point (the bed you slept in or a charged respawn anchor)"
+                : hadRespawnPoint ? "your respawn point (bed or respawn anchor) is gone or blocked, so you landed at the world spawn"
+                : "you have no respawn point, so you landed at the world spawn";
         ServerPlayer owner = body.keeperAtHand();
-        String ownerPart = owner == null ? "主人不在线。"
-                : owner.level() != body.level() ? "主人在 " + owner.level().dimension().location() + ",和你不在同一个维度。"
-                : "主人在你" + com.dwinovo.numen.api.sdk.CompassUtil.compass(body, owner) + "方向,约 "
-                        + Math.round(body.distanceTo(owner)) + " 格处。";
-        return "你重生了:" + how + ",位置 " + body.level().dimension().location() + " "
-                + com.dwinovo.numen.api.sdk.Positions.literal(body.blockPosition()) + "。" + ownerPart
-                + "没有人替你挪动过位置;要不要回主人身边、怎么回,由你定。";
+        String ownerPart = owner == null ? "Your owner is not online. "
+                : owner.level() != body.level() ? "Your owner is in " + owner.level().dimension().location() + ", not the dimension you are in. "
+                : "Your owner is to your " + com.dwinovo.numen.api.sdk.CompassUtil.compass(body, owner) + ", about "
+                        + Math.round(body.distanceTo(owner)) + " blocks away. ";
+        return "You respawned: " + how + ", in " + body.level().dimension().location() + " at "
+                + com.dwinovo.numen.api.sdk.Positions.literal(body.blockPosition()) + ". " + ownerPart
+                + "Nobody moved you; whether and how to go back to your owner is up to you.";
     }
 
     /**
@@ -646,7 +646,7 @@ public final class Companions {
         com.dwinovo.numen.api.event.NumenEvents.emit(body,
                 com.dwinovo.numen.api.agent.inbox.EventTypes.DIMENSION_CHANGE,
                 java.util.Map.of("to", dim),
-                "你进入了 " + dim + "。留意这个维度的环境和危险。", false);
+                "You entered " + dim + ". Mind this dimension's surroundings and dangers.", false);
     }
 
     /**
@@ -663,7 +663,7 @@ public final class Companions {
         String attacker = null;
         if (body.hurtTime > 0) {
             var source = body.getLastDamageSource();
-            attacker = source == null ? "什么东西"
+            attacker = source == null ? "something"
                     : source.getEntity() != null ? source.getEntity().getName().getString()
                     : source.type().msgId();
         }
@@ -681,12 +681,12 @@ public final class Companions {
      */
     static String wokeText(boolean day, String attacker) {
         if (attacker != null) {
-            return "你被" + attacker + "打醒了,已经不在床上。先看清楚周围再决定是打是躲"
-                    + (day ? ",天已经亮了。" : ",天还没亮。");
+            return "You were hit awake by " + attacker + " and are out of bed. Look around before you decide to fight or get away"
+                    + (day ? "; it is already day." : "; it is still night.");
         }
         return day
-                ? "天亮了,你自己从床上醒来,夜过去了。接着做你原本要做的事。"
-                : "你从床上醒来了,可是天还没亮——是外力把你弄醒的(床没了、被传送都算)。先看看周围。";
+                ? "It is day; you woke up in bed on your own and the night is over. Carry on with what you were doing."
+                : "You woke up in bed but it is still night — something woke you (the bed being gone or a teleport would do it). Look around first.";
     }
 
     /** Save the companion to its {@code .dat} and remove it from the world (the real-player logout). */

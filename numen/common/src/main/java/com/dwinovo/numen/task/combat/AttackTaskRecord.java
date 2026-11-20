@@ -85,8 +85,8 @@ public final class AttackTaskRecord extends TaskRecord<Fought> {
     @Override
     public String describe() {
         return indiscriminate
-                ? "清场 已放倒 " + defeated.size()
-                : "战斗 " + defeated.size() + "/" + entityIds.size();
+                ? "clearing the field, " + defeated.size() + " down"
+                : "fighting " + defeated.size() + "/" + entityIds.size();
     }
 
     /** 给主人看的一句(头顶气泡、档案页),客户端按当前语言翻;{@link #describe()} 是给模型的。 */

@@ -111,7 +111,7 @@ public final class MicrophoneManager {
             line.start();
             return true;
         } catch (LineUnavailableException | RuntimeException e) {
-            Constants.LOG.warn("[numen-stt] 打不开麦克风", e);
+            Constants.LOG.warn("[numen-stt] cannot open the microphone", e);
             closeQuietly(line);
             return false;
         }
@@ -152,7 +152,7 @@ public final class MicrophoneManager {
                 }
             }
         } catch (RuntimeException e) {
-            Constants.LOG.warn("[numen-stt] 采集中断", e);
+            Constants.LOG.warn("[numen-stt] capture interrupted", e);
         } finally {
             closeQuietly(line);
             RECORDING.set(false);
@@ -161,7 +161,7 @@ public final class MicrophoneManager {
             if (outcome == Outcome.SILENT) {
                 // 一片零最常见的三个来源:系统拒了麦克风权限、设备被静音、选错了输入源。
                 // 三种在这一层分不开,但至少要说出"没采到声音",别让它变成一句"识别失败"。
-                Constants.LOG.warn("[numen-stt] 这段录音一点声音都没有(峰值 {}),没送去识别", peak);
+                Constants.LOG.warn("[numen-stt] this recording is silent (peak {}); not sent for recognition", peak);
             }
             onDone.accept(outcome);
         }
@@ -196,18 +196,18 @@ public final class MicrophoneManager {
         if (use == null) {
             // 一台机器上没有能出 16kHz 单声道 PCM 的输入设备。这条以前是静默返回,
             // 界面只说"没有可用麦克风",日志里查不到任何线索。
-            Constants.LOG.warn("[numen-stt] 没有支持 {} 的输入设备;系统里的混音器: {}",
+            Constants.LOG.warn("[numen-stt] no input device supports {}; mixers on this system: {}",
                     SttAudio.FORMAT, deviceNames());
             return null;
         }
         if (chosen == null && deviceName != null && !deviceName.isBlank()) {
-            Constants.LOG.warn("[numen-stt] 设置里选的麦克风 '{}' 不在了,改用 '{}'",
+            Constants.LOG.warn("[numen-stt] the microphone '{}' chosen in settings is gone, using '{}'",
                     deviceName, use.getName());
         }
         try {
             return (TargetDataLine) AudioSystem.getMixer(use).getLine(info);
         } catch (LineUnavailableException e) {
-            Constants.LOG.warn("[numen-stt] 取不到输入线路 '{}'", use.getName(), e);
+            Constants.LOG.warn("[numen-stt] cannot get the input line '{}'", use.getName(), e);
             return null;
         }
     }

@@ -53,7 +53,7 @@ public final class PaperNetworkChannel implements INetworkChannel {
 
     @Override
     public void sendToServer(CustomPacketPayload payload) {
-        throw new UnsupportedOperationException("Paper 是服务端,没有上行可发");
+        throw new UnsupportedOperationException("Paper is the server side; there is nothing to send upstream");
     }
 
     /** 下行包只需要编码器;处理体是客户端的,服务端上永远不会被调。 */
@@ -70,7 +70,7 @@ public final class PaperNetworkChannel implements INetworkChannel {
         ResourceLocation id = payload.type().id();
         StreamCodec<? super RegistryFriendlyByteBuf, ?> registered = downlink.get(id);
         if (registered == null) {
-            throw new IllegalStateException("下行包 " + id + " 没有登记过");
+            throw new IllegalStateException("downstream packet " + id + " is not registered");
         }
         @SuppressWarnings("unchecked")
         StreamCodec<? super RegistryFriendlyByteBuf, CustomPacketPayload> codec =

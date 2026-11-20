@@ -38,7 +38,7 @@ public final class ServerKeyQuota {
                         .forEach(e -> used.put(UUID.fromString(e.getKey()), e.getValue().getAsLong()));
             });
         } catch (RuntimeException unreadable) {
-            Constants.LOG.warn("[numen-server] {} 读不了,今天的用量从 0 记: {}", doc.file(), unreadable.toString());
+            Constants.LOG.warn("[numen-server] {} cannot be read; today's usage counts from 0: {}", doc.file(), unreadable.toString());
             used.clear();
             day = null;
         }

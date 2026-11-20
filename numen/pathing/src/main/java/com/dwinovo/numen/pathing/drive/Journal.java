@@ -22,19 +22,19 @@ public final class Journal {
      */
     public enum Replan {
         /** 一步开始前往前核,接下来几步里有一步的前提在活世界上不成立({@link Lookahead})。 */
-        AHEAD("往前核不成立", true),
+        AHEAD("recheck ahead failed", true),
         /** 一步走着走不下去:动不了手、憋不住气、落回前一步的起点、落到路线之外、停不到终点。 */
-        FAILED("一步走不下去", true),
+        FAILED("step failed", true),
         /** 一步超过了期限({@link Watchdog})。 */
-        TIMEOUT("一步超时", true),
+        TIMEOUT("step timed out", true),
         /** 还没开始走下一步,上一步的冲劲把身体带出了路线。 */
-        OFF_ROUTE("离开路线", false),
+        OFF_ROUTE("off route", false),
         /** 路线走完、停稳了,到达判定说要重搜(世界在终点那里变了)。 */
-        ARRIVAL("到了不算到", false),
+        ARRIVAL("arrival not accepted", false),
         /** 接续段证明路线的终点是死路。 */
-        DEAD_END("终点是死路", false),
+        DEAD_END("end is a dead end", false),
         /** 半程路线快走完,从它的终点接着搜下一段({@link Continuation})。 */
-        CONTINUE("半程快走完", false);
+        CONTINUE("segment nearly walked", false);
 
         /** 日志与汇总里的叫法。 */
         public final String label;

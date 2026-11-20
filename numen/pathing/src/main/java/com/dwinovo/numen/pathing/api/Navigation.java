@@ -64,7 +64,7 @@ public final class Navigation {
                 long spent = diagnosis.ranNanos();
                 diagnosis = null;
                 status = NavStatus.failed(outcome);
-                log("结局", " 诊断 " + PathLog.ms(spent));
+                log("outcome", " diagnosis " + PathLog.ms(spent));
             }
             return;
         }
@@ -73,7 +73,7 @@ public final class Navigation {
             }
             case ARRIVED -> {
                 status = NavStatus.ARRIVED;
-                log("结局", "");
+                log("outcome", "");
             }
             case HALTED -> conclude(driver.halt());
         }
@@ -82,7 +82,7 @@ public final class Navigation {
     private void conclude(Halt halt) {
         switch (halt) {
             case Halt.Searched searched -> {
-                PathLog.info("{} 搜索没交出能走的路(停因 {}),在同一份快照上诊断为什么", who, searched.stop());
+                PathLog.info("{} the search gave no walkable route (stop {}); diagnosing why on the same snapshot", who, searched.stop());
                 diagnosis = Searches.submit(cancelled -> Diagnosis.of(searched.stop(), searched.breathless(), searched.search(),
                         searched.blocking(), cancelled));
                 return;
@@ -94,7 +94,7 @@ public final class Navigation {
             case Halt.Stranded stranded -> status = NavStatus.failed(
                     new Outcome.Stranded(stranded.cell(), stranded.block()));
         }
-        log("结局", "");
+        log("outcome", "");
     }
 
     /**
@@ -113,7 +113,7 @@ public final class Navigation {
                 case EditLedger.Toggled t -> toggled++;
             }
         }
-        PathLog.info("{} {} {} 走了 {} 步 挖 {} 放 {} 开关门 {} 身体动作 {} 重规划 {} 用了 {} 刻 墙钟 {} 刻速 {}{} {}", who, event,
+        PathLog.info("{} {} {} walked {} steps dug {} placed {} doors {} body actions {} replans {} took {} ticks wall {} tps {}{} {}", who, event,
                 status.running() ? driver : describe(status.outcome()), ledger.steps(), dug, placed, toggled,
                 driver.actions().size(), PathLog.replans(driver.journal()), ticks(),
                 PathLog.seconds(System.nanoTime() - startNanos), PathLog.num(entity.level().tickRateManager().tickrate()),
@@ -161,7 +161,7 @@ public final class Navigation {
             diagnosis = null;
         }
         if (status.running()) {
-            log("被叫停", "");
+            log("halted", "");
             status = NavStatus.STOPPED;
             endTick = entity.level().getGameTime();
         }

@@ -149,7 +149,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         if (r.travel != Travel.WALK) {
             nav.travelling(r.travel, admission);
         }
-        com.dwinovo.numen.Constants.LOG.info("[numen-task] {} 去 {}", r.getToolName(), r.arrival.words());
+        com.dwinovo.numen.Constants.LOG.info("[numen-task] {} to {}", r.getToolName(), r.arrival.words());
     }
 
     /** 画出航线开船;画不出就是这一趟走不通。 */
@@ -161,7 +161,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         }
         shore = !chart.reached();
         boat = new BoatNav(player, chart);
-        com.dwinovo.numen.Constants.LOG.info("[numen-task] {} 驾船 {} 个航点去 {}", r.getToolName(), chart.path().size(),
+        com.dwinovo.numen.Constants.LOG.info("[numen-task] {} by boat, {} waypoint(s), to {}", r.getToolName(), chart.path().size(),
                 r.arrival.words());
     }
 

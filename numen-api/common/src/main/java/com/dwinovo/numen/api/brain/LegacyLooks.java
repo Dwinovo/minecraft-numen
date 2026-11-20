@@ -118,7 +118,7 @@ public final class LegacyLooks {
                     try {
                         png = Files.readAllBytes(image);
                     } catch (IOException e) {
-                        Constants.LOG.warn("[numen-migrate] 读不了旧皮肤的原图 {}: {}", image, e.toString());
+                        Constants.LOG.warn("[numen-migrate] cannot read the old skin's source image {}: {}", image, e.toString());
                     }
                 }
                 SkinRef ref = SkinMigration.carryOver(name, new SkinProfile(string(entry, "variant"),
@@ -132,7 +132,7 @@ public final class LegacyLooks {
             Files.move(legacyFile, legacyFile.resolveSibling(legacyFile.getFileName() + ".migrated"),
                     java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
-            throw new StoreException("改不了名 " + legacyFile + ": " + e, e);
+            throw new StoreException("cannot rename " + legacyFile + ": " + e, e);
         }
         return ids;
     }
@@ -168,7 +168,7 @@ public final class LegacyLooks {
             }
         }
         if (changed > 0) {
-            Constants.LOG.info("[numen-migrate] {} 只同伴的声线与皮肤选择写进了她的绑定", changed);
+            Constants.LOG.info("[numen-migrate] the voice and skin choices of {} companion(s) were written into their bindings", changed);
         }
         return changed;
     }

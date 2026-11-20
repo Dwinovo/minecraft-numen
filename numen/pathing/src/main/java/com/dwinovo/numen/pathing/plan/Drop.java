@@ -32,7 +32,7 @@ final class Drop implements Move {
     /** @param kind {@link MoveKind#DESCEND} 只收低一个节点的落点,{@link MoveKind#FALL} 只收低两个节点以上的 */
     Drop(MoveKind kind) {
         if (kind != MoveKind.DESCEND && kind != MoveKind.FALL) {
-            throw new IllegalArgumentException("走出边沿只有下一级与下落两种:" + kind);
+            throw new IllegalArgumentException("walking off an edge is either a descend or a fall: " + kind);
         }
         this.kind = kind;
     }

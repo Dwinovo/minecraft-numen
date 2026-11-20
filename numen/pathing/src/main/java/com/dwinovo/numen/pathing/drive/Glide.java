@@ -158,7 +158,7 @@ final class Glide {
 
     private static Admission lacking(Craft craft, Lack.Why why, int need, int have) {
         Lack lack = new Lack(why, need, have);
-        PathLog.debug("{} 飞不起来:{}", craft.who(), lack);
+        PathLog.debug("{} cannot take off: {}", craft.who(), lack);
         return Admission.lacking(lack);
     }
 

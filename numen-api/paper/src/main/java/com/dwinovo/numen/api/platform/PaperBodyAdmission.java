@@ -65,8 +65,8 @@ public final class PaperBodyAdmission implements IBodyAdmission {
     }
 
     private static Component failed(String name, Throwable failure) {
-        Constants.LOG.error("[numen] 接纳 {} 时出错", name, failure);
-        return Component.literal("接纳时出错:" + failure);
+        Constants.LOG.error("[numen] admitting {} failed", name, failure);
+        return Component.literal("admission failed: " + failure);
     }
 
     @Override

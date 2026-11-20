@@ -228,7 +228,7 @@ final class Rig implements Craft {
             return;
         }
         actions.add(action);
-        PathLog.debug("{} 身体动作 {}", who, action);
+        PathLog.debug("{} body action {}", who, action);
     }
 
     List<BodyAction> actions() {

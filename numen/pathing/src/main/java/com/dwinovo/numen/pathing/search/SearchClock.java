@@ -35,7 +35,7 @@ public interface SearchClock {
     /** 按做了多少活折算的表:每展开一个节点记 {@code perExpansion} 纳秒,每做一次精确判断记 {@code perCheck} 纳秒。 */
     static SearchClock counting(long perExpansion, long perCheck) {
         if (perExpansion <= 0 || perCheck < 0) {
-            throw new IllegalArgumentException("折算的纳秒数不对:" + perExpansion + "、" + perCheck);
+            throw new IllegalArgumentException("bad nanosecond conversion: " + perExpansion + ", " + perCheck);
         }
         return nanos -> (expanded, checked) -> (long) expanded * perExpansion + (long) checked * perCheck >= nanos;
     }

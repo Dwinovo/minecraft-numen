@@ -52,7 +52,7 @@ public final class PaperVanillaAccess implements IVanillaAccess {
         try {
             return (int) NIBBLE.invokeExact(hook);
         } catch (Throwable t) {
-            throw new IllegalStateException("读 FishingHook.nibble 抛了异常", t);
+            throw new IllegalStateException("reading FishingHook.nibble threw", t);
         }
     }
 
@@ -73,7 +73,7 @@ public final class PaperVanillaAccess implements IVanillaAccess {
         try {
             RECOMPUTE.invokeExact(menu, level, player, grid, result, (RecipeHolder) hint);
         } catch (Throwable t) {
-            throw new IllegalStateException("CraftingMenu.slotChangedCraftingGrid 抛了异常", t);
+            throw new IllegalStateException("CraftingMenu.slotChangedCraftingGrid threw", t);
         }
     }
 
@@ -82,7 +82,7 @@ public final class PaperVanillaAccess implements IVanillaAccess {
         try {
             return (BlockState) PLACEMENT_STATE.invokeExact(item, context);
         } catch (Throwable t) {
-            throw new IllegalStateException("BlockItem.getPlacementState 抛了异常", t);
+            throw new IllegalStateException("BlockItem.getPlacementState threw", t);
         }
     }
 }

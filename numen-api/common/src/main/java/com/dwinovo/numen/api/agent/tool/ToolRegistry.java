@@ -80,7 +80,7 @@ public final class ToolRegistry {
         String name = tool.name();
         if (name == null || !LEGAL_NAME.matcher(name).matches()) {
             throw new IllegalArgumentException(
-                    "工具名不合规(只允许 [a-zA-Z0-9_-],1~64 字符): '" + name
+                    "invalid tool name (only [a-zA-Z0-9_-], 1 to 64 characters): '" + name
                             + "' — " + tool.getClass().getName());
         }
     }

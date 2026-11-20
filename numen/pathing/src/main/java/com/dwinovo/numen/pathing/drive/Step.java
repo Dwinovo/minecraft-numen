@@ -101,7 +101,7 @@ final class Step {
         Beat beat = control.tick();
         watchdog.observe(rig.entity.position(), beat instanceof Beat.Going going && going.worked());
         if (beat instanceof Beat.Going && watchdog.overran()) {
-            PathLog.info("{} 卡住 {} 做了 {} 刻,超过期限 {} 刻;落点 {} 是 {} {}", rig.who, PathLog.step(planned),
+            PathLog.info("{} stuck {} took {} ticks, over the limit of {} ticks; landing {} is {} {}", rig.who, PathLog.step(planned),
                     watchdog.stepTicks(), PathLog.num(watchdog.allowance()), PathLog.pos(planned.to()),
                     PathLog.block(rig.world().getBlockState(planned.to())), PathLog.body(rig.entity));
             return new Beat.Blocked(blocked(planned.to(), Hitch.STUCK));
@@ -115,7 +115,7 @@ final class Step {
      */
     private void begun(Maneuver m, double expected) {
         if (PathLog.debugging()) {
-            PathLog.debug("{} 步 {} 估 {} 刻 期限 {} 刻 改动 {}", rig.who, PathLog.step(m), PathLog.num(expected),
+            PathLog.debug("{} step {} est {} ticks limit {} ticks edits {}", rig.who, PathLog.step(m), PathLog.num(expected),
                     PathLog.num(watchdog.allowance()), m.edits().size());
         }
         boolean catches = !m.edits().isEmpty() && m.edits().get(m.edits().size() - 1) instanceof Edit.Catch;
@@ -124,9 +124,9 @@ final class Step {
         }
         healthBefore = rig.entity.getHealth();
         expectedDamage = m.fallDamage();
-        PathLog.info("{} 计划坠落 {} 落差 {} 落在 {}{} 预计掉 {} 点血 血 {}", rig.who, PathLog.step(m), PathLog.num(m.drop()),
+        PathLog.info("{} planned fall {} drop {} onto {}{} expected damage {} hp {}", rig.who, PathLog.step(m), PathLog.num(m.drop()),
                 m.support() != null ? PathLog.block(rig.world().getBlockState(m.support())) : m.landing().kind(),
-                catches ? " 上倒的水里" : "", m.fallDamage(), PathLog.num(healthBefore));
+                catches ? " into poured water" : "", m.fallDamage(), PathLog.num(healthBefore));
     }
 
     /** 这一步走完,身体落在 {@code node}:计划内的坠落记一行落地——实际掉了几点血。 */
@@ -134,7 +134,7 @@ final class Step {
         if (Float.isNaN(healthBefore)) {
             return;
         }
-        PathLog.info("{} 落地 {} 掉了 {} 点血(预计 {}) {}", rig.who, PathLog.pos(node),
+        PathLog.info("{} landed {} took {} damage (expected {}) {}", rig.who, PathLog.pos(node),
                 PathLog.num(healthBefore - rig.entity.getHealth()), expectedDamage, PathLog.body(rig.entity));
     }
 
@@ -179,7 +179,7 @@ final class Step {
 
     /** 憋不住了:记一行,这一步以 {@link Reason#OUT_OF_BREATH} 走不下去。 */
     private Beat outOfBreath(Maneuver drowns, int elapsed) {
-        PathLog.info("{} 憋不住气 {} 做了 {} 刻,起这一段水下到 {},此刻的氧气撑不到 {}", rig.who, PathLog.step(planned),
+        PathLog.info("{} out of breath {} took {} ticks; this underwater stretch runs to {}, and the air left will not last to {}", rig.who, PathLog.step(planned),
                 elapsed, PathLog.pos(drowns.to()), PathLog.body(rig.entity));
         return new Beat.Blocked(new Blockage(drowns.to(), rig.world().getBlockState(drowns.to()), planned.kind(),
                 Reason.OUT_OF_BREATH, null));

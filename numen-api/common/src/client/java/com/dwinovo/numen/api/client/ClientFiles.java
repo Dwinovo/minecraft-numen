@@ -37,11 +37,11 @@ public final class ClientFiles {
                 boolean moved = Files.isDirectory(from) ? LegacyMigration.tree(from, clientDir.resolve(name))
                         : LegacyMigration.file(from, clientDir.resolve(name));
                 if (moved) {
-                    Constants.LOG.info("[numen-migrate] 客户端文件 {} 复制进了 client/", name);
+                    Constants.LOG.info("[numen-migrate] client file {} was copied into client/", name);
                 }
             } catch (StoreException e) {
                 // 一项没复制成不拦着别的,也不拦着游戏启动;原件还在,下次启动再来
-                Constants.LOG.warn("[numen-migrate] 复制 {} 失败,原件还在: {}", name, e.getMessage());
+                Constants.LOG.warn("[numen-migrate] copying {} failed, the original is still there: {}", name, e.getMessage());
             }
         }
     }

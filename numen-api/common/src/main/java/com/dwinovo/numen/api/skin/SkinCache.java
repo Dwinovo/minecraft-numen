@@ -47,7 +47,7 @@ public final class SkinCache {
             memory.put(ref, read);
             return read;
         } catch (IOException | RuntimeException unreadable) {
-            Constants.LOG.warn("[numen-skin] 签名缓存 {} 读不了,当作没签过: {}", file.getFileName(), unreadable.toString());
+            Constants.LOG.warn("[numen-skin] the signature cache {} cannot be read, treated as unsigned: {}", file.getFileName(), unreadable.toString());
             return null;
         }
     }

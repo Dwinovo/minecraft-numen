@@ -62,7 +62,7 @@ public final class ModelServices {
 
     public static synchronized ModelServices of(MinecraftServer server) {
         if (current == null || current.server != server) {
-            throw new IllegalStateException("模型服务还没开张——服务器起好时 ModelServices.start 该被调用");
+            throw new IllegalStateException("model services are not started — ModelServices.start should be called once the server is up");
         }
         return current;
     }

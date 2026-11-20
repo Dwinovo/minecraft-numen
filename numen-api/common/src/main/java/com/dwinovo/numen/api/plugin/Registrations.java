@@ -31,7 +31,7 @@ public final class Registrations {
             try {
                 listener.run();
             } catch (RuntimeException e) {
-                Constants.LOG.error("[numen] 登记变了之后有一项跟进失败,其余照常", e);
+                Constants.LOG.error("[numen] one follow-up failed after the registrations changed; the rest go on", e);
             }
         }
     }

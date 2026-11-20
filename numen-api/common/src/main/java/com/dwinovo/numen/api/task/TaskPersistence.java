@@ -97,13 +97,13 @@ public final class TaskPersistence {
     static void replay(NumenPlayer companion, LeftOver left) {
         String taskName = left.taskName();
         if (left.lua().isBlank()) {
-            Constants.LOG.warn("[numen-task] {} 重启前的活是旧版本按一行命令记下的,这一版不再跑它,丢掉",
+            Constants.LOG.warn("[numen-task] the job {} had before the restart was recorded as a one-line command by an older version; this version no longer runs it, dropped",
                     companion.getUUID());
             abandon(companion, taskName, "it was saved by an older version of Numen as a command line ("
                     + left.old() + "), which this version no longer runs. Start it again if it is still wanted.");
             return;
         }
-        Constants.LOG.info("[numen-task] {} 接回重启前的活 {}({} 字符的程序)", companion.getUUID(), taskName, left.lua().length());
+        Constants.LOG.info("[numen-task] {} resumes its job from before the restart {} (a {}-char program)", companion.getUUID(), taskName, left.lua().length());
         // 再跑,和她写的程序走同一个入口。受理了,它干完时的 task_finished 照常送到她手里;没受理(读不通、调用被拒、准备没过)就是
         // 这件活没接回来,程序的回执说为什么
         boolean[] accepted = {false};
@@ -126,7 +126,7 @@ public final class TaskPersistence {
      * 这件活接不回来:记一笔,以它受理时的名字告诉她为什么,清掉记录。
      */
     private static void abandon(NumenPlayer companion, String taskName, String why) {
-        Constants.LOG.warn("[numen-task] 重启前她在做的 {} 没能接回来: {}", taskName, why);
+        Constants.LOG.warn("[numen-task] the {} she was doing before the restart could not be resumed: {}", taskName, why);
         NumenEvents.taskFinished(companion, REPLAY_CALL_ID + "-" + taskName, taskName, "failed",
                 TaskResult.fail("this task could not be resumed after the restart: " + why), null);
         forget(companion);
@@ -137,7 +137,7 @@ public final class TaskPersistence {
      * 那件)。记录不动,新活受理时会记下它自己。
      */
     static void superseded(NumenPlayer companion, LeftOver left) {
-        Constants.LOG.info("[numen-task] {} 重启前的 {} 还没接回来就被新派的活顶替", companion.getUUID(), left.taskName());
+        Constants.LOG.info("[numen-task] {}'s {} from before the restart was replaced by a new job before it resumed", companion.getUUID(), left.taskName());
         NumenEvents.taskFinished(companion, REPLAY_CALL_ID + "-" + left.taskName(), left.taskName(), "stopped",
                 TaskResult.cancelled("the task from before the restart was not resumed: a newer one replaced it."),
                 null);

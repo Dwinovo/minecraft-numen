@@ -109,7 +109,7 @@ public final class FleeChain implements Task, Reflex {
         if (!fleeing) {
             fleeing = true;
             fledFrom = chasers(companion).stream().map(com.dwinovo.numen.api.sdk.EntityLabel::shown).toList();
-            com.dwinovo.numen.Constants.LOG.info("[numen-flee] 扛不住了,跑 —— 身边 {} 只在追",
+            com.dwinovo.numen.Constants.LOG.info("[numen-flee] cannot hold out, running — {} chasing nearby",
                     chasers(companion).size());
         }
         if (haven == null || companion.blockPosition().closerThan(haven, HAVEN_ARRIVED)) {
@@ -156,7 +156,7 @@ public final class FleeChain implements Task, Reflex {
         stopNav();
         fleeing = false;
         companion.controls().releaseAll();
-        com.dwinovo.numen.Constants.LOG.info("[numen-flee] 退不掉,就地还手");
+        com.dwinovo.numen.Constants.LOG.info("[numen-flee] cannot get away, fighting back on the spot");
         com.dwinovo.numen.task.reflex.NumenReflexes.report(companion, this,
                 "tried to run from what was chasing me but found no way out — fighting back where I stand", fledFrom);
         return TaskState.RUNNING;
@@ -200,6 +200,6 @@ public final class FleeChain implements Task, Reflex {
 
     @Override
     public String describe() {
-        return "扛不住或手上没有能打的东西时,有东西追她就自动跑开;跑不掉就就地还手";
+        return "when you cannot hold out or have nothing to fight with, you run from what chases you on your own; if you cannot get away you fight back on the spot";
     }
 }

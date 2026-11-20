@@ -754,7 +754,7 @@ class AgentLoopTest extends LoopHarness {
             assertEquals(before, events.size(), "取消之后的回调不再进内核");
             assertTrue(tools.batch.isEmpty(), "迟到的回复不派工具");
             assertInstanceOf(ConvoState.Msg.Halt.class, lastMessage());
-            assertEquals("被主人打断", ((ConvoState.Msg.Halt) lastMessage()).reason());
+            assertEquals("interrupted by the owner", ((ConvoState.Msg.Halt) lastMessage()).reason());
             assertInstanceOf(RunEnd.Halted.class, eventsOf(LoopEvent.RunEnded.class).get(0).end());
 
             ownerSays("接着讲");
@@ -765,7 +765,7 @@ class AgentLoopTest extends LoopHarness {
                         "没有相邻的 user");
             }
             String last = ((ConvoState.Msg.User) wire.get(wire.size() - 1)).content();
-            assertTrue(last.contains("上一轮被打断：被主人打断") && last.contains("接着讲"));
+            assertTrue(last.contains("the previous turn was cut short: interrupted by the owner") && last.contains("接着讲"));
         }
 
         @Test
@@ -787,7 +787,7 @@ class AgentLoopTest extends LoopHarness {
             List<ConvoState.Msg> wire = ProtocolView.forWire(model.last().request().messages());
             ConvoState.Msg.Tool c2 = wire.stream().filter(m -> m instanceof ConvoState.Msg.Tool t
                     && t.toolCallId().equals("c2")).map(ConvoState.Msg.Tool.class::cast).findFirst().orElseThrow();
-            assertTrue(c2.content().contains("被主人打断"), "没结算的调用拿到带原因的结果");
+            assertTrue(c2.content().contains("interrupted by the owner"), "没结算的调用拿到带原因的结果");
         }
 
         @Test
@@ -809,7 +809,7 @@ class AgentLoopTest extends LoopHarness {
             loop.halt(HaltReason.DEATH, "掉进岩浆");
 
             assertEquals(List.of(false), tools.cancels, "死了不再叫停身体");
-            assertEquals("你死了(掉进岩浆)", ((ConvoState.Msg.Halt) lastMessage()).reason());
+            assertEquals("you died (掉进岩浆)", ((ConvoState.Msg.Halt) lastMessage()).reason());
             assertEquals(Hold.DEAD, loop.hold());
 
             ownerSays("你怎么了");
@@ -839,7 +839,7 @@ class AgentLoopTest extends LoopHarness {
             assertEquals(1, inbox.count(EventTypes.GOAL), "不清队列");
             assertEquals(1, inbox.count(EventTypes.TASK_FINISHED));
             assertFalse(eventsOf(LoopEvent.Halted.class).get(0).reason().endsGoal(), "目标保留");
-            assertEquals("主人断线了", ((ConvoState.Msg.Halt) lastMessage()).reason());
+            assertEquals("the owner disconnected", ((ConvoState.Msg.Halt) lastMessage()).reason());
 
             worldEvent("task_finished", true);   // 离线补发的收尾
 
@@ -979,7 +979,7 @@ class AgentLoopTest extends LoopHarness {
             assertTrue(transcript.snapshot().stream().noneMatch(m -> m instanceof ConvoState.Msg.Assistant),
                     "失败的回应不进历史");
             ConvoState.Msg.Halt cut = (ConvoState.Msg.Halt) lastMessage();
-            assertEquals("这一轮没连上(连不上)", cut.reason(), "给模型的那句");
+            assertEquals("this turn did not reach the model (cannot connect)", cut.reason(), "给模型的那句");
             assertEquals(Cause.NETWORK, cut.code(), "给界面的是结构化原因,不是翻好的话");
             assertTrue(eventsOf(LoopEvent.TurnFailed.class).isEmpty(), "重试前不打扰主人");
 
@@ -1219,7 +1219,7 @@ class AgentLoopTest extends LoopHarness {
 
             model.last().fail(NETWORK);
 
-            assertEquals(List.of("连不上"), memory.failures);
+            assertEquals(List.of("cannot connect"), memory.failures);
             assertEquals(2, model.calls.size(), "历史不动,照原样调模型");
             assertTrue(model.last().lastUser().contains("挖矿"));
         }

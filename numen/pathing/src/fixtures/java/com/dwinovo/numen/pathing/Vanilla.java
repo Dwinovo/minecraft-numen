@@ -69,7 +69,7 @@ public final class Vanilla {
                 Registries.tagsDirPath(registry.key()));
         Map<ResourceLocation, Collection<Holder<T>>> loaded = loader.loadAndBuild(data);
         if (loaded.isEmpty()) {
-            throw new IllegalStateException("没有从原版数据包读到 " + registry.key() + " 的标签");
+            throw new IllegalStateException("no tags were read from the vanilla data pack for " + registry.key());
         }
         Map<TagKey<T>, List<Holder<T>>> tags = new HashMap<>();
         loaded.forEach((id, members) -> tags.put(TagKey.create(registry.key(), id), List.copyOf(members)));

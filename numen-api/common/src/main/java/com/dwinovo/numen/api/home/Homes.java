@@ -96,7 +96,7 @@ public final class Homes {
                 }
             }).filter(java.util.Objects::nonNull).sorted().toList();
         } catch (IOException e) {
-            throw new StoreException("读不了 " + players + ": " + e, e);
+            throw new StoreException("cannot read " + players + ": " + e, e);
         }
     }
 

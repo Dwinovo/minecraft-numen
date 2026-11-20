@@ -35,7 +35,7 @@ public final class Trees {
                 }
             }
         } catch (IOException e) {
-            throw new StoreException("复制不了 " + from + ": " + e, e);
+            throw new StoreException("cannot copy " + from + ": " + e, e);
         }
     }
 
@@ -49,7 +49,7 @@ public final class Trees {
                 Files.deleteIfExists(p);
             }
         } catch (IOException e) {
-            throw new StoreException("删不掉 " + dir + ": " + e, e);
+            throw new StoreException("cannot delete " + dir + ": " + e, e);
         }
     }
 
@@ -58,7 +58,7 @@ public final class Trees {
         try {
             Files.deleteIfExists(file);
         } catch (IOException e) {
-            throw new StoreException("删不掉 " + file + ": " + e, e);
+            throw new StoreException("cannot delete " + file + ": " + e, e);
         }
     }
 
@@ -85,7 +85,7 @@ public final class Trees {
             }
             Files.delete(dir);
         } catch (IOException e) {
-            throw new StoreException("删不掉 " + dir + ": " + e, e);
+            throw new StoreException("cannot delete " + dir + ": " + e, e);
         }
     }
 }

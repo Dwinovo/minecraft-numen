@@ -92,7 +92,7 @@ public final class PluginTags {
                 }
             }
         } catch (IOException e) {
-            throw new UncheckedIOException("读不出 " + jar + " 里的标签文件", e);
+            throw new UncheckedIOException("cannot read the tag files in " + jar, e);
         }
         return out;
     }

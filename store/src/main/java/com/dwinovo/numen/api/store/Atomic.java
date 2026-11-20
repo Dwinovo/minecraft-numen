@@ -27,7 +27,7 @@ public final class Atomic {
             swap(tmp, file);
         } catch (IOException e) {
             discard(tmp, e);
-            throw new StoreException("写不了 " + file + ": " + e, e);
+            throw new StoreException("cannot write " + file + ": " + e, e);
         }
     }
 

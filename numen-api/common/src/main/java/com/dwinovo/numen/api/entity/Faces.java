@@ -263,7 +263,7 @@ public final class Faces {
     public static Vec3 point(BlockGetter level, BlockPos block, Direction face) {
         VoxelShape shape = level.getBlockState(block).getShape(level, block);
         if (shape.isEmpty()) {
-            throw new IllegalArgumentException(block + " 没有轮廓,点不中");
+            throw new IllegalArgumentException(block + " has no outline and cannot be clicked");
         }
         Direction.Axis axis = face.getAxis();
         boolean positive = face.getAxisDirection() == Direction.AxisDirection.POSITIVE;

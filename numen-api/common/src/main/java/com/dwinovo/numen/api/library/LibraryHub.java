@@ -84,7 +84,7 @@ public final class LibraryHub {
     /** 这台服务器上开了张的那一份。{@link #start} 之前调用是编程错误。 */
     public static synchronized LibraryHub of(MinecraftServer server) {
         if (current == null || current.minecraft != server) {
-            throw new IllegalStateException("库还没开张——服务器起好时 LibraryHub.start 该被调用");
+            throw new IllegalStateException("libraries are not started — LibraryHub.start should be called once the server is up");
         }
         return current;
     }

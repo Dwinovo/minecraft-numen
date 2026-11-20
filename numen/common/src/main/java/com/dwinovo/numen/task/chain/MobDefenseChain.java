@@ -129,7 +129,7 @@ public final class MobDefenseChain implements Task, Reflex {
                 ID, "reflex-" + now, now + NO_DEADLINE, List.of(), true);
         fight = new AttackCompanionTask(companion, record);
         fight.start(companion);
-        com.dwinovo.numen.Constants.LOG.info("[numen-defense] 自动接管 —— 身边 {} 个危险",
+        com.dwinovo.numen.Constants.LOG.info("[numen-defense] taking over — {} threat(s) nearby",
                 dangersNear(companion).size());
     }
 
@@ -142,7 +142,7 @@ public final class MobDefenseChain implements Task, Reflex {
         fight = null;
         dangerLastSeenTick = NEVER;
         companion.controls().releaseAll();
-        com.dwinovo.numen.Constants.LOG.info("[numen-defense] 收场 {} —— {}", state, line);
+        com.dwinovo.numen.Constants.LOG.info("[numen-defense] done {} — {}", state, line);
         // <b>不急</b>:她的后台任务照跑,黄了自有 task_finished 报。这条只是让主人翻聊天流时
         // 看得懂她刚才为什么打了一架、或者挪了二十格。攒着搭下一轮的车就够。
         com.dwinovo.numen.task.reflex.NumenReflexes.report(companion, this,
@@ -171,7 +171,7 @@ public final class MobDefenseChain implements Task, Reflex {
 
     @Override
     public String describe() {
-        return "身边有危险就自动开打,打法与她自己派的 `numen.fight.attack` 完全一致";
+        return "with danger nearby you start fighting on your own, exactly the way a `numen.fight.attack` you start yourself would";
     }
 
     // ---- 什么算危险 ----

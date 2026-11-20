@@ -82,7 +82,7 @@ public class EditedView implements WorldView, Recall.Source {
         public Reusable(WorldView base) {
             super(base);
             if (super.changed != null) {
-                throw new IllegalArgumentException("底下不能再是叠加视图:" + base);
+                throw new IllegalArgumentException("the base must not be another overlay view: " + base);
             }
         }
 

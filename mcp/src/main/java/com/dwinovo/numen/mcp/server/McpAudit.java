@@ -63,7 +63,7 @@ public final class McpAudit {
             }
             Files.move(file, older(1), StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
-            throw new StoreException("轮转不了 " + file + ": " + e, e);
+            throw new StoreException("cannot rotate " + file + ": " + e, e);
         }
     }
 

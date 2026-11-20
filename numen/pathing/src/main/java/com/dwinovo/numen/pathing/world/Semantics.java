@@ -214,7 +214,7 @@ public final class Semantics {
      */
     public static BlockState toggled(BlockState state) {
         if (!openableByHand(state)) {
-            throw new IllegalArgumentException("身体开关不了 " + state);
+            throw new IllegalArgumentException("the body cannot operate " + state);
         }
         return state.cycle(BlockStateProperties.OPEN);
     }
