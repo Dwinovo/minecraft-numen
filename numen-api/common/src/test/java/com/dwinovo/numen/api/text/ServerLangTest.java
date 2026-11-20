@@ -28,6 +28,15 @@ class ServerLangTest {
             "numen.nested", "她说:%s",
             "numen.broken", "坏的 %d"));
 
+    /** 客户端报上来的语言代码,给模型看的是英文全名、带地区;Java 不认识的代码原样交回。 */
+    @Test
+    void aClientLocaleIsNamedInEnglishWithItsRegion() {
+        assertEquals("Chinese (China)", ServerLang.languageName("zh_cn"));
+        assertEquals("Chinese (Taiwan)", ServerLang.languageName("zh_tw"));
+        assertEquals("English (United States)", ServerLang.languageName("en_us"));
+        assertEquals("Portuguese (Brazil)", ServerLang.languageName("pt_br"));
+    }
+
     @Test
     void aNumenKeyBecomesItsTranslationWithTheArgumentsFilledIn() {
         assertEquals("拿 3 个", LANG.translate(Component.translatable("numen.one", 3)).getString());

@@ -61,8 +61,18 @@ class InventoryBlockTest {
     @Test
     void theRuntimeStateSaysWhatTimeItIsInTheGame() {
         assumeTrue(booted);
-        assertTrue(new RuntimeState(java.util.UUID.randomUUID(), () -> null, () -> 3 * 24000L + 15250L).xml()
+        assertTrue(new RuntimeState(java.util.UUID.randomUUID(), () -> null, () -> null, () -> 3 * 24000L + 15250L).xml()
                 .contains("<now day=\"3\" t=\"21:15\"/>"));
+    }
+
+    /** 眼前的主人在游戏里时,请求里写着他游戏里选的语言;他不在游戏里就没有这一行。 */
+    @Test
+    void theRuntimeStateNamesTheLanguageOfTheOwnersGame() {
+        assumeTrue(booted);
+        java.util.UUID her = java.util.UUID.randomUUID();
+        assertTrue(new RuntimeState(her, () -> null, () -> "Chinese (China)", () -> 0L).xml()
+                .contains("<owner language=\"Chinese (China)\"/>"));
+        assertFalse(new RuntimeState(her, () -> null, () -> null, () -> 0L).xml().contains("<owner"));
     }
 
     @Test
@@ -71,11 +81,11 @@ class InventoryBlockTest {
         java.util.UUID her = java.util.UUID.randomUUID();
         BodySnapshot wet = new BodySnapshot(true, List.of(), List.of(), 20, 5f, 0, ItemStack.EMPTY, List.of(), "",
                 com.dwinovo.numen.api.entity.WaterState.render(true, true, 240, 300, ""), 1L, Nearby.NONE);
-        assertTrue(new RuntimeState(her, () -> wet, () -> 0L).xml()
+        assertTrue(new RuntimeState(her, () -> wet, () -> null, () -> 0L).xml()
                 .contains("<water>In water, head under water; air left 12s.</water>"));
         BodySnapshot dry = new BodySnapshot(true, List.of(), List.of(), 20, 5f, 0, ItemStack.EMPTY, List.of(), "",
                 com.dwinovo.numen.api.entity.WaterState.render(false, false, 300, 300, ""), 1L, Nearby.NONE);
-        assertFalse(new RuntimeState(her, () -> dry, () -> 0L).xml().contains("water"));
+        assertFalse(new RuntimeState(her, () -> dry, () -> null, () -> 0L).xml().contains("water"));
     }
 
     // ==================== 身上在生效的 ====================

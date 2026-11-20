@@ -196,7 +196,7 @@ public final class Replies {
      */
     static void activities(ServerPlayer player, Map<UUID, LoopStatus.Doing> doing) {
         MinecraftServer server = player.server;
-        ServerLang lang = ServerLang.of(player.clientInformation().language());
+        ServerLang lang = ServerLang.of(ServerLang.localeOf(player));
         MutableComponent bar = Component.empty();
         for (Map.Entry<UUID, LoopStatus.Doing> each : doing.entrySet()) {
             CompanionRegistry.Entry entry = CompanionRegistry.get(server).find(each.getKey());
@@ -221,7 +221,7 @@ public final class Replies {
             return;
         }
         if (failure != null) {
-            Constants.LOG.warn("[numen-entity#{}] 导出记忆失败: {}", companion, failure.toString());
+            Constants.LOG.warn("[numen-entity#{}] exporting memory failed: {}", companion, failure.toString());
             player.sendSystemMessage(Component.translatable(com.dwinovo.numen.api.data.ModLanguageData.Keys.EXPORT_FAILED,
                     entry.name()));
         } else if (!Presence.hasClient(owner)) {

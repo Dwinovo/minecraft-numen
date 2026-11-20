@@ -66,7 +66,24 @@ public final class ServerLang {
      * 调用方保证:只对没装 Numen 客户端的真玩家调(装了的由他自己的客户端翻);任何线程。
      */
     public static Component forPlayer(ServerPlayer player, Component message) {
-        return of(player.clientInformation().language()).translate(message);
+        return of(localeOf(player)).translate(message);
+    }
+
+    /**
+     * 这位玩家的客户端选的语言,原版的写法({@code zh_cn}、{@code en_us})。客户端进服时报上来,中途改了会再报。
+     * 玩家用什么语言只在这里读:给他翻译消息、告诉同伴主人说什么语言,问的是同一个值。
+     */
+    public static String localeOf(ServerPlayer player) {
+        return player.clientInformation().language();
+    }
+
+    /**
+     * 一种语言给模型看的叫法:英文全名,带地区({@code zh_cn} 是 {@code Chinese (China)},{@code en_us} 是
+     * {@code English (United States)});Java 不认识的代码原样交回。
+     */
+    public static String languageName(String locale) {
+        String name = Locale.forLanguageTag(locale.replace('_', '-')).getDisplayName(Locale.ENGLISH);
+        return name.isBlank() ? locale : name;
     }
 
     /** 这个键在表里有译文。 */
@@ -215,7 +232,7 @@ public final class ServerLang {
                     out.put(e.getKey(), text(e.getValue()));
                 }
             } catch (IOException e) {
-                throw new UncheckedIOException(modId + " 的 " + locale + " 语言文件读不出来", e);
+                throw new UncheckedIOException("cannot read the " + locale + " language file of " + modId, e);
             }
         }
         return out;

@@ -119,6 +119,22 @@ public class ClientlessGameTests {
                 ChatType.bind(ChatType.MSG_COMMAND_INCOMING, from.createCommandSourceStack()));
     }
 
+    /** 她的请求里写着眼前的主人游戏里选的语言:客户端报给服务端的那个值,给他翻消息用的也是它。 */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_clientless")
+    public static void her_request_names_the_language_her_owners_game_is_set_to(GameTestHelper helper) throws Exception {
+        var server = helper.getLevel().getServer();
+        ServerPlayer owner = GameTestKit.presentVanillaPlayer(helper, null, "gametest_zh_owner", "zh_cn");
+        BrainGameTests.Brain her = new BrainGameTests.Brain(helper, "gametest_lang",
+                Files.createTempDirectory("numen-gametest-brain-"), owner.getUUID(),
+                Replies.link(server, owner.getUUID()));
+        String state = her.loop.runtimeState();
+        helper.assertTrue(state.contains("<owner language=\"Chinese (China)\"/>"),
+                "her request does not name the language of her owner's game: " + state);
+        her.close();
+        GameTestKit.leave(owner);
+        helper.succeed();
+    }
+
     /** 主人私聊她:话进她的单聊会话,她回的话以私信的样子回到他手里。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
     public static void the_owners_whisper_reaches_her_and_she_whispers_back(GameTestHelper helper) throws Exception {

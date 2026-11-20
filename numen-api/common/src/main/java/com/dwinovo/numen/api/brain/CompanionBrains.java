@@ -13,7 +13,9 @@ import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.api.network.payload.RequestStatePayload;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
 import com.dwinovo.numen.api.program.LocalPrograms;
+import com.dwinovo.numen.api.text.ServerLang;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -87,6 +89,11 @@ public final class CompanionBrains {
                     };
                 },
                 ownerOnline, driving, initiative, persona, player -> NumenPlayer.playerName(server, player),
+                () -> {
+                    NumenPlayer body = NumenPlayer.findByUuid(server, companion);
+                    ServerPlayer keeper = body == null ? null : body.keeperAtHand();
+                    return keeper == null ? null : ServerLang.languageName(ServerLang.localeOf(keeper));
+                },
                 () -> server.overworld().getDayTime(), () -> server.overworld().getGameTime(),
                 (speaker, her, conversation) -> roomsOf.apply(speaker).audienceLine(her, conversation),
                 () -> keepers(registry, owner, companion)));

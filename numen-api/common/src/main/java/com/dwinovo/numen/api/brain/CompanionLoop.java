@@ -110,6 +110,7 @@ public final class CompanionLoop {
      * @param persona     她绑的人设的正文,在绑的那个人的人设库里取;没有这个人设返回 {@code null}
      * @param playerName  一位玩家给人看的名字(界面标"这一项是谁绑的"、{@code <query>} 上写是谁说的都用它);不知道是空串
      * @param tools       她看得到的工具
+     * @param ownerLanguage 眼前的主人({@code NumenPlayer#keeperAtHand})游戏客户端选的语言,英文叫法;他不在游戏里是 {@code null}
      * @param dayTime     游戏内时刻,给事件盖时间戳
      * @param gameTime    主世界的游戏刻(世界不跑它就不走,{@code /time set} 改不了它),主人的定时按它算到期
      * @param keepers     她的主人表,创建者在前(见 {@code docs/adr/runtime/0006-keepers-ownership-use-provenance.md});现问现答,表变了循环不用重建
@@ -118,7 +119,7 @@ public final class CompanionLoop {
                         ToolBook tools, Supplier<NumenPlayer> body, Supplier<BodySnapshot> snapshot,
                         Supplier<HaltReason> absent, BooleanSupplier ownerOnline, BooleanSupplier driving,
                         IntSupplier initiative, Function<Bound, String> persona, Function<UUID, String> playerName,
-                        LongSupplier dayTime, LongSupplier gameTime, Rooms rooms, Supplier<List<UUID>> keepers) {}
+                        Supplier<String> ownerLanguage, LongSupplier dayTime, LongSupplier gameTime, Rooms rooms, Supplier<List<UUID>> keepers) {}
 
     private static final String CHAT = "chat.jsonl";
     private static final String INBOX = "inbox.jsonl";
@@ -175,7 +176,7 @@ public final class CompanionLoop {
         }
         this.convo = new ConvoState(msg -> log.append(msg, conversation));
         this.memory = new MemoryPreamble(NoteBook.of(companion));
-        this.runtime = new RuntimeState(companion, parts.snapshot(), parts.dayTime());
+        this.runtime = new RuntimeState(companion, parts.snapshot(), parts.ownerLanguage(), parts.dayTime());
         this.queue = new EventQueue(JsonlJournal.atFile(home.file(INBOX), home.io()));
         this.goalDoc = new JsonDoc(home.file(GOAL), JsonDoc.Format.of(1), home.io());
         this.bindingDoc = new JsonDoc(home.file(Bindings.FILE), JsonDoc.Format.of(1), home.io());
@@ -217,7 +218,7 @@ public final class CompanionLoop {
         HaltReason absent = parts.absent().get();
         if (absent != null) {
             loop.halt(absent);
-            Constants.LOG.info("[numen-entity#{}] 恢复时她的身体还不在世界里({}) — 停牌等它回来", companion, absent);
+            Constants.LOG.info("[numen-entity#{}] her body is not in the world yet on resume ({}) — holding until it is back", companion, absent);
         }
         List<ConvoState.Msg> history = log.load(ConvoLog.DEFAULT_LOAD_LIMIT);
         if (!history.isEmpty()) {
@@ -243,7 +244,7 @@ public final class CompanionLoop {
         try {
             return doc.read().orElse(null);
         } catch (RuntimeException e) {
-            Constants.LOG.warn("[numen-entity] {} 读不了: {}", doc.file().getFileName(), e.toString());
+            Constants.LOG.warn("[numen-entity] cannot read {}: {}", doc.file().getFileName(), e.toString());
             return null;
         }
     }
@@ -592,7 +593,7 @@ public final class CompanionLoop {
     public void onDied(String cause, String where) {
         loop.halt(HaltReason.DEATH, cause);
         loop.push(List.of(NumenEvents.entry(parts.dayTime().getAsLong(), EventTypes.DEATH, null,
-                "你刚才死了(" + cause.replace('<', '(').replace('>', ')') + ")。" + where,
+                "You just died (" + cause.replace('<', '(').replace('>', ')') + "). " + where,
                 System.currentTimeMillis(), true)));
     }
 
@@ -609,8 +610,9 @@ public final class CompanionLoop {
     public void onRemoved(String reason) {
         loop.halt(HaltReason.REMOVED, reason);
         loop.push(List.of(NumenEvents.entry(parts.dayTime().getAsLong(), EventTypes.REMOVED, null,
-                "你的身体被服务器上的管理员或插件请出去了(" + reason.replace('<', '(').replace('>', ')')
-                        + ")。这不是主人的决定,也不是你做错了什么;从那以后你不在世界里,主人再召唤你才能回来,背包和落点照旧。",
+                "Your body was removed from the server by an admin or a plugin (" + reason.replace('<', '(').replace('>', ')')
+                        + "). This was not your owner's decision and not something you did wrong; since then you have not been in the world, "
+                        + "and you only come back when your owner summons you again. Your inventory and position are as they were.",
                 System.currentTimeMillis(), true)));
     }
 
@@ -754,7 +756,7 @@ public final class CompanionLoop {
         log.wipe();
         requestClearContext();   // 内存里的上下文走清空的控制条目;日志已经是空的
         tell(WIPED_NOTICE);
-        Constants.LOG.info("[numen-entity#{}] 记忆被主人清空", companion);
+        Constants.LOG.info("[numen-entity#{}] memory wiped by the owner", companion);
         return null;
     }
 
@@ -766,20 +768,21 @@ public final class CompanionLoop {
 
     /** 主人在札记里新增或改了一条:如实告诉她,免得她按旧的印象再写一遍。 */
     public void ownerWroteNote(NoteBook.Note note, boolean replaced) {
-        tell("主人" + (replaced ? "改了你的札记 " : "在你的札记里加了一条 ") + note.name() + ":" + note.description()
-                + "。这是他的决定,以札记现在的样子为准。");
-        Constants.LOG.info("[numen-entity#{}] 主人{}了札记 {}", companion, replaced ? "改" : "加", note.name());
+        tell("Your owner " + (replaced ? "changed your note " : "added a note of yours, ") + note.name() + ": " + note.description()
+                + ". It is their decision; go by your notes as they are now.");
+        Constants.LOG.info("[numen-entity#{}] the owner {} the note {}", companion, replaced ? "changed" : "added", note.name());
     }
 
     /** 主人删了她一条札记:告诉她,她不该再把它写回去。 */
     public void ownerForgotNote(NoteBook.Note note) {
-        tell("主人删掉了你的札记 " + note.name() + "(" + note.description() + ")。这是他的决定,别再把它记回去。");
-        Constants.LOG.info("[numen-entity#{}] 主人删了札记 {}", companion, note.name());
+        tell("Your owner deleted your note " + note.name() + " (" + note.description() + "). It is their decision; do not write it back.");
+        Constants.LOG.info("[numen-entity#{}] the owner deleted the note {}", companion, note.name());
     }
 
     /** 清空之后她读到的第一件事。 */
     private static final String WIPED_NOTICE =
-            "主人清空了你的记忆:对话记录、札记和长期目标都没有了。你不记得之前聊过什么、做过什么,这是他的决定;需要的话可以问他。";
+            "Your owner wiped your memory: the conversation record, your notes and your long-term goal are all gone. "
+                    + "You do not remember what you talked about or did before. It is their decision; ask them if you need to.";
 
     // ---- 绑定 ----
 

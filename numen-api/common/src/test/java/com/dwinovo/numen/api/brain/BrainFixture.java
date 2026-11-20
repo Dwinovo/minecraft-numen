@@ -177,7 +177,7 @@ final class BrainFixture {
         loop = new CompanionLoop(new CompanionLoop.Parts(companion, creator, new Home(home, io), Runnable::run, mind,
                 NO_PROGRAMS, NO_TOOLS, () -> null, () -> null, () -> null, () -> ownerOnline, () -> false, () -> 5,
                 bound -> personas.getOrDefault(bound, "A companion under test."), player -> names.getOrDefault(player, ""),
-                () -> 6000L, () -> this.gameTime,
+                () -> null, () -> 6000L, () -> this.gameTime,
                 (speaker, who, conversation) -> "", () -> keepers));
         // 绑一个人设:系统提示的人设层就取它,不去问加载器的配置(无头时没有)
         loop.bind(Slot.PERSONA, new Bound(creator, EntryId.mine("gt_persona")));

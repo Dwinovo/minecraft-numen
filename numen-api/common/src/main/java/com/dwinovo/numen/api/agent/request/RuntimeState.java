@@ -24,6 +24,8 @@ public final class RuntimeState {
     private final UUID entityUuid;
     /** 最近收到的那份身体状态;一份都没收到是 {@code null}。 */
     private final Supplier<BodySnapshot> body;
+    /** 眼前的主人游戏客户端选的语言,英文叫法;他不在游戏里是 {@code null}。{@code <owner>} 照它写。 */
+    private final Supplier<String> ownerLanguage;
     /** 游戏里此刻的时刻(主世界的 {@code dayTime}),{@code <now>} 照它写。 */
     private final LongSupplier dayTime;
 
@@ -39,11 +41,13 @@ public final class RuntimeState {
                                boolean standing) {}
 
     /**
-     * @param body 最近收到的那份身体状态;一份都没收到时给 {@code null}
+     * @param body          最近收到的那份身体状态;一份都没收到时给 {@code null}
+     * @param ownerLanguage 眼前的主人游戏客户端选的语言,英文叫法;他不在游戏里时给 {@code null}
      */
-    public RuntimeState(UUID entityUuid, Supplier<BodySnapshot> body, LongSupplier dayTime) {
+    public RuntimeState(UUID entityUuid, Supplier<BodySnapshot> body, Supplier<String> ownerLanguage, LongSupplier dayTime) {
         this.entityUuid = entityUuid;
         this.body = body;
+        this.ownerLanguage = ownerLanguage;
         this.dayTime = dayTime;
     }
 
@@ -115,7 +119,7 @@ public final class RuntimeState {
         // 插件身体上的片段(bodyStateXml)和背包、状态效果一样是"此刻的她",会变,所以不能进字节级稳定的系统提示。
         // 身体快照每次请求只取一份:各栏读的是同一刻的她,四周(nearby)也是这一刻现看的
         BodySnapshot snapshot = body.get();
-        String content = nowXml() + currentTaskXml() + inventoryXml(snapshot) + effectsXml(snapshot) + ridingXml(snapshot)
+        String content = nowXml() + ownerXml() + currentTaskXml() + inventoryXml(snapshot) + effectsXml(snapshot) + ridingXml(snapshot)
                 + bodyStateXml(snapshot) + nearbyXml(snapshot);
         String xml = content.isEmpty() ? "" : "<runtime_state>" + content + "</runtime_state>";
         // 原样打出来。"她看到的世界"平时完全不可见,于是"她怎么会这么说"只能靠猜——
@@ -133,6 +137,15 @@ public final class RuntimeState {
      */
     private String nowXml() {
         return "<now" + EventClock.stamp(dayTime.getAsLong()) + "/>";
+    }
+
+    /**
+     * 眼前的主人游戏里选的是什么语言。她说哪种语言由系统提示的说话那一节定(主人明说的、主人正在用的,都看不出来才用这一个);
+     * 主人不在游戏里时没有这一行。
+     */
+    private String ownerXml() {
+        String language = ownerLanguage.get();
+        return language == null ? "" : "<owner language=\"" + xml(language) + "\"/>";
     }
 
     /** Live async-task state, recomputed for every worker request and never persisted. */
@@ -176,8 +189,8 @@ public final class RuntimeState {
             // 状态时说一次,别把每一轮都刷满。
             if (!inventoryMissingLogged) {
                 inventoryMissingLogged = true;
-                Constants.LOG.info("[numen-inv] {} 请求里没有背包块({})", entityUuid,
-                        snapshot == null ? "客户端一份快照都没收到" : "身体未加载");
+                Constants.LOG.info("[numen-inv] {} has no inventory block in the request ({})", entityUuid,
+                        snapshot == null ? "no snapshot has been received" : "the body is not loaded");
             }
             return "";
         }
@@ -187,7 +200,7 @@ public final class RuntimeState {
         inventoryRenderedFrom = snapshot;
         // 这行只在快照真换了新的时才打,所以"年龄"读的是"这段时间背包没变过",不是延迟。
         // 背包明明变了却不见这一行,才是链路断了。
-        Constants.LOG.info("[numen-inv] 背包块进请求:{} 字符,这份快照 {}ms 前收到",
+        Constants.LOG.info("[numen-inv] inventory block in the request: {} chars, snapshot received {}ms ago",
                 inventoryRendered.length(), System.currentTimeMillis() - snapshot.receivedAtMs());
         return inventoryRendered;
     }
