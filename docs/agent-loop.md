@@ -437,9 +437,9 @@ record Halt(String reason) implements Msg {}   // 这一轮在这里被切断:�
 
 1. **悬空工具调用补结果**:assistant 的 tool_calls 在下一条 assistant/user/Halt/结尾之前没有结果的,
    补 `{"success":false,"message":"<原因>"}`。原因取紧随其后的 Halt;没有 Halt(游戏被直接关掉)
-   用"游戏关闭前没有返回结果"。
+   用 "no result came back before the game closed"。
 2. **Halt 本身不发**;若它切断的是一次模型回复(没有悬空调用),在下一条 user 消息开头加一行
-   "(上一轮被打断:原因)"。
+   "(the previous turn was cut short: 原因)"。
 3. **相邻 user 合并**:失败后又来一句话、运行期状态块、切断说明,都可能造出连续 user,统一合并。
 
 随之删除:

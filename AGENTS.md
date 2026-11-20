@@ -25,6 +25,7 @@ Numen is a Minecraft mod: an AI companion that is a server-side fake player (`Se
 - Actions that change the world or hurt an entity are decided only by the permission layer. Do not add "may I do this" checks inside tools or tasks.
 - Whatever the companion's body does must be reported to the model. No silent teleports or inventory edits.
 - Comments say what the code does now and why, never how it used to be. Match the comment language of the surrounding file.
+- Every piece of text has one reader, and the reader decides its language. For players (screens, chat and action-bar messages): a translation key in the language files, never a literal. For the model (prompts, events, receipts, tool and skill documentation) and for whoever debugs (log lines, exception messages): English, written once. Which language she speaks is told to the model in one place, the `<speaking>` section of the system prompt.
 - Do not create new documentation or summary files unless asked. Do not change `version` in `gradle.properties`.
 
 ## Verify
