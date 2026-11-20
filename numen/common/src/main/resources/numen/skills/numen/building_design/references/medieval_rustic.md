@@ -1,4 +1,4 @@
-# medieval_rustic — 中世纪村舍
+# medieval_rustic — medieval cottage
 
 A village house built by the people living in it, out of whatever the woods and
 the field gave them. Nothing is plumb, nothing repeats exactly, and the upper

@@ -1,4 +1,4 @@
-# nordic_viking — 维京长屋
+# nordic_viking — Viking longhouse
 
 The roof is the building. Walls are barely a metre of turf and stave before the
 enormous shingled roof takes over and comes down almost to the ground, because

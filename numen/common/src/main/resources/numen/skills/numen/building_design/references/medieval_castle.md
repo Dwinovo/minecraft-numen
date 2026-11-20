@@ -1,4 +1,4 @@
-# medieval_castle — 城堡
+# medieval_castle — castle
 
 A castle is a machine for holding ground, and every part of it earns its place
 by making an attacker's life harder. Walls are thick and battered at the base,

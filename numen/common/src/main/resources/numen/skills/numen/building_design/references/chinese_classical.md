@@ -1,4 +1,4 @@
-# chinese_classical — 中式官式
+# chinese_classical — Chinese official style
 
 Official Chinese architecture makes hierarchy visible: a strict north–south
 axis, symmetric courtyards, and a roof whose weight and colour announce the rank

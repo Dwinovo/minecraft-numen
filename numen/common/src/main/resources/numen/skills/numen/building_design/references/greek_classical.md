@@ -1,4 +1,4 @@
-# greek_classical — 古希腊
+# greek_classical — ancient Greek
 
 A Greek temple is a set of proportional rules made physical. Columns at a fixed
 rhythm carry a horizontal entablature, and above it a shallow triangular pediment

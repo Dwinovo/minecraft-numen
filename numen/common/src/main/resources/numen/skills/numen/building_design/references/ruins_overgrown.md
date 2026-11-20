@@ -1,4 +1,4 @@
-# ruins_overgrown — 废墟
+# ruins_overgrown — ruins
 
 Not a style of its own — a treatment applied to any other style. A ruin is a
 building minus the parts that fail first: roof, floors, glass, timber. What

@@ -1,4 +1,4 @@
-# brutalist — 粗野主义
+# brutalist — Brutalist
 
 Raw concrete, left exactly as the formwork made it, in shapes that are honest to
 the point of aggression. Volumes are heavy and blocky, they cantilever and stack

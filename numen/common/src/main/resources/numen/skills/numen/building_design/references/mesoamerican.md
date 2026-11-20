@@ -1,4 +1,4 @@
-# mesoamerican — 中美洲金字塔
+# mesoamerican — Mesoamerican pyramid
 
 A stepped mountain with a very small building on top, and a staircase so steep
 it is nearly a ladder. The pyramid is a platform, not a tomb — the point is the

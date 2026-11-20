@@ -1,4 +1,4 @@
-# islamic — 伊斯兰
+# islamic — Islamic
 
 Geometry instead of figures. Because the tradition avoids depicting living
 things, the entire decorative energy goes into pattern, calligraphy and light —

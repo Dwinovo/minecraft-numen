@@ -1,4 +1,4 @@
-# tudor — 都铎半木
+# tudor — Tudor half-timber
 
 Tudor is medieval timber framing that got wealthy. The same exposed frame and
 white infill, but now the owner can afford to show off: the timber pattern turns

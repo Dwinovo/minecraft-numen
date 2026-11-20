@@ -1,4 +1,4 @@
-# korean_hanok — 韩屋
+# korean_hanok — Korean hanok
 
 Hanok sits between Chinese formality and Japanese restraint and looks like
 neither. The roof line is its own thing: a long, gentle, almost sagging curve

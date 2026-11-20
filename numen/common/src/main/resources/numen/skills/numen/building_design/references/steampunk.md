@@ -1,4 +1,4 @@
-# steampunk — 蒸汽朋克
+# steampunk — steampunk
 
 Victorian brick with the machinery left on the outside. Pipes, boilers, gauges
 and gearwheels are bolted onto and through buildings that would otherwise be

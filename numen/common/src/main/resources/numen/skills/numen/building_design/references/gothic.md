@@ -1,4 +1,4 @@
-# gothic — 哥特
+# gothic — Gothic
 
 Gothic is an argument about weight: how little stone can hold up how much
 height, and how much of the wall can be replaced by glass. Every device — the

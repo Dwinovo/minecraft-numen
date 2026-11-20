@@ -1,54 +1,54 @@
 ---
 name: kaleidoscope_cooking
-description: 森罗物语:厨房的做饭机制:炒锅与汤锅的脾气和时限、火源、油、容器与厨具、森罗自带的四种作物、弹性配方的黄金配比与成色,以及哪些厨具还用不了。
+description: How cooking works in Kaleidoscope Cookery — the stir-fry pot and the stockpot with their quirks and time limits, heat sources, oil, containers and utensils, the mod's four crops, the golden ratio and quality of flexible recipes, and which kitchen blocks cannot be used yet.
 ---
 
-# 森罗物语:厨房
+# Kaleidoscope Cookery
 
-这个世界装了森罗物语:厨房。做饭的函数在 `kaleidoscope.pot` 组里:`recipes` 查菜单、`inspect` 看锅、`cook` 把一道菜从头做到尾,
-还有锅上一步一步的 `oil` 倒油、`base` 放汤底、`fill` 下料、`lid` 盖盖揭盖、`stir` 翻炒、`plate` 装盘。写法用
-`numen.api.help("kaleidoscope.pot.cook")` 这类调用查看。
+This world has Kaleidoscope Cookery installed. The cooking functions are in the `kaleidoscope.pot` group: `recipes` looks up the menu, `inspect` looks at a pot, `cook` makes one dish from start to finish,
+and the pot's single steps are `oil` to pour oil, `base` to add a soup base, `fill` to add ingredients, `lid` to put the lid on or take it off, `stir` to stir-fry, `plate` to serve. Look up how to call them with
+`numen.api.help("kaleidoscope.pot.cook")` and the like.
 
-## 配方
+## Recipes
 
-- 整合包能加菜也能删菜,所以菜单以 `recipes` 查到的为准。
-- `recipes` 每一行写着这道菜要的料、容器(碗、盘子)和厨具(锅铲、锅盖)。
-- 有一部分菜是**弹性配方**(回执里写 flex recipe),见下面的黄金配比;其余是固定配方,照份数投就是那道菜。
+- A modpack can add dishes and remove them, so the menu is whatever `recipes` returns.
+- Each line of `recipes` gives the dish's ingredients, its container (bowl, plate) and its utensil (spatula, lid).
+- Some dishes are **flexible recipes** (the receipt says flex recipe), see the golden ratio below; the rest are fixed recipes, and adding the listed amounts makes that dish.
 
-## 两口锅
+## The two pots
 
-| | 炒锅 | 汤锅 |
+| | Stir-fry pot | Stockpot |
 |---|---|---|
-| 时限 | 倒油后下料窗口只有约 1 分钟;炒好后约 40 秒内要端出来,过了就糊,再放一会儿整锅变成木炭 | 不会糊,炖好可以一直等着 |
-| 份量 | 一锅一份 | 一锅能盛出好几份 |
-| 规矩 | 要有油 | 盖着盖子时放不进也盛不出;盖子一盖、锅里有料就立刻开炖 |
+| Time limits | After the oil goes in, the window for adding ingredients is only about 1 minute; once done, the dish must be taken out within about 40 seconds or it burns, and left longer the whole pot turns to charcoal | Never burns; a finished stew waits as long as you like |
+| Servings | One serving per pot | One pot serves several |
+| Rules | Needs oil | With the lid on, nothing goes in and nothing comes out; the moment the lid is on with ingredients inside, it starts stewing |
 
-- 两口锅都要**下面那格点着**(灶、营火都行)。没火时锅完全静止,倒计时也不走;`inspect` 里是 `has_heat_source: false`。
-- 出锅时手里没有容器,菜就端不出来,只能等着糊。
-- 糊了会得到"黑暗料理"。炒糊多半是因为出锅时手里没容器,或者翻炒时锅铲不在手上。
-- 一次只做一道菜:`cook` 做完一道才返回。
+- Both pots need **the block below them lit** (a stove or a campfire both work). Without fire the pot is completely still and no countdown runs; `inspect` shows `has_heat_source: false`.
+- With no container in hand when the dish is done, it cannot be taken out and just waits to burn.
+- A burnt dish becomes "dark cuisine". A burnt stir-fry usually means there was no container in hand when it was done, or the spatula was not in hand while stirring.
+- One dish at a time: `cook` returns only when the dish is finished.
 
-**蒸笼、砧板、石磨、烤架**还没有接上,这几样用不了。
+The **steamer, chopping board, millstone and grill** are not connected yet; they cannot be used.
 
-## 料从哪来
+## Where ingredients come from
 
-森罗自带四种作物,种法和小麦一样:锄地、播种、长熟后右键收(收完退回半熟,不用重新播种);**镰刀**(`kaleidoscope_cookery:sickle`)能成片收割。
+The mod has four crops of its own, grown like wheat: till, sow, and right-click to harvest when ripe (harvesting sets the plant back to half-grown, so there is no need to sow again); a **sickle** (`kaleidoscope_cookery:sickle`) harvests a whole patch at once.
 
-| 作物 | 种子 | 种在哪 |
+| Crop | Seed | Where it grows |
 |---|---|---|
-| 稻子 | `rice_seed` | **水里**(泡水的耕地);长到两三格高,收的是稻穗,稻穗才能做成米饭 |
-| 番茄 | `tomato_seed` | 普通耕地 |
-| 辣椒 | `chili_seed` | 普通耕地 |
-| 生菜 | `lettuce_seed` | 普通耕地 |
+| Rice | `rice_seed` | **In water** (flooded farmland); grows two or three blocks tall, the harvest is rice panicles, and only panicles can be made into cooked rice |
+| Tomato | `tomato_seed` | Ordinary farmland |
+| Chili | `chili_seed` | Ordinary farmland |
+| Lettuce | `lettuce_seed` | Ordinary farmland |
 
-**油**是炒锅的门槛,标签 `kaleidoscope_cookery:oil`。猪身上能得到油脂;油能压成油脂块收纳,也能灌进油壶(`oil_pot`),
-或者用锅铲从搪瓷盆里蘸一铲带走。其他油脂代替不了它。
+**Oil** is what the stir-fry pot cannot do without; its tag is `kaleidoscope_cookery:oil`. Pigs give fat; oil can be pressed into fat blocks for storage, poured into an oil pot (`oil_pot`),
+or carried a spatula at a time by dipping the spatula into an enamel basin. No other fat can stand in for it.
 
-## 黄金配比与成色
+## The golden ratio and quality
 
-弹性配方**同样的料,投料比例不同,成色不同**:生疏 / 普通 / 优秀 / 极佳。成色决定这道菜回多少饱食度、状态效果持续多久。
+For a flexible recipe, **the same ingredients in different proportions give a different quality**: poor / normal / good / excellent. The quality sets how much hunger the dish restores and how long its status effects last.
 
-- 黄金配比**由世界种子和配方一起决定,每个存档一套**;换了存档就作废,别人攻略里的配比也不适用。
-- `recipes` 给出的份数就是这个存档的黄金配比,`cook` 也照它投。
-- 看的是**比例**不是总量:2:1 和 4:2 是同一个成色,料少时按小的那份投不浪费。
-- 只有一味料的菜怎么放都是极佳,放一份就够。
+- The golden ratio is **set by the world seed together with the recipe, one set per save**; it means nothing in another save, and a ratio from someone else's guide does not apply either.
+- The amounts `recipes` gives are this save's golden ratio, and `cook` adds ingredients by it.
+- What counts is the **ratio**, not the total: 2:1 and 4:2 are the same quality, so with few ingredients the smaller amounts waste nothing.
+- A dish with a single ingredient is excellent however much goes in; one is enough.

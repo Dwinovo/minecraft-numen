@@ -1,4 +1,4 @@
-# southeast_stilt — 东南亚高脚屋
+# southeast_stilt — stilt house
 
 Everything is lifted off the ground because the ground is water, mud, or full of
 things you do not want indoors. The house is a light timber box on posts under

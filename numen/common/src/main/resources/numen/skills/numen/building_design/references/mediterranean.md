@@ -1,4 +1,4 @@
-# mediterranean — 地中海
+# mediterranean — Mediterranean
 
 Whitewashed mass against hard sun. Walls are thick and lime-washed to bounce
 heat, openings are small and deeply recessed, and the roof is either flat and

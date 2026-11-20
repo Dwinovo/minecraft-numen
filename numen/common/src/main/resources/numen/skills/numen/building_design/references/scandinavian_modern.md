@@ -1,4 +1,4 @@
-# scandinavian_modern — 北欧现代
+# scandinavian_modern — Scandinavian modern
 
 Modernism with the cold taken out of it. The shapes stay simple and the roofs
 often stay pitched — but bare — and every surface that can be timber is timber.

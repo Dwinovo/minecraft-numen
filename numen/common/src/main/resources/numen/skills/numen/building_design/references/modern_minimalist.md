@@ -1,4 +1,4 @@
-# modern_minimalist — 现代极简
+# modern_minimalist — modern minimalist
 
 Nothing is applied; everything you see is either structure, enclosure, or view.
 The composition is made of intersecting flat planes and a lot of glass, with the

@@ -1,4 +1,4 @@
-# log_cabin — 原木小屋
+# log_cabin — log cabin
 
 Whole trees, notched at the corners and stacked. Because the walls are round
 logs, the corners overhang and the whole building reads as horizontal courses of

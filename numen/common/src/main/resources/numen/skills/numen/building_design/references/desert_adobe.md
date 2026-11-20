@@ -1,4 +1,4 @@
-# desert_adobe — 沙漠土坯
+# desert_adobe — desert adobe
 
 Mud brick, hand-smoothed, with walls thick enough that the inside stays cool
 until evening. Everything is rounded because it was shaped by hand and re-

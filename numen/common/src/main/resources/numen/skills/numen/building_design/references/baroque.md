@@ -1,4 +1,4 @@
-# baroque — 巴洛克
+# baroque — Baroque
 
 Baroque takes classical parts and bends them for effect. Where a renaissance
 facade would sit flat and calm, baroque pushes the centre forward, curves the

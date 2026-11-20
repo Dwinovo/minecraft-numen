@@ -1,4 +1,4 @@
-# lighthouse_coastal — 海岸灯塔
+# lighthouse_coastal — coastal lighthouse
 
 A tower whose entire job is to be seen, attached to a small ordinary house whose
 job is to keep someone alive next to it. The tower tapers, is painted in bands

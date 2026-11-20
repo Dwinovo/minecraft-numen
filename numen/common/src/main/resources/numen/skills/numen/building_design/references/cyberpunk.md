@@ -1,4 +1,4 @@
-# cyberpunk — 赛博朋克
+# cyberpunk — cyberpunk
 
 A dense grey city with neon nailed to it. The buildings themselves are cheap
 concrete boxes stacked too close together; what you actually see is the layer of

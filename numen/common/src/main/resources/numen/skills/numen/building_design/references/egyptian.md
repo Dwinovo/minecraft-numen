@@ -1,4 +1,4 @@
-# egyptian — 古埃及
+# egyptian — ancient Egyptian
 
 Built to outlast everything. Walls lean inward as they rise, openings are few
 and small, and the mass is so overwhelming that a doorway reads as a crack in a

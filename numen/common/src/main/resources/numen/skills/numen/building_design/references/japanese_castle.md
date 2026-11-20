@@ -1,4 +1,4 @@
-# japanese_castle — 天守
+# japanese_castle — Japanese castle keep
 
 A Japanese keep is a stack of shrinking roofed boxes on a colossal battered
 stone base. The base does the defending and holds most of the volume; the white

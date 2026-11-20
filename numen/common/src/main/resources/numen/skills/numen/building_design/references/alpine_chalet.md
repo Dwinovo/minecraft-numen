@@ -1,4 +1,4 @@
-# alpine_chalet — 阿尔卑斯木屋
+# alpine_chalet — Alpine chalet
 
 Built for snow. The roof is broad and shallow with enormous overhangs — shallow
 so the snow stays on as insulation, wide so it never slides onto the door — and

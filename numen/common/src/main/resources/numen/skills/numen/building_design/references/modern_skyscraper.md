@@ -1,4 +1,4 @@
-# modern_skyscraper — 摩天楼
+# modern_skyscraper — skyscraper
 
 A tower is a repeated floor plate multiplied until it is tall, so the design
 question is what happens at the three places repetition breaks: the ground, the

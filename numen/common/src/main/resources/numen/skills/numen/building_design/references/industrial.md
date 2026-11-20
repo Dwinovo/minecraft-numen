@@ -1,4 +1,4 @@
-# industrial — 工业厂房
+# industrial — industrial works
 
 A building shaped entirely by what happens inside it. Long clear spans, roofs
 made of repeated trusses, walls that are mostly window because daylight was

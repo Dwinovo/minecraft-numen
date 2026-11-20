@@ -1,4 +1,4 @@
-# underwater — 水下
+# underwater — underwater
 
 Pressure shapes everything. Domes and spheres because they resist crushing,
 airlocks because doors cannot simply open, and light everywhere because sunlight

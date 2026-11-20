@@ -1,39 +1,39 @@
 ---
 name: litematica_projection
-description: Litematica 的投影(placement)与分层显示是什么、litematica.placement 的函数交回什么(投影列表、某几层的格、把设计做成投影给主人看)、这些格怎样直接交给 numen.build.place、numen.build.diff。
+description: What Litematica's placements and layer display are, what the litematica.placement functions return (the list of placements, the cells of chosen layers, turning a design into a placement for your owner to look at), and how those cells go straight into numen.build.place and numen.build.diff.
 ---
 
-# Litematica 投影
+# Litematica placements
 
-主人装了 Litematica。它是一个只在玩家客户端上运行的蓝图模组:主人把一份蓝图文件(`.litematic`)加载进来、摆在世界的某处,世界里就出现一团半透明的虚影,照着它建。虚影只是主人客户端上的显示,不是世界里的方块。相关函数在 `litematica.placement` 组里,写法用 `numen.api.help("litematica.placement.cells")` 这类调用查看。这些函数都在主人的客户端上执行,读的是主人此刻的 Litematica。
+Your owner has Litematica installed. It is a schematic mod that runs only on the player's client: your owner loads a schematic file (`.litematic`), puts it somewhere in the world, and a translucent ghost appears there to build by. The ghost is only shown on your owner's client; it is not blocks in the world. The functions are in the `litematica.placement` group; look up how to call them with `numen.api.help("litematica.placement.cells")` and the like. They all run on your owner's client and read your owner's Litematica as it is at that moment.
 
-## 投影(placement)
+## Placements
 
-蓝图文件摆在世界某处,就是一个投影:
+A schematic file put somewhere in the world is a placement:
 
-- **原点**:蓝图自己的原点落在哪一格。
-- **子区域**:一份蓝图可以由几块子区域拼成,每块各有位置,也各有开关;关着的子区域不属于这个投影。
-- **旋转与镜像**:整个投影可以绕它的原点顺时针转 0、90、180、270 度,也可以镜像;`left_right` 翻转南北方向(z),`front_back` 翻转东西方向(x)。每块子区域还有自己的旋转镜像。方块的朝向跟着一起变。
-- **启用**:主人可以把整个投影关掉。
-- **选中**:主人同时可以加载好几个投影,其中一个是选中的。
+- **Origin**: the cell the schematic's own origin lands on.
+- **Subregions**: a schematic can be made of several subregions, each with its own position and its own on/off switch; a subregion that is off is not part of the placement.
+- **Rotation and mirror**: the whole placement can be rotated 0, 90, 180 or 270 degrees clockwise around its origin, and mirrored; `left_right` flips north–south (z), `front_back` flips east–west (x). Each subregion has its own rotation and mirror as well. Block facings change along with them.
+- **Enabled**: your owner can turn a whole placement off.
+- **Selected**: your owner can have several placements loaded at once, and one of them is the selected one.
 
-名字相同的投影分不出是哪一个,点名会失败;不点名读的是选中的那份。
+Placements with the same name cannot be told apart, so naming one of them fails; with no name given, the selected one is read.
 
-## 分层显示(layer range)
+## Layer display (layer range)
 
-主人可以让 Litematica 只显示投影的某几层,免得虚影挡住视线。它是主人的显示设置,不限制谁能读什么:`mode` 是 `all`、`single_layer`、`layer_range`、`all_below`、`all_above`(Litematica 自己的名字),`axis` 是分层所沿的轴(通常是 `y`),`from`、`to` 是显示的最低与最高一层,没有边界的那一头不写。从分层显示能看出主人此刻关心哪一层,但 `cells` 想读哪几层都可以读。
+Your owner can have Litematica show only some layers of a placement so the ghost does not block the view. It is your owner's display setting and does not limit what anyone can read: `mode` is `all`, `single_layer`, `layer_range`, `all_below` or `all_above` (Litematica's own names), `axis` is the axis the layers run along (usually `y`), `from` and `to` are the lowest and highest layer shown, and an end that has no bound is left out. The layer display shows which layer your owner cares about right now, but `cells` can read any layers it wants.
 
-## 函数交回什么
+## What the functions return
 
-`litematica.placement.list()` 交回 `layer`(上面的分层显示)和 `placements`。每个投影写着:名字、来自哪个文件、原点、占的世界范围(最低与最高两个角和各方向的格数)、旋转、镜像、是否启用、是否选中,以及里面有方块的格数(空气和关着的子区域不算)。
+`litematica.placement.list()` returns `layer` (the layer display above) and `placements`. Each placement gives: its name, which file it comes from, its origin, the world range it covers (the lowest and highest corners and the size along each axis), rotation, mirror, whether it is enabled, whether it is selected, and how many of its cells hold a block (air and switched-off subregions do not count).
 
-`litematica.placement.cells(64, 66)` 交回一个投影在世界 y 从 64 到 66 那三层里的格(只写一个数就是一层;不点名投影就读选中的,点名写成选项 `{placement = "名字"}`)。每一格是 `{name, pos}`:`pos` 是世界坐标,`name` 是带完整状态的方块,写法和 `/setblock` 一样,例如 `minecraft:oak_stairs[facing=east,half=bottom,shape=straight,waterlogged=false]`。Litematica 自己的摆放已经算进去:原点、子区域、旋转、镜像,方块朝向也跟着转了。空气不交回;投影够不到的层是空表。
+`litematica.placement.cells(64, 66)` returns the cells of one placement in the three layers from world y 64 to 66 (a single number is one layer; with no placement named the selected one is read, and one is named with the option `{placement = "name"}`). Each cell is `{name, pos}`: `pos` is the world position and `name` is the block with its full state, written the way `/setblock` takes it, for example `minecraft:oak_stairs[facing=east,half=bottom,shape=straight,waterlogged=false]`. Litematica's own positioning is already applied: origin, subregions, rotation and mirror, with block facings turned to match. Air is not returned; layers the placement does not reach give an empty list.
 
-一次最多交回 16384 格。要的层装不下就失败(`bad_argument`),提示里是装得下的、从最低一层起的那几层。
+One call returns at most 16384 cells. If the layers asked for do not fit, the call fails (`bad_argument`), and the hint gives the layers that do fit, counted from the lowest one.
 
-## 交给建造
+## Handing them to building
 
-交回的格就是 Cells,原样传给收一串格的函数:
+The cells returned are Cells and go unchanged into any function that takes a list of cells:
 
 ```lua
 local cells = litematica.placement.cells(64)
@@ -41,14 +41,14 @@ print(numen.build.diff(cells))
 numen.build.place(cells)
 ```
 
-`numen.build.diff` 报还差什么,以及剩下的格要用哪些材料(`materials`)、你身上缺哪些(`short_of`)——Litematica 自己的材料清单是按主人的背包算的,不是你的。
+`numen.build.diff` reports what is still missing, which materials the remaining cells need (`materials`) and which of them you do not have (`short_of`) — Litematica's own material list is counted against your owner's inventory, not yours.
 
-## 把设计给主人看
+## Showing your owner a design
 
-`litematica.placement.preview(格, 名字)` 把一串格做成主人客户端里的一份投影,摆在格子本来的世界坐标上:
+`litematica.placement.preview(cells, name)` turns a list of cells into a placement in your owner's client, put at the cells' own world positions:
 
 ```lua
 litematica.placement.preview({{name = "cobblestone", pos = {x = 100, y = 64, z = -20}}}, "my_house")
 ```
 
-它只改主人的显示,世界不动。格子被存成蓝图目录下 `numen/<名字>.litematic`,主人之后能在 Litematica 里再加载它、改它、分享给别人。同名的再调一次,旧的投影被换掉,所以设计改了再调一次就是更新。名字同时是文件名,只能用字母、数字、空格和 `_ - . ( )`。空气格不显示。交回的是这份新投影,写法同 `list` 里的一项。
+It only changes what your owner sees; the world does not change. The cells are saved as `numen/<name>.litematic` under the schematics folder, so your owner can load it again in Litematica later, edit it, and share it. Calling it again with the same name replaces the old placement, so calling it again after changing a design is an update. The name is also the file name and may only use letters, digits, spaces and `_ - . ( )`. Air cells are not shown. What comes back is the new placement, in the same form as an item of `list`.

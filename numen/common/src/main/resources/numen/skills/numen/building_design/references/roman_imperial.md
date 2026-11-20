@@ -1,4 +1,4 @@
-# roman_imperial — 古罗马
+# roman_imperial — ancient Roman
 
 Rome took the Greek vocabulary and added the two things Greece lacked: the arch
 and concrete. That combination lets you span wide, stack storeys, and enclose

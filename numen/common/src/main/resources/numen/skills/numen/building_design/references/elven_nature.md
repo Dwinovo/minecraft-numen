@@ -1,4 +1,4 @@
-# elven_nature — 精灵
+# elven_nature — elven
 
 Architecture that was grown rather than assembled. Nothing meets at a right
 angle if a curve will do; structures wrap around living trees instead of

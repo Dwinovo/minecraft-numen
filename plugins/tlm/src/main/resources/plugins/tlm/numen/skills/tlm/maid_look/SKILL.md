@@ -1,12 +1,12 @@
 ---
 name: maid_look
-description: 车万女仆模型作为你外观的机制:模型 id 从哪来、穿上女仆模型后会盖住其他所有外观,以及查、换、脱模型的 tlm.skin 函数组。
+description: How a Touhou Little Maid model works as your look — where model ids come from, how a maid model covers every other look once worn, and the tlm.skin functions for listing, wearing and removing models.
 ---
 
-# 女仆模型外观
+# Maid model look
 
-这台机器上装了车万女仆,你可以穿它的模型。相关函数在 `tlm.skin` 组里:`list` 查、`wear` 换、`remove` 脱;写法用
-`numen.api.help("tlm.skin.wear")` 查看。
+This machine has Touhou Little Maid installed, so you can wear its models. The functions are in the `tlm.skin` group: `list` to look, `wear` to change, `remove` to take off; look up how to call them with
+`numen.api.help("tlm.skin.wear")`.
 
-- 模型 id 以 `tlm.skin.list` 查到的为准(可以按名字搜,比如"灵梦");清单里没有的就是没装。
-- 女仆模型**盖住整个身体**。穿着它时,别的外观(YSM 的模型、你本来的皮肤)在底下一点都露不出来——那些换装命令照样会成功,但看不到任何变化。要换成别的外观,得先把女仆模型脱下来。
+- A model id is whatever `tlm.skin.list` returns (it can search by name, for example "灵梦"); a model not in the list is not installed.
+- A maid model **covers the whole body**. While you wear one, no other look (a YSM model, your own skin) shows through at all — those other commands still succeed, but nothing visible changes. To switch to another look, take the maid model off first.

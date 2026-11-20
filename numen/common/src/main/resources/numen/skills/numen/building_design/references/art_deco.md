@@ -1,4 +1,4 @@
-# art_deco — 装饰艺术
+# art_deco — Art Deco
 
 Machine-age glamour: everything reaches upward in stepped tiers, and the
 ornament is geometric — chevrons, sunbursts, fluted bands — rather than floral.

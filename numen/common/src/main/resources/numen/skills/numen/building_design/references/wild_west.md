@@ -1,4 +1,4 @@
-# wild_west — 西部小镇
+# wild_west — Wild West town
 
 Cheap timber buildings thrown up fast, each hiding behind a tall flat false
 front so the street looks like a real town. Behind that parapet the building is

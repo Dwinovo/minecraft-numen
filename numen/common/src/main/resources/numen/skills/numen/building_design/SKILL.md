@@ -259,38 +259,38 @@ read as a template.
 Each style is the file `references/<name>.md` of this skill, e.g. `references/baroque.md`.
 
 ### East Asia
-`japanese_minka` 和风民居 · `japanese_shrine` 神社 · `japanese_castle` 天守 ·
-`chinese_classical` 中式官式 · `korean_hanok` 韩屋
+`japanese_minka` Japanese farmhouse · `japanese_shrine` Shinto shrine · `japanese_castle` Japanese castle keep ·
+`chinese_classical` Chinese official style · `korean_hanok` Korean hanok
 
 ### South & Southeast Asia
-`southeast_stilt` 高脚屋 · `indian_temple` 印度石庙
+`southeast_stilt` stilt house · `indian_temple` Indian stone temple
 
 ### Historic Europe
-`medieval_rustic` 中世纪村舍 · `medieval_castle` 城堡 · `tudor` 都铎半木 ·
-`gothic` 哥特 · `baroque` 巴洛克 · `nordic_viking` 维京长屋 ·
-`mediterranean` 地中海 · `alpine_chalet` 阿尔卑斯木屋
+`medieval_rustic` medieval cottage · `medieval_castle` castle · `tudor` Tudor half-timber ·
+`gothic` Gothic · `baroque` Baroque · `nordic_viking` Viking longhouse ·
+`mediterranean` Mediterranean · `alpine_chalet` Alpine chalet
 
 ### Ancient
-`greek_classical` 古希腊 · `roman_imperial` 古罗马 · `egyptian` 古埃及 ·
-`mesoamerican` 中美洲金字塔
+`greek_classical` ancient Greek · `roman_imperial` ancient Roman · `egyptian` ancient Egyptian ·
+`mesoamerican` Mesoamerican pyramid
 
 ### Middle East & Desert
-`islamic` 伊斯兰 · `desert_adobe` 沙漠土坯
+`islamic` Islamic · `desert_adobe` desert adobe
 
 ### Modern
-`modern_minimalist` 现代极简 · `modern_skyscraper` 摩天楼 · `brutalist` 粗野主义 ·
-`art_deco` 装饰艺术 · `industrial` 工业厂房 · `scandinavian_modern` 北欧现代
+`modern_minimalist` modern minimalist · `modern_skyscraper` skyscraper · `brutalist` Brutalist ·
+`art_deco` Art Deco · `industrial` industrial works · `scandinavian_modern` Scandinavian modern
 
 ### Vernacular
-`farmhouse` 农舍谷仓 · `log_cabin` 原木小屋 · `lighthouse_coastal` 海岸灯塔 ·
-`wild_west` 西部小镇 · `victorian` 维多利亚
+`farmhouse` farmhouse and barn · `log_cabin` log cabin · `lighthouse_coastal` coastal lighthouse ·
+`wild_west` Wild West town · `victorian` Victorian
 
 ### Fantasy
-`elven_nature` 精灵 · `dwarven_hall` 矮人 · `witch_hut` 女巫 ·
-`steampunk` 蒸汽朋克 · `cyberpunk` 赛博朋克 · `fantasy_floating` 浮空 ·
-`underwater` 水下
+`elven_nature` elven · `dwarven_hall` dwarven · `witch_hut` witch's hut ·
+`steampunk` steampunk · `cyberpunk` cyberpunk · `fantasy_floating` floating ·
+`underwater` underwater
 
-`ruins_overgrown` 废墟 is not a style of its own — it is a **treatment applied on top of any other one**: a ruined,
+`ruins_overgrown` ruins is not a style of its own — it is a **treatment applied on top of any other one**: a ruined,
 abandoned, ancient or reclaimed version of a base style.
 
 `references/decoration.md` collects finishing touches (ceilings, lighting, windows, paths, gardens, chimneys, water)

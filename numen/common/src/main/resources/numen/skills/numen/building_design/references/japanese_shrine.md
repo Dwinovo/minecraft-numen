@@ -1,4 +1,4 @@
-# japanese_shrine — 神社
+# japanese_shrine — Shinto shrine
 
 Where the house whispers, the shrine announces. Vermilion against dark timber
 and white gravel exists to be seen from far off and to mark a threshold: you are

@@ -1,4 +1,4 @@
-# japanese_minka — 和风民居
+# japanese_minka — Japanese farmhouse
 
 Domestic Japanese building is horizontal, quiet, and unfinished-looking on
 purpose. The wooden frame stays visible because the joinery *is* the ornament;

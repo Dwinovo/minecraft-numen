@@ -1,4 +1,4 @@
-# dwarven_hall — 矮人
+# dwarven_hall — dwarven
 
 Carved out of the mountain rather than built on it, so the architecture is
 subtractive: you are shaping a void, and every column is stone that was left in

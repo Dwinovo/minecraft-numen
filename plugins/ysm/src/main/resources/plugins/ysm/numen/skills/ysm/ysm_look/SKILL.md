@@ -1,26 +1,26 @@
 ---
 name: ysm_look
-description: YSM(Yes Steve Model)换模型与做动作的机制:能换哪些模型、模型 id 与贴图的写法、每个模型自带的动作、哪些动作会自己播放、动作音效,以及服务器能确认什么、确认不了什么。
+description: How changing models and playing emotes works in YSM (Yes Steve Model) — which models can be switched to, how model ids and textures are written, the emotes each model brings, which ones play by themselves, emote sounds, and what the server can and cannot confirm.
 ---
 
-# YSM 模型与动作
+# YSM models and emotes
 
-装了 YSM 之后,`ysm` 组里的函数能换外观(`ysm.model.switch`)、做动作(`ysm.model.emote`);写法用
-`numen.api.help("ysm.model.switch")` 查看。
+With YSM installed, the functions in the `ysm` group change your look (`ysm.model.switch`) and play emotes (`ysm.model.emote`); look up how to call them with
+`numen.api.help("ysm.model.switch")`.
 
-## 模型
+## Models
 
-- `ysm.model.options()` 一次给出三样:现在穿的、能换的清单、当前模型自带的贴图(`textures`)。
-- 模型 id 照清单原样写:形如 `misc/1_alex`;打包模型是带扩展名的文件名(如 `抽象鸣潮 菲比.ysm`)。都不是显示名。
-- 换别的贴图(比如白色款)时在 `textures` 里挑一张,换的时候指定它。
-- 能换的范围**跟主人一致**:主人被授权了哪些模型,你就有哪些;不在范围里的会明确换失败,那是主人也没有这身。
+- `ysm.model.options()` gives three things at once: what you wear now, the list you can switch to, and the textures the current model brings (`textures`).
+- Write a model id exactly as it is in the list: something like `misc/1_alex`; a packed model is a file name with its extension (such as `抽象鸣潮 菲比.ysm`). Neither is the display name.
+- For another texture (a white variant, say) pick one from `textures` and name it when switching.
+- What you can switch to **is the same as for your owner**: you have the models your owner is authorized for; one outside that set fails to switch and says so, and it means your owner does not have that look either.
 
-## 动作
+## Emotes
 
-- **每个模型自带的动作不同**,换了模型,原来那套动作名可能就没了。YSM 不告诉服务器一个模型有哪些动作,所以没有动作清单可查。
-- 大多数模型都有 `extra1`~`extra8` 这一组,通常是作者做的表情或特殊动作。`idle`、`walk`、`run`、`sit` 这些是走路待机用的,身体会自己播放。
-- 有些动作**自带音效**(模型作者接在动画上的),做那个动作时会响;哪些带音效从服务器看不出来。
-- `ysm.model.emote` 没有回执:这身模型没有那个动作时,身体什么都不会做,服务器也核对不了。
-- 动作一直放到你**移动**(前、后、左、右、跳、潜行任一)、**换模型**、**换个动作**或 `ysm.model.emote("stop")` 为止。这和真人一样:玩家一动,自己的动作就收了。停下来是这条规则的结果,不会另有通知。
-- 循环的动作不会自己停,停在最后一帧的也不会;单次动作放完后外观会回到待机,但服务器不知道它放完了,仍当它在放。
-- 已知限制:放完单次动作后一直站着不动,旁人走开再回来会再看到它放一遍,直到你动一下或 stop。服务器拿不到动作时长,没法替你收。
+- **Each model brings its own emotes**; after a model switch the old emote names may be gone. YSM does not tell the server which emotes a model has, so there is no emote list to look up.
+- Most models have the `extra1` to `extra8` set, usually expressions or special moves made by the author. `idle`, `walk`, `run` and `sit` are for walking and standing, and the body plays them by itself.
+- Some emotes **carry a sound** (attached to the animation by the model's author) that plays with the emote; which ones do cannot be seen from the server.
+- `ysm.model.emote` has no receipt: when the model has no such emote the body does nothing, and the server cannot check.
+- An emote plays until you **move** (forward, back, left, right, jump or sneak), **switch models**, **play another emote** or call `ysm.model.emote("stop")`. It is the same as for a human: the moment a player moves, their emote ends. Stopping is a consequence of this rule, with no separate notice.
+- A looping emote does not stop by itself, and neither does one that holds its last frame; after a one-shot emote the look returns to idle, but the server does not know it finished and still counts it as playing.
+- Known limit: after a one-shot emote, if you keep standing still, someone who walks away and comes back sees it play once more, until you move or stop. The server cannot get an emote's length, so it cannot end it for you.

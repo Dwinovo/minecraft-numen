@@ -1,48 +1,48 @@
 ---
 name: ftb_quests
-description: FTB Quests 与 FTB Teams 的机制:任务进度怎么算到队伍头上、哪类任务你做到就算、哪类要提交或要别人完成、奖励怎么发、队伍邀请与入队规则、FTB Chunks 领地对你的限制,以及你会收到的 quest_completed、quest_reward_auto、team_invite 事件。
+description: How FTB Quests and FTB Teams work — how quest progress is credited to a team, which tasks count when you do them, which must be handed in or done by someone else, how rewards are given, team invites and joining rules, what FTB Chunks claims allow you, and the quest_completed, quest_reward_auto and team_invite events you receive.
 ---
 
-# FTB 任务与队伍
+# FTB Quests and Teams
 
-这个世界装了 FTB Quests。FTB 把你当成一个真正的玩家:你击杀的怪、身上带着的东西、走到的地方,都照 FTB 自己的规则算进**你所在队伍**的任务进度。相关函数在 `ftbquests` 组里,写法用 `numen.api.help("ftbquests.quest.submit")` 这类调用查看。
+This world has FTB Quests installed. FTB treats you as a real player: the mobs you kill, what you carry and where you walk all count toward the quest progress of **the team you are in**, by FTB's own rules. The functions are in the `ftbquests` group; look up how to call them with `numen.api.help("ftbquests.quest.submit")` and the like.
 
-## 进度算给谁
+## Who gets the progress
 
-进度只按队伍算:
+Progress is counted per team only:
 
-- **和主人在同一个队伍**:你做的就是他做的,一起推进同一本任务书。
-- **不在同一个队伍**:你做的只算你自己那一队,主人那一队的进度一点不动。
+- **In the same team as your owner**: what you do is what they do, and you advance the same quest book together.
+- **Not in the same team**: what you do counts for your own team only, and your owner's team does not move at all.
 
-任务书是主人那一本:进度是主人所在队伍的,标题按主人的语言显示。任务列表开头会写明你在不在这个队伍里。
+The quest book is your owner's: the progress is their team's, and titles are shown in their language. The quest list says at the top whether you are in that team.
 
-## 各类任务谁能完成
+## Who can complete which task
 
-| 列表里的标注 | 意思 |
+| Mark in the list | Meaning |
 |---|---|
-| you can do it too | 击杀、到达、身上带着某样东西这类,你做到了就算 |
-| hand in with submit | 要在书上点"提交"的(交物品、交经验、打勾);提交会从**你的背包**拿走东西,交出去拿不回来 |
-| observation | 要亲眼看着目标,只有玩家本人能完成 |
-| task screen / crafted / modpack's scripts | 要任务屏方块、要在合成那一刻才算、或由整合包自己的脚本判定 |
+| you can do it too | Kill, reach, or carry something — it counts when you do it |
+| hand in with submit | Needs "submit" in the book (handing in items, experience, or ticking a box); submitting takes things from **your inventory**, and what is handed in does not come back |
+| observation | The target has to be looked at in person; only the player themself can complete it |
+| task screen / crafted / modpack's scripts | Needs a task screen block, only counts at the moment of crafting, or is judged by the modpack's own scripts |
 
-没解锁的任务提交会被拒,回执写着原因;提交的回执写每个条件交之前、交之后的进度和你背包实际少了什么。
+Submitting a quest that is not unlocked is refused, and the receipt gives the reason; a submit receipt gives each task's progress before and after, and what your inventory actually lost.
 
-## 奖励
+## Rewards
 
-FTB 的自动领取对你和对真人一样:
+FTB's auto-claim works for you the same as for a human player:
 
-- **个人奖励**:每个在线成员各一份,你也有一份,直接进你的背包。
-- **团队奖励**:只发给 FTB 认定完成了这个任务的那个人,可能是你,也可能是主人。
-- 背包满了放不下的,掉在你脚边。
+- **Personal rewards**: one for every online member, you included, straight into your inventory.
+- **Team rewards**: given only to the one FTB counts as having completed the quest, which may be you or your owner.
+- What does not fit in a full inventory drops at your feet.
 
-奖励记到你名下时你会收到 `quest_reward_auto` 事件,写着领了哪些奖励、同一刻背包和经验实际变了什么。队伍完成一个任务或章节时收到 `quest_completed`,其中 `by` 是 FTB 算作完成它的人。
+When rewards are credited to you, you receive a `quest_reward_auto` event that says which rewards were claimed and how your inventory and experience actually changed at that moment. When the team completes a quest or a chapter you receive `quest_completed`, where `by` is the one FTB counts as having completed it.
 
-## 队伍
+## Teams
 
-- 有人邀请你入队时收到 `team_invite`,写着是哪个队伍(`party`)、主人在不在里面。接受邀请用 `ftbquests.quest.join`;同时有几个邀请时,用 `party` 点名要入的那一个。
-- 已经在别的队伍里时入不了新队,得先退出原来那个。
+- When someone invites you to a team you receive `team_invite`, which says which team (`party`) and whether your owner is in it. Accept with `ftbquests.quest.join`; with several invites at once, name the one to join with `party`.
+- You cannot join a new team while you are in another one; leave the old one first.
 
-## 领地(FTB Chunks)
+## Claims (FTB Chunks)
 
-- 在主人的队伍里时,他的领地按成员对你放行。
-- 自己一队时,要主人把你加为盟友,或者那片领地设成公开,你才能在里面挖、放、开箱子。
+- In your owner's team, their claims let you through as a member.
+- In a team of your own, you can dig, place and open chests in a claim only if your owner adds you as an ally or the claim is set to public.

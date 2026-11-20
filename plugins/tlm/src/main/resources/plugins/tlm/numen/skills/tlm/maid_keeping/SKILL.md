@@ -1,51 +1,51 @@
 ---
 name: maid_keeping
-description: 车万女仆(Touhou Little Maid)的养成机制:驯服、女仆界面与饰品页、背包、坐下与跟随、工作模式需要的东西、日程/家/拾取设置、P 点,以及女仆死后的墓碑、胶片和两种复活方式(祭坛与神社)的条件和代价。
+description: How raising maids works in Touhou Little Maid — taming, the maid screen and its bauble page, backpacks, sitting and following, what each work mode needs, schedule / home / pickup settings, power points, and after a maid dies: the tombstone, the film, and the conditions and costs of the two ways to revive her (altar and shrine).
 ---
 
-# 车万女仆的养成
+# Raising Touhou Little Maid maids
 
-你可以像主人一样养车万女仆。相关函数在 `tlm` 组里:`tlm.maid.list`、`tlm.maid.info`、`tlm.maid.open`、`tlm.maid.task`、`tlm.maid.config` 等,
-写法用 `numen.api.help("tlm.maid.task")` 这类调用查看。女仆的实体编号从 `numen.scan.entities` 或 `tlm.maid.list` 得到,服务器重启后会变。
+You can raise maids the way your owner does. The functions are in the `tlm` group: `tlm.maid.list`, `tlm.maid.info`, `tlm.maid.open`, `tlm.maid.task`, `tlm.maid.config` and so on;
+look up how to call them with `numen.api.help("tlm.maid.task")` and the like. A maid's entity id comes from `numen.scan.entities` or `tlm.maid.list`, and changes after a server restart.
 
-## 看得到什么
+## What you can see
 
-- `tlm.maid.list`:你名下的女仆——在附近的给编号、工作、日程、血量、好感等级、离你多远;在没加载区块里的给最后位置;还有没取空的墓碑。
-- `tlm.maid.info`:一只女仆的详情,每个工作模式现在能不能切、缺什么(`to_enable`)、干活要用什么(`works_with`)。别人的女仆也能看。
-- 你身上的 P 点、车万女仆记给你的女仆数,每轮在身体状态的 `<touhou_little_maid>` 里。
+- `tlm.maid.list`: the maids that are yours — for those nearby, the id, task, schedule, health, favorability level and distance from you; for those in unloaded chunks, the last position; and tombstones that have not been emptied.
+- `tlm.maid.info`: one maid in detail, with whether each work mode can be switched to right now, what is missing (`to_enable`) and what the work uses (`works_with`). Other people's maids can be looked at too.
+- Your power points and the number of maids Touhou Little Maid counts as yours are in `<touhou_little_maid>` in your body state every turn.
 
-## 驯服
+## Taming
 
-- 野生女仆用**蛋糕**右键驯服,蛋糕在背包里就行;成了会收到 `maid_tamed` 事件,她从此归你。
-- 别人的女仆用蛋糕驯服不了。
+- A wild maid is tamed by right-clicking her with **cake**; having the cake in your inventory is enough. When it works you receive a `maid_tamed` event and she is yours from then on.
+- Someone else's maid cannot be tamed with cake.
 
-## 界面、装备与背包
+## Screen, equipment and backpack
 
-- 她的界面在她身边约 7 格内才打得开。界面里是她的盔甲、主手副手、她自己的几格和背包;`numen.gui.view` 里你的背包格在前,她的格子在后。
-- 饰品在另一页(`bauble`),装了 Curios 的话还有 `curios` 页。
-- **背包是穿上去的**:拿着背包右键她(例如 `touhou_little_maid:maid_backpack_small`)。拿**剪刀**右键她会卸下背包:旧背包回到你手上,背包里的东西掉在她脚下。
+- Her screen only opens within about 7 blocks of her. It holds her armor, main hand and off hand, her own few slots and her backpack; in `numen.gui.view` your inventory slots come first and hers after.
+- Baubles are on another page (`bauble`), and with Curios installed there is a `curios` page as well.
+- **A backpack is worn**: right-click her while holding one (for example `touhou_little_maid:maid_backpack_small`). Right-clicking her with **shears** takes the backpack off: the old backpack returns to your hand and what was in it drops at her feet.
 
-## 坐下与跟随
+## Sitting and following
 
-- **潜行右键**她切换坐下与站起;拿着河童罗盘时这一下是罗盘的用法,空手最稳。
-- 坐着的女仆不跟着你走,也不会传送到你身边。
+- **Sneak-right-click** her to switch between sitting and standing; while you hold a kappa compass that click is the compass's use instead, so an empty hand is the safest.
+- A sitting maid does not follow you and does not teleport to you.
 
-## 工作
+## Work
 
-- 每个工作模式需要特定的东西:比如远程攻击要她手里有弓、格子里有箭(`works_with` 里的 `has_bow`、`has_arrow`);种地要她的格子里有种子。
-- 切换工作模式后回执读回她现在的工作;没变就是车万女仆没照做,回执会说它的规矩。
-- 设置:日程(`day` 白天干活、`night` 晚上干活白天睡、`all` 全天);**家模式**(在家干活、不再跟着你,没设过日程点时她站的地方就是家);拾取开关(不捡地上的东西)。
-- 对你自己的女仆,切工作、改设置、开界面出厂不需要问主人;主人另写了规矩要问时,会先问主人,答复回来才执行。
+- Each work mode needs particular things: ranged attack needs a bow in her hand and arrows in her slots (`has_bow` and `has_arrow` in `works_with`); farming needs seeds in her slots.
+- After switching the work mode the receipt reads back the task she has now; if it did not change, Touhou Little Maid did not go along, and the receipt gives its rule.
+- Settings: schedule (`day` works by day, `night` works by night and sleeps by day, `all` works around the clock); **home mode** (she works at home and no longer follows you; if no schedule point was ever set, where she stands is home); the pickup switch (she does not pick things up off the ground).
+- For your own maids, switching work, changing settings and opening the screen need no asking by default; when your owner has written a rule that says to ask, your owner is asked first and it happens once they answer.
 
-## 女仆死亡与复活
+## A maid's death and revival
 
-- 她死时你会收到 `maid_died` 事件:死在哪、墓碑的编号和位置。**墓碑**里是她的全部东西和她的**胶片**(记着她的一切)。
-- 右键墓碑取回里面的东西;你背包放不下时它不给。
-- 用胶片复活有两种办法:
+- When she dies you receive a `maid_died` event: where she died, and the tombstone's id and position. The **tombstone** holds everything she had and her **film** (which records everything about her).
+- Right-click the tombstone to take back what is inside; it gives nothing when your inventory has no room.
+- There are two ways to revive her with the film:
 
-| 方式 | 条件 | 代价 |
+| Way | Conditions | Cost |
 |---|---|---|
-| **祭坛** | 搭好的祭坛上放齐胶片、青金石、金锭、红石、铁锭、煤炭(拿着一样右键一根柱子放一样);放齐那一下就复活 | 0.5 个 P 点 |
-| **神社** | 拿着胶片右键神社放进去,再空手右键神社 | **你的血直接被设成 0.25**;血量不到一半多一点时不让用 |
+| **Altar** | On a built altar place the film, lapis lazuli, a gold ingot, redstone, an iron ingot and coal (hold one and right-click a pillar to place it); she revives the moment the last one is placed | 0.5 power points |
+| **Shrine** | Right-click the shrine with the film to put it in, then right-click the shrine with an empty hand | **Your health is set straight to 0.25**; it is not allowed when your health is not a little over half |
 
-放进神社没用掉的胶片,空手潜行右键神社取回(手里拿着东西时潜行右键不会碰到神社)。
+A film put into the shrine but not used is taken back by sneak-right-clicking the shrine with an empty hand (with something in hand, a sneak-right-click does not reach the shrine).

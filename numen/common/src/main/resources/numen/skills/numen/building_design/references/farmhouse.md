@@ -1,4 +1,4 @@
-# farmhouse — 农舍谷仓
+# farmhouse — farmhouse and barn
 
 A working yard where the barn matters more than the house. Buildings are simple
 gabled boxes arranged loosely around open ground, painted or weathered, with

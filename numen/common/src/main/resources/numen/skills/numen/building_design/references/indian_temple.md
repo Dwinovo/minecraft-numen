@@ -1,4 +1,4 @@
-# indian_temple — 印度石庙
+# indian_temple — Indian stone temple
 
 A carved stone mountain. The tower rises in tiers that shrink while repeating
 their own shape, so the silhouette comes out dense and busy rather than clean.

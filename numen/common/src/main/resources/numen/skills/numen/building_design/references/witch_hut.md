@@ -1,4 +1,4 @@
-# witch_hut — 女巫小屋
+# witch_hut — witch's hut
 
 A hut that has been leaning for a long time and has not fallen yet. Every line
 is slightly off: the walls lean, the roof sags, the chimney is crooked, and the

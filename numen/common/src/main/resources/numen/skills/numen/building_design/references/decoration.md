@@ -1,4 +1,4 @@
-# Decoration — 让房子像有人住
+# Decoration — making a house look lived in
 
 Finishing touches that work in any style. A building wants the few that suit it; all of them at once make a showroom,
 not a home. The measured interior numbers, what furniture is made of, the height bands and the room props are in the

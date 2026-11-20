@@ -1,4 +1,4 @@
-# victorian — 维多利亚
+# victorian — Victorian
 
 Industrial-age abundance. Machine-cut ornament became cheap, so it went
 everywhere: turned porch posts, fretwork brackets, patterned shingles, bay

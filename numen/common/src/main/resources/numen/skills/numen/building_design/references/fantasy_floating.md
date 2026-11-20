@@ -1,4 +1,4 @@
-# fantasy_floating — 浮空
+# fantasy_floating — floating
 
 An island torn out of the ground and left hanging. The whole illusion rests on
 the underside: a ragged inverted cone of rock with roots and stone trailing off
