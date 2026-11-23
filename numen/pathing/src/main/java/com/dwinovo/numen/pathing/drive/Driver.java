@@ -195,6 +195,7 @@ public final class Driver implements Segment {
     /** 叫停:在飞的搜索作废,松开所有键(包括潜行),手上正在挖的放下。 */
     public void stop() {
         trip.abandon();
+        rig.kit.abandon();
         rig.keys.releaseAll();
         rig.mouse.release();
         if (state == State.RUNNING) {
@@ -594,6 +595,7 @@ public final class Driver implements Segment {
     private void afterDiscard() {
         unsettled = 0;
         rig.mouse.release();
+        rig.kit.abandon();
         tracker.reset();
         step = null;
         air.reset();
@@ -652,6 +654,7 @@ public final class Driver implements Segment {
         halt = why;
         state = State.HALTED;
         trip.abandon();
+        rig.kit.abandon();
         rig.keys.releaseAll();
     }
 

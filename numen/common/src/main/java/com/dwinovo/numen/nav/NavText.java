@@ -552,6 +552,8 @@ public final class NavText {
                     + " in my hotbar";
         } else if (action instanceof BodyAction.Held h) {
             return "took " + StackLabel.brief(h.stack()) + " from my inventory into my hand";
+        } else if (action instanceof BodyAction.Crafted c) {
+            return "crafted " + c.made() + " " + item(c.item());
         } else {
             BodyAction.Conjured c = (BodyAction.Conjured) action;
             return "took a stack of " + item(c.item()) + " from the creative inventory";

@@ -1,6 +1,7 @@
 package com.dwinovo.numen.tools;
 
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.knowledge.RecipeProbe;
 import com.dwinovo.numen.api.knowledge.RecipePage;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;

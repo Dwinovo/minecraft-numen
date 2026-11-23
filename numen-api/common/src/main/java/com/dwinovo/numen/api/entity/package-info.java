@@ -10,6 +10,9 @@
  * to dig and the pause after), {@link Reach}, {@link Sight}, {@link Faces} and {@link Replaceable} (what she can touch, see,
  * click on, and where a placed block lands).
  *
+ * <p>Moving exactly N of a stack between two menu slots (what laying a recipe out in the grid and moving items in a
+ * container both do) is {@link MenuOps#dripInto}.
+ *
  * <p>Which carried stack an item id means is answered in one place, {@link Stacks#pick} (the main hand's stack, else the first
  * slot; two stacks are the same kind only when item and components both match), and {@link StackLabel} is the one sentence that
  * tells same-id stacks apart in the model's inventory listing and in receipts.

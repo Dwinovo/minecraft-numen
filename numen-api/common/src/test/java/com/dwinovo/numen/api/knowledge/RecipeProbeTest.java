@@ -1,4 +1,4 @@
-package com.dwinovo.numen.tools;
+package com.dwinovo.numen.api.knowledge;
 
 import net.minecraft.core.NonNullList;
 import net.minecraft.core.RegistryAccess;

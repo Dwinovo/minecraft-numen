@@ -4,6 +4,7 @@ import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.api.entity.Mouse;
 import com.dwinovo.numen.pathing.drive.Blockage.Hitch;
 import com.dwinovo.numen.pathing.plan.Edit;
+import com.dwinovo.numen.pathing.plan.Maneuver;
 import com.dwinovo.numen.pathing.plan.MoveKind;
 import com.dwinovo.numen.pathing.plan.ToolChoice;
 import com.dwinovo.numen.api.entity.Faces;
@@ -30,17 +31,21 @@ final class Work {
     private static final int BLIND_LIMIT = 40;
 
     private final Rig rig;
+    private final Maneuver maneuver;
     private final MoveKind move;
     /** 正在做的那一件;换了一件就重新拿工具、重新计看不见的刻数。 */
     private Edit current;
+    /** 这一件已经把工具拿到手上了:备工具(做一件)可能要好几刻,只拿一次。 */
+    private boolean gripped;
     private int blind;
     /** 接坠落的那桶水已经倒下、已经收回。 */
     private boolean poured;
     private boolean scooped;
 
-    Work(Rig rig, MoveKind move) {
+    Work(Rig rig, Maneuver maneuver) {
         this.rig = rig;
-        this.move = move;
+        this.maneuver = maneuver;
+        this.move = maneuver.kind();
     }
 
     /** 正在做的那一件;还没动手为 null。 */
@@ -72,13 +77,22 @@ final class Work {
         if (edit != current) {
             current = edit;
             blind = 0;
+            gripped = false;
             if (edit instanceof Edit.Dig dig) {
-                // 先把挑中的工具拿到手上:按此刻的身体挑,与规划定价是同一个选择
-                BlockState state = rig.world().getBlockState(dig.pos());
-                rig.act(new ToolChoice(rig.snapshot()).take(state, rig.hotbar).orElse(null));
+                rig.kit.begin(dig, maneuver.to(), move);
             }
         }
         if (edit instanceof Edit.Dig dig) {
+            // 先备一件挖得动这一格的工具(没有适格的就做一件;做不出就照现有工具挖),再挑最快的那件拿到手上
+            Kit.Status prepared = rig.kit.tick(dig);
+            if (prepared == Kit.Status.WORKING) {
+                return rig.kit.worked() ? Beat.WORKED : Beat.IDLE;
+            }
+            if (!gripped) {
+                gripped = true;
+                BlockState state = rig.world().getBlockState(dig.pos());
+                rig.act(new ToolChoice(rig.snapshot()).take(state, rig.hotbar).orElse(null));
+            }
             return dig(dig);
         } else if (edit instanceof Edit.Place place) {
             return place(place);
@@ -126,6 +140,18 @@ final class Work {
     // ==================== 放 ====================
 
     private Beat place(Edit.Place edit) {
+        Beat beat = placeCore(rig, edit, move);
+        if (beat instanceof Beat.Going going && !going.worked()) {
+            if (++blind < BLIND_LIMIT) {
+                return Beat.IDLE;
+            }
+            return new Beat.Blocked(new Blockage(edit.pos(), rig.world().getBlockState(edit.pos()), move, null, Hitch.NO_FACE));
+        }
+        return beat;
+    }
+
+    /** 往 {@code edit.pos()} 放一块,身体停稳着放(供 {@link Kit} 放工作台复用同一条路):真放上了、还在等、被拒、拿不到料。 */
+    static Beat placeCore(Rig rig, Edit.Place edit, MoveKind move) {
         ServerPlayer body = rig.entity;
         BlockPos pos = edit.pos();
         Hotbar.Grip grip = rig.hotbar.grip(edit.block().asItem());
@@ -135,12 +161,12 @@ final class Work {
         }
         Faces.Face face = rig.look.face(pos, edit.block());
         if (face == null) {
-            return blind(pos, Hitch.NO_FACE);
+            return Beat.IDLE;
         }
         rig.look.at(face.point());
         if (!(rig.mouse.pick() instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK
                 || !hit.getBlockPos().equals(face.clicked()) || hit.getDirection() != face.side()) {
-            return blind(pos, Hitch.NO_FACE);
+            return Beat.IDLE;
         }
         // 点中的方块若自己会响应右键(箱子、门),按着潜行才是往上贴方块:按下的那一刻按着潜行,与搭桥的玩家一样
         boolean sneaking = body.isShiftKeyDown();

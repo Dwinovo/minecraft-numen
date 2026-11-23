@@ -1,5 +1,7 @@
 package com.dwinovo.numen.tools;
 
+import com.dwinovo.numen.api.entity.MenuOps;
+import com.dwinovo.numen.api.knowledge.RecipeProbe;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.PlayerInv;

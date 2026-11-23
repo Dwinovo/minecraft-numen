@@ -83,22 +83,44 @@ public final class ToolChoice {
     }
 
     private Pick choose(BlockState state) {
+        // 要对的工具才有掉落的方块:先只在收得到掉落的工具里挑——"最快"不等于"挖了有东西掉",剑挖石头快,但石头没了。
+        // 一件适格的都没有(材料做不出、也没带)才退回原来的挑法:用现有最快的,接受慢/无掉落。
+        if (!body.creative() && state.requiresCorrectToolForDrops()) {
+            Pick right = choose(state, true);
+            if (right != null) {
+                return right;
+            }
+        }
+        return choose(state, false);
+    }
+
+    /**
+     * 在背包里挑: {@code harvestOnly} 时只看得上挖得动这一格的(空手不是候选);否则照原来的规矩,空手也是一份候选。
+     * 没有可挑的交回 null。
+     */
+    private Pick choose(BlockState state, boolean harvestOnly) {
         int bestSlot = Pick.BARE_HAND;
         ItemStack best = ItemStack.EMPTY;
-        int bestTicks = DigTime.ticks(body.mining(), body.creative(), ItemStack.EMPTY, handEfficiency, state, false, true);
+        int bestTicks = 0;
+        boolean found = false;
+        if (!harvestOnly) {
+            bestTicks = DigTime.ticks(body.mining(), body.creative(), ItemStack.EMPTY, handEfficiency, state, false, true);
+            found = true;
+        }
         for (int slot = 0; slot < inventory.size(); slot++) {
             ItemStack tool = inventory.get(slot);
-            if (tool.isEmpty()) {
+            if (tool.isEmpty() || (harvestOnly && !tool.isCorrectToolForDrops(state))) {
                 continue;
             }
             int ticks = DigTime.ticks(body.mining(), body.creative(), tool, efficiency[slot], state, false, true);
             // 严格更快才换;一样快时保留先到的,而先到的是空手,再是不耗耐久的物品
-            if (ticks < bestTicks || (ticks == bestTicks && best.isDamageableItem() && !tool.isDamageableItem())) {
+            if (!found || ticks < bestTicks || (ticks == bestTicks && best.isDamageableItem() && !tool.isDamageableItem())) {
                 bestSlot = slot;
                 best = tool;
                 bestTicks = ticks;
+                found = true;
             }
         }
-        return new Pick(bestSlot, best, bestTicks);
+        return found ? new Pick(bestSlot, best, bestTicks) : null;
     }
 }

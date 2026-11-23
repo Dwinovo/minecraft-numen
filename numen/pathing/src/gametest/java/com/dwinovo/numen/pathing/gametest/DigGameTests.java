@@ -285,6 +285,158 @@ public class DigGameTests {
                 });
     }
 
+    // ==================== 备工具 ====================
+
+    /**
+     * 石墙,背包里四根原木、手上铁剑:走到墙前先做出木板、木棍、工作台,把工作台放下、打开,做出木镐,再拿镐挖。
+     * 剑一点耐久不掉;原木被用掉;工作台留在世界里;回执里有"crafted …"。
+     */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    public static void crafts_the_tool_it_needs_before_digging(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        wall(t, 8, 3, Blocks.STONE);
+        TestBody body = t.body(4, 1, 5);
+        for (int slot = 20; slot < 24; slot++) {
+            body.getInventory().setItem(slot, new ItemStack(Items.OAK_LOG));
+        }
+        body.getInventory().setItem(0, new ItemStack(Items.IRON_SWORD));
+        body.getInventory().selected = 0;
+        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(590).arrives().then(r -> {
+            boolean crafted = r.report.actions().stream().anyMatch(a -> a instanceof BodyAction.Crafted c
+                    && c.item() == Items.WOODEN_PICKAXE);
+            boolean madeTable = r.report.actions().stream().anyMatch(a -> a instanceof BodyAction.Crafted c
+                    && c.item() == Items.CRAFTING_TABLE);
+            if (!crafted || !madeTable) {
+                throw new GameTestAssertException("没有先做工作台与木镐:" + r.report.actions());
+            }
+            ItemStack pickaxe = find(body, Items.WOODEN_PICKAXE);
+            if (pickaxe.isEmpty() || pickaxe.getDamageValue() == 0) {
+                throw new GameTestAssertException("做好的木镐没挖过东西:" + pickaxe);
+            }
+            ItemStack sword = find(body, Items.IRON_SWORD);
+            if (sword.getDamageValue() != 0) {
+                throw new GameTestAssertException("剑被拿来挖了:" + sword);
+            }
+            if (count(body, Items.OAK_LOG) >= 4) {
+                throw new GameTestAssertException("原木没被用掉");
+            }
+            if (dug(r).isEmpty()) {
+                throw new GameTestAssertException("一格也没挖");
+            }
+            if (!hasCraftingTable(t)) {
+                throw new GameTestAssertException("工作台没放下来");
+            }
+        });
+    }
+
+    /** 铁矿墙,背包里只有一把金镐(等级不够、没有掉落)且没有料:做不出工具,照旧拿金镐挖,不阻断、不报错。 */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    public static void digs_with_what_it_has_when_it_cannot_craft(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        wall(t, 8, 3, Blocks.IRON_ORE);
+        TestBody body = t.body(4, 1, 5);
+        ItemStack golden = new ItemStack(Items.GOLDEN_PICKAXE);
+        golden.enchant(Enchantments.BLOCK_EFFICIENCY, 5);
+        body.getInventory().setItem(0, golden);
+        body.getInventory().selected = 0;
+        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(590).arrives().then(r -> {
+            if (r.report.actions().stream().anyMatch(a -> a instanceof BodyAction.Crafted)) {
+                throw new GameTestAssertException("没有料还做出了东西:" + r.report.actions());
+            }
+            if (!find(body, Items.WOODEN_PICKAXE).isEmpty() || hasCraftingTable(t)) {
+                throw new GameTestAssertException("没有料却出现了工具或工作台");
+            }
+            if (dug(r).isEmpty()) {
+                throw new GameTestAssertException("一格也没挖");
+            }
+            if (find(body, Items.GOLDEN_PICKAXE).getDamageValue() == 0) {
+                throw new GameTestAssertException("金镐没被用上,场景没起作用");
+            }
+        });
+    }
+
+    /** 已经带着木镐:不做、不放工作台,直接挖。 */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    public static void does_not_craft_when_the_right_tool_is_at_hand(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        wall(t, 8, 3, Blocks.STONE);
+        TestBody body = t.body(4, 1, 5);
+        body.getInventory().setItem(0, new ItemStack(Items.WOODEN_PICKAXE));
+        body.getInventory().selected = 0;
+        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(590).arrives().then(r -> {
+            if (r.report.actions().stream().anyMatch(a -> a instanceof BodyAction.Crafted)) {
+                throw new GameTestAssertException("已经有镐还做了东西:" + r.report.actions());
+            }
+            if (hasCraftingTable(t)) {
+                throw new GameTestAssertException("已经有镐还放了工作台");
+            }
+            if (dug(r).isEmpty() || find(body, Items.WOODEN_PICKAXE).getDamageValue() == 0) {
+                throw new GameTestAssertException("木镐没挖");
+            }
+        });
+    }
+
+    /** 铁矿墙,金镐(效率五)挖得快但等级不够、没有掉落,石镐够:每一格都用石镐挖。 */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    public static void skips_a_faster_tool_that_would_not_harvest(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        wall(t, 8, 3, Blocks.IRON_ORE);
+        TestBody body = t.body(4, 1, 5);
+        ItemStack golden = new ItemStack(Items.GOLDEN_PICKAXE);
+        golden.enchant(Enchantments.BLOCK_EFFICIENCY, 5);
+        body.getInventory().setItem(0, golden);
+        body.getInventory().setItem(1, new ItemStack(Items.STONE_PICKAXE));
+        body.getInventory().selected = 0;
+        DigWatch watch = new DigWatch(body);
+        watch.install();
+        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(590).arrives().then(r -> {
+            if (watch.broken().isEmpty()) {
+                throw new GameTestAssertException("一格也没挖");
+            }
+            for (DigWatch.Dig d : watch.broken()) {
+                if (d.tool.getItem() != Items.STONE_PICKAXE) {
+                    throw new GameTestAssertException("用错了工具:" + d);
+                }
+            }
+        });
+    }
+
+    /** 背包里的那一件(整个 36 格);没有为 EMPTY。 */
+    private static ItemStack find(TestBody body, net.minecraft.world.item.Item item) {
+        for (int slot = 0; slot < 36; slot++) {
+            ItemStack stack = body.getInventory().getItem(slot);
+            if (stack.is(item)) {
+                return stack;
+            }
+        }
+        return ItemStack.EMPTY;
+    }
+
+    private static int count(TestBody body, net.minecraft.world.item.Item item) {
+        int count = 0;
+        for (int slot = 0; slot < 36; slot++) {
+            ItemStack stack = body.getInventory().getItem(slot);
+            if (stack.is(item)) {
+                count += stack.getCount();
+            }
+        }
+        return count;
+    }
+
+    /** 场地这一片里有没有放下的工作台。 */
+    private static boolean hasCraftingTable(Trial t) {
+        for (int x = 0; x < 16; x++) {
+            for (int y = 1; y <= 4; y++) {
+                for (int z = 0; z < 20; z++) {
+                    if (t.level.getBlockState(t.at(x, y, z)).is(Blocks.CRAFTING_TABLE)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     /** 六格高的石头山,穿过去是四格长的隧道,手上铁镐:每一格只开挖一次,准星不在两格之间来回换靶。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
     public static void digs_each_block_of_a_tunnel_once(GameTestHelper helper) {

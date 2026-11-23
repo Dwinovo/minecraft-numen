@@ -62,7 +62,7 @@ public final class Voyage {
      */
     public Voyage(Body body, Travel travel, Admission admission, TerrainPolicy terrain, Materials materials, Threats threats, Goal goal,
                   RouteSpec spec, int budget, Route seed, boolean passing, SearchClock clock) {
-        this.rig = new Rig(body, travel, terrain, materials, threats);
+        this.rig = new Rig(body, travel, terrain, materials, threats, spec.place());
         this.admission = admission;
         this.goal = goal;
         this.spec = spec;
@@ -77,7 +77,7 @@ public final class Voyage {
      * 缺什么({@link Lack})当场交回,不占身体。只在世界所在的线程上调用。
      */
     public static Admission admit(Body body, Travel travel, TerrainPolicy terrain, Materials materials, Threats threats, Goal goal) {
-        Rig rig = new Rig(body, travel, terrain, materials, threats);
+        Rig rig = new Rig(body, travel, terrain, materials, threats, false);
         return switch (travel) {
             case FLY -> flightAdmission(rig);
             case GLIDE -> Glide.admit(rig, goal, Set.of());

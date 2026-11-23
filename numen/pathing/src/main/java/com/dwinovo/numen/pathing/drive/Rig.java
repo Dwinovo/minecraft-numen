@@ -49,6 +49,10 @@ final class Rig implements Craft {
     final Materials materials;
     final TerrainPolicy terrain;
     final Threats threats;
+    /** 这一趟许不许放方块:备工具时放工作台要它。 */
+    final boolean mayPlace;
+    /** 挖一格之前备适格工具的那一段(做一件、放/开工作台);一次导航一份,跨步保留配方索引。 */
+    final Kit kit;
     final EditLedger ledger = new EditLedger();
     /** 这次导航一路上的搜索、重搜、走不下去、卡住与复核的次数。 */
     final Journal journal = new Journal();
@@ -61,7 +65,7 @@ final class Rig implements Craft {
     private final List<BodyAction> actions = new ArrayList<>();
     private LiveWorld world;
 
-    Rig(Body body, Travel travel, TerrainPolicy terrain, Materials materials, Threats threats) {
+    Rig(Body body, Travel travel, TerrainPolicy terrain, Materials materials, Threats threats, boolean mayPlace) {
         this.body = body;
         this.travel = travel;
         this.entity = body.entity();
@@ -72,7 +76,9 @@ final class Rig implements Craft {
         this.terrain = terrain;
         this.materials = materials;
         this.threats = threats;
+        this.mayPlace = mayPlace;
         this.who = PathLog.who(entity);
+        this.kit = new Kit(this);
     }
 
     /** 左键这一下;用了多久(问许可、原版挖掘与它引起的方块更新)记进这一刻的账。 */
