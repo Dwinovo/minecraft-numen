@@ -146,3 +146,15 @@
 - 只接了方块。实体的"这是什么"没接。
 - 测试:`DescriptionsTest`、`VanillaDescribersTest`;GameTest `a_plugins_describer_adds_its_line_to_what_a_block_scan_says`
   (告示牌的字和插件的一句都在,旁边抛异常的回答者不碍事),读箱子、读石头与空气的两条改问 `numen.scan.block`。
+
+第 2 步(做)落地了通用容器与熔炉:
+
+- 一件活 `StationTaskRecord`(`numen` 的 `task.station`):右键目标是一件子活(走过去、过权限层、按下去,和 `numen.use.block` 同一件),
+  界面开了按步骤搬东西(每步是 `GuiItemsCompanionTask` 这件子活,它多了"只动界面那一侧的这几格"和"不点名拿哪一种"),收场时合上界面,
+  做成、失败、被叫停都合。回执说哪一步搬了几件什么,做到一半收场已经搬了的照样说。
+- 开工之前就拒绝的两样:目标那一格打不开界面(没有方块实体、也没有菜单提供者;不拦的话右键下去手里的方块会被放上去),要放的东西她没带。
+- `numen.container.put`、`take`(目标是一格或一只右键能打开的实体;放进哪一格由界面自己分),`numen.furnace.input`、`fuel`、`take`
+  (界面得是 `AbstractFurnaceMenu`;取产物时还没烧出来交回空表)。`numen.inv.store`、`fetch` 删了。
+- `numen.inv.smelt` 仍是出厂 Lua 库,改成拼熔炉那三个函数:放料、放燃料,每两秒取一次,够数或 15 秒没有新产物就收。
+- 测试:GameTest `container_put_and_take_go_through_the_chest`、`furnace_fuel_and_input_land_in_their_own_slots`(原木当燃料进的是
+  燃料格)、`container_put_on_a_block_with_no_window_is_refused_before_any_click`;慢批里的 `smelt_loads_waits_and_takes_the_output` 照旧过。
