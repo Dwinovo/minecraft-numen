@@ -21,8 +21,8 @@ import net.minecraft.world.level.Level;
  * <h2>Contract</h2>
  * Implementations query the block at {@code pos} on the "no particular side" context and on every face
  * (some machines only expose per-side), merge what is the same storage (see {@link Exposures}) and hand back the
- * numbers as a {@link BlockStorageReading} — they do not word anything: {@link BlockStorageReading#lines()} is the
- * one place that writes the text for the model. Fluids are in mB. The reading is empty when the block exposes no
+ * numbers as a {@link BlockStorageReading} — they do not word anything: whoever uses the reading decides what the
+ * model is shown. Fluids are in mB. The reading is empty when the block exposes no
  * standard storage on any side (a decorative/menu-only block, or a kind of storage the loader has no standard
  * for). A storage-network terminal (AE2/RS) will show only its local buffer here, never the whole network.
  */

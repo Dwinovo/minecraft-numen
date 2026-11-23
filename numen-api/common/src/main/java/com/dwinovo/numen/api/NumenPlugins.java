@@ -315,8 +315,8 @@ public final class NumenPlugins {
         }
 
         @Override
-        public <T> void answer(Question<T> question, T answerer) {
-            open().add(question.register(answerer));
+        public <T> void answer(Question<T> question, String name, T answerer) {
+            open().add(question.register(name, answerer));
         }
 
         @Override

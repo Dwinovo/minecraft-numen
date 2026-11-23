@@ -31,6 +31,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *       {@link Place}、{@link Target} 各有一种写法,见它们自己。</li>
  *   <li>{@code List<T>}、{@code Map<String, T>};record 是一张表,组件名从驼峰换成下划线就是字段名,{@code Optional} 组件可以没有,
  *       类名是 {@code <名字空间>.<类名>}(第一个用到它的函数的名字空间;{@link #SHARED} 里共用的几种没有名字空间)。</li>
+ *   <li>{@code Map<String, Object>} 是一张字段不固定的表({@code table}):值是脚本的普通值——字符串、数、布尔、列表、名字到值的表,
+ *       可以套着,照 {@link #encode(Object)} 写。</li>
  *   <li>插件自己的类型:{@code numen.codec(MyThing.class, codec)}。</li>
  * </ul>
  */
@@ -44,6 +46,34 @@ public final class LuaCodecs {
     private static final Map<String, ScriptType.Class> CLASSES = new TreeMap<>();
     /** 类名归谁(一个 Java 类型);同一个名字给了两个类型是硬错误。 */
     private static final Map<String, Class<?>> NAMED = new TreeMap<>();
+
+    /** 一张字段不固定的表在签名里的写法。 */
+    private static final ScriptType TABLE = new ScriptType.Simple("table");
+
+    /**
+     * 一张字段不固定的表,值是脚本的普通值(一个回答者说的那几个字段):写回去照 {@link #encode(Object)},里面有写不成脚本的值的东西就抛出。
+     * 写在下面的静态块之前:静态块里现造的 record 有字段用它。
+     */
+    private static final Codec<Map<String, Object>> PLAIN_TABLE = new Codec<>() {
+        @Override
+        public ScriptType type() {
+            return TABLE;
+        }
+
+        @Override
+        public Map<String, Object> decode(Object given) {
+            Map<String, Object> table = table(given);
+            if (table == null) {
+                throw new BadValue("expected a table; got " + BadValue.given(given));
+            }
+            return table;
+        }
+
+        @Override
+        public Object encode(Map<String, Object> map) {
+            return LuaCodecs.encode(map);
+        }
+    };
 
     // ---- 共用的类 ----
 
@@ -66,7 +96,7 @@ public final class LuaCodecs {
                     ScriptType.field("message", ScriptType.STRING, "What went wrong."),
                     ScriptType.optional("hint", ScriptType.STRING, "A next line to run."),
                     ScriptType.optional("fn", ScriptType.STRING, "The function that failed, numen.work.dig."),
-                    ScriptType.optional("data", new ScriptType.Simple("table"), "What the call knew when it failed (the "
+                    ScriptType.optional("data", TABLE, "What the call knew when it failed (the "
                             + "nearest cell out of reach …).")));
 
     /**
@@ -219,7 +249,7 @@ public final class LuaCodecs {
                 return new ListCodec<>(of(args[0], namespace));
             }
             if (raw == Map.class && args[0] == String.class) {
-                return new MapCodec<>(of(args[1], namespace));
+                return args[1] == Object.class ? PLAIN_TABLE : new MapCodec<>(of(args[1], namespace));
             }
             if (raw == Optional.class) {
                 throw new IllegalArgumentException("Optional is only for a record component (an option, or a field "

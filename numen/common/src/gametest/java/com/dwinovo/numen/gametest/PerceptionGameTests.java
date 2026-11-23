@@ -74,10 +74,15 @@ public class PerceptionGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(storage.succeeded(), "reading the chest failed: " + storage.reply());
             String reply = storage.reply();
-            helper.assertTrue(reply.contains("(sides: all,down,up,north,south,west,east)"),
+            java.util.Map<?, ?> held = said(storage, "storage");
+            List<?> inventories = held != null && held.get("inventories") instanceof List<?> listed ? listed : List.of();
+            helper.assertTrue(inventories.size() == 1 && inventories.get(0) instanceof java.util.Map<?, ?>,
+                    "the chest is not listed as exactly one storage: " + reply);
+            java.util.Map<?, ?> inventory = (java.util.Map<?, ?>) inventories.get(0);
+            helper.assertTrue(List.of("all", "down", "up", "north", "south", "west", "east").equals(inventory.get("sides")),
                     "the chest is not one storage exposed on every side: " + reply);
-            helper.assertTrue(!reply.contains("items #"), "the chest is listed more than once: " + reply);
-            helper.assertTrue(reply.contains("diamond") && reply.contains("5"),
+            helper.assertTrue(List.of(java.util.Map.of("slot", 0L, "item", "minecraft:diamond", "count", 5L))
+                            .equals(inventory.get("items")),
                     "the chest's diamonds are not in the reply: " + reply);
             helper.assertTrue(companion.containerMenu == companion.inventoryMenu, "reading the chest opened it");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -138,6 +143,38 @@ public class PerceptionGameTests {
             helper.assertTrue(all.reply().equals(viaCommand.reply()),
                     "scan_entities and scan entities list differently: " + all.reply() + " / "
                             + viaCommand.reply());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 细看一样东西({@code numen.scan.block}、{@code numen.scan.entity})交回的 {@code details} 里这个回答者说的字段;它没说话是 null。 */
+    private static java.util.Map<?, ?> said(ToolRun scan, String answerer) {
+        return scan.field("details") instanceof java.util.Map<?, ?> details
+                && details.get(answerer) instanceof java.util.Map<?, ?> fields ? fields : null;
+    }
+
+    /**
+     * 细看一只实体:一个有职业、有等级的村民,{@code details.villager} 里读得出这两样;列一片时的那几样(编号、种类)照样在。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
+    public static void scan_entity_reads_a_villagers_profession_and_level(GameTestHelper helper) {
+        var villager = EntityType.VILLAGER.create(helper.getLevel());
+        BlockPos at = helper.absolutePos(new BlockPos(8, 2, 3));
+        villager.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        villager.setNoAi(true);
+        villager.setVillagerData(villager.getVillagerData()
+                .setProfession(net.minecraft.world.entity.npc.VillagerProfession.FARMER).setLevel(2));
+        helper.getLevel().addFreshEntity(villager);
+        NumenPlayer companion = spawnAt(helper, "gametest_census", new BlockPos(3, 2, 3), false);
+        ToolRun scan = lua(companion, "numen.scan.entity(" + ref(villager) + ")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(scan.succeeded() && "minecraft:villager".equals(scan.field("type"))
+                            && com.dwinovo.numen.api.sdk.EntityLabel.of(villager).equals(scan.field("id")),
+                    "the villager itself was not read: " + scan.reply());
+            helper.assertTrue(java.util.Map.of("profession", "minecraft:farmer", "level", 2L).equals(said(scan, "villager")),
+                    "details.villager does not carry the profession and the level: " + scan.reply());
+            villager.discard();
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -398,21 +435,21 @@ public class PerceptionGameTests {
         ToolRun onAir = lua(companion, "numen.scan.block(" + xyz(air) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(onStone.succeeded() && List.of().equals(onStone.field("details")),
+            helper.assertTrue(onStone.succeeded() && java.util.Map.of().equals(onStone.field("details")),
                     "stone was not reported with nothing more known: " + onStone.reply());
             helper.assertTrue(onAir.succeeded() && Boolean.TRUE.equals(onAir.field("is_air"))
-                            && List.of().equals(onAir.field("details")),
+                            && java.util.Map.of().equals(onAir.field("details")),
                     "air was not reported as air with nothing more known: " + onAir.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
 
     /**
-     * "这是什么"问的是登记着的回答者(control 0021):一块写了字的告示牌,原版的回答者说出牌上的字,插件登记的回答者说的那一句接在后面;
-     * 旁边一个抛异常的回答者只丢它自己那一条,这次看照常读出来。
+     * "这是什么"问的是登记着的回答者(control 0021):一块写了字的告示牌,原版的回答者说出牌上的字,插件登记的回答者说的归在它自己的
+     * 名字下、排在后面;旁边一个抛异常的回答者只丢它自己那一条,这次看照常读出来。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
-    public static void a_plugins_describer_adds_its_line_to_what_a_block_scan_says(GameTestHelper helper) {
+    public static void a_plugins_describer_adds_its_entry_to_what_a_block_scan_says(GameTestHelper helper) {
         BlockPos sign = helper.absolutePos(new BlockPos(5, 2, 3));
         helper.getLevel().setBlockAndUpdate(sign, Blocks.OAK_SIGN.defaultBlockState());
         var entity = (net.minecraft.world.level.block.entity.SignBlockEntity) helper.getLevel().getBlockEntity(sign);
@@ -420,14 +457,14 @@ public class PerceptionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_reader", new BlockPos(3, 2, 3), false);
         // 回答者全服的同伴都问得到:只认这一条用例的那一格,不论成败都撤掉
         com.dwinovo.numen.api.NumenPlugins.register("gt_describe", numen -> {
-            numen.answer(com.dwinovo.numen.api.Questions.DESCRIBE, (her, target) -> {
-                if (sign.equals(target.block())) {
+            numen.answer(com.dwinovo.numen.api.Questions.BLOCK, "gt_broken", (her, pos) -> {
+                if (sign.equals(pos)) {
                     throw new IllegalStateException("a broken describer");
                 }
-                return List.of();
+                return null;
             });
-            numen.answer(com.dwinovo.numen.api.Questions.DESCRIBE, (her, target) -> sign.equals(target.block())
-                    ? List.of("gt_describe knows this sign") : List.of());
+            numen.answer(com.dwinovo.numen.api.Questions.BLOCK, "gt_describe", (her, pos) -> sign.equals(pos)
+                    ? java.util.Map.of("note", "gt_describe knows this sign") : null);
         });
         com.dwinovo.numen.api.gametest.TestCleanup.whenFinished(helper,
                 () -> com.dwinovo.numen.api.NumenPlugins.roster().withdraw("gt_describe"));
@@ -436,9 +473,14 @@ public class PerceptionGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(scan.succeeded() && "minecraft:oak_sign".equals(scan.field("name")),
                     "the sign itself was not read: " + scan.reply());
-            helper.assertTrue(List.of("sign front: \"Keep\", \"\", \"\", \"\"", "sign back: \"\", \"\", \"\", \"\"",
-                            "gt_describe knows this sign").equals(scan.field("details")),
-                    "details does not carry the sign's text with the plugin's line after it: " + scan.reply());
+            helper.assertTrue(java.util.Map.of("front", List.of("Keep", "", "", ""), "back", List.of("", "", "", ""),
+                            "waxed", false).equals(said(scan, "sign")),
+                    "details.sign does not carry the sign's text: " + scan.reply());
+            helper.assertTrue(java.util.Map.of("note", "gt_describe knows this sign").equals(said(scan, "gt_describe")),
+                    "details does not carry what the plugin's answerer said under its name: " + scan.reply());
+            helper.assertTrue(scan.field("details") instanceof java.util.Map<?, ?> details
+                            && List.of("sign", "gt_describe").equals(List.copyOf(details.keySet())),
+                    "details is not the sign's entry with the plugin's after it and nothing else: " + scan.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }

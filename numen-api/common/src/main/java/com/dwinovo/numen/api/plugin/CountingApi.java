@@ -67,8 +67,8 @@ final class CountingApi implements NumenApi {
     }
 
     @Override
-    public <T> void answer(com.dwinovo.numen.api.Question<T> question, T answerer) {
-        door.answer(question, answerer);
+    public <T> void answer(com.dwinovo.numen.api.Question<T> question, String name, T answerer) {
+        door.answer(question, name, answerer);
         one(PluginRoster.Kind.ANSWER);
     }
 

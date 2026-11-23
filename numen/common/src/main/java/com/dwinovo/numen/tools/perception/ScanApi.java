@@ -2,8 +2,8 @@ package com.dwinovo.numen.tools.perception;
 
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
-import com.dwinovo.numen.api.Focus;
 import com.dwinovo.numen.api.NumenApi;
+import com.dwinovo.numen.api.Questions;
 import com.dwinovo.numen.api.describe.Descriptions;
 import com.dwinovo.numen.scan.BlockScan;
 import com.dwinovo.numen.api.sdk.NearbyEntities;
@@ -17,6 +17,7 @@ import com.dwinovo.numen.api.sdk.CellOrEntity;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.EntityInfo;
 import com.dwinovo.numen.api.sdk.EntityLabel;
+import com.dwinovo.numen.api.sdk.EntityRef;
 import com.dwinovo.numen.api.sdk.Example;
 import com.dwinovo.numen.api.sdk.Flatten;
 import com.dwinovo.numen.api.sdk.Fn;
@@ -53,10 +54,11 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * {@code numen.scan}:看她周围——脚下一圈的地形图、某几种方块在哪、附近有谁、一格方块是什么、看不看得见一处。
- * 五个函数都在服务端读世界,不动世界,不占身体,什么也不存;脚本拿到的是读到的值(方块、实体都带 Pos,原样能交给下一个函数)。
- * 一格方块"是什么"分两半:方块本身的事这里读,别的(告示牌的字、里面存着什么、模组的机器在干什么)问登记着的回答者
- * ({@link com.dwinovo.numen.api.Questions#DESCRIBE})。
+ * {@code numen.scan}:看她周围——脚下一圈的地形图、某几种方块在哪、附近有谁、一格方块是什么、一只实体是什么、看不看得见一处。
+ * 六个函数都在服务端读世界,不动世界,不占身体,什么也不存;脚本拿到的是读到的值(方块、实体都带 Pos,原样能交给下一个函数)。
+ * 看分两档:列一片({@code blocks}、{@code entities})只给每样东西本身的事,不问人;细看一样({@code block}、{@code entity})
+ * 在本身的事之外,再问登记着的回答者({@link Questions#BLOCK}、{@link Questions#ENTITY}:告示牌的字、里面存着什么、村民的职业、
+ * 模组的机器在干什么),各人说的归在各人的名字下,放进 {@code details}。
  */
 public final class ScanApi {
 
@@ -70,8 +72,8 @@ public final class ScanApi {
     private ScanApi() {}
 
     public static void install(NumenApi numen) {
-        numen.api("scan", "Look around you: the ground map, where blocks are, who is near, one block and what it "
-                + "holds, whether you can see something.", ScanApi.class);
+        numen.api("scan", "Look around you: the ground map, where blocks are, who is near, one block or one entity "
+                + "in full, whether you can see something.", ScanApi.class);
     }
 
     // ---- map ----
@@ -155,12 +157,13 @@ public final class ScanApi {
             + "end`.")
     @Note("Instant and read-only. All of them, nearest first: each is an Entity (id, type, category, pos, distance, "
             + "hp); a dropped item is an Item (also item, count and pickup_delay, ticks before anyone can pick it up); "
-            + "a tamed one has owner: you, your owner, or the other player's id (name).")
+            + "a tamed one has owner: you, your owner, or the other player's id (name). One entity in full: "
+            + "numen.scan.entity.")
     @Note("Hand one on as it is: `local e = numen.scan.entities(\"hostile\")[1]; numen.fight.attack(e)`, and the same "
             + "with numen.use.entity(e) or numen.move.walk(e.pos). An id is kind@code, like zombie@3f9a1c "
             + "(player@ab12cd for a player, with its name in name): the code is the start of the entity's UUID, so it is the same "
             + "after a restart.")
-    @SeeAlso({"numen.scan.map", "numen.fight.attack", "numen.use.entity"})
+    @SeeAlso({"numen.scan.entity", "numen.scan.map", "numen.fight.attack", "numen.use.entity"})
     public static List<Seen> entities(ServerCall call, Entities args) {
         NumenPlayer self = call.her();
         double radius = Math.clamp(args.radius().orElse((double) DEFAULT_ENTITY_RADIUS), MIN_ENTITY_RADIUS,
@@ -171,26 +174,33 @@ public final class ScanApi {
         raw.sort(Comparator.comparingDouble(self::distanceTo));
         List<Seen> out = new ArrayList<>();
         for (Entity e : raw) {
-            Kind kind = kindOf(e);
-            if (filter != Kind.ALL && filter != kind) {
+            if (filter != Kind.ALL && filter != kindOf(e)) {
                 continue;
             }
-            Optional<Double> hp = e instanceof LivingEntity le ? Optional.of((double) le.getHealth()) : Optional.empty();
-            Optional<Double> maxHp = e instanceof LivingEntity le ? Optional.of((double) le.getMaxHealth())
-                    : Optional.empty();
-            EntityInfo info = EntityInfo.of(e).seen(Optional.of(kind.name().toLowerCase(java.util.Locale.ROOT)),
-                    Optional.of(Math.round(self.distanceTo(e) * 10.0) / 10.0), hp, maxHp,
-                    Optional.ofNullable(ownerOf(e, self)));
-            if (e instanceof ItemEntity item) {
-                ItemStack stack = item.getItem();
-                // 刚掉下来的东西原版要过一小段冷却才让人捡:还剩几刻,捡的模块据此判断走上去没捡到是不是在等冷却
-                out.add(new ItemInfo(info, BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), stack.getCount(),
-                        com.dwinovo.numen.platform.NumenServices.VANILLA.pickupDelay(item)));
-            } else {
-                out.add(info);
-            }
+            out.add(row(e, basics(self, e)));
         }
         return out;
+    }
+
+    /** 一只实体本身的事:编号、种类、位置、名字,加上哪一类、离她多远、血量、是谁的。列一片与细看一只说的是这同一份。 */
+    private static EntityInfo basics(NumenPlayer self, Entity e) {
+        Optional<Double> hp = e instanceof LivingEntity le ? Optional.of((double) le.getHealth()) : Optional.empty();
+        Optional<Double> maxHp = e instanceof LivingEntity le ? Optional.of((double) le.getMaxHealth())
+                : Optional.empty();
+        return EntityInfo.of(e).seen(Optional.of(kindOf(e).name().toLowerCase(java.util.Locale.ROOT)),
+                Optional.of(Math.round(self.distanceTo(e) * 10.0) / 10.0), hp, maxHp,
+                Optional.ofNullable(ownerOf(e, self)));
+    }
+
+    /** 交给脚本的那一行:掉落物在实体的那些字段之外带上它是什么、几个、多久之后能捡,别的就是 {@code info}。 */
+    private static Seen row(Entity e, EntityInfo info) {
+        if (e instanceof ItemEntity item) {
+            ItemStack stack = item.getItem();
+            // 刚掉下来的东西原版要过一小段冷却才让人捡:还剩几刻,捡的模块据此判断走上去没捡到是不是在等冷却
+            return new ItemInfo(info, BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), stack.getCount(),
+                    com.dwinovo.numen.platform.NumenServices.VANILLA.pickupDelay(item));
+        }
+        return info;
     }
 
     private static Kind kindOf(Entity e) {
@@ -221,12 +231,38 @@ public final class ScanApi {
         return EntityLabel.shown(owner, NumenPlayer.playerName(self.getServer(), owner));
     }
 
+    // ---- entity ----
+
+    /** 哪一只。 */
+    public record Who(@Doc("The entity: an Entity from numen.scan.entities, or its id (zombie@3f9a1c).")
+                      EntityRef entity) {}
+
+    @Fn("One entity in full: what numen.scan.entities lists for it, and what else is known about it (a villager's "
+            + "profession, whether an animal is tamed, what it holds and wears).")
+    @Example("local v = numen.scan.entity(\"villager@3f9a1c\").details.villager\nif v then print(v.profession, v.level) "
+            + "end")
+    @Example("local tame = numen.scan.entity(\"wolf@3f9a1c\").details.tame\nprint(tame and tame.sitting)")
+    @Note("Instant and read-only, for an entity that is loaded in your dimension. The same Entity (or Item) "
+            + "numen.scan.entities lists, with details filled in.")
+    @Note("details is a table with one named entry per kind of fact; an entry is there only when it applies. villager "
+            + "= {profession, level}: the profession id (minecraft:none without a job) and the trade level 1-5. tame "
+            + "= {tamed, sitting, saddled}: sitting on animals that can be told to sit, saddled on a mount that wears "
+            + "a saddle or can be given one now. equipment = what it holds and wears, a {item, count} under each of "
+            + "mainhand, offhand, head, chest, legs, feet that is not empty. A mod's integration adds entries of its "
+            + "own for its entities.")
+    @SeeAlso({"numen.scan.entities", "numen.scan.block"})
+    public static Seen entity(ServerCall call, Who args) {
+        NumenPlayer self = call.her();
+        Entity e = call.entity(args.entity());
+        return row(e, basics(self, e).detailed(Descriptions.of(Questions.ENTITY, self, e)));
+    }
+
     // ---- block ----
 
     /** 哪一格。 */
     public record Cell(@Doc("The block's cell.") BlockPos cell) {}
 
-    /** 一格方块的详情:前面是方块本身的事,{@code details} 是回答者们说的。 */
+    /** 一格方块的详情:前面是方块本身的事,{@code details} 是回答者们说的,回答者的名字到它说的字段。 */
     @Doc("One block in full: what it is, what digging it takes and what else is known about it.")
     public record BlockInfo(@Flatten BlockAt block,
                             @Doc("Its state, facing = \"north\" ...") Optional<Map<String, String>> properties,
@@ -240,26 +276,38 @@ public final class ScanApi {
                             Optional<Integer> estimatedMiningTicks,
                             double distance,
                             boolean inReach,
-                            @Doc("What else is known about it, one fact per line: a sign's text, what it holds (items, "
-                                    + "fluid, energy), what a mod's integration says about its own block and which "
-                                    + "functions work on it. Empty when nothing more is known.")
-                            List<String> details) {}
+                            @Doc("What else is known about it, one named entry per kind of fact: sign, storage, "
+                                    + "furnace, and the entries a mod's integration adds for its own blocks. Empty "
+                                    + "when nothing more is known.")
+                            Map<String, Map<String, Object>> details) {}
 
     @Fn("One block: its id and state, hardness, whether your held tool is right, dig time, whether it is in reach, "
             + "and what else is known about it (a sign's text, what it holds).")
     @Example("numen.scan.block({x = 120, y = 64, z = -35})")
-    @Example("for _, line in ipairs(numen.scan.block({x = 120, y = 64, z = -35}).details) do print(line) end")
+    @Example("local held = numen.scan.block({x = 120, y = 64, z = -35}).details.storage\nif held and held.inventories "
+            + "then for _, it in ipairs(held.inventories[1].items) do print(it.item, it.count) end end")
+    @Example("local f = numen.scan.block({x = 120, y = 64, z = -35}).details.furnace\nprint(f and f.cook_percent)")
     @Note("Instant and read-only, from any distance; nothing is opened or moved. The block id and its state properties "
             + "(an end_portal_frame's has_eye), hardness, whether the tool in hand is right, an estimated dig time, and "
             + "whether it is within your reach.")
-    @Note("details holds the rest, one fact per line: a sign's text on both sides; what the block holds — items, fluid, "
-            + "energy — on chests, furnaces and most modded machines, tanks and batteries; on a furnace, blast furnace "
-            + "or smoker also how many seconds the fuel being burned lasts and how far the item being cooked is; and "
-            + "whatever a mod's integration tells about its own blocks. Storage-network terminals (AE2/RS) show only their local buffer, "
-            + "not the whole network.")
+    @Note("details is a table with one named entry per kind of fact; an entry is there only when it applies, and a "
+            + "mod's integration adds entries of its own for its blocks. sign = {front, back, waxed}: the four lines "
+            + "of each side, and whether it is waxed (its text can no longer be edited).")
+    @Note("details.storage is what the block holds, on a block that exposes its storage the way chests and "
+            + "furnaces do: inventories, fluids and energy, each only when the block has it. An inventory is {sides, "
+            + "slots, items}: the faces it is reached from (all = no particular face), how many slots it has, and "
+            + "one {slot, item, count} per slot that is not empty (slot counts from 0 within that inventory). A "
+            + "block that shows different slots on different faces (a furnace) has several inventories, and the same "
+            + "items can be in more than one of them. A fluid storage is {sides, tanks}, each tank {fluid, "
+            + "amount_mb, capacity_mb} with no fluid while it is empty. energy = {stored_fe, capacity_fe, accepts, "
+            + "provides}.")
+    @Note("details.furnace, on a furnace, blast furnace or smoker that is working: fuel_seconds, how long the fuel "
+            + "being burned lasts (only while it burns); cook_percent, how far the item being cooked is (only while "
+            + "one is cooking); cook_seconds_left (only while it cooks and fuel burns: without fire the progress "
+            + "goes back down).")
     @Note("What a block holds and how full it is are read here. Putting in and taking out are the block's own group "
             + "of functions: numen.container for a chest or a barrel, numen.furnace, numen.brewing and the others.")
-    @SeeAlso({"numen.scan.blocks", "numen.scan.sight"})
+    @SeeAlso({"numen.scan.blocks", "numen.scan.entity", "numen.scan.sight"})
     @SuppressWarnings("deprecation")  // BlockBehaviour.isSolid() 带的是 Mojang 的"别覆写"标记,不是要淘汰
     public static BlockInfo block(ServerCall call, Cell args) {
         NumenPlayer self = call.her();
@@ -292,7 +340,7 @@ public final class ScanApi {
         return new BlockInfo(BlockAt.of(pos, state), properties, state.isAir(), state.isSolid(),
                 !state.getFluidState().isEmpty(), hardness, hardness < 0, needsTool, handIsRightTool, ticks,
                 Math.round(distance * 10.0) / 10.0, self.canInteractWithBlock(pos, 0.0),
-                Descriptions.of(self, Focus.on(pos)));
+                Descriptions.of(Questions.BLOCK, self, pos));
     }
 
     /** 一个方块状态属性写成的值("true"、"north")。 */

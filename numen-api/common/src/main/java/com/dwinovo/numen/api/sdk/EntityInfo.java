@@ -5,6 +5,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -23,7 +24,9 @@ public record EntityInfo(
         @Doc("Blocks from you.") Optional<Double> distance,
         @Doc("Health, for a living one.") Optional<Double> hp,
         Optional<Double> maxHp,
-        @Doc("Whose it is, for a tamed one: you, your owner, or another player's name.") Optional<String> owner)
+        @Doc("Whose it is, for a tamed one: you, your owner, or another player's name.") Optional<String> owner,
+        @Doc("What else is known about it, one named entry per kind of fact; only numen.scan.entity fills it.")
+        Optional<Map<String, Map<String, Object>>> details)
         implements Seen {
 
     /** 一只实体的编号、种类、位置,有名字的带上名字;别的字段由用的一方补({@link #seen})。 */
@@ -31,12 +34,18 @@ public record EntityInfo(
         boolean named = entity.hasCustomName() || entity instanceof Player;
         return new EntityInfo(EntityLabel.of(entity), BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString(),
                 entity.position(), named ? Optional.of(entity.getName().getString()) : Optional.empty(),
-                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
+                Optional.empty());
     }
 
     /** 同一只,补上看到它时的种类、距离、血量与主人。 */
     public EntityInfo seen(Optional<String> category, Optional<Double> distance, Optional<Double> hp,
                            Optional<Double> maxHp, Optional<String> owner) {
-        return new EntityInfo(id, type, pos, name, category, distance, hp, maxHp, owner);
+        return new EntityInfo(id, type, pos, name, category, distance, hp, maxHp, owner, details);
+    }
+
+    /** 同一只,带上细看它时回答者们说的:回答者的名字到它说的字段。 */
+    public EntityInfo detailed(Map<String, Map<String, Object>> details) {
+        return new EntityInfo(id, type, pos, name, category, distance, hp, maxHp, owner, Optional.of(details));
     }
 }

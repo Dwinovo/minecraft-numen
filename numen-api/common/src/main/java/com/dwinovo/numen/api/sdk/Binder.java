@@ -68,7 +68,7 @@ public final class Binder {
     }
 
     /** 一个名字在脚本里写不写得出来;写不出来是那句话,能写是 null。 */
-    static String badName(String name) {
+    public static String badName(String name) {
         if (name == null || !NAME.matcher(name).matches()) {
             return "'" + name + "' is not a name a script can write (a lowercase letter, then [a-z0-9_])";
         }

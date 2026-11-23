@@ -180,7 +180,8 @@ public final class NumenContent {
             // 原版的弓与弩是远程武器的两个提供者,和模组的枪走同一张表(弓先登记,同档里排在弩前)
             numen.rangedWeapon(com.dwinovo.numen.task.combat.VanillaRanged.BOW);
             numen.rangedWeapon(com.dwinovo.numen.task.combat.VanillaRanged.CROSSBOW);
-            // "这是什么"原版的那几样回答者(告示牌的字、方块里存着什么),和模组的回答者走同一扇门、同一个问题
+            // "这是什么"原版的那几样回答者(方块:告示牌的字、里面存着什么、炉子的进度;实体:村民的职业、驯没驯服、穿的拿的),
+            // 和模组的回答者走同一扇门、同样的问题
             com.dwinovo.numen.describe.VanillaDescribers.install(numen);
         });
     }

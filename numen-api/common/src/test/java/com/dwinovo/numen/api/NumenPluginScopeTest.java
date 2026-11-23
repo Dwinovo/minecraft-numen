@@ -114,7 +114,7 @@ class NumenPluginScopeTest {
             numen.on(CompanionEvent.ABORT, id -> heard.incrementAndGet());
             numen.codec(Marker.class, MARKER);
             numen.registerGear(gear);
-            numen.answer(PROBE, "gt_scope says");
+            numen.answer(PROBE, "gt_scope", "gt_scope says");
             numen.bundleContent(dir);
         });
 
@@ -124,7 +124,7 @@ class NumenPluginScopeTest {
         assertNotNull(BuiltinModules.get("gt_scope.probe"));
         assertTrue(Shipped.bundles().stream().anyMatch(b -> b.source().equals("gt_scope")));
         assertEquals(Set.of("gt_scope_kind"), NumenPlugins.gearKinds(null, (ItemStack) null));
-        assertEquals(List.of("gt_scope says"), PROBE.answerers());
+        assertEquals(java.util.Map.of("gt_scope", "gt_scope says"), PROBE.answerers());
         CompanionEvents.fire(CompanionEvent.ABORT, UUID.randomUUID());
         assertEquals(1, heard.get());
 
@@ -137,7 +137,7 @@ class NumenPluginScopeTest {
         assertNull(BuiltinModules.get("gt_scope.probe"));
         assertTrue(Shipped.bundles().stream().noneMatch(b -> b.source().equals("gt_scope")));
         assertEquals(Set.of(), NumenPlugins.gearKinds(null, (ItemStack) null));
-        assertEquals(List.of(), PROBE.answerers());
+        assertEquals(java.util.Map.of(), PROBE.answerers());
         CompanionEvents.fire(CompanionEvent.ABORT, UUID.randomUUID());
         assertEquals(1, heard.get(), "a withdrawn plugin hears nothing");
         assertEquals(Status.DISABLED, row("gt_scope").status());
@@ -150,7 +150,7 @@ class NumenPluginScopeTest {
         assertTrue(codecKnown());
         assertNotNull(BuiltinModules.get("gt_scope.probe"));
         assertEquals(Set.of("gt_scope_kind"), NumenPlugins.gearKinds(null, (ItemStack) null));
-        assertEquals(List.of("gt_scope says"), PROBE.answerers());
+        assertEquals(java.util.Map.of("gt_scope", "gt_scope says"), PROBE.answerers());
         CompanionEvents.fire(CompanionEvent.ABORT, UUID.randomUUID());
         assertEquals(2, heard.get());
         assertEquals(Status.LOADED, row("gt_scope").status());

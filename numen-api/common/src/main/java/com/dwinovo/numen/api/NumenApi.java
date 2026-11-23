@@ -94,18 +94,22 @@ public interface NumenApi {
 
     /**
      * 回答一个问题:登记一个回答者。问题是出题一方放在常量里的 {@link Question}(Numen API 自己出的列在 {@link Questions}),它要用的时候把
-     * 登记着的回答者问一圈。原版的回答由 Numen 从这同一个方法登记;你的模组懂的那一部分——你的机器是什么、在干什么、
-     * 能对它用哪些函数——登记在这里,不用改 Numen。
+     * 登记着的回答者问一圈。原版的回答由 Numen 从这同一个方法登记;你的模组懂的那一部分——你的机器是什么、在干什么——登记在这里,
+     * 不用改 Numen。
      *
      * <pre>{@code
-     * numen.answer(Questions.DESCRIBE, new MySmelterDescriber());
+     * numen.answer(Questions.BLOCK, "smelter", new MySmelterDescriber());   // 她看到的是 details.smelter
      * }</pre>
      *
      * <p>你也可以自己出题:在自己的类里放一个 {@code Question.of("mymod:…")} 常量,别的插件拿它登记回答者,你用
      * {@link Question#answerers()} 问。在门里登记,插件撤回时一起撤。回答者在哪一侧被问由出题的一方说(Numen API 出的题都在服务端问);
      * 登记两侧都跑,在 {@code NumenPlugins.register} 的块里直接调。
+     *
+     * @param name 这个回答者的名字,一个问题里不重名:它说的话归在这个名字下,出错时日志点的也是它。小写字母开头,小写字母、
+     *             数字、下划线
+     * @throws IllegalArgumentException 名字在脚本里写不出来,或这个问题已经有一个同名的回答者
      */
-    <T> void answer(Question<T> question, T answerer);
+    <T> void answer(Question<T> question, String name, T answerer);
 
     /**
      * 登记一种远程武器的提供者:攻击任务打远处的东西时问它"这件认不认得、此刻能不能射、弹道什么样、怎么起一发"
