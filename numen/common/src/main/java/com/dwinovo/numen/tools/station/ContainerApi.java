@@ -18,8 +18,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * {@code numen.container}:往一样装东西的东西里放、从里面取——箱子、木桶、漏斗、潜影盒,和没有自己那一组函数的机器。放进哪一格由它
- * 自己的界面分(和按住 Shift 点一样),所以不用认得它是什么;要说清放进哪一格的(熔炉的燃料)有自己的一组。
+ * {@code numen.container}:往原版那些只管装东西的东西里放、从里面取——箱子、木桶、漏斗、投掷器、发射器、潜影盒、箱子矿车。放进哪一格
+ * 由它自己的界面分(和按住 Shift 点一样);要说清放进哪一格的(熔炉的燃料)有自己的一组。
  */
 public final class ContainerApi {
 
@@ -28,8 +28,8 @@ public final class ContainerApi {
     private ContainerApi() {}
 
     public static void install(NumenApi numen) {
-        numen.api("container", "Anything that keeps items in slots — a chest, a barrel, a hopper, a shulker box, a machine "
-                + "with no functions of its own: put items in, take items out.", ContainerApi.class);
+        numen.api("container", "A plain storage container — a chest, a barrel, a hopper, a dropper, a dispenser, a shulker "
+                + "box, a chest minecart: put items in, take items out.", ContainerApi.class);
     }
 
     /** 往哪儿放、放什么、放几件。 */
