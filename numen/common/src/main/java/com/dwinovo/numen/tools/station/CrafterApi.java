@@ -54,7 +54,7 @@ public final class CrafterApi {
     @SeeAlso({"numen.crafter.toggle", "numen.scan.block"})
     public static Pending<Integer> put(ServerCall call, Put args) {
         int slot = slot(args.slot());
-        Move put = Move.put(args.item().in(call.her().getInventory()), Stations.count("count", args.count()),
+        Move put = Move.put(args.item().in(call.her().getInventory(), call.her().registryAccess()), Stations.count("count", args.count()),
                 new int[] {slot}, "slot " + slot);
         return Stations.at(call, args.crafter(), CrafterMenu.class, KIND, List.of(
                 new Deed((menu, her) -> {

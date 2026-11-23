@@ -52,9 +52,9 @@ public final class SmithingApi {
             + "you.")
     @SeeAlso("numen.inv.recipes")
     public static Pending<Stations.Product> forge(ServerCall call, Forge args) {
-        Stacks.Which template = args.template().in(call.her().getInventory());
-        Stacks.Which base = args.base().in(call.her().getInventory());
-        Stacks.Which addition = args.addition().in(call.her().getInventory());
+        Stacks.Which template = args.template().in(call.her().getInventory(), call.her().registryAccess());
+        Stacks.Which base = args.base().in(call.her().getInventory(), call.her().registryAccess());
+        Stacks.Which addition = args.addition().in(call.her().getInventory(), call.her().registryAccess());
         AtomicReference<Stations.Product> made = new AtomicReference<>();
         return Stations.at(call, args.smithingTable(), SmithingMenu.class, KIND, List.of(
                 Move.put(template, 1, TEMPLATE, "the template"),

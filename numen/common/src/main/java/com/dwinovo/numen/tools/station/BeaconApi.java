@@ -77,7 +77,7 @@ public final class BeaconApi {
                     allowed((BeaconMenu) menu, primary, secondary);
                     return null;
                 }),
-                Move.put(args.pay().in(call.her().getInventory()), 1, PAYMENT, "payment"),
+                Move.put(args.pay().in(call.her().getInventory(), call.her().registryAccess()), 1, PAYMENT, "payment"),
                 new Deed((menu, her) -> {
                     BeaconMenu beacon = (BeaconMenu) menu;
                     her.packets().setBeacon(Optional.of(primary), Optional.ofNullable(secondary));

@@ -1,9 +1,18 @@
 package com.dwinovo.numen.api.entity;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.component.DataComponentPatch;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -20,6 +29,9 @@ import net.minecraft.world.item.ItemStack;
  */
 public final class Stacks {
 
+    /** 记号取摘要的前几个字节:写成十六进制是它的两倍长。 */
+    private static final int CODE_BYTES = 6;
+
     private Stacks() {}
 
     /** 两叠是不是同一种:物品与全部组件都相同。选叠、合种、丢、穿戴比的都是它,"什么算一种"只此一处。 */
@@ -28,17 +40,32 @@ public final class Stacks {
     }
 
     /**
-     * 一种的记号:同一种({@link #sameKind})的叠记号相同,从物品与全部组件算出来,和件数、在哪一格无关。清单里的每一项带着它,
-     * 交回来就凭它认回那一种({@link #carried})。只在这一次开服里作数。
+     * 一种的记号:同一种({@link #sameKind})的叠记号相同,和件数、在哪一格无关。清单里的每一项带着它,交回来就凭它认回那一种
+     * ({@link #carried})。
+     *
+     * <p>从物品 id 与它和新物品不同的那些组件的全部内容算出来:组件照存盘的写法写成文字(键排好序),再取摘要。内容有一点不同
+     * 记号就不同——容器里装的是三件还是四件也算。不用物品自带的散列:它不看容器里各叠的件数,两种会撞成一个。
+     *
+     * @throws IllegalStateException 这一叠带着存不了盘的组件
      */
-    public static String code(ItemStack stack) {
-        return String.format("%08x", ItemStack.hashItemAndComponents(stack));
+    public static String code(ItemStack stack, HolderLookup.Provider registries) {
+        Tag components = DataComponentPatch.CODEC
+                .encodeStart(registries.createSerializationContext(NbtOps.INSTANCE), stack.getComponentsPatch())
+                .getOrThrow();
+        String content = BuiltInRegistries.ITEM.getKey(stack.getItem()) + components.toString();
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(content.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest, 0, CODE_BYTES);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     /** 主背包里这种物品、记号是 {@code code} 的那一种的一叠;她已经没有这一种了为空。 */
-    public static Optional<ItemStack> carried(Inventory inventory, Item item, String code) {
+    public static Optional<ItemStack> carried(Inventory inventory, Item item, String code,
+                                              HolderLookup.Provider registries) {
         for (ItemStack stack : inventory.items) {
-            if (stack.is(item) && code(stack).equals(code)) {
+            if (stack.is(item) && code(stack, registries).equals(code)) {
                 return Optional.of(stack);
             }
         }

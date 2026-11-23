@@ -80,7 +80,7 @@ public final class CartographyApi {
     private static Pending<Stations.Product> work(ServerCall call, OnMap args, Item with, String withName) {
         AtomicReference<Stations.Product> made = new AtomicReference<>();
         return Stations.at(call, args.cartographyTable(), CartographyTableMenu.class, KIND, List.of(
-                Move.put(args.map().in(call.her().getInventory()), 1, MAP, "the map"),
+                Move.put(args.map().in(call.her().getInventory(), call.her().registryAccess()), 1, MAP, "the map"),
                 Move.put(Stacks.Which.of(with), 1, OTHER, "what it is worked with"),
                 Stations.result(CartographyTableMenu.RESULT_SLOT, made, () -> "the cartography table shows no result "
                         + "for this map with " + withName),

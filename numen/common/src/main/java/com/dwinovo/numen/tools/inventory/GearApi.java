@@ -58,8 +58,8 @@ public final class GearApi {
     @SeeAlso({"numen.gear.hold", "numen.gear.remove"})
     public static Pending<Wardrobe.Change> wear(ServerCall call, Wear args) {
         String slot = args.slot().map(s -> s.toLowerCase(Locale.ROOT)).orElse(null);
-        Stacks.Which which = args.item().in(call.her().getInventory());
-        String id = BuiltInRegistries.ITEM.getKey(which.item()).toString();
+        // 参数写错了先退回,不用先看她身上有什么
+        String id = BuiltInRegistries.ITEM.getKey(args.item().item()).toString();
         if (Wardrobe.ARMOR.equals(slot)) {
             throw new ApiError(ErrorKind.BAD_ARGUMENT, "slot = \"armor\" is only for numen.gear.remove (it means all "
                     + "four armor pieces)", Call.of("numen.gear.wear", id));
@@ -69,6 +69,7 @@ public final class GearApi {
                     Wardrobe.OFFHAND.equals(slot) ? Call.of("numen.gear.hold", id, Map.of("hand", "off"))
                             : Call.of("numen.gear.hold", id));
         }
+        Stacks.Which which = args.item().in(call.her().getInventory(), call.her().registryAccess());
         return call.sync(new EquipTaskRecord(call, which, slot, BuiltInRegistries.ITEM.getKey(which.item()).getPath()));
     }
 
@@ -93,7 +94,7 @@ public final class GearApi {
             + "into your backpack, and with no room for it nothing changes.")
     @SeeAlso({"numen.gear.wear", "numen.gear.remove"})
     public static Pending<Wardrobe.Change> hold(ServerCall call, Hold args) {
-        Stacks.Which which = args.item().in(call.her().getInventory());
+        Stacks.Which which = args.item().in(call.her().getInventory(), call.her().registryAccess());
         String slot = args.hand().map(h -> h == Hand.OFF ? Wardrobe.OFFHAND : Wardrobe.MAINHAND)
                 .orElseGet(() -> Wardrobe.handFor(call.her(), new ItemStack(which.item())));
         return call.sync(new EquipTaskRecord(call, which, slot, BuiltInRegistries.ITEM.getKey(which.item()).getPath()));

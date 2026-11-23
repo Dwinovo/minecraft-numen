@@ -64,7 +64,7 @@ public final class FurnaceApi {
     }
 
     private static Pending<Integer> load(ServerCall call, Load args, int[] slots, String role) {
-        Move put = Move.put(args.item().in(call.her().getInventory()), args.count().orElse(null), slots, role);
+        Move put = Move.put(args.item().in(call.her().getInventory(), call.her().registryAccess()), args.count().orElse(null), slots, role);
         return Stations.at(call, args.furnace(), AbstractFurnaceMenu.class, KIND, List.of(put), () -> put.moved().count());
     }
 

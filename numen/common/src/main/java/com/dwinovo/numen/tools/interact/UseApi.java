@@ -194,7 +194,7 @@ public final class UseApi {
 
     /** 点名要先拿到手上的那一样,落到她此刻背包里的哪一种;没点名(用手上的)是 null。 */
     private static Stacks.Which carried(ServerCall call, Optional<StackRef> item) {
-        return item.map(ref -> ref.in(call.her().getInventory())).orElse(null);
+        return item.map(ref -> ref.in(call.her().getInventory(), call.her().registryAccess())).orElse(null);
     }
 
     /** 按住的秒数折成刻,至少一刻;不写是 0,按一下。 */

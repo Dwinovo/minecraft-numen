@@ -73,8 +73,8 @@ public final class AnvilApi {
     @SeeAlso("numen.anvil.rename")
     public static Pending<AnvilWork> combine(ServerCall call, Combine args) {
         Integer count = Stations.count("count", args.count());
-        return work(call, args.anvil(), args.item().in(call.her().getInventory()),
-                args.other().in(call.her().getInventory()), count == null ? 1 : count, args.name().orElse(null));
+        return work(call, args.anvil(), args.item().in(call.her().getInventory(), call.her().registryAccess()),
+                args.other().in(call.her().getInventory(), call.her().registryAccess()), count == null ? 1 : count, args.name().orElse(null));
     }
 
     /** 哪座铁砧、哪件东西、叫什么。 */
@@ -89,7 +89,7 @@ public final class AnvilApi {
             + "you, when you have fewer levels than it costs or the item already has that name.")
     @SeeAlso("numen.anvil.combine")
     public static Pending<AnvilWork> rename(ServerCall call, Rename args) {
-        return work(call, args.anvil(), args.item().in(call.her().getInventory()), null, 0, args.name());
+        return work(call, args.anvil(), args.item().in(call.her().getInventory(), call.her().registryAccess()), null, 0, args.name());
     }
 
     /**

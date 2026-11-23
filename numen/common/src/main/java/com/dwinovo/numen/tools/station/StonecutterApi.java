@@ -71,7 +71,7 @@ public final class StonecutterApi {
                 new SingleRecipeInput(new ItemStack(args.item().item())), level), args, level.registryAccess());
         Move take = Move.take(args.result(), null, RESULT, "the result", false);
         return Stations.at(call, args.stonecutter(), StonecutterMenu.class, KIND, List.of(
-                Move.put(args.item().in(call.her().getInventory()), count, INPUT, "the input"),
+                Move.put(args.item().in(call.her().getInventory(), call.her().registryAccess()), count, INPUT, "the input"),
                 new Deed((menu, her) -> {
                     StonecutterMenu cutter = (StonecutterMenu) menu;
                     int n = recipe(cutter.getRecipes(), args, her.level().registryAccess());

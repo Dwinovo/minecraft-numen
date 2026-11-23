@@ -75,7 +75,7 @@ public final class EnchantApi {
     public static Pending<EnchantOptions> options(ServerCall call, Look args) {
         AtomicReference<EnchantOptions> read = new AtomicReference<>();
         return Stations.at(call, args.enchantingTable(), EnchantmentMenu.class, KIND, List.of(
-                Move.put(args.item().in(call.her().getInventory()), 1, ITEM, "the item to enchant"),
+                Move.put(args.item().in(call.her().getInventory(), call.her().registryAccess()), 1, ITEM, "the item to enchant"),
                 new Deed((menu, her) -> {
                     read.set(read((EnchantmentMenu) menu, her));
                     return null;
@@ -102,7 +102,7 @@ public final class EnchantApi {
             throw new ApiError(ErrorKind.BAD_ARGUMENT, "an enchanting table has options 1 to 3; " + n + " is not one",
                     options);
         }
-        Stacks.Which item = args.item().in(call.her().getInventory());
+        Stacks.Which item = args.item().in(call.her().getInventory(), call.her().registryAccess());
         AtomicReference<Stations.Product> made = new AtomicReference<>();
         return Stations.at(call, args.enchantingTable(), EnchantmentMenu.class, KIND, List.of(
                 Move.put(item, 1, ITEM, "the item to enchant"),

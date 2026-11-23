@@ -4,6 +4,7 @@ import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.script.ScriptType;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
@@ -34,11 +35,11 @@ public record StackRef(Item item, String kind) {
      *
      * @throws ApiError {@link ErrorKind#NOT_FOUND}:她已经没有那一种了,这一项过时了
      */
-    public Stacks.Which in(Inventory inventory) {
+    public Stacks.Which in(Inventory inventory, HolderLookup.Provider registries) {
         if (kind == null) {
             return Stacks.Which.of(item);
         }
-        ItemStack there = Stacks.carried(inventory, item, kind).orElseThrow(() -> new ApiError(ErrorKind.NOT_FOUND,
+        ItemStack there = Stacks.carried(inventory, item, kind, registries).orElseThrow(() -> new ApiError(ErrorKind.NOT_FOUND,
                 "you no longer carry the kind of " + BuiltInRegistries.ITEM.getKey(item) + " this entry of "
                         + "numen.inv.items() names. Read numen.inv.items() again and pass the entry it returns",
                 Call.of("numen.inv.items")));

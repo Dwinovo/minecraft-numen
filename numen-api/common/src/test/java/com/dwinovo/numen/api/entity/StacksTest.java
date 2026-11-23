@@ -29,6 +29,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class StacksTest {
 
     private static BuiltInExceptionProvider brigadierWords;
+    /** 原版的注册表:算一种的记号要把组件照存盘的写法写出来。游戏启动之后才取得到。 */
+    private static net.minecraft.core.HolderLookup.Provider REGISTRIES;
     /** 测试用的回答者;这张表是全进程共用的,测完撤掉。 */
     private static Handle holds;
 
@@ -39,6 +41,7 @@ class StacksTest {
         try {
             net.minecraft.SharedConstants.tryDetectVersion();
             net.minecraft.server.Bootstrap.bootStrap();
+            REGISTRIES = net.minecraft.data.registries.VanillaRegistries.createLookup();
             booted = true;
         } catch (Throwable t) {
             booted = false;
@@ -73,9 +76,9 @@ class StacksTest {
                 new ItemStack(Items.DIRT, 5), new ItemStack(Items.SHULKER_BOX), boxHolding(3), boxHolding(4),
                 ItemStack.EMPTY, new ItemStack(Items.DIRT, 2)));
         assertEquals(4, kinds.size());
-        assertEquals(Stacks.code(boxHolding(3).copyWithCount(1)), Stacks.code(kinds.get(1).sample()),
+        assertEquals(Stacks.code(boxHolding(3).copyWithCount(1), REGISTRIES), Stacks.code(kinds.get(1).sample(), REGISTRIES),
                 "同一种的叠记号相同,和件数无关");
-        assertEquals(4, kinds.stream().map(kind -> Stacks.code(kind.sample())).distinct().count(), "不同的种记号不同");
+        assertEquals(4, kinds.stream().map(kind -> Stacks.code(kind.sample(), REGISTRIES)).distinct().count(), "不同的种记号不同");
         assertEquals("minecraft:shulker_box", StackLabel.of(null, kinds.get(0).sample()));
         assertEquals(2, kinds.get(0).count());
         assertEquals("minecraft:shulker_box[gt_holds={minecraft:diamond=3}]", StackLabel.of(null, kinds.get(1).sample()));
@@ -128,7 +131,7 @@ class StacksTest {
         List<Stacks.Kind> kinds = Stacks.kinds(List.of(a, b, a.copy()));
         assertEquals(2, kinds.size());
         assertEquals(2, kinds.get(0).count());
-        assertFalse(Stacks.code(kinds.get(0).sample()).equals(Stacks.code(kinds.get(1).sample())), "两种的记号不同");
+        assertFalse(Stacks.code(kinds.get(0).sample(), REGISTRIES).equals(Stacks.code(kinds.get(1).sample(), REGISTRIES)), "两种的记号不同");
         assertEquals("minecraft:stick", StackLabel.of(null, a));
         assertEquals("minecraft:stick", StackLabel.of(null, b));
     }

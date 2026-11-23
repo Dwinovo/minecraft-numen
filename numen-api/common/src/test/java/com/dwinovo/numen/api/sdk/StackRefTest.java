@@ -30,6 +30,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class StackRefTest {
 
     private static BuiltInExceptionProvider brigadierWords;
+    /** 原版的注册表:算一种的记号要把组件照存盘的写法写出来。游戏启动之后才取得到。 */
+    private static net.minecraft.core.HolderLookup.Provider REGISTRIES;
 
     @BeforeAll
     static void boot() {
@@ -38,6 +40,7 @@ class StackRefTest {
         try {
             net.minecraft.SharedConstants.tryDetectVersion();
             net.minecraft.server.Bootstrap.bootStrap();
+            REGISTRIES = net.minecraft.data.registries.VanillaRegistries.createLookup();
             booted = true;
         } catch (Throwable t) {
             booted = false;
@@ -106,12 +109,12 @@ class StackRefTest {
         inventory.setItem(2, new ItemStack(Items.SHULKER_BOX));
         inventory.setItem(4, boxHolding(3));
 
-        Stacks.Which any = StackRef.of(Items.SHULKER_BOX).in(inventory);
+        Stacks.Which any = StackRef.of(Items.SHULKER_BOX).in(inventory, REGISTRIES);
         assertNull(any.exact());
         assertTrue(any.matches(inventory.getItem(2)) && any.matches(inventory.getItem(4)));
 
-        StackRef named = new StackRef(Items.SHULKER_BOX, Stacks.code(inventory.getItem(4)));
-        Stacks.Which full = named.in(inventory);
+        StackRef named = new StackRef(Items.SHULKER_BOX, Stacks.code(inventory.getItem(4), REGISTRIES));
+        Stacks.Which full = named.in(inventory, REGISTRIES);
         assertTrue(full.matches(inventory.getItem(4)));
         assertFalse(full.matches(inventory.getItem(2)));
 
@@ -119,12 +122,12 @@ class StackRefTest {
         ItemStack empty = inventory.getItem(2);
         inventory.setItem(2, inventory.getItem(4));
         inventory.setItem(4, empty);
-        Stacks.Which moved = named.in(inventory);
+        Stacks.Which moved = named.in(inventory, REGISTRIES);
         assertTrue(moved.matches(inventory.getItem(2)));
         assertFalse(moved.matches(inventory.getItem(4)));
 
         inventory.setItem(2, new ItemStack(Items.DIRT));
-        ApiError stale = assertThrows(ApiError.class, () -> named.in(inventory));
+        ApiError stale = assertThrows(ApiError.class, () -> named.in(inventory, REGISTRIES));
         assertEquals(ErrorKind.NOT_FOUND, stale.kind());
         assertEquals("numen.inv.items()", stale.hint());
     }

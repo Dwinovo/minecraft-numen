@@ -42,7 +42,8 @@ class DescriptionsTest {
         with(describers, () -> {
             Map<String, Map<String, Object>> said = Descriptions.of(Questions.BLOCK, null, AT);
             assertEquals(List.of("gt_storage", "gt_smelter"), List.copyOf(said.keySet()));
-            assertEquals(Map.of("items", List.of(Map.of("item", "minecraft:raw_iron", "count", 8))),
+            // 回答当场写成脚本的普通值:整数读回是 Long
+            assertEquals(Map.of("items", List.of(Map.of("item", "minecraft:raw_iron", "count", 8L))),
                     said.get("gt_storage"));
             assertEquals(Map.of("running", true), said.get("gt_smelter"));
         });

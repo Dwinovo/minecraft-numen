@@ -36,9 +36,11 @@ class AnswerTextTest {
 
     @Test
     void stringsAreQuotedAndNumbersAndBooleansAreBare() {
-        assertEquals("minecraft:iron_sword[gt={name=\"Excalibur\", level=5, ratio=0.5, lit=true}]",
+        assertEquals("minecraft:iron_sword[gt={name=\"Excalibur\", level=5, lit=true}]",
                 AnswerText.of("minecraft:iron_sword",
-                        answers("gt", fields("name", "Excalibur", "level", 5L, "ratio", 0.5, "lit", true))));
+                        answers("gt", fields("name", "Excalibur", "level", 5L, "lit", true))));
+        assertEquals("minecraft:iron_sword[gt={ratio=0.5}]",
+                AnswerText.of("minecraft:iron_sword", answers("gt", fields("ratio", 0.5))));
     }
 
     @Test

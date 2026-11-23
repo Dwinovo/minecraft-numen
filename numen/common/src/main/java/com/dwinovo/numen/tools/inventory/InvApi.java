@@ -82,7 +82,7 @@ public final class InvApi {
         List<StackInfo> out = new ArrayList<>();
         for (Stacks.Kind kind : Stacks.kinds(inventory.items.subList(0,
                 Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size())))) {
-            out.add(StackInfo.of(kind, StackLabel.details(call.her(), kind.sample())));
+            out.add(StackInfo.of(kind, StackLabel.details(call.her(), kind.sample()), call.her().registryAccess()));
         }
         return out;
     }
@@ -173,7 +173,7 @@ public final class InvApi {
     @Note("Refused at once, keeping the food, when you don't carry it or it isn't food or drink; fails the same way "
             + "when you are already full.")
     public static Job<EatCompanionTask.Ate> eat(ServerCall call, Eat args) {
-        Stacks.Which which = args.item().in(call.her().getInventory());
+        Stacks.Which which = args.item().in(call.her().getInventory(), call.her().registryAccess());
         return Job.of(new EatItemTaskRecord(call, which, BuiltInRegistries.ITEM.getKey(which.item()).getPath()));
     }
 
@@ -195,7 +195,7 @@ public final class InvApi {
     @Note("Returns how many were dropped and how many remain.")
     @SeeAlso("numen.use.block")
     public static Pending<DropCompanionTask.Dropped> drop(ServerCall call, Drop args) {
-        Stacks.Which which = args.item().in(call.her().getInventory());
+        Stacks.Which which = args.item().in(call.her().getInventory(), call.her().registryAccess());
         int carried = Stacks.pick(call.her().getInventory(), which).map(Stacks.Pick::count).orElse(0);
         int n = args.count().orElse(Math.max(1, carried));
         return call.sync(new DropItemsTaskRecord(call, which, Math.clamp(n, 1, DROP_MAX_COUNT),

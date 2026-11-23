@@ -51,7 +51,7 @@ public final class ContainerApi {
     @Note("What it holds is read with numen.scan.block, without opening it.")
     @SeeAlso({"numen.container.take", "numen.scan.block"})
     public static Pending<Integer> put(ServerCall call, Put args) {
-        Move put = Move.put(args.item().in(call.her().getInventory()), args.count().orElse(null), null, null);
+        Move put = Move.put(args.item().in(call.her().getInventory(), call.her().registryAccess()), args.count().orElse(null), null, null);
         return Stations.at(call, args.target(), null, KIND, List.of(put), () -> put.moved().count());
     }
 

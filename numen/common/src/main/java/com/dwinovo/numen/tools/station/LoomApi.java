@@ -75,9 +75,9 @@ public final class LoomApi {
         }
         AtomicReference<Stations.Product> made = new AtomicReference<>();
         List<Step> steps = new ArrayList<>();
-        steps.add(Move.put(args.banner().in(call.her().getInventory()), 1, BANNER, "the banner"));
-        steps.add(Move.put(args.dye().in(call.her().getInventory()), 1, DYE, "the dye"));
-        args.item().ifPresent(item -> steps.add(Move.put(item.in(call.her().getInventory()), 1, PATTERN,
+        steps.add(Move.put(args.banner().in(call.her().getInventory(), call.her().registryAccess()), 1, BANNER, "the banner"));
+        steps.add(Move.put(args.dye().in(call.her().getInventory(), call.her().registryAccess()), 1, DYE, "the dye"));
+        args.item().ifPresent(item -> steps.add(Move.put(item.in(call.her().getInventory(), call.her().registryAccess()), 1, PATTERN,
                 "the pattern item")));
         steps.add(new Deed((menu, her) -> {
             ItemStack woven = weave((LoomMenu) menu, her, pattern, args.item().isPresent());

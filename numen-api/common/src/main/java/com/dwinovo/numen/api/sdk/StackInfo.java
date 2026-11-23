@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.sdk;
 
 import com.dwinovo.numen.api.entity.Stacks;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
 
 import java.util.Map;
@@ -23,9 +24,11 @@ public record StackInfo(@Doc("The item id, minecraft:cobblestone.") String item,
      *
      * @param kind    这一种
      * @param details 关于它回答者们说的({@code StackLabel.details}):回答者的名字到它说的字段;没人说话是空表
+     * @param registries 算这一种的记号({@link Stacks#code})用的注册表
      */
-    public static StackInfo of(Stacks.Kind kind, Map<String, Map<String, Object>> details) {
+    public static StackInfo of(Stacks.Kind kind, Map<String, Map<String, Object>> details,
+                               HolderLookup.Provider registries) {
         return new StackInfo(BuiltInRegistries.ITEM.getKey(kind.sample().getItem()).toString(), kind.count(),
-                details, Stacks.code(kind.sample()));
+                details, Stacks.code(kind.sample(), registries));
     }
 }

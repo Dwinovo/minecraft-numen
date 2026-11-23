@@ -51,7 +51,7 @@ public final class GrindstoneApi {
             + "item comes back to you.")
     @SeeAlso("numen.grindstone.repair")
     public static Pending<Stations.Product> disenchant(ServerCall call, Disenchant args) {
-        return grind(call, args.grindstone(), args.item().in(call.her().getInventory()), null);
+        return grind(call, args.grindstone(), args.item().in(call.her().getInventory(), call.her().registryAccess()), null);
     }
 
     /** 哪座砂轮、哪两件东西。 */
@@ -68,8 +68,8 @@ public final class GrindstoneApi {
             + "back to you.")
     @SeeAlso({"numen.grindstone.disenchant", "numen.anvil.combine"})
     public static Pending<Stations.Product> repair(ServerCall call, Repair args) {
-        return grind(call, args.grindstone(), args.item().in(call.her().getInventory()),
-                args.other().in(call.her().getInventory()));
+        return grind(call, args.grindstone(), args.item().in(call.her().getInventory(), call.her().registryAccess()),
+                args.other().in(call.her().getInventory(), call.her().registryAccess()));
     }
 
     /** @param other 并进去的另一件;只磨掉附魔是 null */

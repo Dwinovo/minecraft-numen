@@ -52,7 +52,7 @@ public final class BrewingApi {
             + "when you carry none, failed when no slot is free or the item is no bottle.")
     @SeeAlso({"numen.brewing.ingredient", "numen.brewing.fuel", "numen.brewing.take"})
     public static Pending<Integer> bottles(ServerCall call, Load args) {
-        return load(call, args.stand(), args.item().in(call.her().getInventory()), args.count(), BOTTLES, "bottles");
+        return load(call, args.stand(), args.item().in(call.her().getInventory(), call.her().registryAccess()), args.count(), BOTTLES, "bottles");
     }
 
     @Fn("Put items into a brewing stand's ingredient slot.")
@@ -62,7 +62,7 @@ public final class BrewingApi {
             + "another one.")
     @SeeAlso({"numen.brewing.bottles", "numen.brewing.fuel", "numen.scan.block"})
     public static Pending<Integer> ingredient(ServerCall call, Load args) {
-        return load(call, args.stand(), args.item().in(call.her().getInventory()), args.count(), INGREDIENT,
+        return load(call, args.stand(), args.item().in(call.her().getInventory(), call.her().registryAccess()), args.count(), INGREDIENT,
                 "the ingredient");
     }
 

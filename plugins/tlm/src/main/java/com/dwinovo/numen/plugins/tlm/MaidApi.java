@@ -470,7 +470,7 @@ public final class MaidApi {
             + "the plain one), pass that kind's entry of numen.inv.items() as item.")
     @SeeAlso({"tlm.maid.take", "tlm.maid.info"})
     public static Pending<Integer> give(ServerCall call, Give args) {
-        Stacks.Which which = args.item().in(call.her().getInventory());
+        Stacks.Which which = args.item().in(call.her().getInventory(), call.her().registryAccess());
         Item item = which.item();
         int count = atLeastOne(args.count());
         Place place = args.slot().orElse(Place.BACKPACK);
