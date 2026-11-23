@@ -315,9 +315,10 @@ public final class Interaction {
     private Status useAir() {
         player.controls().stop();
         if (!started) {
-            if (player.mouse().useItem() instanceof Mouse.Use.Waiting) {
+            if (!(player.mouse().useItem() instanceof Mouse.Use.Pressed pressed)) {
                 return Status.RUNNING;                 // 上一下右键的缓手还没过,下一刻再按
             }
+            landed(pressed);
             started = true;
             if (!timing.hold) return Status.DONE;      // single tap (throw / instant use)
         }
@@ -397,14 +398,22 @@ public final class Interaction {
                 yield false;
             }
             case Mouse.Use.Pressed pressed -> {
-                if (pressed.opened()) {
-                    opened = true;
-                    MenuOrigin.opened(player, pressed.hit() instanceof BlockHitResult hit
-                            && hit.getType() == HitResult.Type.BLOCK ? hit.getBlockPos() : null);
-                }
+                landed(pressed);
                 yield true;                            // a press with no effect is still a press
             }
         };
+    }
+
+    /**
+     * 右键按下去了:这一下打开了界面就记下来,连同它是右键哪儿打开的({@link MenuOrigin})。对着方块、实体、空气按的三条路都从这里过——
+     * 手里的东西对着空气用也能打开界面(模组的背包、无线终端)。
+     */
+    private void landed(Mouse.Use.Pressed pressed) {
+        if (pressed.opened()) {
+            opened = true;
+            MenuOrigin.opened(player, pressed.hit() instanceof BlockHitResult hit
+                    && hit.getType() == HitResult.Type.BLOCK ? hit.getBlockPos() : null);
+        }
     }
 
     /** Abandon any in-progress interaction (clears a dig overlay / releases a held use / lets go of sneak). */
