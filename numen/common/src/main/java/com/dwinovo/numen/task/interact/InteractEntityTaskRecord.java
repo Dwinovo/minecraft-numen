@@ -24,7 +24,7 @@ import net.minecraft.world.item.Item;
  * hold N ticks, -1 = hold until done (dead / self-complete) or timeout. {@code sneak}: hold sneak while pressing
  * ({@code --sneak}).
  */
-public final class InteractEntityTaskRecord extends TaskRecord<com.dwinovo.numen.tools.Clicks.Pressed> {
+public final class InteractEntityTaskRecord extends TaskRecord<com.dwinovo.numen.tools.Clicks.Clicked> {
 
     /** Covers chasing a moving target. */
     private static final long TIMEOUT_TICKS = 60 * 20;
@@ -36,9 +36,14 @@ public final class InteractEntityTaskRecord extends TaskRecord<com.dwinovo.numen
     public final boolean sneak;
     /** 点在实体身上的哪一点(相对它的位置),先发 INTERACT_AT;不指定为 null。 */
     public final net.minecraft.world.phys.Vec3 at;
+    /**
+     * 这一下打开的界面留着不合:只有 {@code StationCompanionTask} 这样派,它接着在那个界面里做事、做完自己合。别的点击是 false,
+     * 点开了界面当场合上。
+     */
+    public final boolean keepsWindow;
 
     public InteractEntityTaskRecord(ServerCall source, MouseButton button, EntityRef entity, int holdTicks, Item item,
-                                    boolean sneak, net.minecraft.world.phys.Vec3 at) {
+                                    boolean sneak, net.minecraft.world.phys.Vec3 at, boolean keepsWindow) {
         super(source, source.her().level().getGameTime() + TIMEOUT_TICKS);
         this.button = button;
         this.entity = entity;
@@ -46,6 +51,7 @@ public final class InteractEntityTaskRecord extends TaskRecord<com.dwinovo.numen
         this.item = item;
         this.sneak = sneak;
         this.at = at;
+        this.keepsWindow = keepsWindow;
     }
 
     @Override

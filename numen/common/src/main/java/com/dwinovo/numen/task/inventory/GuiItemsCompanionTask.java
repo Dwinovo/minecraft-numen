@@ -21,13 +21,12 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 在她打开的界面里按种类搬东西:一刻一步,和 {@code gui move}/{@code gui quick} 同一种搬法({@link ContainerOps}),整叠够数就
- * 整叠挪到另一边,只要一部分就放进另一边一格空的或同样东西的格;界面那一侧限了格时,放进去总是落在那几格里。从容器里拿出来的那一步
- * 点下去之前交给权限层,和 {@code gui quick} 一样。搬够了、这一种没了、另一边放不下了就收场,回执说搬了几件、为什么停在那儿。
+ * 在她打开的界面里按种类搬东西,是 {@code StationCompanionTask} 的子活:一刻一步({@link ContainerOps}),整叠够数就整叠挪到另一边,
+ * 只要一部分就放进另一边一格空的或同样东西的格;界面那一侧限了格时,放进去总是落在那几格里。从容器里拿出来的那一步点下去之前交给
+ * 权限层。搬够了、这一种没了、另一边放不下了就收场,回执说搬了几件、为什么停在那儿。
  */
 public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsTaskRecord, Integer> {
 
-    private final ContainerOps ops = new ContainerOps();
     private int moved;
     /** 搬了的东西,按种类记件数,先搬的在前。 */
     private final Map<Item, Integer> kinds = new LinkedHashMap<>();
@@ -51,8 +50,7 @@ public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsT
             if (moved > 0) {
                 return finish();
             }
-            fail("no window is open: open a chest, a furnace or a machine first (numen.use.block on it)",
-                    FailureType.UNSUPPORTED);
+            fail("it closed before the work was done", FailureType.UNKNOWN);
             return TaskState.FAILED;
         }
         int left = r.count == null ? Integer.MAX_VALUE : r.count - moved;
@@ -67,8 +65,7 @@ public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsT
         } else {
             Slot to = target(menu, from.getItem());
             if (to == null) {
-                stopped = r.slotted() ? "that slot is full or does not take " + itemName()
-                        : "there is no room on the other side for part of a stack";
+                stopped = noRoom();
                 return finish();
             }
             move = new ContainerOps.Move(from.index, to.index, Math.min(left, from.getItem().getCount()));
@@ -89,10 +86,10 @@ public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsT
         // 点它会一直切到料用完)那一格只少一叠,到她手里的是全部
         Item kind = from.getItem().getItem();
         int before = PlayerInv.count(player.getInventory(), kind);
-        ops.step(move, player);
+        ContainerOps.step(move, player);
         int step = (PlayerInv.count(player.getInventory(), kind) - before) * (r.put ? -1 : 1);
         if (step <= 0) {
-            stopped = "the other side is full or does not take " + itemName();
+            stopped = noRoom();
             return finish();
         }
         moved += step;
@@ -100,15 +97,23 @@ public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsT
         return TaskState.RUNNING;
     }
 
+    /** 这一步搬不动时说的那句:拿是她的背包放不下,放是对方满了或不收这种东西。 */
+    private String noRoom() {
+        if (!r.put) {
+            return "your inventory has no room for " + itemName();
+        }
+        return (r.slotted() ? "that slot" : "it") + " is full or does not take " + itemName();
+    }
+
     /** 搬够了、搬不动了:搬了的照实说;一件都没搬是失败。 */
     private TaskState finish() {
         if (moved == 0) {
             boolean none = stopped == null;
-            fail(none ? (r.put ? "you carry no " + itemName() : "the window holds no " + itemName())
+            fail(none ? (r.put ? "you carry no " + itemName() : "it holds no " + itemName())
                     : stopped, none ? FailureType.TARGET_LOST : FailureType.NO_SPACE);
             return TaskState.FAILED;
         }
-        done = (r.put ? "put " : "took ") + moved + " " + itemName() + (r.put ? " into the window" : " out of the window")
+        done = (r.put ? "put " : "took ") + moved + " " + itemName() + (r.put ? " in" : " out")
                 + (r.count != null && moved < r.count ? " (" + r.count + " asked; "
                 + (stopped != null ? stopped : (r.put ? "you had no more" : "it held no more")) + ")" : "") + ".";
         succeed();
@@ -161,7 +166,7 @@ public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsT
         return Collections.unmodifiableMap(kinds);
     }
 
-    /** 搬了几件:{@code numen.gui.put}、{@code numen.gui.take} 交回的值。 */
+    /** 搬了几件。 */
     @Override
     protected Integer value() {
         return moved;

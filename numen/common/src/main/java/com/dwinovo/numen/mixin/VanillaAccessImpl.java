@@ -4,7 +4,6 @@ import com.dwinovo.numen.mixin.inject.BlockItemAccessor;
 import com.dwinovo.numen.mixin.inject.CraftingMenuAccessor;
 import com.dwinovo.numen.mixin.inject.FishingHookAccessor;
 import com.dwinovo.numen.mixin.inject.ItemEntityAccessor;
-import com.dwinovo.numen.mixin.inject.MenuDataSlotsAccessor;
 import com.dwinovo.numen.platform.IVanillaAccess;
 
 import net.minecraft.world.entity.item.ItemEntity;
@@ -12,7 +11,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.FishingHook;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.CraftingContainer;
-import net.minecraft.world.inventory.DataSlot;
 import net.minecraft.world.inventory.ResultContainer;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.context.BlockPlaceContext;
@@ -20,8 +18,6 @@ import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
-
-import java.util.List;
 
 /**
  * {@link IVanillaAccess} 的模组实现,全部经 {@code mixin.inject} 包的 Mixin 访问器。
@@ -37,11 +33,6 @@ public final class VanillaAccessImpl implements IVanillaAccess {
     @Override
     public int pickupDelay(ItemEntity item) {
         return ((ItemEntityAccessor) item).numen$getPickupDelay();
-    }
-
-    @Override
-    public List<DataSlot> syncedDataSlots(AbstractContainerMenu menu) {
-        return ((MenuDataSlotsAccessor) (Object) menu).numen$dataSlots();
     }
 
     @Override

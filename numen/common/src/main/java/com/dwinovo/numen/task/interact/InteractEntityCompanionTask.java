@@ -27,7 +27,7 @@ import java.util.List;
  * the requested mouse button only when the native raytrace reaches that entity. LEFT+hold repeats the native attack until
  * the hold ends, the target dies, or the task times out.
  */
-public final class InteractEntityCompanionTask extends InReachTask<InteractEntityTaskRecord, com.dwinovo.numen.tools.Clicks.Pressed> {
+public final class InteractEntityCompanionTask extends InReachTask<InteractEntityTaskRecord, com.dwinovo.numen.tools.Clicks.Clicked> {
 
     private Entity entity;
     private Interaction interaction;
@@ -180,6 +180,18 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
         return com.dwinovo.numen.tools.Clicks.said(interaction);
     }
 
+    /**
+     * 这一下打开了界面(村民的交易、箱子矿车)就当场合上,回执与交回的值都不提它,与点一格同款。派这件活的要接着用那个界面时
+     * ({@link InteractEntityTaskRecord#keepsWindow})留着。
+     */
+    @Override
+    protected void closeBooks() {
+        if (!r.keepsWindow && interaction != null && interaction.opened()
+                && player.containerMenu != player.inventoryMenu) {
+            player.closeContainer();
+        }
+    }
+
     /** Release the interaction, then the nav + overlay (base default). */
     @Override
     protected void cleanup() {
@@ -187,12 +199,10 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
         super.cleanup();
     }
 
-    /**
-     * 右键打开了一个界面(交易、模组机器),交回的就是那个 Window,和点一格同一种结果;别的点击交回按了哪个键、点了哪只实体、游戏接没接。
-     */
+    /** 按了哪个键、点了哪只实体、游戏接没接,和点一格同一种结果。 */
     @Override
-    protected com.dwinovo.numen.tools.Clicks.Pressed value() {
-        return com.dwinovo.numen.tools.Clicks.result(player, interaction != null && interaction.opened(),
+    protected com.dwinovo.numen.tools.Clicks.Clicked value() {
+        return com.dwinovo.numen.tools.Clicks.result(
                 r.button == MouseButton.LEFT ? com.dwinovo.numen.tools.Clicks.Button.LEFT
                         : com.dwinovo.numen.tools.Clicks.Button.RIGHT,
                 null, r.entity.label(), java.util.Optional.empty(), interaction != null && interaction.accepted());

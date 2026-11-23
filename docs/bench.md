@@ -195,7 +195,7 @@ API 错、超上下文、死亡、评测出错。
 | 标签 | 含义 | 自动打 |
 |---|---|---|
 | A | 理解:没听懂要什么 | |
-| B | 感知:没看见、看错了世界 | 真实模型整次运行一次都没调用过感知(`scan`、`status`、`locate`、`gui.view`),却调了改世界或动身上东西的函数。基线是写死的脚本,坐标在剧本里,不问它这一句 |
+| B | 感知:没看见、看错了世界 | 真实模型整次运行一次都没调用过感知(`scan`、`status`、`locate`),却调了改世界或动身上东西的函数。基线是写死的脚本,坐标在剧本里,不问它这一句 |
 | C | 规划:步骤、顺序不对 | 她最后一趟路的结局是照这次规格想不出路来:搜遍了没有(`NoRoute`)、预算用完(`OutOfBudget`)、憋不住气(`Breathless`)、没料可垫(`NoMaterials`)、超了改动预算(`OverAlterBudget`、`NeedsChanges`) |
 | D | 执行参数:调用写错、参数不合 | 有一段程序停在一次 API 调用写错上(没有这个函数、参数读不成);或者她最后一趟路卡在够不着(`OUT_OF_REACH`) |
 | E | 监控核验:没核对就说做完了 | 她自己收了工、断言却没过(`claimedDone`) |
@@ -222,7 +222,7 @@ GameTest 管,不在这里测。场景分三集:**回归集**每次改动都跑,*
 | 回归 | `mine_iron` | 七乘七、四层的石堆里埋 12 块铁矿,包里一把石镐 | 帮我挖 10 个铁回来。 | 粗铁 ≥ 10 | 没死 | `numen.scan.blocks("iron_ore", {radius = 12})`,`while #found > 0` 循环先 `numen.move.walk(found[1], {arrive = "dig", costs = {dig = true, place = true, consent = false}})` 后 `numen.work.dig(found[1])`、再扫一次;再站进挖空的芯、`numen.work.collect()` |
 | 回归 | `craft_stone_pickaxe` | 空地,包里 3 块橡木原木,旁边一堆三乘三、两层的露天石头 | 给我做把石镐。 | 包里有石镐(子目标按里程碑:工作台、木镐、圆石) | 没死 | `numen.inv.make` 木板、工作台、木棍,`numen.build.place` 放工作台,`numen.inv.make("wooden_pickaxe")`,`numen.move.walk` 石堆边、`numen.work.dig` 上层三块、`numen.work.collect()`,`numen.inv.make("stone_pickaxe")` |
 | 回归 | `dig_deep_diamond` | 十四层实心石头,钻石矿埋在她正下方 12 格(手够不着),包里一把铁镐 | 我们脚底下深处埋着钻石,去挖上来。 | 钻石在她包里、主人包里,或掉在主人碰撞箱外扩 5 格以内 | 没死 | `numen.move.walk(<矿>, {arrive = "dig", costs = {dig = true, place = true, consent = false}})`、`numen.work.dig(<矿>)`、`numen.work.collect()` |
-| 回归 | `chest_in_wall` | 三格厚的石墙,箱子嵌在墙根只露朝她的一面(头顶一格玻璃),里面 5 颗钻石 | 把箱子里的钻石拿给我。 | 5 颗钻石在她包里、主人包里,或掉在主人碰撞箱外扩 5 格以内 | 没死 | `numen.move.walk(<箱子>, {arrive = "use"})`、`numen.use.block(<箱子>)`、`numen.gui.quick(0)`、`numen.gui.close()` |
+| 回归 | `chest_in_wall` | 三格厚的石墙,箱子嵌在墙根只露朝她的一面(头顶一格玻璃),里面 5 颗钻石 | 把箱子里的钻石拿给我。 | 5 颗钻石在她包里、主人包里,或掉在主人碰撞箱外扩 5 格以内 | 没死 | `numen.move.walk(<箱子>, {arrive = "use"})`、`numen.container.take(<箱子>, "minecraft:diamond")` |
 | 回归 | `guard_owner` | 夜里、简单难度;主人生存模式、60 点血站在场地当中,三只僵尸在他身边五六格外;她在另一头(十几格,防御本能不替她出手),包里一把铁剑 | 保护我! | 三只僵尸全死 | 没死、主人活着 | 三行 `numen.fight.attack(<一只>)`。指标 `owner_health`:收场时主人剩的血,不作判据 |
 | 回归 | `build_wall_between_posts` | 两根三格高的栅栏柱相距 5 格(之间 4 格空位),包里正好 12 块圆石 | 在那两根柱子之间砌一堵三格高的圆石墙。 | 目标墙格(两柱之间 4×3)的 F1 ≥ 0.9:目标格与场地里实际圆石格的交集,精确率 = 交集 ÷ 实际圆石格,召回率 = 交集 ÷ 目标格(照 IGLU) | 没死、两根柱子还在 | `numen.move.walk` 墙南两格,`numen.build.place(numen.shape.cuboid(<墙左下>, <墙右上>):set("cobblestone"))` |
 | 能力 | `iron_pickaxe_chain` | 三棵树(各四格原木)、一堆四乘三两层的露天石头、两乘二的露天铁矿、两块露天煤矿,她空手;预算 60 轮、20 分钟 | 给我做一把铁镐。 | 包里有铁镐(子目标按里程碑:工作台、木镐、石镐、熔炉、铁锭、铁镐) | 没死 | `numen.work.mine` 一棵树,`numen.inv.make` 木板、工作台、木棍、木镐,`numen.work.mine` 石堆,`numen.inv.make("stone_pickaxe")`,`numen.work.mine` 煤矿与铁矿,`numen.inv.make("furnace")`、`numen.build.place` 放熔炉、`numen.inv.smelt(<熔炉>, "raw_iron", 3)`、`numen.inv.make("iron_pickaxe")` |

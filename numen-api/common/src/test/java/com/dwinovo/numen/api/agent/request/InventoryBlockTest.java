@@ -299,7 +299,6 @@ class InventoryBlockTest {
         assumeTrue(booted);
         String block = RuntimeState.renderInventory(snapshot(0, ItemStack.EMPTY));
         assertTrue(block.contains("numen.status.self()"), block);
-        assertTrue(block.contains("numen.gui.view()"), block);
     }
 
     // ==================== mainHand 本身 ====================

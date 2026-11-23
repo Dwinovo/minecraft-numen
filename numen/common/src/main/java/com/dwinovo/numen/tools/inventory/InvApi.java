@@ -61,7 +61,7 @@ public final class InvApi {
                                 + "custom name, enchantments, a potion's effect. Absent for a plain item.")
                         Optional<String> detail) {
 
-        /** 一叠(或合起来的一种)东西在模型眼里的样子:物品 id、件数,区别由 {@link StackLabel#detail} 说。背包清单与窗口里的各项同用。 */
+        /** 一叠(或合起来的一种)东西在模型眼里的样子:物品 id、件数,区别由 {@link StackLabel#detail} 说。 */
         public static Stack of(ItemStack sample, int count) {
             return of(sample, count, StackLabel.detail(sample));
         }
@@ -80,8 +80,7 @@ public final class InvApi {
             + "<worn>. Empty means an empty table.")
     @Note("Stacks of one item that differ — a shulker box with diamonds in it and an empty one, two different potions — "
             + "are separate entries, each with a detail. Naming only the item in a call picks the stack in your main "
-            + "hand, else the first slot, and the result says which. To use another one, move it into your main hand's "
-            + "slot first: numen.gui.view lists every slot with its detail, numen.gui.move puts a stack there.")
+            + "hand, else the first slot, and the result says which.")
     @SeeAlso("numen.inv.count")
     public static List<Stack> items(ServerCall call) {
         Inventory inventory = call.her().getInventory();

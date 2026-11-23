@@ -1,6 +1,5 @@
 package com.dwinovo.numen.task.inventory;
 
-import com.dwinovo.numen.api.task.Activity;
 import com.dwinovo.numen.api.sdk.ServerCall;
 import com.dwinovo.numen.api.task.TaskRecord;
 
@@ -9,7 +8,7 @@ import net.minecraft.world.item.Item;
 
 /**
  * 在她打开的界面里搬东西(放进去、拿出来):这一种全搬,或搬够 {@code count} 件。界面那一侧可以只限几格(熔炉的燃料格、产物格),
- * 拿的时候可以不点名是哪一种({@code item} 为 null:那几格里有什么拿什么)。
+ * 拿的时候可以不点名是哪一种({@code item} 为 null:那几格里有什么拿什么)。只当 {@code StationCompanionTask} 的子活派,不单独进任务槽。
  *
  * @see GuiItemsCompanionTask
  */
@@ -23,10 +22,6 @@ public final class GuiItemsTaskRecord extends TaskRecord<Integer> {
     public final boolean put;
     /** 界面那一侧只动这几格(界面的格子编号);null 是那一侧的每一格,放进哪一格由界面自己分。 */
     private final int[] slots;
-
-    public GuiItemsTaskRecord(ServerCall source, long deadlineGameTime, Item item, Integer count, boolean put) {
-        this(source, deadlineGameTime, item, count, put, null);
-    }
 
     public GuiItemsTaskRecord(ServerCall source, long deadlineGameTime, Item item, Integer count, boolean put,
                               int[] slots) {
@@ -61,18 +56,5 @@ public final class GuiItemsTaskRecord extends TaskRecord<Integer> {
     /** 这次搬的东西叫什么;不点名是哪一种时是 {@code items}。 */
     public String itemName() {
         return item == null ? "items" : BuiltInRegistries.ITEM.getKey(item).getPath();
-    }
-
-    @Override
-    public String describe() {
-        return getToolName() + " " + itemName() + (count == null ? "" : " " + count);
-    }
-
-    /** 给主人看的一句(头顶气泡、档案页),客户端按当前语言翻;{@link #describe()} 是给模型的。 */
-    @Override
-    public Activity activity() {
-        String name = itemName();
-        String key = "numen.activity." + (put ? "gui_put" : "gui_take") + (count == null ? "_all" : "");
-        return count == null ? Activity.of(key, name) : Activity.of(key, name, count);
     }
 }

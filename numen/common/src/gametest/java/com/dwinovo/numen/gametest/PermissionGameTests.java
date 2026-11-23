@@ -685,63 +685,37 @@ public class PermissionGameTests {
         helper.succeed();
     }
 
-    /** 把打开的界面里第 0 格整叠拿进背包。 */
-    private static ToolRun takeFirstSlot(NumenPlayer companion) {
-        return lua(companion, "numen.gui.quick(0)");
-    }
-
     /**
-     * 主人写 {@code ask take(*)} 之后,开箱子照出厂规则放行,拿东西要问:transfer 悬着、钻石还在箱子里;主人允许后
+     * 主人写 {@code ask take(*)} 之后,走过去开箱子照出厂规则放行,拿东西要问:numen.container.take 悬着、钻石还在箱子里;主人允许后
      * 钻石进了她的背包。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
     public static void an_owners_ask_take_row_asks_before_taking(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        BlockPos chestRel = new BlockPos(6, 2, 5);
-        BlockPos chest = chestWithDiamonds(helper, chestRel, 3);
+        BlockPos chest = chestWithDiamonds(helper, new BlockPos(6, 2, 5), 3);
         NumenPlayer companion = spawnAt(helper, "gametest_borrower", new BlockPos(4, 2, 5), false);
         ServerPlayer owner = presentPlayer(helper, companion, "gametest_lender");
         runAs(owner, "numen permission rules add ask take(*)");
-        ToolRun[] calls = new ToolRun[2];
-        int[] step = {0};
-        helper.runAfterDelay(5, () -> {
-            calls[0] = click(helper, companion, "right", chestRel);
-            step[0] = 1;
-        });
+        ToolRun take = lua(companion, "numen.container.take(" + xyz(chest) + ", \"minecraft:diamond\")");
+        boolean[] asked = new boolean[1];
         helper.onEachTick(() -> {
             var pending = desk(companion).pending();
-            switch (step[0]) {
-                case 1 -> {
-                    helper.assertTrue(pending == null, "opening the chest asked: " + pending);
-                    if (calls[0].done()) {
-                        helper.assertTrue(calls[0].succeeded()
-                                        && companion.containerMenu != companion.inventoryMenu,
-                                "the chest did not open: " + calls[0].outcome());
-                        calls[1] = takeFirstSlot(companion);
-                        step[0] = 2;
-                    }
-                }
-                case 2 -> {
-                    if (pending != null) {
-                        helper.assertTrue(pending.items().get(0).rule().equals("take(*)")
-                                        && pending.items().get(0).subject().equals("chest"),
-                                "asked something else: " + pending.items());
-                        helper.assertTrue(!calls[1].done(), "transfer did not wait for the owner");
-                        helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 0,
-                                "took before the owner answered");
-                        desk(companion).answer(pending.id(),
-                                com.dwinovo.numen.api.permission.ConsentAnswer.Decision.ALLOW_ONCE, "");
-                        step[0] = 3;
-                    }
-                }
-                default -> { }
+            if (pending != null && !asked[0]) {
+                helper.assertTrue(pending.items().get(0).rule().equals("take(*)")
+                                && pending.items().get(0).subject().equals("chest"),
+                        "asked something else: " + pending.items());
+                helper.assertTrue(!take.done(), "the take did not wait for the owner");
+                helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 0,
+                        "took before the owner answered");
+                desk(companion).answer(pending.id(),
+                        com.dwinovo.numen.api.permission.ConsentAnswer.Decision.ALLOW_ONCE, "");
+                asked[0] = true;
             }
         });
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(step[0] == 3 && calls[1].done(), "transfer has not finished");
-            helper.assertTrue(calls[1].succeeded(), "transfer failed after allow: "
-                    + calls[1].outcome());
+            helper.assertTrue(asked[0] && take.done(), "the take has not finished");
+            helper.assertTrue(take.succeeded(), "the take failed after allow: " + take.outcome());
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 3, "the diamonds did not arrive");
             var box = (net.minecraft.world.level.block.entity.ChestBlockEntity) level.getBlockEntity(chest);
             helper.assertTrue(box.getItem(0).isEmpty(), "the chest still holds the diamonds");
@@ -1362,53 +1336,6 @@ public class PermissionGameTests {
             String listed = String.join("\n", runAs(owner, "numen permission rules list"));
             helper.assertTrue(listed.contains("she added it: harvest the farm"),
                     "the owner's list does not mark her rows: " + listed);
-            CompanionFactory.despawn(level.getServer(), companion);
-            leave(owner);
-        });
-    }
-
-    /**
-     * 来历不明的界面:不经 use.block、由代码给她强行打开一个信标界面,不知道它是哪一格——choose 不放行,问主人。答"允许"就定下效果,
-     * 答"拒绝"就如实报拒绝(理由是主人原话),效果没动。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
-    public static void a_window_of_unknown_origin_asks_the_owner_before_it_changes_a_block(GameTestHelper helper) {
-        unknownWindow(helper, "gametest_unknown_allow", com.dwinovo.numen.api.permission.ConsentAnswer.Decision.ALLOW_ONCE,
-                true);
-    }
-
-    private static void unknownWindow(GameTestHelper helper, String name,
-                                      com.dwinovo.numen.api.permission.ConsentAnswer.Decision answer, boolean allowed) {
-        ServerLevel level = helper.getLevel();
-        BlockPos beacon = place(helper, new BlockPos(5, 2, 4), Blocks.BEACON);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, name + "_owner");
-        NumenPlayer companion = adopted(spawnAt(helper, name, new BlockPos(3, 2, 4), false), owner);
-        companion.openMenu((net.minecraft.world.MenuProvider) level.getBlockEntity(beacon));
-        var menu = (net.minecraft.world.inventory.BeaconMenu) companion.containerMenu;
-        menu.setData(0, 1);
-        menu.getSlot(0).set(new ItemStack(Items.IRON_INGOT));
-        ToolRun choose = lua(companion, "numen.gui.choose(\"haste\")");
-        boolean[] asked = new boolean[1];
-        helper.onEachTick(() -> {
-            var pending = desk(companion).pending();
-            if (pending != null) {
-                asked[0] = true;
-                desk(companion).answer(pending.id(), answer, allowed ? "" : "not this beacon");
-            }
-        });
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(choose.done(), "gui choose has not finished");
-            helper.assertTrue(asked[0], "the owner was not asked about a window of unknown origin");
-            if (allowed) {
-                helper.assertTrue(choose.succeeded() && menu.getPrimaryEffect() != null
-                                && menu.getPrimaryEffect().is(net.minecraft.world.effect.MobEffects.DIG_SPEED),
-                        "the beacon was not set after the owner said yes: " + choose.outcome());
-            } else {
-                helper.assertTrue(!choose.succeeded() && choose.outcome().contains("not this beacon")
-                                && menu.getPrimaryEffect() == null,
-                        "the refusal does not quote the owner, or the beacon changed: " + choose.outcome());
-            }
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
         });

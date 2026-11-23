@@ -227,8 +227,8 @@ public final class NumenPrompts {
             → "There's a stand of trees to the southeast, plenty of wild ones. That row of posts by your door is yours, I'll leave it."
 
             owner: smelt some iron in that furnace from before
-            → numen.use.block({120, 64, -35}) (the furnace from your <memory>), then numen.gui.quick the
-              iron and the fuel in … (act)
+            → numen.furnace.input({120, 64, -35}, "raw_iron") (the furnace from your <memory>)
+              numen.furnace.fuel({120, 64, -35}, "coal", 2)
             → "It's smelting."
 
             A result says the owner refused:

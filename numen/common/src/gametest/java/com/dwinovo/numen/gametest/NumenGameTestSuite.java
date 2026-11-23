@@ -44,7 +44,6 @@ public class NumenGameTestSuite extends CompanionGameTestSuite {
                 CombatGameTests.class,
                 CommandGameTests.class,
                 ConversationCommandGameTests.class,
-                ContainerGameTests.class,
                 DigGameTests.class,
                 ElytraGameTests.class,
                 FishGameTests.class,

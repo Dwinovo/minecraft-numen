@@ -43,8 +43,8 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * {@code numen.use}:像玩家那样点世界——右键一格(打开它就交回那个界面)、对着前方用手里的东西、右键一只实体、左键点一格或一只实体一下,
- * 上床、从坐着的东西上下来。打开之后在界面里搬东西是 {@code gui} 那一组。
+ * {@code numen.use}:像玩家那样点世界——右键一格、对着前方用手里的东西、右键一只实体、左键点一格或一只实体一下,上床、从坐着的
+ * 东西上下来。点一下打开了界面就当场合上,她面前没有界面:往箱子里放、在工作方块上做事是各自那一组函数({@code tools.station})。
  *
  * <p>按键经 {@link ServerCall#sync},动手前各自把动作交给权限层;上床当场回。目标得在手够得着、看得见的地方才按,够不着先走到能按的
  * 地方({@code InReachTask} 的走过去,到达目标是动作自己那一处的)。对准一格和不对准任何东西是两件事,拆成 {@code block} 与
@@ -59,8 +59,8 @@ public final class UseApi {
     private UseApi() {}
 
     public static void install(NumenApi numen) {
-        numen.api("use", "Clicking the world like a player: right-click a block (opening its window) or an entity, use "
-                + "what you hold, hit something once, get into bed, step off what you ride.", UseApi.class);
+        numen.api("use", "Clicking the world like a player: right-click a block or an entity, use what you hold, hit "
+                + "something once, get into bed, step off what you ride.", UseApi.class);
     }
 
     /** 右键一格。 */
@@ -73,16 +73,15 @@ public final class UseApi {
                                 + "you off first (numen.use.dismount() does just that).")
                         @Omitted("press standing") Optional<Boolean> sneak) {}
 
-    @Fn("Aim at a block, fluid or air cell within reach and right-click it: the full native click. When it opens a "
-            + "window (a chest, a furnace, a machine) it returns that Window.")
-    @Example("local w = numen.use.block({x = 120, y = 64, z = -35})")
+    @Fn("Aim at a block, fluid or air cell within reach and right-click it: the full native click.")
+    @Example("numen.use.block({x = 120, y = 64, z = -35})")
     @Example("numen.use.block({x = 120, y = 63, z = -35}, {item = \"minecraft:bucket\"})")
     @Example("numen.use.block({x = 120, y = 64, z = -35}, {item = \"minecraft:oak_planks\", sneak = true})")
     @Note("With item, the stack taken in hand is the one already in your main hand, else the first slot holding that item "
-            + "(numen.inv.items lists stacks that differ, e.g. a shulker box with contents); the result says which. To use "
-            + "another one, numen.gui.move it into your main hand's slot first.")
-    @Note("When the click opens a window, it returns the Window, the same as numen.gui.view(): its methods put, take, "
-            + "move, quick and close work on it (see the numen.gui group).")
+            + "(numen.inv.items lists stacks that differ, e.g. a shulker box with contents); the result says which.")
+    @Note("Storing, taking and working at a block have their own functions, which take the block as an argument: "
+            + "numen.container for a chest or a barrel, numen.furnace, numen.anvil, numen.enchant and the other "
+            + "groups named after a block. numen.scan.block reads what a block holds.")
     @Note("If the aimed block doesn't take a right click, the held item acts on its own, exactly like a real "
             + "right-click: aiming at water with a bucket scoops it, with a boat places it.")
     @Note("With sneak = true and something in hand, a right click skips what the aimed block itself does: a block "
@@ -95,11 +94,11 @@ public final class UseApi {
             + "clicked, and the result says so and names the next step. It never moves, never swaps tools, never "
             + "clears the way.")
     @Note("Placing near your owner's things may ask your owner first; the call waits for the answer.")
-    @Note("Otherwise the result says whether the game accepted the click (accepted): the block or what you hold acted "
+    @Note("The result says whether the game accepted the click (accepted): the block or what you hold acted "
             + "on it. What the world looks like afterwards is not in the result: numen.scan.block reads the block, "
             + "numen.scan.entities what is around, numen.inv.items what you carry.")
-    @SeeAlso({"numen.gui.view", "numen.use.hit", "numen.use.entity"})
-    public static Pending<Clicks.Pressed> block(ServerCall call, Block args) {
+    @SeeAlso({"numen.scan.block", "numen.use.hit", "numen.use.entity"})
+    public static Pending<Clicks.Clicked> block(ServerCall call, Block args) {
         return call.sync(BlockActionOps.interactAt(call, MouseButton.RIGHT, args.cell(), holdTicks(args.hold()),
                 args.item().orElse(null), args.sneak().orElse(false)));
     }
@@ -118,7 +117,7 @@ public final class UseApi {
     @Note("The result says whether the game accepted the click (accepted), not what it changed; look afterwards with "
             + "numen.scan and numen.inv.")
     @SeeAlso("numen.use.block")
-    public static Pending<Clicks.Pressed> item(ServerCall call, Press args) {
+    public static Pending<Clicks.Clicked> item(ServerCall call, Press args) {
         return call.sync(BlockActionOps.interactAt(call, MouseButton.RIGHT, null, holdTicks(args.hold()),
                 args.item().orElse(null), args.sneak().orElse(false)));
     }
@@ -135,8 +134,7 @@ public final class UseApi {
                                    + "off what is on that part.")
                            @Omitted("click the entity itself") Optional<StandPart> at) {}
 
-    @Fn("Right-click an entity within reach of where you stand. When it opens a window (a villager's trade) "
-            + "it returns that Window.")
+    @Fn("Right-click an entity within reach of where you stand.")
     @Example("numen.use.entity(\"sheep@3f9a1c\", {item = \"minecraft:shears\"})")
     @Example("numen.use.entity(\"villager@3f9a1c\", {sneak = true})")
     @Example("numen.use.entity(\"armor_stand@3f9a1c\", {item = \"minecraft:iron_helmet\", at = \"head\"})")
@@ -147,9 +145,10 @@ public final class UseApi {
     @Note("An armor stand takes its gear by where you click (`at`), like a real client's click on that spot: the click on the "
             + "spot goes first, a plain click after it. Minecraft decides what fits where; numen.inv.items shows what left "
             + "your hands or came back to them.")
+    @Note("Trading with a villager is numen.trade; a chest minecart is put into and taken from with numen.container.")
     @Note("The result says whether the entity or what you hold accepted the click (accepted), not what it changed.")
-    @SeeAlso({"numen.use.block", "numen.use.hit"})
-    public static Pending<Clicks.Pressed> entity(ServerCall call, OnEntity args) {
+    @SeeAlso({"numen.use.block", "numen.use.hit", "numen.trade.offers"})
+    public static Pending<Clicks.Clicked> entity(ServerCall call, OnEntity args) {
         EntityRef target = present(call, args.entity());
         Vec3 at = null;
         if (args.at().isPresent()) {
@@ -178,7 +177,7 @@ public final class UseApi {
             + "answer.")
     @Note("The result says whether the block broke or the hit landed (accepted).")
     @SeeAlso({"numen.use.block", "numen.use.entity"})
-    public static Pending<Clicks.Pressed> hit(ServerCall call, Hit args) {
+    public static Pending<Clicks.Clicked> hit(ServerCall call, Hit args) {
         CellOrEntity target = args.target();
         return target.cell() != null
                 ? call.sync(BlockActionOps.interactAt(call, MouseButton.LEFT, target.cell(), 0, null, false))

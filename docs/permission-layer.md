@@ -209,7 +209,7 @@ deny place(hazard_item & near(other))
 | `build.place` | 施工前把要清的与要放的整批裁决,一张卡;拒绝的格按"主人不让动"跳过并写进回执。她放下的每一格记在她名下(`self`) |
 | `fight` | 开打前送目标,一张卡,等答复期间不打它;自卫换目标时新冒出来的再送 |
 | `use.block`、`use.entity`、`use.hit`、`use.item` | 按下去之前送准星落到的动作 |
-| `gui` 的取物 | 把东西从容器拿进背包的那一步动手前送 `take`;她自己背包的合成格与没有方块实体的工作台类界面不算 |
+| 从容器里取东西(`container.take`、`furnace.take`、`lectern.take` 等) | 把东西从容器拿进背包的那一步动手前送 `take`;没有方块实体的工作台类界面不算 |
 | `inv.drop` | 每次送 `drop` |
 | `numen.mc.run` | 解析通了才送 `command(根名)`;服务器不让她用的当场失败,不送 |
 | 她改规则 | 加 `deny`、`ask` 直接写入并回执;加 `allow` 或删行发卡 |

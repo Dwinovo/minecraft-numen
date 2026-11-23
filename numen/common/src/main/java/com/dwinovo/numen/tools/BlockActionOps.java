@@ -107,13 +107,13 @@ public final class BlockActionOps {
         if (bodyBound != null) {
             throw new ApiError(ErrorKind.BAD_ARGUMENT, bodyBound, null);
         }
-        return new InteractAtTaskRecord(source, button, aim, holdTicks, item, sneak);
+        return new InteractAtTaskRecord(source, button, aim, holdTicks, item, sneak, false);
     }
 
     /** {@code use entity}:参数同 {@link #interactAt},按的是那一只实体;{@code at} 是点在它身上的哪一点(相对位置),不指定为 null。 */
     public static InteractEntityTaskRecord interactEntity(ServerCall source, MouseButton button, EntityRef entity,
                                                           int holdTicks, Item item, boolean sneak,
                                                           net.minecraft.world.phys.Vec3 at) {
-        return new InteractEntityTaskRecord(source, button, entity, holdTicks, item, sneak, at);
+        return new InteractEntityTaskRecord(source, button, entity, holdTicks, item, sneak, at, false);
     }
 }

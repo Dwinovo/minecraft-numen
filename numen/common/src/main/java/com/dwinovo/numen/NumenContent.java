@@ -159,7 +159,6 @@ public final class NumenContent {
             com.dwinovo.numen.tools.shape.ShapeApi.install(numen);
             com.dwinovo.numen.tools.work.FightApi.install(numen);
             com.dwinovo.numen.tools.interact.UseApi.install(numen);
-            com.dwinovo.numen.tools.interact.GuiApi.install(numen);
             com.dwinovo.numen.tools.station.ContainerApi.install(numen);
             com.dwinovo.numen.tools.station.FurnaceApi.install(numen);
             com.dwinovo.numen.tools.station.EnchantApi.install(numen);
@@ -196,10 +195,6 @@ public final class NumenContent {
         TaskFactory.register(com.dwinovo.numen.task.inventory.UnequipTaskRecord.class,
                 (p, r) -> new com.dwinovo.numen.task.inventory.UnequipCompanionTask(p, r));
         TaskFactory.register(DropItemsTaskRecord.class, (p, r) -> new DropCompanionTask(p, r));
-        TaskFactory.register(com.dwinovo.numen.task.inventory.TransferTaskRecord.class,
-                (p, r) -> new com.dwinovo.numen.task.inventory.TransferCompanionTask(p, r));
-        TaskFactory.register(com.dwinovo.numen.task.inventory.GuiItemsTaskRecord.class,
-                (p, r) -> new com.dwinovo.numen.task.inventory.GuiItemsCompanionTask(p, r));
         TaskFactory.register(com.dwinovo.numen.task.wait.WaitTaskRecord.class,
                 (p, r) -> new com.dwinovo.numen.task.wait.WaitCompanionTask(p, r));
         TaskFactory.register(EatItemTaskRecord.class, (p, r) -> new EatCompanionTask(p, r));

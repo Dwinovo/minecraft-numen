@@ -542,6 +542,32 @@ public class InventoryGameTests {
         });
     }
 
+    /** 往塞满圆石的箱子里放钻石:一颗都放不进,这次调用失败,说它满了;钻石还在她身上,箱子原样,界面合上。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void container_put_into_a_full_chest_says_it_is_full(GameTestHelper helper) {
+        BlockPos chest = helper.absolutePos(new BlockPos(5, 2, 7));
+        helper.getLevel().setBlockAndUpdate(chest, Blocks.CHEST.defaultBlockState());
+        var box = (net.minecraft.world.level.block.entity.ChestBlockEntity) helper.getLevel().getBlockEntity(chest);
+        for (int i = 0; i < box.getContainerSize(); i++) {
+            box.setItem(i, new ItemStack(Items.COBBLESTONE, 64));
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_depositor", new BlockPos(3, 2, 7), false);
+        companion.getInventory().add(new ItemStack(Items.DIAMOND, 5));
+        ToolRun put = lua(companion, "numen.container.put(" + xyz(chest) + ", \"diamond\")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(put.done(), "the call has not finished");
+            helper.assertTrue(!put.succeeded() && put.outcome().contains("it is full or does not take diamond"),
+                    "putting into a full chest does not say it is full: " + put.outcome());
+            helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 5
+                            && box.countItem(Items.COBBLESTONE) == box.getContainerSize() * 64
+                            && box.countItem(Items.DIAMOND) == 0,
+                    "something moved between her and the full chest");
+            helper.assertTrue(companion.containerMenu == companion.inventoryMenu, "the chest was left open");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
     /**
      * 熔炉的三件事各说各的格:原木当燃料放,进的是燃料格(按 Shift 点的话原木会进原料格去烧木炭);粗铁放进原料格;还没烧出来时取产物
      * 交回空表,不算失败。界面每次都合上。
@@ -585,7 +611,7 @@ public class InventoryGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(put.done(), "the call has not finished");
-            helper.assertTrue(!put.succeeded() && put.outcome().contains("has no window to open"),
+            helper.assertTrue(!put.succeeded() && put.outcome().contains("cannot be opened: it is not a container"),
                     "putting into a stone was not refused up front: " + put.outcome());
             helper.assertTrue(companion.getInventory().countItem(Items.COBBLESTONE) == 8
                             && helper.getLevel().getBlockState(stone.above()).isAir()

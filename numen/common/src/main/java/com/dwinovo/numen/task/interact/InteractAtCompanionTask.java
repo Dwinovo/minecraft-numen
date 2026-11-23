@@ -35,7 +35,7 @@ import java.util.List;
  * 高草)不清,点到的就是它,回执照实说,下一步写出 {@code numen.work.dig} 挖掉它或从另一面点。The mouse model is the two record fields
  * {@code button} (left/right) × {@code holdTicks} (tap/hold).
  */
-public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRecord, com.dwinovo.numen.tools.Clicks.Pressed> {
+public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRecord, com.dwinovo.numen.tools.Clicks.Clicked> {
 
     private Interaction interaction;
     private long holdUntil = -1;       // game tick to release a fixed-duration hold (holdTicks > 0)
@@ -225,6 +225,18 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
         return com.dwinovo.numen.tools.Clicks.said(interaction);
     }
 
+    /**
+     * 这一下打开了界面(箱子、熔炉、手里的东西自己的界面)就当场合上,回执与交回的值都不提它:她面前没有界面。派这件活的要接着用
+     * 那个界面时({@link InteractAtTaskRecord#keepsWindow})留着。
+     */
+    @Override
+    protected void closeBooks() {
+        if (!r.keepsWindow && interaction != null && interaction.opened()
+                && player.containerMenu != player.inventoryMenu) {
+            player.closeContainer();
+        }
+    }
+
     /** Release the interaction, then the nav + overlay (base default). */
     @Override
     protected void cleanup() {
@@ -232,16 +244,13 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
         super.cleanup();
     }
 
-    /**
-     * 右键打开了一个界面(箱子、熔炉、机器),交回的就是那个 Window,和 {@code numen.gui.view()} 读到的一样,外加点开它的那一格;
-     * 别的点击交回按了哪个键、瞄哪一格、游戏接没接。
-     */
+    /** 按了哪个键、瞄哪一格、游戏接没接。 */
     @Override
-    protected com.dwinovo.numen.tools.Clicks.Pressed value() {
+    protected com.dwinovo.numen.tools.Clicks.Clicked value() {
         // 点开的那个工位(与它确切的位置,比瞄的那一格准):她只记得住我们告诉过她的地方
         java.util.Optional<com.dwinovo.numen.api.sdk.BlockAt> station = activatedBlock == null ? java.util.Optional.empty()
                 : java.util.Optional.of(new com.dwinovo.numen.api.sdk.BlockAt(activatedBlockId, activatedBlock));
-        return com.dwinovo.numen.tools.Clicks.result(player, interaction != null && interaction.opened(),
+        return com.dwinovo.numen.tools.Clicks.result(
                 r.button == MouseButton.LEFT ? com.dwinovo.numen.tools.Clicks.Button.LEFT
                         : com.dwinovo.numen.tools.Clicks.Button.RIGHT,
                 r.aim, null, station, interaction != null && interaction.accepted());

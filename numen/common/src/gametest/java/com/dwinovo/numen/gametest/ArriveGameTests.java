@@ -6,7 +6,6 @@ import com.dwinovo.numen.api.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoublePlantBlock;
@@ -54,8 +53,8 @@ public class ArriveGameTests {
     }
 
     /**
-     * 箱子前立着高草:{@code numen.work.dig} 走过去挖掉高草,再 {@code numen.use.block} 打开箱子。右键是纯按键,
-     * 清视线只归挖掘执行。
+     * 箱子前立着高草:{@code numen.work.dig} 走过去挖掉高草,再 {@code numen.use.block} 点到的就是箱子,箱子接了这一下。右键是
+     * 纯按键,清视线只归挖掘执行。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = ON_FOOT)
     public static void use_block_opens_a_chest_once_work_dig_clears_the_tall_grass(GameTestHelper helper) {
@@ -75,15 +74,15 @@ public class ArriveGameTests {
                 press[0] = lua(companion, "numen.use.block(" + xyz(chest) + ")");
             }
             helper.assertTrue(press[0].done(), "use block has not finished");
-            helper.assertTrue(press[0].succeeded() && companion.containerMenu instanceof ChestMenu,
-                    "the chest was not opened after the grass was dug: " + press[0].outcome());
-            companion.closeContainer();
+            helper.assertTrue(press[0].succeeded() && press[0].outcome().contains("right-clicked " + chest.getX() + ","
+                            + chest.getY() + "," + chest.getZ() + " — accepted"),
+                    "the chest did not take the click after the grass was dug: " + press[0].outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
 
     /**
-     * 同一只箱子、同一株高草,不挖就右键:她走过去,点到的是高草,箱子没开,高草还在;回执说准星落在高草上,写出
+     * 同一只箱子、同一株高草,不挖就右键:她走过去,点到的是高草,这一下没人接,高草还在;回执说准星落在高草上,写出
      * {@code numen.work.dig} 挖掉它、或从另一面点这两条路。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = ON_FOOT)
@@ -102,7 +101,7 @@ public class ArriveGameTests {
                                     + "," + chest.getZ())
                             && said.contains("`numen.work.dig({") && said.contains("click it from another side"),
                     "the reply does not say the click landed on the grass and what to do next: " + said);
-            helper.assertTrue(!(companion.containerMenu instanceof ChestMenu), "the chest opened through the grass");
+            helper.assertTrue(said.contains("not accepted"), "the chest took the click through the grass: " + said);
             helper.assertTrue(helper.getLevel().getBlockState(grass.above()).is(Blocks.TALL_GRASS),
                     "the grass was cleared by a right click");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);

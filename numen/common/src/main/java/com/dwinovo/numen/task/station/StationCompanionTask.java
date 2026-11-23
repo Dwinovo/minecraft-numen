@@ -82,7 +82,7 @@ public final class StationCompanionTask<V> extends AbstractCompanionTask<Station
             checks.add(() -> {
                 BlockState state = player.level().getBlockState(r.block);
                 return state.hasBlockEntity() || state.getMenuProvider(player.level(), r.block) != null ? null
-                        : new Precondition.Failure(name(state) + " at " + cell() + " has no window to open: it is not "
+                        : new Precondition.Failure(name(state) + " at " + cell() + " cannot be opened: it is not "
                                 + a(r.kind), FailureType.UNSUPPORTED);
             });
         }
@@ -121,14 +121,15 @@ public final class StationCompanionTask<V> extends AbstractCompanionTask<Station
         };
     }
 
-    /** 右键目标,等它的界面打开;开的不是这件活要的那一种就收场。 */
+    /** 右键目标,等它的界面打开;开的不是这件活要的那一种就收场。点开的界面要留着(这件活接着在里面做事),所以点击带着"不合"。 */
     private TaskState open() {
         if (opener == null) {
             opener = r.block != null
                     ? new InteractAtCompanionTask(player,
-                            new InteractAtTaskRecord(r.source, MouseButton.RIGHT, r.block, 0, null, false))
+                            new InteractAtTaskRecord(r.source, MouseButton.RIGHT, r.block, 0, null, false, true))
                     : new InteractEntityCompanionTask(player,
-                            new InteractEntityTaskRecord(r.source, MouseButton.RIGHT, r.entity, 0, null, false, null));
+                            new InteractEntityTaskRecord(r.source, MouseButton.RIGHT, r.entity, 0, null, false, null,
+                                    true));
         }
         TaskResult clicked = runChild(opener);
         if (clicked == null) {
@@ -140,7 +141,7 @@ public final class StationCompanionTask<V> extends AbstractCompanionTask<Station
             return TaskState.FAILED;
         }
         if (player.containerMenu == player.inventoryMenu) {
-            fail(where + " opened no window (" + clicked.message() + ")", FailureType.UNSUPPORTED);
+            fail(where + " did not open (" + clicked.message() + ")", FailureType.UNSUPPORTED);
             return TaskState.FAILED;
         }
         opened = player.containerMenu;

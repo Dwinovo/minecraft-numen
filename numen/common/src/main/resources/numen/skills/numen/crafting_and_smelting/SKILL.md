@@ -82,9 +82,9 @@ Common smelts: raw iron/gold/copper → ingot; sand → glass; cobblestone → s
 
 Blast furnaces and smokers burn fuel twice as fast, so the same fuel smelts the same number of items. Charcoal (smelted from a log) is a full replacement for coal.
 
-### What a furnace window shows
+### Inside a furnace
 
-A furnace-type block has three slots: **input** on top, **fuel** below it, **output** to the right. The output slot only takes items out. Its progress numbers are, in order: fuel time left (ticks), the total burn time of the current fuel, cook progress (ticks), and total cook time (200 in a furnace, 100 in a blast furnace or smoker). Smelting continues while the block stays loaded, with nobody at it. Taking the output out awards the smelting experience.
+A furnace-type block has three slots: **input**, **fuel** and **output**. The output slot only takes items out. Smelting continues while the block stays loaded, with nobody at it. Taking the output out awards the smelting experience.
 
 ## Workstations
 

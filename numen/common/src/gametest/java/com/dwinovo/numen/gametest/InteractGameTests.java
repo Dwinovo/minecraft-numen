@@ -121,27 +121,6 @@ public class InteractGameTests {
         });
     }
 
-    /** 准星落在箱子上时 numen.use.item 点开了它:回执是那个界面(#118:这条路的声明漏了"打开界面",编不成回执掀翻了服务器)。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
-    public static void use_ahead_at_a_chest_hands_back_its_window(GameTestHelper helper) {
-        chestWithDiamonds(helper, new BlockPos(5, 2, 4), 3);
-        NumenPlayer companion = spawnAt(helper, "gametest_facing_chest", new BlockPos(3, 2, 4), false);
-        companion.setYRot(-90f);
-        companion.setYHeadRot(-90f);
-        companion.setXRot(29f);
-        ToolRun press = lua(companion, "numen.use.item()");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(press.done(), "use item has not finished");
-            helper.assertTrue(press.succeeded() && companion.containerMenu instanceof net.minecraft.world.inventory.ChestMenu
-                            && press.reply().contains("\"menu\"") && press.reply().contains("minecraft:diamond"),
-                    "use item did not hand back the chest window: " + press.reply());
-            helper.assertTrue(press.outcome().contains(" — accepted"),
-                    "the receipt does not say the chest took the click: " + press.outcome());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     /**
      * 右键的回执只说游戏接没接(control 0022):拿打火石点一堆没点着的营火,营火接了这一下,回执写 accepted、营火点着了;空手右键一块石头,
      * 谁都不理,回执写 not accepted,这一下照常算做完。回执里没有"变了什么"。
@@ -166,12 +145,10 @@ public class InteractGameTests {
                             && level.getBlockState(campfire).getValue(net.minecraft.world.level.block.CampfireBlock.LIT),
                     "the campfire was not lit: " + light.reply());
             helper.assertTrue(light.outcome().contains(" — accepted")
-                            && light.result(com.dwinovo.numen.tools.Clicks.Pressed.class)
-                                    instanceof com.dwinovo.numen.tools.Clicks.Clicked lit && lit.accepted(),
+                            && light.result(com.dwinovo.numen.tools.Clicks.Clicked.class).accepted(),
                     "the receipt does not say the campfire took the click and nothing more: " + light.outcome());
             helper.assertTrue(poke.succeeded() && poke.outcome().contains("not accepted: nothing there responds")
-                            && poke.result(com.dwinovo.numen.tools.Clicks.Pressed.class)
-                                    instanceof com.dwinovo.numen.tools.Clicks.Clicked poked && !poked.accepted(),
+                            && !poke.result(com.dwinovo.numen.tools.Clicks.Clicked.class).accepted(),
                     "an empty-handed click on stone is not reported as ignored: " + poke.outcome());
             CompanionFactory.despawn(level.getServer(), lighter);
             CompanionFactory.despawn(level.getServer(), idler);
@@ -348,8 +325,8 @@ public class InteractGameTests {
     }
 
     /**
-     * 拿着圆石右键一只箱子:站着点,箱子开了;按住潜行点,箱子不开,圆石贴着箱子放下了——手里有东西时潜行右键越过方块自己的反应,
-     * 只有潜行才有。点完潜行松开,回执说是潜行点的。
+     * 拿着圆石右键一只箱子:站着点,箱子接了这一下(回执写 accepted,圆石一块没少),点开的界面当场合上了;按住潜行点,箱子不理,
+     * 圆石贴着箱子放下了——手里有东西时潜行右键越过方块自己的反应,只有潜行才有。点完潜行松开,回执说是潜行点的。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void use_block_sneaking_puts_a_block_on_a_chest_instead_of_opening_it(GameTestHelper helper) {
@@ -363,13 +340,14 @@ public class InteractGameTests {
 
         steps(helper)
                 .thenExecute(() -> run.set(lua(companion, click + "})")))
-                .thenWaitUntil(() -> helper.assertTrue(run.get().done()
-                                && companion.containerMenu instanceof net.minecraft.world.inventory.ChestMenu,
-                        "standing, the right click did not open the chest: " + run.get().outcome()))
-                .thenExecute(() -> run.set(lua(companion, "numen.gui.close()")))
-                .thenWaitUntil(() -> helper.assertTrue(run.get().done()
-                                && companion.containerMenu == companion.inventoryMenu,
-                        "the chest did not close: " + run.get().outcome()))
+                .thenWaitUntil(() -> {
+                    helper.assertTrue(run.get().done(), "the standing click has not finished");
+                    helper.assertTrue(run.get().succeeded() && run.get().outcome().contains(" — accepted")
+                                    && companion.getInventory().countItem(Items.COBBLESTONE) == 4,
+                            "standing, the chest did not take the right click: " + run.get().outcome());
+                    helper.assertTrue(companion.containerMenu == companion.inventoryMenu,
+                            "the chest the click opened was left open");
+                })
                 .thenExecute(() -> run.set(lua(companion, click + ", sneak = true})")))
                 .thenWaitUntil(() -> {
                     helper.assertTrue(run.get().done(), "the sneaking click has not finished");

@@ -14,7 +14,7 @@ import net.minecraft.world.item.component.ItemContainerContents;
 
 /**
  * 一叠东西在模型眼里是什么样:物品 id 一样、组件不一样的几叠(装着钻石的潜影盒与空盒、不同的药水、附魔与没附魔的镐)靠这一句短描述
- * 分开。<b>描述只有这一处</b>:背包清单({@code runtime_state} 与 {@code numen.inv.items})、{@code numen.gui.view} 的槽、
+ * 分开。<b>描述只有这一处</b>:背包清单({@code runtime_state} 与 {@code numen.inv.items})、
  * 回执里"用了哪一叠"都读它,所以模型在清单里看到的写法与回执里报的是同一个。
  *
  * <p>只说事实,不下结论(该不该喝、值不值钱是她的判断)。已知的组件写成人话(名字、附魔、容器里装着什么、药水效果、旗帜花纹、头颅的

@@ -28,7 +28,7 @@ import net.minecraft.world.item.Items;
  * -1 = hold until the action self-completes or the task times out.
  * {@code sneak}: hold sneak while pressing ({@code --sneak}).
  */
-public final class InteractAtTaskRecord extends TaskRecord<com.dwinovo.numen.tools.Clicks.Pressed> {
+public final class InteractAtTaskRecord extends TaskRecord<com.dwinovo.numen.tools.Clicks.Clicked> {
 
     /** Covers walking to the aim. */
     private static final long TIMEOUT_TICKS = 30 * 20;
@@ -38,15 +38,21 @@ public final class InteractAtTaskRecord extends TaskRecord<com.dwinovo.numen.too
     public final int holdTicks;
     public final Item item;        // null → use whatever is already in hand; else equip this first
     public final boolean sneak;
+    /**
+     * 这一下打开的界面留着不合:只有 {@code StationCompanionTask} 这样派,它接着在那个界面里做事、做完自己合。别的点击是 false,
+     * 点开了界面当场合上。
+     */
+    public final boolean keepsWindow;
 
     public InteractAtTaskRecord(ServerCall source, MouseButton button, BlockPos aim, int holdTicks, Item item,
-                                boolean sneak) {
+                                boolean sneak, boolean keepsWindow) {
         super(source, source.her().level().getGameTime() + TIMEOUT_TICKS);
         this.button = button;
         this.aim = aim != null ? aim.immutable() : null;
         this.holdTicks = holdTicks;
         this.item = item;
         this.sneak = sneak;
+        this.keepsWindow = keepsWindow;
     }
 
     /**

@@ -256,8 +256,8 @@ public final class ScanApi {
             + "energy — on chests, furnaces and most modded machines, tanks and batteries; and whatever a mod's "
             + "integration tells about its own blocks. Storage-network terminals (AE2/RS) show only their local buffer, "
             + "not the whole network.")
-    @Note("Read contents and fill levels here instead of opening the block; a block with a window and nothing listed "
-            + "here is opened with numen.use.block and read with numen.gui.view.")
+    @Note("What a block holds and how full it is are read here. Putting in and taking out are the block's own group "
+            + "of functions: numen.container for a chest or a barrel, numen.furnace, numen.brewing and the others.")
     @SeeAlso({"numen.scan.blocks", "numen.scan.sight"})
     @SuppressWarnings("deprecation")  // BlockBehaviour.isSolid() 带的是 Mojang 的"别覆写"标记,不是要淘汰
     public static BlockInfo block(ServerCall call, Cell args) {

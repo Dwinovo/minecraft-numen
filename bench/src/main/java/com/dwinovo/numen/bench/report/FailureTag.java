@@ -26,12 +26,8 @@ public enum FailureTag {
         return words;
     }
 
-    /**
-     * 只读、不动世界的那几组:她"看"用的就是它们。{@code numen.gui.view} 是读开着的那扇窗,同一类;
-     * 组里别的函数(往窗口里搬东西)改世界,所以这一条写到函数名。
-     */
-    private static final Set<String> PERCEPTION = Set.of("numen.scan.", "numen.status.", "numen.locate.",
-            "numen.gui.view");
+    /** 只读、不动世界的那几组:她"看"用的就是它们。 */
+    private static final Set<String> PERCEPTION = Set.of("numen.scan.", "numen.status.", "numen.locate.");
 
     /**
      * 动了世界或动了身上东西的那几组。走路不在里面:她走到哪儿不改世界,而"主人给了坐标让她走过去"本来

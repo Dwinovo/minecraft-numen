@@ -83,8 +83,8 @@ public final class StatusApi {
     @Note("Instant and read-only: name, game mode, health, hunger and saturation, position and the way you face, "
             + "dimension, biome, the structures you stand in, what is in your hands, what you wear and what mods "
             + "report about your body, movement state (on the ground, in water or lava, flying, gliding).")
-    @Note("It does not list your backpack: what you carry is in front of you every turn; `numen.gui.view()` shows "
-            + "exact slots.")
+    @Note("It does not list your backpack: what you carry is in front of you every turn, and numen.inv.items reads "
+            + "it kind by kind.")
     @SeeAlso({"numen.status.owner", "numen.status.world"})
     public static Self self(ServerCall call) {
         NumenPlayer self = call.her();
@@ -99,7 +99,7 @@ public final class StatusApi {
             }
         }
         // 背包不在这里。它是「状态」不是「事件」——值会沉进对话历史,而历史里的状态永远不会过期:十轮之后她读到那份快照,
-        // 和这一轮挂在请求里的实时背包对不上。全量背包只有一个来源(runtime_state 的 <inventory>);要精确到槽位就用 gui view。
+        // 和这一轮挂在请求里的实时背包对不上。全量背包只有一个来源(runtime_state 的 <inventory>)。
         var inv = self.getInventory();
         int used = 0;
         for (int i = 0; i < inv.getContainerSize(); i++) {
