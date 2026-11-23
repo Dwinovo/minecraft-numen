@@ -41,28 +41,31 @@ public final class PermissionApi {
 
     private PermissionApi() {}
 
-    /** 她此刻受着的规则,一行一条,写法和 {@code add}/{@code remove} 认的一样。 */
+    /** 她此刻受着的规则,一行一条,写法和 {@code add}/{@code remove} 认的一样;连同此刻规则里能写的词。 */
     public record Rules(
             @Doc("Rules the server owner set; nobody can lift them, not even your owner.") List<String> hard,
             @Doc("Your owner's rules, checked first: \"deny break(...)\" lines etc. Each notes who wrote it (you may "
                     + "have) and how often it fired.") List<String> yours,
-            @Doc("The rules that ship with the mod, checked after your owner's.") List<String> factory) {}
+            @Doc("The rules that ship with the mod, checked after your owner's.") List<String> factory,
+            @Doc("Every word a condition can use right now, written as a rule writes it: owner, near(owner), ...")
+            List<String> words) {}
 
     @Fn("The rules that decide what you may do to the world, in the order they are checked.")
     @Example("numen.permission.rules()")
     @Note("Read-only. A deny anywhere always wins; then allow before ask, your owner's layer before the factory's; "
             + "what no row says is asked of your owner.")
-    @Note("Rows are written verb(condition) @Name: verbs break, place, attack, use_block, use_entity, take, drop, "
-            + "command; conditions combine groups (self, owner, other, structure, nature, unknown), properties "
-            + "(block_entity, contents, named, villager, hostile, hazard_item, near(owner)), ids (minecraft:chest), "
-            + "tags (#c:chests) with & | ! and parentheses; @Name limits a row to one companion.")
+    @Note("Rows are written verb(condition) @Name: verbs break, place, attack, use_block, use_entity, drop, "
+            + "command; conditions combine the words listed in words, ids (minecraft:chest), tags (#c:chests) "
+            + "with & | ! and parentheses; @Name limits a row to one companion.")
+    @Note("Taking things out of a container is not a verb of its own: it is decided by the use_block that opens "
+            + "the container.")
     @SeeAlso({"numen.permission.deny", "numen.permission.ask", "numen.permission.allow", "numen.permission.remove"})
     public static Rules rules(ServerCall call) {
         NumenPlayer her = call.her();
         return rules(RuleBook.of(storeOf(her), PermissionConfig.of(her.getServer()).hardRules()));
     }
 
-    /** 一本规则书写成她读的三张表:硬规则、主人的(带谁写的、命中几次)、出厂的。 */
+    /** 一本规则书写成她读的三张表:硬规则、主人的(带谁写的、命中几次)、出厂的;连同此刻规则里能写的词。 */
     static Rules rules(RuleBook book) {
         List<String> hard = new ArrayList<>();
         book.hard().forEach(row -> hard.add(line(row.table(), row.rule())));
@@ -74,7 +77,7 @@ public final class PermissionApi {
         for (Verdict.Kind table : List.of(Verdict.Kind.ALLOW, Verdict.Kind.ASK)) {
             book.factory().get(table).forEach(row -> factory.add(line(table, row.rule())));
         }
-        return new Rules(hard, yours, factory);
+        return new Rules(hard, yours, factory, Groups.vocabulary(Groups.registered()).words());
     }
 
     /** 加一行。 */

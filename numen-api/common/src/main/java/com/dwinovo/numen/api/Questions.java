@@ -1,6 +1,9 @@
 package com.dwinovo.numen.api;
 
 import com.dwinovo.numen.api.describe.Describer;
+import com.dwinovo.numen.api.entity.ClickActions;
+import com.dwinovo.numen.api.permission.Groups;
+import com.dwinovo.numen.api.permission.RuleWord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
@@ -30,4 +33,17 @@ public final class Questions {
      * ({@link com.dwinovo.numen.api.entity.StackLabel}),比细看一格方块问得勤。回答者只读这一叠,不改它。见 {@link Describer}。
      */
     public static final Question<Describer<ItemStack>> ITEM = Question.of("item");
+
+    /**
+     * 手里拿着这一叠、右键按在方块的这一面上,会对世界做哪几件事:每个回答者说它认得的那种物品(方块物品放下一格、桶倒出液体、
+     * 你的模组的放置类物品)。说出来的动作在按下去之前交权限层裁决,和"用这一格"那一问合成一张单。见 {@link ClickActions}。
+     */
+    public static final Question<ClickActions> CLICK = Question.of("click");
+
+    /**
+     * 规则里能写的词:回答者的名字就是那个词({@code contents}、{@code hostile}),回答者说这个词在一个动作的对象上成不成立。
+     * 主人的规则、出厂的规则写的词,除了 Numen API 自带的那几个({@link Groups}:归属、{@code near}、{@code block_entity}、
+     * {@code named}),都是这里登记的;没人登记的词写进规则是解析错误。自带的名字登记不了。见 {@link RuleWord}。
+     */
+    public static final Question<RuleWord> RULE_WORD = Question.of("rule_word", Groups.names());
 }

@@ -3,6 +3,8 @@ package com.dwinovo.numen.api.permission;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.BlockGetter;
 
+import java.util.Map;
+
 /**
  * 对象组与属性读世界的口。
  *
@@ -13,12 +15,14 @@ import net.minecraft.world.level.BlockGetter;
  * @param actor     要动手的同伴是谁、她的名字与主人(放置记号与驯服记录认人只看这个);测试可传 {@link Actor#NOBODY}
  * @param structures 世界生成时记下的结构件范围(任何线程可读)
  * @param unknownAsOther 说不清是谁的方块按别人的算(专用服务器默认如此,见 {@link PermissionConfig})
+ * @param words     取这份裁决快照时登记着的词({@link Groups#registered}),名字到词:规则里写的词不是自带的就在这里查,
+ *                  一次裁决从头到尾认的是同一份
  */
 public record Facts(BlockGetter view, PlacedBlocks placed, ServerLevel live, Actor actor, Structures structures,
-                    boolean unknownAsOther) {
+                    boolean unknownAsOther, Map<String, RuleWord> words) {
 
     /** 同一份事实,但读不到活世界:搜索线程按保守值回答的那一份。 */
     public Facts withoutLive() {
-        return new Facts(view, placed, null, actor, structures, unknownAsOther);
+        return new Facts(view, placed, null, actor, structures, unknownAsOther, words);
     }
 }

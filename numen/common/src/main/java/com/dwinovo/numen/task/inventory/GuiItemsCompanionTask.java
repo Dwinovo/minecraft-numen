@@ -1,13 +1,10 @@
 package com.dwinovo.numen.task.inventory;
 
-import com.dwinovo.numen.api.permission.GatedAct.Permit;
-import com.dwinovo.numen.api.permission.GatedAct.PermitState;
 import com.dwinovo.numen.FailureType;
 import com.dwinovo.numen.PlayerInv;
 import com.dwinovo.numen.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.tools.ContainerOps;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.task.TaskState;
 
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -22,8 +19,8 @@ import java.util.Map;
 
 /**
  * 在她打开的界面里按种类搬东西,是 {@code StationCompanionTask} 的子活:一刻一步({@link ContainerOps}),整叠够数就整叠挪到另一边,
- * 只要一部分就放进另一边一格空的或同样东西的格;界面那一侧限了格时,放进去总是落在那几格里。从容器里拿出来的那一步点下去之前交给
- * 权限层。搬够了、这一种没了、另一边放不下了就收场,回执说搬了几件、为什么停在那儿。
+ * 只要一部分就放进另一边一格空的或同样东西的格;界面那一侧限了格时,放进去总是落在那几格里。搬东西这一步不过权限层:能不能动这个容器
+ * 里的东西,问在右键打开它的那一下。搬够了、这一种没了、另一边放不下了就收场,回执说搬了几件、为什么停在那儿。
  */
 public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsTaskRecord, Integer> {
 
@@ -69,18 +66,6 @@ public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsT
                 return finish();
             }
             move = new ContainerOps.Move(from.index, to.index, Math.min(left, from.getItem().getCount()));
-        }
-        Action take = ContainerOps.taking(move, player);
-        if (take != null) {
-            Permit permit = gate().permit(take);
-            if (permit.state() == PermitState.WAITING) {
-                player.controls().stop();
-                return TaskState.RUNNING;
-            }
-            if (permit.state() == PermitState.REFUSED) {
-                fail("did not take " + itemName() + ": " + permit.refusal(), FailureType.REFUSED);
-                return TaskState.FAILED;
-            }
         }
         // 搬了几件看她背包里这一种变了多少,不看搬出来的那一格少了多少:取走一件就又出一件的格(切石机的成品格,按住 Shift
         // 点它会一直切到料用完)那一格只少一叠,到她手里的是全部

@@ -206,5 +206,5 @@ public final class KaleidoscopeApi {
             + "2)`); out of reach, no pot or stockpot there, or an unknown recipe fails at once "
             + "with the reason.";
     private static final String ASKS = "Uses what you carry. Asks your owner first when their rules say so, for using "
-            + "the cookware and for taking the dish.";
+            + "the cookware.";
 }

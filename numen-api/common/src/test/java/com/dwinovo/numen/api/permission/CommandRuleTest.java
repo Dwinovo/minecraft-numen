@@ -70,7 +70,7 @@ class CommandRuleTest {
         assumeTrue(booted, "Minecraft 引导不可用,跳过指令规则钉桩");
     }
 
-    private static final Facts NO_WORLD = new Facts(null, null, null, Actor.NOBODY, Structures.NONE, false);
+    private static final Facts NO_WORLD = new Facts(null, null, null, Actor.NOBODY, Structures.NONE, false, Map.of());
 
     private static Action run(String line) {
         return Action.command(line, tree);
@@ -199,11 +199,11 @@ class CommandRuleTest {
         Action setblock = run("setblock 0 64 0 stone");
         ConsentItem item = bare.consentItem(setblock, bare.judge(setblock, null), null);
         PermissionStore store = new PermissionStore();
+        List<Rule> factoryAllow = FactoryRules.layer().allow();
         store.remember(List.of(item.remember()));
 
         assertEquals(List.of(Groups.parse("command(setblock)")), store.rules().allow(), "以后都允许写进主人层");
-        assertEquals(FactoryRules.ALLOW, FactoryRules.layer().allow().stream().map(Rule::toString).toList(),
-                "出厂层不跟着变");
+        assertEquals(factoryAllow, FactoryRules.layer().allow(), "出厂层不跟着变");
         Gate after = new Gate(Actor.NOBODY, Layers.policy(Mode.ASK, FactoryRules.hard(), store.rules(), FactoryRules.layer()), new PlacedBlocks(), Structures.NONE, false, List.of(), Hits.NONE);
         assertTrue(after.judge(run("setblock 1 64 1 dirt"), null).allowed(), "记住以后 setblock 不再问");
         assertTrue(after.judge(run("help"), null).allowed(), "出厂行照旧放行");

@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 /**
  * 规则里认得的名字:对象组与属性。核心只知道名字、带不带括号参数、命中时怎么自述、哪些动词下命中算"撤不回";
@@ -66,10 +65,15 @@ public final class Vocabulary {
         return entries.values();
     }
 
-    /** 教学式错误里列的名字:带参数的写成 {@code near(...)}。 */
-    public String listing() {
+    /** 认得的名字各写成规则里的样子,按登记顺序:带参数的写成 {@code near(owner)}。 */
+    public List<String> words() {
         return entries.values().stream().map(e -> e.takesArgument() ? e.name + "(" + e.argument.hint + ")" : e.name)
-                .collect(Collectors.joining(", "));
+                .toList();
+    }
+
+    /** 教学式错误里列的名字:{@link #words} 连成一句。 */
+    public String listing() {
+        return String.join(", ", words());
     }
 
     /**

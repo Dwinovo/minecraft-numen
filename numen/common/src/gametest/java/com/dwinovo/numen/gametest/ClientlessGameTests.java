@@ -10,7 +10,6 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.item.Items;
 import net.minecraft.core.BlockPos;
 import com.dwinovo.numen.api.permission.Groups;
-import com.dwinovo.numen.permission.Rule;
 import com.dwinovo.numen.permission.Verb;
 import com.dwinovo.numen.api.permission.ConsentItem;
 import com.dwinovo.numen.api.permission.ConsentDesk;
@@ -269,7 +268,7 @@ public class ClientlessGameTests {
     private static ConsentItem oakLog(GameTestHelper helper) {
         return new ConsentItem(Verb.BREAK, helper.absolutePos(new BlockPos(5, 2, 5)), ConsentItem.NO_ENTITY,
                 "oak_log", Items.OAK_LOG, Blocks.OAK_LOG.getName(), "ask break(owner)", "belongs to the owner",
-                Component.literal("it is yours"), false, Rule.parse("break(owner & minecraft:oak_log)", Groups.VOCABULARY));
+                Component.literal("it is yours"), false, Groups.parse("break(owner & minecraft:oak_log)"));
     }
 
     /**

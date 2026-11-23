@@ -9,9 +9,10 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.BlockGetter;
 
 import java.util.List;
+import java.util.Map;
 
 /**
- * 一次裁决用的快照:模式、两层规则、所在维度的放置记录、主人答应下来的任务期授权。
+ * 一次裁决用的快照:模式、两层规则、所在维度的放置记录、主人答应下来的任务期授权、此刻登记着的词。
  * 主线程建({@link Permission#gateFor}),之后任何线程只读——寻路工作线程拿着它给每条边定价。
  *
  * <p>判定顺序与出厂层、主人层怎么叠都在规则核心({@link Policy});这里只做游戏适配:把一下动作和世界此刻的
@@ -30,6 +31,8 @@ public final class Gate {
     private final boolean unknownAsOther;
     private final List<ConsentItem> granted;
     private final Hits hits;
+    /** 建这份快照时登记着的词:规则里不是自带的词在这里查。 */
+    private final Map<String, RuleWord> words;
 
     /**
      * @param actor      要动手的同伴是谁、她的名字与主人;测试可传 {@link Actor#NOBODY}
@@ -50,6 +53,7 @@ public final class Gate {
         this.unknownAsOther = unknownAsOther;
         this.granted = List.copyOf(granted);
         this.hits = hits;
+        this.words = Groups.registered();
     }
 
     public Mode mode() {
@@ -84,7 +88,7 @@ public final class Gate {
     }
 
     private Facts facts(BlockGetter view, ServerLevel live) {
-        return new Facts(view, placed, live, actor, structures, unknownAsOther);
+        return new Facts(view, placed, live, actor, structures, unknownAsOther, words);
     }
 
     private Verdict decide(Action action, Facts facts) {

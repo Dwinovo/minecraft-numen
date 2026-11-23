@@ -11,10 +11,8 @@ import com.dwinovo.numen.api.task.TaskResult;
 import com.dwinovo.numen.api.task.TaskState;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -169,23 +167,17 @@ final class PotActTask implements Task {
     }
 
     /**
-     * 动手之前过权限层:动这口锅,装盘时还有把成品拿走。
+     * 动手之前过权限层:动这口锅。装盘把成品拿走也在这一问里,和右键打开一个容器再往外拿一样。
      *
      * @return null = 可以动手;{@code RUNNING} = 在等主人答复;{@code FAILED} = 不许
      */
     private TaskState permit(NumenPlayer cook, ServerLevel level) {
-        BlockState state = level.getBlockState(r.pos);
-        List<Action> proposed = r.act == PotAct.PLATE
-                ? List.of(Action.useBlock(r.pos, state), Action.take(r.pos, state, dish.result().getItem()))
-                : List.of(Action.useBlock(r.pos, state));
-        List<GatedAct.Permit> permits = gate.permitAll(proposed);
-        for (int i = 0; i < proposed.size(); i++) {
-            if (permits.get(i).state() == GatedAct.PermitState.REFUSED) {
-                return failed(ErrorKind.DENIED, "cannot " + proposed.get(i).describe() + ": " + permits.get(i).refusal(),
-                        null);
-            }
+        Action use = Action.useBlock(r.pos, level.getBlockState(r.pos));
+        GatedAct.Permit permit = gate.permit(use);
+        if (permit.state() == GatedAct.PermitState.REFUSED) {
+            return failed(ErrorKind.DENIED, "cannot " + use.describe() + ": " + permit.refusal(), null);
         }
-        if (permits.stream().anyMatch(p -> p.state() == GatedAct.PermitState.WAITING)) {
+        if (permit.state() == GatedAct.PermitState.WAITING) {
             cook.controls().stop();
             return TaskState.RUNNING;
         }

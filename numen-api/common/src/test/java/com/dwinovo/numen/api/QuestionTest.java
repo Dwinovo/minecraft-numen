@@ -29,6 +29,15 @@ class QuestionTest {
     }
 
     @Test
+    void aNameTheQuestionKeepsForItselfCannotBeRegistered() {
+        Question<String> question = Question.of("gt:taken", java.util.Set.of("mine"));
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class, () -> question.register("mine", "a"));
+        assertEquals("question gt:taken keeps the name 'mine' for itself", refused.getMessage());
+        question.register("yours", "b");
+        assertEquals(Map.of("yours", "b"), question.answerers());
+    }
+
+    @Test
     void aQuestionNeedsAnId() {
         assertThrows(IllegalArgumentException.class, () -> Question.of(" "));
     }

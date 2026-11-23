@@ -293,15 +293,17 @@ interface Reflex {
 内容。五个零件:
 
 **动作(Action)。** 身体要对世界做的一件具体的事及其目标:`break(pos)`、`place(pos, block)`、
-`attack(entity)`、`use_block(pos)`、`use_entity(entity)`、`take(container, item)`、`drop(item)`、
-`command(整行)`。不带工具名、不带 JSON。
+`attack(entity)`、`use_block(pos)`、`use_entity(entity)`、`drop(item)`、
+`command(整行)`。不带工具名、不带 JSON。从容器里拿东西不是单独的动作,归右键打开它的那一下 `use_block`。
 
 **对象组与属性。** 规则判的是"这东西是谁的"。方块恰好属于六类之一,按次序判、判出来就停:`self`(放置记录:她放的)、
 `owner`(放置记录:主人或主人名下别的同伴放的)、`other`(别的玩家或别人名下同伴放的)、`structure`(世界生成时记下的结构件范围,
 `structure(#minecraft:village)` 按结构类型分)、`nature`(种类在数据标签 `numen:natural` 里;树叶要不持久,原木要连着不持久的树叶)、
 `unknown`(其余;专用服务器上按 `other` 算,服主可在 `config/numen/server/server.json` 的 `unknownAsOther` 改)。实体用 `self`、`owner`、`other`、`nature`,
-认的是驯服记录。放置记录的放的人只在 `PlacedBlocks.placedBy` 一处认。属性:`block_entity`、`contents`(只在主线程读;搜索线程按"有")、
-`named`、`villager`、`hostile`、`hazard_item`、`near(<组>)`。组与属性的名字登记在规则核心的 `Vocabulary`,判断在 `Groups`。
+认的是驯服记录。放置记录的放的人只在 `PlacedBlocks.placedBy` 一处认。属性分两处:不用认识任何具体东西的 `block_entity`、`named`、
+`near(<组>)` 与六个归属组是 Numen API 自带的(`Groups`);说得出"这是哪一类东西"的由认得的一方登记(`RuleWord`,经 `Questions.RULE_WORD`),
+原版的 `contents`(只在主线程读;搜索线程按"有")、`villager`、`hostile`、`hazard_item` 由 Numen 登记。规则认得的名字在 `Groups.vocabulary`
+一处合起来,交给规则核心的 `Vocabulary`。右键手里的东西会对世界做什么同样是问出来的(`Questions.CLICK`),不按物品的类认。
 
 权限层只做原版,领地模组之后以联动插件做。原生通道里服务器退回的挖掘,由挖掘落点如实报成被拒,
 那是身体汇报,不是权限裁决。

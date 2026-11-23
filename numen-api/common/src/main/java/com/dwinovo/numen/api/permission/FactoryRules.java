@@ -1,9 +1,14 @@
 package com.dwinovo.numen.api.permission;
 
+import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.permission.Rule;
 import com.dwinovo.numen.permission.RuleSet;
+import com.dwinovo.numen.permission.Vocabulary;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * 随模组发的规则:硬规则,和出厂层。规则原文住在这里,主人看得见;出厂层主人改得了(写自己那一层,压过它),硬规则只有服主能关
@@ -19,9 +24,10 @@ import java.util.List;
  *       可疑的沙子)不进任何拆方块的 allow 行,落到 {@code break(block_entity)} 去问;</li>
  *   <li>床、门、活板门、栅栏门不再单列:主人放的已经是 {@code owner},村子里的已经是 {@code structure(#minecraft:village)},
  *       自然生成的门只在结构里;</li>
- *   <li>从主人的容器拿东西放行:她的设计就是用主人的工作台熔炉箱子;主人想管就加 {@code ask take(owner)}。废弃结构里的战利品箱随便拿,
- *       村民的箱子要问;</li>
- *   <li>右键方块全放行:开门、开容器、按按钮不改世界的归属;拿东西另由 {@code take} 管;</li>
+ *   <li>右键一格里面没装东西的方块放行:开门、按按钮、睡床、开空容器不动别人的东西;</li>
+ *   <li>右键一格装着东西的容器,问的就是"能不能动里面的东西"——打开之后往外拿不再另问:主人的、她自己的放行(她的设计就是用主人的
+ *       工作台熔炉箱子;主人想管就加 {@code ask use_block(contents & owner)}),废弃结构里的战利品箱放行,村子里的、自然里的、
+ *       说不清是谁的没有一行说到,去问;别人的是硬规则;</li>
  *   <li>执行只读或只说话的指令:帮助、在线名单、动作消息、私信、队伍消息、种子、随机数。别名随根名认
  *       ({@code tell}、{@code w} 归 {@code msg}),见 {@link Action#command}。其余指令没有一行说到,照旧问。</li>
  * </ul>
@@ -34,7 +40,7 @@ public final class FactoryRules {
     public static final List<String> HARD = List.of(
             "break(other)",
             "place(other)",
-            "take(other)",
+            "use_block(other & contents)",
             "attack(other)",
             "use_entity(other)",
             "place(hazard_item & near(other))");
@@ -48,12 +54,12 @@ public final class FactoryRules {
             "place(hazard_item & !near(owner) & !near(other))",
             "attack(hostile)",
             "attack(nature & !named & !villager)",
-            "use_block(*)",
+            "use_block(!contents)",
+            "use_block(contents & owner)",
+            "use_block(contents & self)",
+            "use_block(contents & structure & !structure(#minecraft:village))",
             "use_entity(nature)",
             "use_entity(self)",
-            "take(owner)",
-            "take(self)",
-            "take(structure & !structure(#minecraft:village))",
             "command(help)",
             "command(list)",
             "command(me)",
@@ -77,19 +83,51 @@ public final class FactoryRules {
             "drop(*)",
             "place(hazard_item & near(owner))");
 
-    private static final List<Rule> HARD_RULES = HARD.stream().map(Groups::parse).toList();
+    /**
+     * 原文按一份词表解析出来的规则。原文里有登记的词({@link RuleWord}),词是活的——插件装上、撤回——所以解析的结果跟着词表走:
+     * 登记着的名字变了就重新解析。
+     *
+     * @param words 解析时登记着的名字
+     */
+    private record Parsed(Set<String> words, List<Rule> hard, RuleSet layer) {}
 
-    private static final RuleSet LAYER = new RuleSet(List.of(),
-            ASK.stream().map(Groups::parse).toList(),
-            ALLOW.stream().map(Groups::parse).toList());
+    private static volatile Parsed parsed;
 
     /** 硬规则;服主关掉({@link PermissionConfig#hardRules})时调用方传空表。 */
     public static List<Rule> hard() {
-        return HARD_RULES;
+        return parsed().hard;
     }
 
     /** 出厂层:deny 空;allow 见 {@link #ALLOW};ask 见 {@link #ASK}。 */
     public static RuleSet layer() {
-        return LAYER;
+        return parsed().layer;
+    }
+
+    private static Parsed parsed() {
+        Map<String, RuleWord> words = Groups.registered();
+        Parsed now = parsed;
+        if (now == null || !now.words.equals(words.keySet())) {
+            Vocabulary vocabulary = Groups.vocabulary(words);
+            now = new Parsed(Set.copyOf(words.keySet()), rules("hard", HARD, vocabulary),
+                    new RuleSet(List.of(), rules("factory ask", ASK, vocabulary), rules("factory allow", ALLOW, vocabulary)));
+            parsed = now;
+        }
+        return now;
+    }
+
+    /**
+     * 一张表的原文解析成规则。写着此刻没人登记的词的那一行不成规则:记一条错误日志、不进表,和存档里解析不了的行同一个办法
+     * (登记它的插件没装上时,那一行说的东西没人认得)。
+     */
+    private static List<Rule> rules(String table, List<String> texts, Vocabulary vocabulary) {
+        List<Rule> out = new ArrayList<>();
+        for (String text : texts) {
+            try {
+                out.add(Rule.parse(text, vocabulary));
+            } catch (Rule.Mistake mistake) {
+                Constants.LOG.error("[numen-permission] the {} rule {} is left out: {}", table, text, mistake.getMessage());
+            }
+        }
+        return List.copyOf(out);
     }
 }

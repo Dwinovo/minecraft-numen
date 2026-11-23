@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.permission;
 
+import com.dwinovo.numen.api.Questions;
 import com.dwinovo.numen.api.data.ModLanguageData;
 import com.dwinovo.numen.permission.Rule;
 import com.dwinovo.numen.permission.Verb;
@@ -10,15 +11,9 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
-import net.minecraft.world.Container;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.OwnableEntity;
-import net.minecraft.world.entity.monster.Enemy;
-import net.minecraft.world.entity.npc.AbstractVillager;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.level.block.entity.BlockEntity;
 
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -27,20 +22,19 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * 原版的对象组与属性,规则行里写的名词。每个只回答一个通用问题、各自独立、无状态:
+ * 规则行里写的名词。这里是 Numen API 自带的那几个,都不用认识任何具体的东西,每个只回答一个通用问题、各自独立、无状态:
  * <ul>
  *   <li><b>归属</b>六类,互斥且完备({@link Whose}):{@code self}、{@code owner}、{@code other}、{@code structure}(可带结构类型
  *       标签,{@code structure(#minecraft:village)})、{@code nature}、{@code unknown};</li>
- *   <li><b>属性</b>:{@code block_entity}、{@code contents}、{@code named}、{@code villager}、{@code hostile}、{@code hazard_item}、
- *       {@code near(<组>)}(放置点附近有没有属于那一组的方块,组是 {@code self}、{@code owner}、{@code other})。</li>
+ *   <li><b>属性</b>:{@code block_entity}、{@code named}、{@code near(<组>)}(放置点附近有没有属于那一组的方块,组是
+ *       {@code self}、{@code owner}、{@code other})。</li>
  * </ul>
- * 规则文本里的名字登记在 {@link #VOCABULARY},规则核心解析时据此核对;一个名字对不对得上一个具体对象,由 {@link #test} 回答。
- *
- * <p>不按方块或生物种类枚举:谁放的、在不在结构里、带方块实体、有主人、有名字、是村民,这几个事实覆盖原版和任何模组——
- * 高级工作台有方块实体,模组宠物继承原版驯服,都不用适配。
+ * 说得出"这是哪一类东西"的词(村民、敌对生物、容器里有没有东西)不在这里:谁认得谁登记({@link RuleWord},经
+ * {@link Questions#RULE_WORD}),原版的那几个由 Numen 登记。规则能用的词就是这两处合起来的:解析、教学式的错误、撤不回的判断都从
+ * {@link #vocabulary} 取,全仓只此一处。
  *
  * <p>只陈述事实,不裁决,只在规则行里起作用。线程:只读 {@link Facts#view}、{@link Facts#placed} 与 {@link Facts#structures}
- * (任何线程可读);要活读世界的({@link #CONTENTS})只在 {@link Facts#live} 非空时读,否则按它说明的保守值回答。
+ * (任何线程可读)。
  */
 public enum Groups {
 
@@ -121,44 +115,10 @@ public enum Groups {
         }
     },
 
-    /**
-     * 容器里有没有东西。只有主线程读得到方块实体;搜索线程按"有"回答——规划比执行保守,
-     * 一条要等主人点头的路不会被规划成免费的。拆了东西洒一地会消失,撤不回。
-     */
-    CONTENTS("contents", "has contents", EnumSet.allOf(Verb.class)) {
-        @Override
-        boolean test(ActView v, String arg) {
-            Action a = v.action();
-            return a.pos() != null && a.state() != null && a.state().hasBlockEntity()
-                    && (v.facts().live() == null || hasContents(v.facts().live().getBlockEntity(a.pos())));
-        }
-    },
-
     NAMED("named", "has a name", Set.of()) {
         @Override
         boolean test(ActView v, String arg) {
             return v.action().entity() != null && v.action().entity().hasCustomName();
-        }
-    },
-
-    VILLAGER("villager", "is a villager", Set.of()) {
-        @Override
-        boolean test(ActView v, String arg) {
-            return v.action().entity() instanceof AbstractVillager;
-        }
-    },
-
-    HOSTILE("hostile", "is hostile", Set.of()) {
-        @Override
-        boolean test(ActView v, String arg) {
-            return v.action().entity() instanceof Enemy;
-        }
-    },
-
-    HAZARD_ITEM("hazard_item", "is a hazard", Set.of()) {
-        @Override
-        boolean test(ActView v, String arg) {
-            return v.action().item() != null && HAZARD_ITEMS.contains(v.action().item());
         }
     },
 
@@ -192,13 +152,6 @@ public enum Groups {
 
     /** 按规则名查组的表;判断路径上每问一项都查,不能每次走 {@link #values()}(它每次新建一份数组)。 */
     private static final Map<String, Groups> BY_NAME = indexByName();
-
-    /** 放下去会烧、会炸、会淹的东西。 */
-    private static final Set<Item> HAZARD_ITEMS = Set.of(
-            Items.LAVA_BUCKET, Items.FLINT_AND_STEEL, Items.FIRE_CHARGE, Items.TNT, Items.WATER_BUCKET);
-
-    /** 规则里认得的名字:这里登记的全部组与属性。 */
-    public static final Vocabulary VOCABULARY = vocabulary();
 
     final String ruleName;
     private final String description;
@@ -242,9 +195,14 @@ public enum Groups {
         return mobOwner ? null : owner;
     }
 
-    /** 按规则文本里的名字取;没有这个名字返回 null。 */
+    /** 按规则文本里的名字取自带的那一个;不是自带的名字返回 null。 */
     public static Groups byName(String name) {
         return BY_NAME.get(name);
+    }
+
+    /** 自带的全部名字:登记的词不能用({@link Questions#RULE_WORD} 把它们占着)。 */
+    public static Set<String> names() {
+        return BY_NAME.keySet();
     }
 
     private static Map<String, Groups> indexByName() {
@@ -255,12 +213,24 @@ public enum Groups {
         return Map.copyOf(out);
     }
 
-    /** 用原版的名字表解析一行规则;写错了抛 {@link Rule.Mistake}。全仓解析规则文本都走这里。 */
-    public static Rule parse(String text) {
-        return Rule.parse(text, VOCABULARY);
+    /** 此刻登记着的词,名字到词,按登记先后的一份快照。 */
+    public static Map<String, RuleWord> registered() {
+        return Questions.RULE_WORD.answerers();
     }
 
-    private static Vocabulary vocabulary() {
+    /**
+     * 按此刻认得的词解析一行规则;写错了抛 {@link Rule.Mistake}——用了没人登记的词也是写错。全仓解析规则文本都走这里。
+     */
+    public static Rule parse(String text) {
+        return Rule.parse(text, vocabulary(registered()));
+    }
+
+    /**
+     * 规则里认得的名字:自带的在前,{@code registered} 里的按登记先后接在后面。解析、教学式的错误里列的名字、撤不回的判断读的都是它。
+     *
+     * @param registered 登记着的词的一份快照({@link #registered},或一次裁决用的那一份 {@link Facts#words})
+     */
+    public static Vocabulary vocabulary(Map<String, RuleWord> registered) {
         Vocabulary.Builder builder = Vocabulary.builder();
         for (Groups g : values()) {
             switch (g) {
@@ -277,14 +247,11 @@ public enum Groups {
                 }
             }
         }
+        registered.forEach((name, word) -> builder.irreversibleName(name, word.description(), word.irreversibleOn()));
         return builder.build();
     }
 
     private static boolean isTag(String arg) {
         return arg.startsWith("#") && ResourceLocation.tryParse(arg.substring(1)) != null;
-    }
-
-    private static boolean hasContents(BlockEntity be) {
-        return be instanceof Container c && !c.isEmpty();
     }
 }

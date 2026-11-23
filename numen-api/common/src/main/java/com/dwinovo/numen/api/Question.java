@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * 一个问题:出题的一方定下"我要问什么"({@code T} 是回答者的样子),谁懂谁经 {@link NumenApi#answer} 登记一个回答者,出题的一方要用时
@@ -28,11 +29,14 @@ import java.util.Objects;
 public final class Question<T> {
 
     private final String id;
+    /** 出题的一方自己占着的名字:回答者登记不了。 */
+    private final Set<String> taken;
     /** 名字到回答者,按登记先后;读写都锁它。 */
     private final Map<String, T> answerers = new LinkedHashMap<>();
 
-    private Question(String id) {
+    private Question(String id, Set<String> taken) {
         this.id = id;
+        this.taken = Set.copyOf(taken);
     }
 
     /**
@@ -41,10 +45,20 @@ public final class Question<T> {
      * @param id 写进日志的名字;插件出的题带上自己的名字空间({@code mymod:item_namer})
      */
     public static <T> Question<T> of(String id) {
+        return of(id, Set.of());
+    }
+
+    /**
+     * 出一道题,出题的一方自己占着几个名字:回答者的名字和出题一方自己的名字写在同一处时(规则里的词:自带的与登记的),
+     * 登记一个被占的名字和重名一样是错。
+     *
+     * @param taken 回答者不能用的名字
+     */
+    public static <T> Question<T> of(String id, Set<String> taken) {
         if (id == null || id.isBlank()) {
             throw new IllegalArgumentException("a question needs an id");
         }
-        return new Question<>(id);
+        return new Question<>(id, taken);
     }
 
     public String id() {
@@ -63,13 +77,16 @@ public final class Question<T> {
      * 随插件撤回)。
      *
      * @param name 回答者的名字:小写字母开头,小写字母、数字、下划线
-     * @throws IllegalArgumentException 名字在脚本里写不出来,或这个问题已经有一个同名的回答者
+     * @throws IllegalArgumentException 名字在脚本里写不出来,被出题的一方占着,或这个问题已经有一个同名的回答者
      */
     public Handle register(String name, T answerer) {
         Objects.requireNonNull(answerer, "answerer");
         String bad = Binder.badName(name);
         if (bad != null) {
             throw new IllegalArgumentException("question " + id + ": the name of an answerer: " + bad);
+        }
+        if (taken.contains(name)) {
+            throw new IllegalArgumentException("question " + id + " keeps the name '" + name + "' for itself");
         }
         synchronized (answerers) {
             if (answerers.putIfAbsent(name, answerer) != null) {

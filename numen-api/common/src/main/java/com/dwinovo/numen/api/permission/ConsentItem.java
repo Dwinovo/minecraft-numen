@@ -4,6 +4,7 @@ import com.dwinovo.numen.api.data.ModLanguageData;
 import com.dwinovo.numen.permission.Rule;
 import com.dwinovo.numen.permission.Verb;
 import com.dwinovo.numen.permission.Verdict;
+import com.dwinovo.numen.permission.Vocabulary;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -96,8 +97,9 @@ public record ConsentItem(Verb kind, BlockPos pos, int entityId, String subject,
         String rule = verdict.rule() == null ? "" : verdict.rule().toString();
         ActView now = new ActView(action, facts);
         ActView blind = new ActView(action, facts.withoutLive());
-        boolean irreversible = Groups.VOCABULARY.irreversible(now);
-        Rule remember = Rule.remembering(now, blind, verdict.rule(), Groups.VOCABULARY);
+        Vocabulary vocabulary = Groups.vocabulary(facts.words());
+        boolean irreversible = vocabulary.irreversible(now);
+        Rule remember = Rule.remembering(now, blind, verdict.rule(), vocabulary);
         Component why = verdict.rule() != null ? now.shown(verdict.rule())
                 : Component.translatable(ModLanguageData.Keys.PERMISSION_UNCOVERED);
         return switch (action.kind()) {
@@ -200,7 +202,7 @@ public record ConsentItem(Verb kind, BlockPos pos, int entityId, String subject,
         return String.join("; ", texts);
     }
 
-    /** 方块、物品、指令与区域动作的对象:挖、右键、拿看格子上的方块,放、丢看物品,指令就是那一整行,改区域是那块区域的名字。 */
+    /** 方块、物品、指令与区域动作的对象:挖、右键看格子上的方块,放、丢看物品,指令就是那一整行,改区域是那块区域的名字。 */
     private record Subject(String id, Item icon, Component name) {
 
         static Subject of(Action action) {

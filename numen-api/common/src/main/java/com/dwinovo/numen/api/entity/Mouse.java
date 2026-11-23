@@ -24,14 +24,8 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.BucketItem;
-import net.minecraft.world.item.FireChargeItem;
-import net.minecraft.world.item.FlintAndSteelItem;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ClipContext;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
@@ -71,7 +65,7 @@ import net.minecraft.world.phys.Vec3;
  *
  * <h2>权限</h2>
  * 身体是同伴({@link NumenPlayer})时,每一下动手之前先过权限层,这是关卡长在身体上、谁驱动她都绕不开的地方:左键换到新的一格时问
- * "能不能拆这一格"、打实体时问"能不能打它",右键手上的东西会往世界里放东西({@link #placing})时问"能不能放",再问"能不能用这一格或这只实体"。不许就不动手,交回
+ * "能不能拆这一格"、打实体时问"能不能打它",右键手上的东西会对世界做的事({@link ClickActions},谁认得那种物品谁来说)逐件问,再问"能不能用这一格或这只实体"。不许就不动手,交回
  * 裁决本身当理由;要问主人时鼠标停下,交回要问的那一条({@link Refusal.Asks}),由驱动者决定怎么问。不是同伴的普通假玩家照原版,
  * 不过权限层。服务端自己退回的挖掘如实报成被拒({@link Refusal#SERVER}),那是身体汇报,不是权限裁决。
  *
@@ -641,25 +635,10 @@ public class Mouse {
     // ==================== 权限 ====================
 
     /**
-     * 右键落在 {@code hit} 这一面、手里是 {@code stack} 时,会不会往世界里放东西、放在哪:方块物品贴着命中面放进可替换的格,
-     * 桶倒出或舀起液体,打火石与火焰弹点起火——都是一次放置,交权限层裁决。不往世界里放东西时为 null。
-     */
-    public static Action placing(Level level, BlockHitResult hit, ItemStack stack) {
-        BlockPos placeAt = hit.getBlockPos().relative(hit.getDirection());
-        BlockState before = level.getBlockState(placeAt);
-        Item item = stack.getItem();
-        boolean places = (before.canBeReplaced() && item instanceof BlockItem)
-                || item instanceof BucketItem
-                || item instanceof FlintAndSteelItem
-                || item instanceof FireChargeItem;
-        return places ? Action.place(placeAt, before, item) : null;
-    }
-
-    /**
      * 这一下按在 {@code hit} 上会做的事,权限层按它们裁决——鼠标在动手那一刻问的,驱动者在受理前预问的(任务要问主人、要先站定)是
      * 同一张单,权限的判据只此一处:
-     * 左键是挖那一格方块或打那只实体;右键两只手里会往世界里放东西的各放一次({@link #placing}),再用那一格方块或那只实体。
-     * 准星什么也没落着,没有要问的。
+     * 左键是挖那一格方块或打那只实体;右键落在方块上,两只手里的东西各问一圈"这一下会做什么"({@link ClickActions#of},今天
+     * 说出来的都是放置),再用那一格方块;右键落在实体上是用那只实体。准星什么也没落着,没有要问的。
      */
     public List<Action> intents(HitResult hit, boolean left) {
         if (hit instanceof BlockHitResult block && hit.getType() == HitResult.Type.BLOCK) {
@@ -670,10 +649,7 @@ public class Mouse {
             }
             List<Action> out = new ArrayList<>();
             for (InteractionHand hand : InteractionHand.values()) {
-                Action placing = placing(body.level(), block, body.getItemInHand(hand));
-                if (placing != null) {
-                    out.add(placing);
-                }
+                out.addAll(ClickActions.of(body, block, body.getItemInHand(hand)));
             }
             out.add(Action.useBlock(pos, state));
             return out;

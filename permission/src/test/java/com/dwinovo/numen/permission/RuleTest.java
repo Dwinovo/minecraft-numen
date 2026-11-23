@@ -52,6 +52,9 @@ class RuleTest {
         assertEquals("chew", verb.args().get(0));
         assertEquals("chew(mine)", verb.args().get(1));
         assertTrue(verb.getMessage().contains("break") && verb.getMessage().contains("command"), "列出认得的动词");
+        assertEquals("break, place, attack, use_block, use_entity, drop, command", verb.args().get(2), "动词就这七个");
+        assertEquals("verb", assertThrows(Rule.Mistake.class, () -> rule("take(mine)")).code(),
+                "从容器里拿东西不是一个动词:它归右键打开容器的那一下");
 
         Rule.Mistake name = assertThrows(Rule.Mistake.class, () -> rule("break(haunted)"));
         assertEquals("name", name.code());
@@ -182,7 +185,7 @@ class RuleTest {
         assertTrue(FakeAct.VOCAB.irreversible(breaking().with("stuffed")));
         assertTrue(FakeAct.VOCAB.irreversible(FakeAct.of(Verb.ATTACK).with("stuffed")));
         assertFalse(FakeAct.VOCAB.irreversible(breaking().with("hollow")));
-        assertFalse(FakeAct.VOCAB.irreversible(FakeAct.of(Verb.TAKE).with("stuffed")), "撤不回是按动词登记的");
+        assertFalse(FakeAct.VOCAB.irreversible(FakeAct.of(Verb.USE_BLOCK).with("stuffed")), "撤不回是按动词登记的");
         assertFalse(FakeAct.VOCAB.irreversible(breaking()), "对象身上不成立就不算");
     }
 

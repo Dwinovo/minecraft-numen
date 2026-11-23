@@ -51,8 +51,8 @@ class PermissionStoreTest {
         store.setMode(companion, Mode.OBSERVE);
 
         RuleSet before = store.rules();
-        assertTrue(store.add(Verdict.Kind.ASK, Groups.parse("take(*)")));
-        assertFalse(store.add(Verdict.Kind.ASK, Groups.parse("take(*)")), "同一张表不重复加");
+        assertTrue(store.add(Verdict.Kind.ASK, Groups.parse("use_block(*)")));
+        assertFalse(store.add(Verdict.Kind.ASK, Groups.parse("use_block(*)")), "同一张表不重复加");
         assertTrue(store.add(Verdict.Kind.ALLOW, Groups.parse("break(owner & minecraft:cobblestone)")));
         assertTrue(store.add(Verdict.Kind.ALLOW, Groups.parse("attack(minecraft:zombie)")));
         assertTrue(before.ask().isEmpty(), "取走的快照不跟着变");
@@ -78,7 +78,7 @@ class PermissionStoreTest {
         store.setMode(companion, Mode.BYPASS);
         store.add(Verdict.Kind.DENY, Groups.parse("break(#minecraft:beds)"));
         store.add(Verdict.Kind.ASK, Groups.parse("break(!owner & !block_entity)"));
-        store.add(Verdict.Kind.ALLOW, Groups.parse("break(block_entity & minecraft:chest & !contents)"));
+        store.add(Verdict.Kind.ALLOW, Groups.parse("break(block_entity & minecraft:chest & !named)"));
 
         PermissionStore loaded = PermissionStore.load(store.save(new CompoundTag(), null), null);
         assertEquals(Mode.BYPASS, loaded.modeOf(companion));
@@ -162,16 +162,16 @@ class PermissionStoreTest {
         ask.add(StringTag.valueOf("attack(owned)"));
         tag.put("ask", ask);
         ListTag allow = new ListTag();
-        allow.add(StringTag.valueOf("break(self_placed & !contents)"));
-        allow.add(StringTag.valueOf("place(hazard_item & !near_placed)"));
+        allow.add(StringTag.valueOf("break(self_placed & !block_entity)"));
+        allow.add(StringTag.valueOf("place(minecraft:tnt & !near_placed)"));
         allow.add(StringTag.valueOf("break(minecraft:placed_thing)"));
         tag.put("allow", allow);
 
         PermissionStore loaded = PermissionStore.load(tag, null);
         assertEquals(List.of(Groups.parse("break((owner | other) & !block_entity)"),
                 Groups.parse("attack(self | owner | other)")), loaded.rules().ask());
-        assertEquals(List.of(Groups.parse("break(self & !contents)"),
-                Groups.parse("place(hazard_item & !(near(owner) | near(other)))"),
+        assertEquals(List.of(Groups.parse("break(self & !block_entity)"),
+                Groups.parse("place(minecraft:tnt & !(near(owner) | near(other)))"),
                 Groups.parse("break(minecraft:placed_thing)")), loaded.rules().allow(),
                 "id 里碰巧同名的部分不动");
         assertTrue(loaded.isDirty(), "改写过的档要重新落盘");
@@ -181,16 +181,26 @@ class PermissionStoreTest {
         assertFalse(again.isDirty(), "新写法的档读档不再改写");
     }
 
+    /**
+     * 读不成规则的行:写了没人登记的词的,和动词不认识的——早先的版本存下的 {@code take(...)} 行就是后一种。各记一条错误日志、
+     * 不进表,前后的行照读;存档没因此变脏,那几行留在文件里,到这份存档下一次落盘才没有。
+     */
     @Test
-    void aMistypedLineInTheSaveIsLeftOutAndTheRestLoads() {
+    void aLineThatNoLongerParsesIsLeftOutAndTheRestLoads() {
         CompoundTag tag = new CompoundTag();
         tag.put("modes", new CompoundTag());
         ListTag allow = new ListTag();
         allow.add(StringTag.valueOf("break(minecraft:dirt)"));
         allow.add(StringTag.valueOf("break(haunted)"));
-        allow.add(StringTag.valueOf("take(*)"));
+        allow.add(StringTag.valueOf("take(owner)"));
+        allow.add(StringTag.valueOf("drop(*)"));
         tag.put("allow", allow);
+        ListTag ask = new ListTag();
+        ask.add(StringTag.valueOf("take(*)"));
+        tag.put("ask", ask);
         PermissionStore loaded = PermissionStore.load(tag, null);
-        assertEquals(List.of(Groups.parse("break(minecraft:dirt)"), Groups.parse("take(*)")), loaded.rules().allow());
+        assertEquals(List.of(Groups.parse("break(minecraft:dirt)"), Groups.parse("drop(*)")), loaded.rules().allow());
+        assertTrue(loaded.rules().ask().isEmpty(), "take 不再是动词,这一行不成规则");
+        assertFalse(loaded.isDirty(), "读档不为丢掉的行重写存档");
     }
 }

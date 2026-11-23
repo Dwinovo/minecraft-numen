@@ -115,10 +115,10 @@ class NumenCommandsTest {
         assertEquals("break(placed & minecraft:cobblestone)",
                 runs("numen permission rules add allow break(placed & minecraft:cobblestone)").get("rule").getResult());
         runs("numen permission rules add deny attack(villager)");
-        runs("numen permission rules add ask take(*)");
+        runs("numen permission rules add ask drop(*)");
         assertEquals(2, runs("numen permission rules remove ask 2").get("row").getResult());
         runs("numen permission rules reset");
-        assertTrue(fails("numen permission rules add maybe take(*)"), "only deny, ask and allow are tables");
+        assertTrue(fails("numen permission rules add maybe drop(*)"), "only deny, ask and allow are tables");
         assertTrue(fails("numen permission rules remove ask 0"), "rows are numbered from 1");
     }
 

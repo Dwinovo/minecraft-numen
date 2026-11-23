@@ -23,14 +23,14 @@
 | 要素 | 这里是 | 说明 |
 |---|---|---|
 | 主体 | 同伴 | 缺省是主人名下的每一只;可点名某一只 |
-| 动作 | `break`、`place`、`attack`、`use_block`、`use_entity`、`take`、`drop`、`command` | 第一版的八个动词不变 |
+| 动作 | `break`、`place`、`attack`、`use_block`、`use_entity`、`drop`、`command` | 七个动词。从容器里拿东西不是单独的一问,归右键打开它的那一下 `use_block`(见末尾"落地时的出入(七个动词、会做什么与词都靠登记)") |
 | 对象 | 方块、实体、物品、指令根名,用对象组与属性组合 | 本版的重点,见 §三 |
 | 判决 | `allow`、`ask`、`deny` | 不变 |
 | 默认策略 | 哪条都不中:`ask` | 不变 |
 
 再加防火墙的两样:
 
-- **对象组。** 一个名字代表一类对象:`nature`、`owner`、`structure(#minecraft:village)`……规则只写组名,组怎么判归对象组的提供者。
+- **对象组。** 一个名字代表一类对象:`nature`、`owner`、`structure(#minecraft:village)`……规则只写名字,这个名字在一个对象上成不成立归登记它的一方答(§三.4)。
 - **命中计数。** 每条规则记命中次数与最近一次命中的时间,规则列表与面板上显示,主人一眼看出哪条在起作用、哪条从没用过。改了规则计数清零。
 
 **不照搬防火墙的一处:顺序。** 防火墙按书写顺序首条命中,一条宽的放行写在前面就让后面的禁止全失效。这里照 IAM:
@@ -49,7 +49,7 @@ allow command(msg)
 ```
 
 对象条件是对象组、属性、方块或物品 id、标签(`#minecraft:beds`)、某一只实体(`entity:<uuid>`)、`*` 的组合,
-`&`、`|`、`!`、括号。全仓只在规则核心的解析器里解析(§九),写错了回教学式的错误,列出认得的动词、组与属性。
+`&`、`|`、`!`、括号。全仓只在规则核心的解析器里解析(§九),写错了回教学式的错误,列出认得的动词、组与属性(自带的加此刻登记着的)。
 
 ## 三、对象:先判是谁的
 
@@ -94,31 +94,64 @@ allow command(msg)
 
 ### 3. 属性
 
-归属之外的事实,与第一版的信号同一回事,改叫属性:
+归属之外的事实,与第一版的信号同一回事,改叫属性。按一条判据分两处:**不用认识任何具体东西的,Numen API 自带;说得出"这是哪一类东西"的,
+谁认得谁登记**(§三.4)。
 
-| 属性 | 问题 |
+| 属性 | 问题 | 谁的 |
+|---|---|---|
+| `block_entity` | 这格有没有方块实体 | Numen API 自带 |
+| `named` | 实体有没有自定义名字 | Numen API 自带 |
+| `near(<组>)` | 放置点附近有没有属于那一组的方块,`near(owner)`、`near(other)` | Numen API 自带 |
+| `contents` | 容器里有没有东西(撤不回)。只有主线程读得到方块实体,搜索线程按"有"回答 | Numen 登记(原版) |
+| `villager` | 是不是村民 | Numen 登记(原版) |
+| `hostile` | 是不是敌对生物 | Numen 登记(原版) |
+| `hazard_item` | 放的是不是岩浆、火、TNT、水 | Numen 登记(原版) |
+
+归属的六个组(§三.1)也是 Numen API 自带的。种类 id、标签、`entity:<uuid>`、`*` 是规则的语法,不是词。
+
+撤不回由词标:`contents`(任何动词下)、实体的 `owner`/`self`/`other` 命中 `attack` 时,征询卡把那一项标成"撤不回"。
+
+### 4. 规则里的词是登记的
+
+权限层只管判,不认东西:Numen API 留着动词、规则怎么写怎么比怎么排、征询协议;一个词在一个对象上成不成立,由认得那类东西的一方登记来答。
+登记口是一个问题常量(`Questions.RULE_WORD`,机制见 `adr/control/0020`):
+
+```java
+numen.answer(Questions.RULE_WORD, "villager", new RuleWord(
+        "is a villager",                                    // 命中时的英文自述,给模型与日志
+        Component.translatable("numen.rule_word.villager"), // 同一句给主人看的,征询卡上显示,键在登记者自己的语言文件里
+        Set.of(),                                           // 哪些动词下成立就算撤不回
+        view -> view.action().entity() instanceof AbstractVillager));
+```
+
+回答者的名字就是规则里写的那个词;它拿到的和自带的词拿到的是同一个东西(`ActView`:`action()` 说做什么、对哪一格哪只实体哪件物品,
+`facts()` 是读世界的口)。
+
+| 谁 | 词 |
 |---|---|
-| `block_entity` | 这格有没有方块实体 |
-| `contents` | 容器里有没有东西(撤不回) |
-| `named` | 实体有没有自定义名字 |
-| `villager` | 是不是村民 |
-| `hostile` | 是不是敌对生物 |
-| `hazard_item` | 放的是不是岩浆、火、TNT、水 |
-| `near(<组>)` | 放置点附近有没有属于那一组的方块,`near(owner)`、`near(other)` |
+| Numen API 自带 | `self`、`owner`、`other`、`structure`、`nature`、`unknown`、`block_entity`、`named`、`near(<组>)` |
+| Numen 登记(原版) | `contents`、`villager`、`hostile`、`hazard_item` |
+| 模组的插件 | 各登记各认得的那一类(领地插件登记"别人圈的地"之类);还没有哪个插件登记 |
 
-撤不回由属性标:`contents`、实体的 `owner`/`self`/`other` 命中 `attack` 时,征询卡把那一项标成"撤不回"。
+规矩:
 
-### 4. 对象组是扩展点
+- 登记的词不带括号参数;带参数的只有自带的 `structure(...)` 与 `near(...)`。
+- 名字照回答者名字的规矩(小写字母开头,小写字母、数字、下划线);重名、用了自带的名字,登记时就是错。
+- **没人登记的词写进规则是解析错误**,和写错任何一个名字一样,错误里列出此刻认得的全部名字(自带的加登记着的)。出厂规则与硬规则的
+  原文也照此刻认得的词解析:写着没人登记的词的那一行不成规则(记一条错误日志、不进表),登记的名字变了就重新解析。
+- 规则解析之后登记撤回了(插件卸下):那个词在任何对象上都不成立,再解析写着它的规则是解析错误。
+- **线程**:哪条线程在裁决就在哪条线程上被问。真要动手前的那一问在服务端主线程,读得到活世界;寻路给每一格定价时在搜索线程,只许读动作本身与
+  冻结的方块快照,要活读才答得出的词这时按保守的一头回答(`contents` 按"有")。只陈述事实,不裁决,不改世界,不做慢事。
+- 插件只加名词,不加动词,不改判定顺序。
 
-组由提供者给出,原版也是提供者之一。登记一个组 = 一个名字 + 一个"这个对象属不属于它"的判断(可带参数)。
+规则认得的词只在一处合起来(`Groups.vocabulary`:自带的加登记着的):解析、教学式的错误、撤不回的判断、她读规则时拿到的词表读的都是它。
 
-| 提供者 | 组 |
-|---|---|
-| 原版(Numen API 自带) | `self`、`owner`、`other`、`structure`、`nature`、`unknown` |
-| 领地模组的插件 | 例 `claim(other)`:别人圈的地 |
-| 区域(以后) | 主人圈的一片地,`area(家)`。等有真实需求再做,做时是主人定义的保护范围,不是给模型用的工作区 |
+区域(主人圈的一片地)等有真实需求再做,做时是主人定义的保护范围,不是给模型用的工作区。
 
-插件只加名词,不加动词,不改判定顺序。
+**同一个道理也用在"这一下右键会做什么"上**(`Questions.CLICK`,回答者 `ClickActions`):鼠标右键按在一格方块上之前,两只手里的东西各问一圈
+"拿着这一叠按在这一面上会对世界做哪几件事",回答者交回动作(今天都是一次 `place`),Numen API 把各人说的合起来、再加上它自己的那一问
+`use_block`,逐件交给裁决。原版的四种由 Numen 登记:方块物品贴着命中面放进可替换的格、桶、打火石、火焰弹;模组的放置类物品由它的插件登记。
+回答者在服务端主线程上被叫,世界是这具身体所在的活世界;寻路规划不问这一圈(搜索线程给垫路定价时直接提出放置动作)。
 
 ## 四、谁能改规则
 
@@ -157,7 +190,7 @@ allow command(msg)
 ```
 deny break(other)
 deny place(other)
-deny take(other)
+deny use_block(other & contents)
 deny attack(other)
 deny use_entity(other)
 deny place(hazard_item & near(other))
@@ -167,7 +200,7 @@ deny place(hazard_item & near(other))
 
 | 判决 | 规则 |
 |---|---|
-| allow | `break(nature & !block_entity)`、`break(self & !contents)`、`break(structure & !structure(#minecraft:village) & !block_entity)`、`place(!hazard_item)`、`place(hazard_item & !near(owner) & !near(other))`、`attack(hostile)`、`attack(nature & !named & !villager)`、`use_block(*)`、`use_entity(nature)`、`use_entity(self)`、`take(owner)`、`take(self)`、`take(structure & !structure(#minecraft:village))`、`command(help)`、`command(list)`、`command(me)`、`command(msg)`、`command(teammsg)`、`command(seed)`、`command(random)` |
+| allow | `break(nature & !block_entity)`、`break(self & !contents)`、`break(structure & !structure(#minecraft:village) & !block_entity)`、`place(!hazard_item)`、`place(hazard_item & !near(owner) & !near(other))`、`attack(hostile)`、`attack(nature & !named & !villager)`、`use_block(!contents)`、`use_block(contents & owner)`、`use_block(contents & self)`、`use_block(contents & structure & !structure(#minecraft:village))`、`use_entity(nature)`、`use_entity(self)`、`command(help)`、`command(list)`、`command(me)`、`command(msg)`、`command(teammsg)`、`command(seed)`、`command(random)` |
 | ask | `break(owner)`、`break(unknown)`、`break(structure(#minecraft:village))`、`break(block_entity)`、`break(self & contents)`、`attack(owner)`、`attack(self)`、`attack(named)`、`attack(villager)`、`use_entity(owner)`、`drop(*)`、`place(hazard_item & near(owner))` |
 | deny | 空 |
 
@@ -176,17 +209,20 @@ deny place(hazard_item & near(other))
 - 没人的随便挖、随便打;她自己的随便拆(装着东西的除外);主人的、说不清的、村子里的要问;别人的碰不得。
 - 同层 `allow` 先于 `ask`,所以 `allow` 行写得比 `ask` 行窄:带方块实体的(地牢的刷怪笼与战利品箱、蜂巢、可疑的沙子)不进任何 `allow` 行,落到 `break(block_entity)` 去问。
 - 床、门、活板门、栅栏门不再单列:主人放的已经是 `owner`,村子里的已经是 `structure(#minecraft:village)`,自然生成的门只在结构里。
-- 从主人的容器拿东西放行:她的设计就是用主人的工作台熔炉箱子;主人想管就加 `ask take(owner)`。废弃结构里的战利品箱随便拿,村民的箱子要问。
-- 右键方块全放行:开门、开容器、按按钮不改世界的归属;拿东西另由 `take` 管。
+- 右键一格里面没装东西的方块放行(`use_block(!contents)`):开门、按按钮、睡床、开空容器不动别人的东西。
+- 右键一格装着东西的容器,问的就是"能不能动里面的东西"——打开之后往里放、往外拿都不再另问。主人的、她自己的放行:她的设计就是用主人的
+  工作台熔炉箱子,主人想管就加 `ask use_block(contents & owner)`。废弃结构里的战利品箱放行。村子里的、自然里的、说不清是谁的没有一行说到,
+  落到默认去问。别人的是硬规则。
+- `contents` 认的是"方块实体是个不空的容器,或是放着书的讲台"(讲台不是容器,书靠它界面上的钮取下)。营火上的肉这类不是这样存的,不算。
 
 ## 七、动作分类
 
 | 档 | 动作 |
 |---|---|
 | 从不问 | 看(`scan`、`status`、`inv` 的查询、`build.diff`)、合成烧炼、吃、装备、换手——不改世界,不是权限层的动作 |
-| 出厂放行 | 挖没人的、拆自己的、挖废弃结构、放普通方块、打怪与野生动物、右键方块、从主人与自己的容器拿东西、只读只说话的指令 |
-| 问 | 挖主人的、挖说不清的、挖村子里的、挖带方块实体的、打有主或有名字的、打村民、丢东西、在主人的东西旁放危险物,以及没有任何一行规则说到的 |
-| 拒 | 别人的一切(硬规则)、任何一层的 `deny`、`observe` 模式 |
+| 出厂放行 | 挖没人的、拆自己的、挖废弃结构、放普通方块、打怪与野生动物、右键没装东西的方块、右键主人的与自己的与废弃结构里装着东西的容器(连同往外拿)、只读只说话的指令 |
+| 问 | 挖主人的、挖说不清的、挖村子里的、挖带方块实体的、打有主或有名字的、打村民、丢东西、在主人的东西旁放危险物,以及没有任何一行规则说到的(右键村子里的、说不清是谁的装着东西的容器就在这里) |
+| 拒 | 别人的方块、实体与装着东西的容器(硬规则)、任何一层的 `deny`、`observe` 模式 |
 
 挖不动(基岩)、岩浆与危险格、摔落上限回答的是"做不做得到、会不会伤到自己",是物理,不经裁决、不弹卡,留在寻路与身体。
 
@@ -208,8 +244,8 @@ deny place(hazard_item & near(other))
 | `work.dig` | 挖给它的每一格,动手前问;够不着先走过去,路上要改的格同上 |
 | `build.place` | 施工前把要清的与要放的整批裁决,一张卡;拒绝的格按"主人不让动"跳过并写进回执。她放下的每一格记在她名下(`self`) |
 | `fight` | 开打前送目标,一张卡,等答复期间不打它;自卫换目标时新冒出来的再送 |
-| `use.block`、`use.entity`、`use.hit`、`use.item` | 按下去之前送准星落到的动作 |
-| 从容器里取东西(`container.take`、`furnace.take`、`lectern.take` 等) | 把东西从容器拿进背包的那一步动手前送 `take`;没有方块实体的工作台类界面不算 |
+| `use.block`、`use.entity`、`use.hit`、`use.item` | 按下去之前送准星落到的动作:右键落在方块上,先是手里的东西会做的事(问一圈 `ClickActions`),再是 `use_block` |
+| 往容器里放、从容器里取(`container.put`、`container.take`、`furnace.take`、`lectern.take` 等) | 右键打开它的那一下送 `use_block`(或 `use_entity`);界面开了之后搬东西不再送任何动作 |
 | `inv.drop` | 每次送 `drop` |
 | `numen.mc.run` | 解析通了才送 `command(根名)`;服务器不让她用的当场失败,不送 |
 | 她改规则 | 加 `deny`、`ask` 直接写入并回执;加 `allow` 或删行发卡 |
@@ -348,3 +384,20 @@ deny place(hazard_item & near(other))
 - **规则有变就推**:存档任何一处变(她加了行、命令改了、命中账涨了)记下是谁的,每 10 个服务端刻合并成一包推给在线、装着客户端的主人
   (`PermissionFeed`)。比"每刻一包"粗一点:挖矿时每一格都命中一次,半秒的窗口既让计数看着是活的,也不把整张表(出厂层三十多行)每刻发一遍。
 - **规则页上没有铅笔**:主人层的行只有删,没有改——改一条规则就是另一条规则(命中账从零数起),删了再加。删在右键菜单里,和别的库页面一致。
+
+## 落地时的出入(七个动词、会做什么与词都靠登记)
+
+心智模型:**权限层只管判,不认东西;谁认得谁登记。** 三件事一起落地:
+
+- **动词 `take` 拿掉,八个成七个。** 从容器里拿东西不再单独问:右键打开它的那一下(`use_block`,实体是 `use_entity`)问的就是
+  "能不能动里面的东西"。界面开着时搬东西的每一步不过权限层、不等主人。出厂规则与硬规则里说 `take` 的行改写在 `use_block` 上(§六)。
+  和原来不一样的地方:别人装着东西的容器现在打不开(原来打得开、拿不出),往里放也放不了;村子里的、说不清是谁的装着东西的容器,
+  打开时就问(原来打开不问、拿的时候问),往里放也在这一问里;右键实体开的容器(箱子矿车)照 `use_entity` 的规则,野生的放行
+  (原来从里面拿东西没有规则说到、要问)。讲台上放着书时算装着东西,所以读它、翻它、取书都照装着东西的容器走。
+- **"这一下右键会做什么"是一个问题**(`Questions.CLICK`)。鼠标原来按物品的类认(方块物品、桶、打火石、火焰弹),现在问一圈,原版这四种
+  由 Numen 登记,行为照旧。没人登记的物品,这一下只问 `use_block`。
+- **规则里的词可以登记**(`Questions.RULE_WORD`)。`villager`、`hostile`、`hazard_item`、`contents` 从 Numen API 挪到 Numen,行为照旧
+  (`contents` 在搜索线程上仍按"有")。给主人看的那一句也跟着走:这四个词的翻译键在 Numen 的语言文件里(`numen.rule_word.<词>`)。
+- **存档里的旧行不改写。** 主人层里早先存下的 `take(...)` 行、写着此刻没人登记的词的行,读档时和任何写错的行一样:记一条错误日志
+  (`the permission save has unreadable content`)、不进表,别的行照读;文件不因此重写,那几行到这份存档下一次落盘时才没有。
+- **她读规则时多一张词表。** `numen.permission.rules()` 交回的除了三层规则,还有此刻规则里能写的词(自带的加登记着的)。

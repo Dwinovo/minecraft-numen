@@ -145,7 +145,7 @@ public final class ModLanguageData {
         /** 征询那条的问话:一件事是"想挖 [原木]×6,可以吗?"(%s 是动词加东西),几件事是一句总问。 */
         public static final String CONSENT_ASK            = "numen.consent.ask";
         public static final String CONSENT_ASK_MANY       = "numen.consent.ask_many";
-        /** 对象组与属性给主人看的自述,后接规则里的名字({@code owner}……)。 */
+        /** Numen API 自带的规则词给主人看的自述,后接规则里的名字({@code owner}……)。 */
         public static final String PERMISSION_NAME_PREFIX = "numen.permission.name.";
         public static final String PERMISSION_PLACED_BY   = "numen.permission.placed_by";
         /** 征询卡上"她要改你的规则"的理由。 */
@@ -1156,7 +1156,6 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_VERB_PREFIX + "attack",     "attack");
         adder.add(Keys.CONSENT_VERB_PREFIX + "use_block",  "use");
         adder.add(Keys.CONSENT_VERB_PREFIX + "use_entity", "use");
-        adder.add(Keys.CONSENT_VERB_PREFIX + "take",       "take from");
         adder.add(Keys.CONSENT_VERB_PREFIX + "drop",       "drop");
         adder.add(Keys.CONSENT_VERB_PREFIX + "command",    "run");
         adder.add(Keys.PERMISSION_NAME_PREFIX + "self",        "hers");
@@ -1166,11 +1165,7 @@ public final class ModLanguageData {
         adder.add(Keys.PERMISSION_NAME_PREFIX + "nature",      "natural");
         adder.add(Keys.PERMISSION_NAME_PREFIX + "unknown",     "of unknown origin");
         adder.add(Keys.PERMISSION_NAME_PREFIX + "block_entity", "functional block");
-        adder.add(Keys.PERMISSION_NAME_PREFIX + "contents",    "has things inside");
         adder.add(Keys.PERMISSION_NAME_PREFIX + "named",       "named");
-        adder.add(Keys.PERMISSION_NAME_PREFIX + "villager",    "villager");
-        adder.add(Keys.PERMISSION_NAME_PREFIX + "hostile",     "hostile");
-        adder.add(Keys.PERMISSION_NAME_PREFIX + "hazard_item", "dangerous");
         adder.add(Keys.PERMISSION_NEAR,        "next to something %s");
         adder.add(Keys.PERMISSION_PLACED_BY,   "placed by %s");
         adder.add(Keys.PERMISSION_RULE_EDIT,   "changes your rules");
@@ -1242,7 +1237,7 @@ public final class ModLanguageData {
         adder.add(Keys.PERMISSION_SOURCE_OWNER,   "yours");
         adder.add(Keys.PERMISSION_FORM_VERDICT,   "Verdict");
         adder.add(Keys.PERMISSION_FORM_RULE,      "Rule");
-        adder.add(Keys.PERMISSION_FORM_HINT,      "Written verb(what): break, place, attack, use_block, use_entity, take, drop or command; what combines owner, other, nature, structure, ids, #tags with & | ! and parentheses. Add @Name to limit it to one companion.");
+        adder.add(Keys.PERMISSION_FORM_HINT,      "Written verb(what): break, place, attack, use_block, use_entity, drop or command; what combines owner, other, nature, structure, ids, #tags with & | ! and parentheses. Add @Name to limit it to one companion.");
         adder.add(Keys.PERMISSION_MODE_PREFIX + "ask",     "Ask");
         adder.add(Keys.PERMISSION_MODE_PREFIX + "bypass",  "Bypass");
         adder.add(Keys.PERMISSION_MODE_PREFIX + "observe", "Observe");
@@ -1972,7 +1967,6 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_VERB_PREFIX + "attack",     "打");
         adder.add(Keys.CONSENT_VERB_PREFIX + "use_block",  "用");
         adder.add(Keys.CONSENT_VERB_PREFIX + "use_entity", "用");
-        adder.add(Keys.CONSENT_VERB_PREFIX + "take",       "拿");
         adder.add(Keys.CONSENT_VERB_PREFIX + "drop",       "丢");
         adder.add(Keys.CONSENT_VERB_PREFIX + "command",    "执行");
         adder.add(Keys.PERMISSION_NAME_PREFIX + "self",        "她自己的");
@@ -1982,11 +1976,7 @@ public final class ModLanguageData {
         adder.add(Keys.PERMISSION_NAME_PREFIX + "nature",      "天然的");
         adder.add(Keys.PERMISSION_NAME_PREFIX + "unknown",     "说不清是谁的");
         adder.add(Keys.PERMISSION_NAME_PREFIX + "block_entity", "功能方块");
-        adder.add(Keys.PERMISSION_NAME_PREFIX + "contents",    "装着东西");
         adder.add(Keys.PERMISSION_NAME_PREFIX + "named",       "起了名字");
-        adder.add(Keys.PERMISSION_NAME_PREFIX + "villager",    "村民");
-        adder.add(Keys.PERMISSION_NAME_PREFIX + "hostile",     "敌对");
-        adder.add(Keys.PERMISSION_NAME_PREFIX + "hazard_item", "危险");
         adder.add(Keys.PERMISSION_NEAR,        "附近有%s东西");
         adder.add(Keys.PERMISSION_PLACED_BY,   "%s 放的");
         adder.add(Keys.PERMISSION_RULE_EDIT,   "要改你的规则");
@@ -2058,7 +2048,7 @@ public final class ModLanguageData {
         adder.add(Keys.PERMISSION_SOURCE_OWNER,   "你写的");
         adder.add(Keys.PERMISSION_FORM_VERDICT,   "判决");
         adder.add(Keys.PERMISSION_FORM_RULE,      "规则");
-        adder.add(Keys.PERMISSION_FORM_HINT,      "写法 动词(对象):动词有 break、place、attack、use_block、use_entity、take、drop、command;对象可以拿 owner、other、nature、structure、方块或物品 id、#标签 用 & | ! 和括号组合。末尾加 @名字 只管某一只同伴。");
+        adder.add(Keys.PERMISSION_FORM_HINT,      "写法 动词(对象):动词有 break、place、attack、use_block、use_entity、drop、command;对象可以拿 owner、other、nature、structure、方块或物品 id、#标签 用 & | ! 和括号组合。末尾加 @名字 只管某一只同伴。");
         adder.add(Keys.PERMISSION_MODE_PREFIX + "ask",     "询问");
         adder.add(Keys.PERMISSION_MODE_PREFIX + "bypass",  "放行");
         adder.add(Keys.PERMISSION_MODE_PREFIX + "observe", "只看");

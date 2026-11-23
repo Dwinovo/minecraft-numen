@@ -1,9 +1,9 @@
 package com.dwinovo.numen.permission;
 
-/** 规则里的动作:身体对世界能做的八件事。{@link #word} 是规则文本里写的那个词。 */
+/** 规则里的动作:身体对世界能做的七件事。{@link #word} 是规则文本里写的那个词。 */
 public enum Verb {
     BREAK("break", true), PLACE("place", true), ATTACK("attack", false), USE_BLOCK("use_block", true),
-    USE_ENTITY("use_entity", false), TAKE("take", true), DROP("drop", false), COMMAND("command", false);
+    USE_ENTITY("use_entity", false), DROP("drop", false), COMMAND("command", false);
 
     private final String word;
     private final boolean atBlock;
@@ -18,7 +18,7 @@ public enum Verb {
         return word;
     }
 
-    /** 这种动作落在一格上:挖、放、右键方块、从容器拿。 */
+    /** 这种动作落在一格上:挖、放、右键方块。 */
     public boolean atBlock() {
         return atBlock;
     }

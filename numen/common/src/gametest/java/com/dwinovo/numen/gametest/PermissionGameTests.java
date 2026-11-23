@@ -686,25 +686,27 @@ public class PermissionGameTests {
     }
 
     /**
-     * 主人写 {@code ask take(*)} 之后,走过去开箱子照出厂规则放行,拿东西要问:numen.container.take 悬着、钻石还在箱子里;主人允许后
-     * 钻石进了她的背包。
+     * 主人写 {@code ask use_block(contents)} 之后,右键打开装着东西的箱子要问(出厂规则对她自己的箱子是放行的):numen.container.take
+     * 悬着、箱子没打开、钻石还在里面;主人允许后箱子打开,往外拿不再另问,钻石进了她的背包。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
-    public static void an_owners_ask_take_row_asks_before_taking(GameTestHelper helper) {
+    public static void an_owners_ask_row_on_opening_a_full_container_asks_before_taking(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos chest = chestWithDiamonds(helper, new BlockPos(6, 2, 5), 3);
         NumenPlayer companion = spawnAt(helper, "gametest_borrower", new BlockPos(4, 2, 5), false);
         ServerPlayer owner = presentPlayer(helper, companion, "gametest_lender");
-        runAs(owner, "numen permission rules add ask take(*)");
+        runAs(owner, "numen permission rules add ask use_block(contents)");
         ToolRun take = lua(companion, "numen.container.take(" + xyz(chest) + ", \"minecraft:diamond\")");
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> {
             var pending = desk(companion).pending();
             if (pending != null && !asked[0]) {
-                helper.assertTrue(pending.items().get(0).rule().equals("take(*)")
+                helper.assertTrue(pending.items().size() == 1 && pending.items().get(0).rule().equals("use_block(contents)")
                                 && pending.items().get(0).subject().equals("chest"),
                         "asked something else: " + pending.items());
                 helper.assertTrue(!take.done(), "the take did not wait for the owner");
+                helper.assertTrue(companion.containerMenu == companion.inventoryMenu,
+                        "the chest was opened before the owner answered");
                 helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 0,
                         "took before the owner answered");
                 desk(companion).answer(pending.id(),

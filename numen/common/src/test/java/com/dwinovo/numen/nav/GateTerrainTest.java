@@ -57,10 +57,10 @@ class GateTerrainTest {
     /** 地形自己长的方块表来自数据包,无头引导下手动绑:泥土在里面。 */
     private static final TagKey<Block> NATURAL = TagKey.create(Registries.BLOCK, ResourceLocation.parse("numen:natural"));
 
+    /** 出厂规则写的词有 Numen 登记的那几个,所以装上 Numen 的全部登记再问。 */
     @BeforeAll
     static void boot() {
-        net.minecraft.SharedConstants.tryDetectVersion();
-        net.minecraft.server.Bootstrap.bootStrap();
+        com.dwinovo.numen.NumenApiFixture.install();
     }
 
     @BeforeEach

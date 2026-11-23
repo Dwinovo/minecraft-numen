@@ -86,7 +86,7 @@ class PermissionLibraryTest {
     @Test
     void theTableListsAllThreeLayersWithTheCompanionsAndTheServersSwitch() {
         store.add(Verdict.Kind.DENY, Groups.parse("break(owner) @小蓝"));
-        store.add(Verdict.Kind.ALLOW, new PermissionStore.Row(Groups.parse("attack(hostile)"),
+        store.add(Verdict.Kind.ALLOW, new PermissionStore.Row(Groups.parse("attack(named)"),
                 PermissionStore.Source.HER, "别误伤"));
         store.hit(Layers.OWNER, Verdict.Kind.DENY, Groups.parse("break(owner) @小蓝"));
         store.setMode(blue, Mode.OBSERVE);
@@ -108,7 +108,7 @@ class PermissionLibraryTest {
         assertEquals("owner", mine.get("source").getAsString());
         assertEquals(1, mine.get("count").getAsInt());
         assertTrue(mine.get("last").getAsLong() > 0);
-        JsonObject hers = ruleRow("owner", "allow", "attack(hostile)");
+        JsonObject hers = ruleRow("owner", "allow", "attack(named)");
         assertEquals("her", hers.get("source").getAsString());
         assertEquals("别误伤", hers.get("note").getAsString());
         assertEquals(0, hers.get("count").getAsInt());
@@ -126,15 +126,15 @@ class PermissionLibraryTest {
 
     @Test
     void aRuleIsAddedOnceAndDeletedByItsText() {
-        JsonObject row = body("table", "ask", "rule", "take(*)");
+        JsonObject row = body("table", "ask", "rule", "drop(*)");
 
         assertNull(PermissionLibrary.write(ground, PermissionLibrary.PUT, row).problem());
         assertNull(PermissionLibrary.write(ground, PermissionLibrary.PUT, row).problem(), "再加一次已经如愿");
         assertEquals(1, store.rows(Verdict.Kind.ASK).size());
-        assertNotNull(ruleRow("owner", "ask", "take(*)"));
+        assertNotNull(ruleRow("owner", "ask", "drop(*)"));
 
         assertNotNull(PermissionLibrary.write(ground, PermissionLibrary.DELETE,
-                body("table", "deny", "rule", "take(*)")).problem(), "那张表里没有这一行");
+                body("table", "deny", "rule", "drop(*)")).problem(), "那张表里没有这一行");
         assertNull(PermissionLibrary.write(ground, PermissionLibrary.DELETE, row).problem());
         assertTrue(store.rows(Verdict.Kind.ASK).isEmpty());
     }
@@ -148,7 +148,7 @@ class PermissionLibraryTest {
         assertEquals("verb", outcome.mistake().code());
         assertTrue(store.rows(Verdict.Kind.DENY).isEmpty());
         assertNotNull(PermissionLibrary.write(ground, PermissionLibrary.PUT,
-                body("table", "maybe", "rule", "take(*)")).problem(), "表只有 deny、ask、allow");
+                body("table", "maybe", "rule", "drop(*)")).problem(), "表只有 deny、ask、allow");
     }
 
     @Test

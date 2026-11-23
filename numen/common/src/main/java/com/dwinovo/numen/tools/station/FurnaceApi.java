@@ -75,7 +75,8 @@ public final class FurnaceApi {
     @Example("for _, s in ipairs(numen.furnace.take({x = 120, y = 64, z = -35})) do print(s.item, s.count) end")
     @Note("Returns what came out, one entry per kind; an empty list when nothing is cooked yet. What is still cooking "
             + "and how much fuel is left is read with numen.scan.block.")
-    @Note("Taking out of someone's furnace may ask your owner first; the call waits for the answer.")
+    @Note("Opening a furnace that holds things may ask your owner first when it is neither yours nor your "
+            + "owner's; the call waits for the answer. Once it is open, taking out is not asked again.")
     @SeeAlso({"numen.furnace.input", "numen.scan.block"})
     public static Pending<List<Stations.Taken>> take(ServerCall call, Furnace args) {
         Move take = Move.take(null, null, OUTPUT, "the output", true);

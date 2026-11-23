@@ -34,7 +34,7 @@ import java.util.Map;
 
 /**
  * 对一个目标做一件事({@link StationTaskRecord}):右键它是一件子活(走过去、过权限层、按下去,和 {@code numen.use.block} 同一件),
- * 界面开了就一步步做——搬东西的每一步也是子活(从别人的容器里拿东西照旧先过权限层),当场做完的事直接做——收场时把界面合上:
+ * 界面开了就一步步做——搬东西的每一步也是子活(能不能动里面的东西问在右键那一下,界面开了之后不再问),当场做完的事直接做——收场时把界面合上:
  * 做成了、失败了、被叫停了都合。子活的账(路上挖的放的、主人点过的头)并进这件活,回执里说一次。
  *
  * <p>回执只说做了什么:哪一步搬了几件什么、做了哪件事。做到一半收场,已经做了的照样说;合上界面时原版退回她背包的东西
@@ -42,7 +42,7 @@ import java.util.Map;
  */
 public final class StationCompanionTask<V> extends AbstractCompanionTask<StationTaskRecord<V>, V> {
 
-    /** 一步搬东西的期限:点击一刻一步,留的是等主人点头的时间。 */
+    /** 一步搬东西的期限:点击一刻一步,搬空一个大箱子也用不到这么久。 */
     private static final long MOVE_TICKS = 60 * 20;
 
     /** 右键目标的那件子活;界面开了之后是 null。 */

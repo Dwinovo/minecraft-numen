@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * {@code numen.lectern}:讲台上的书。读它(标题、作者、每一页的字、翻到第几页),翻到某一页(按钮 100 起是跳页),把书取下来。
- * 取书是从讲台里拿东西,和从别的容器里拿一样是搬东西的一步,先过权限层;书取下之后原版自己把讲台的界面合上。
+ * 取书是从讲台里拿东西,和从别的容器里拿一样是搬东西的一步;书取下之后原版自己把讲台的界面合上。
  */
 public final class LecternApi {
 
@@ -91,7 +91,6 @@ public final class LecternApi {
     @Example("local book = numen.lectern.take({x = 120, y = 64, z = -35}) print(book.title)")
     @Note("Walks up to the lectern when it is out of reach and takes the book. Returns the book you took, as "
             + "numen.inv.read reads it.")
-    @Note("Taking a book off someone's lectern may ask your owner first; the call waits for the answer.")
     @SeeAlso({"numen.lectern.read", "numen.inv.read"})
     public static Pending<Books.Book> take(ServerCall call, Lectern args) {
         AtomicReference<OnLectern> read = new AtomicReference<>();

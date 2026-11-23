@@ -93,7 +93,8 @@ public final class BrewingApi {
     @Note("Returns what came out, one entry per kind; an empty list when the slots hold no bottle. It takes them "
             + "as they are, brewed or not: what the stand holds is read with numen.scan.block, and what the bottles "
             + "you took are is in numen.inv.items.")
-    @Note("Taking out of someone's brewing stand may ask your owner first; the call waits for the answer.")
+    @Note("Opening a brewing stand that holds things may ask your owner first when it is neither yours nor your "
+            + "owner's; the call waits for the answer. Once it is open, taking out is not asked again.")
     @SeeAlso({"numen.brewing.bottles", "numen.scan.block", "numen.inv.items"})
     public static Pending<List<Stations.Taken>> take(ServerCall call, Stand args) {
         Move take = Move.take(null, null, BOTTLES, "the bottle slots", true);

@@ -68,7 +68,8 @@ public final class ContainerApi {
             + "result.")
     @Note("Returns how many came out; fewer than asked when it held no more or your inventory filled up. None at all "
             + "fails: not_found when it holds none.")
-    @Note("Taking out of someone's container may ask your owner first; the call waits for the answer.")
+    @Note("Opening a container that holds things may ask your owner first when it is neither yours nor your "
+            + "owner's; the call waits for the answer. Once it is open, taking out is not asked again.")
     @SeeAlso({"numen.container.put", "numen.scan.block"})
     public static Pending<Integer> take(ServerCall call, Take args) {
         Move take = Move.take(args.item(), args.count().orElse(null), null, null, false);

@@ -1,24 +1,43 @@
-package com.dwinovo.numen.api.permission;
+package com.dwinovo.numen.rule;
 
-import com.dwinovo.numen.api.FakeWorld;
+import com.dwinovo.numen.NumenApiFixture;
+import com.dwinovo.numen.api.permission.ActView;
+import com.dwinovo.numen.api.permission.Action;
+import com.dwinovo.numen.api.permission.Actor;
+import com.dwinovo.numen.api.permission.ConsentItem;
+import com.dwinovo.numen.api.permission.FactoryRules;
+import com.dwinovo.numen.api.permission.Facts;
+import com.dwinovo.numen.api.permission.Gate;
+import com.dwinovo.numen.api.permission.Groups;
+import com.dwinovo.numen.api.permission.Hits;
+import com.dwinovo.numen.api.permission.Layers;
+import com.dwinovo.numen.api.permission.PlacedBlocks;
+import com.dwinovo.numen.api.permission.Structures;
 import com.dwinovo.numen.permission.Mode;
 import com.dwinovo.numen.permission.Rule;
 import com.dwinovo.numen.permission.RuleSet;
 import com.dwinovo.numen.permission.Verb;
 import com.dwinovo.numen.permission.Verdict;
+import com.dwinovo.numen.permission.Vocabulary;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.MappedRegistry;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LeavesBlock;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.level.material.FluidState;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -35,12 +54,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * 游戏适配层的裁决:出厂层与硬规则对着真实的方块与放置记录读出归属({@link Whose}),是谁的就怎么办——没人的随便挖,自己的
+ * 游戏适配层的裁决:出厂层与硬规则对着真实的方块与放置记录读出归属,是谁的就怎么办——没人的随便挖,自己的
  * 随便拆,主人的、说不清的要问,别人的碰不得;三种模式;任务期授权按"同一行规则 + 同一种东西"放行;记住的规则怎么推。
- * 判定顺序本身在规则核心的单测里({@code PolicyTest}),这里钉的是它接上游戏之后的样子。需要 MC 注册表。
+ * 判定顺序本身在规则核心的单测里({@code PolicyTest}),这里钉的是它接上游戏之后的样子。出厂规则写的词有 Numen 登记的那几个
+ * ({@link VanillaWords}),所以这份钉桩住在 Numen 这一侧。需要 MC 注册表。
  */
 @Tag("mc")
 class GateTest {
@@ -62,28 +81,44 @@ class GateTest {
 
     private static final BlockPos POS = new BlockPos(3, 64, 3);
 
-    private static boolean booted;
+    /** 地形自己长的方块表来自数据包,无头引导下手动绑。 */
+    private static final TagKey<Block> NATURAL = TagKey.create(Registries.BLOCK, ResourceLocation.parse("numen:natural"));
 
     @BeforeAll
     static void boot() {
-        booted = FakeWorld.boot();
+        NumenApiFixture.install();
     }
 
     @BeforeEach
     void setUp() {
-        assumeTrue(booted, "Minecraft 引导不可用,跳过裁决钉桩");
         // 标签内容来自数据包,无头引导下手动绑:这几样是"地形自己长的"
         bindBlockTags(Map.of(
-                NaturalBlocks.TAG, holders(Blocks.STONE, Blocks.DIRT, Blocks.OAK_LOG, Blocks.OAK_LEAVES),
+                NATURAL, holders(Blocks.STONE, Blocks.DIRT, Blocks.OAK_LOG, Blocks.OAK_LEAVES),
                 BlockTags.OVERWORLD_NATURAL_LOGS, holders(Blocks.OAK_LOG),
                 BlockTags.LOGS, holders(Blocks.OAK_LOG, Blocks.STRIPPED_OAK_LOG)));
     }
 
     @AfterEach
     void tearDown() {
-        if (booted) {
-            bindBlockTags(Map.of());
+        bindBlockTags(Map.of());
+    }
+
+    /** Map 后备的方块视图:没摆的格是空气,读不到方块实体(搜索线程那一种)。 */
+    private static final class FakeWorld implements BlockGetter {
+        private final Map<BlockPos, BlockState> blocks = new HashMap<>();
+
+        FakeWorld set(BlockPos pos, BlockState state) {
+            blocks.put(pos.immutable(), state);
+            return this;
         }
+
+        @Override public BlockEntity getBlockEntity(BlockPos pos) { return null; }
+        @Override public BlockState getBlockState(BlockPos pos) {
+            return blocks.getOrDefault(pos, Blocks.AIR.defaultBlockState());
+        }
+        @Override public FluidState getFluidState(BlockPos pos) { return getBlockState(pos).getFluidState(); }
+        @Override public int getHeight() { return 384; }
+        @Override public int getMinBuildHeight() { return -64; }
     }
 
     @SuppressWarnings("unchecked")
@@ -149,9 +184,20 @@ class GateTest {
         assertTrue(chestVerdict.asks());
         assertTrue(gate.consentItem(dig(world, chest), chestVerdict, world).irreversible(),
                 "搜索线程读不到内容按有:拆装着东西的容器撤不回");
-        assertTrue(gate.judge(Action.useBlock(chest, world.getBlockState(chest)), world).allowed(), "开箱子随便");
-        assertTrue(gate.judge(Action.take(chest, world.getBlockState(chest), Items.DIRT), world).allowed(),
-                "从主人的容器拿东西放行");
+        Verdict open = gate.judge(Action.useBlock(chest, world.getBlockState(chest)), world);
+        assertTrue(open.allowed(), "开主人装着东西的箱子(搜索线程读不到内容按有)放行,往外拿不另问");
+        assertEquals("use_block(contents & owner)", open.rule().toString());
+        BlockPos door = POS.south();
+        world.set(door, Blocks.OAK_DOOR.defaultBlockState());
+        assertEquals("use_block(!contents)", gate.judge(Action.useBlock(door, world.getBlockState(door)), world)
+                .rule().toString(), "没人放过的门:里面没装东西的方块右键放行");
+        BlockPos barrel = POS.south(2);
+        world.set(barrel, Blocks.BARREL.defaultBlockState());
+        Verdict unknownBarrel = gate.judge(Action.useBlock(barrel, world.getBlockState(barrel)), world);
+        assertTrue(unknownBarrel.asks(), "说不清是谁的、装着东西的容器:没有一行说到,问");
+        assertNull(unknownBarrel.rule());
+        assertTrue(gate.consentItem(Action.useBlock(barrel, world.getBlockState(barrel)), unknownBarrel, world)
+                .irreversible(), "动别人容器里的东西撤不回");
         assertTrue(gate.judge(Action.drop(Items.DIRT), world).asks(), "丢东西要问");
         assertTrue(gate.judge(Action.place(cobble.above(), Blocks.AIR.defaultBlockState(), Items.DIRT), world).allowed(),
                 "贴着主人的东西放泥土随便");
@@ -159,16 +205,17 @@ class GateTest {
                 .asks(), "贴着主人的东西放岩浆要问");
         assertTrue(gate.judge(Action.place(POS.offset(9, 0, 0), Blocks.AIR.defaultBlockState(), Items.LAVA_BUCKET), world)
                 .allowed(), "远处放岩浆随便");
-        assertTrue(gate.judge(Action.place(POS.offset(9, 0, 0), Blocks.AIR.defaultBlockState(), Items.TNT), world)
-                .allowed(), "远处放 TNT 也随便");
+        Verdict tnt = gate.judge(Action.place(POS.offset(9, 0, 0), Blocks.AIR.defaultBlockState(), Items.TNT), world);
+        assertTrue(tnt.allowed(), "远处放 TNT 也随便");
+        assertEquals("place(hazard_item & !near(owner) & !near(other))", tnt.rule().toString(), "TNT 是危险物品");
         assertTrue(gate.judge(Action.place(cobble.above(), Blocks.AIR.defaultBlockState(), null), world).allowed(),
                 "规划期还不知道放什么:不危险那一行放行");
     }
 
     @Test
     void factoryTablesAreWhatTheDesignSays() {
-        assertEquals(List.of("break(other)", "place(other)", "take(other)", "attack(other)", "use_entity(other)",
-                "place(hazard_item & near(other))"), FactoryRules.HARD);
+        assertEquals(List.of("break(other)", "place(other)", "use_block(other & contents)", "attack(other)",
+                "use_entity(other)", "place(hazard_item & near(other))"), FactoryRules.HARD);
         assertEquals(List.of(
                 "break(owner)", "break(unknown)", "break(structure(#minecraft:village))", "break(block_entity)",
                 "break(self & contents)", "attack(owner)", "attack(self)", "attack(named)", "attack(villager)",
@@ -177,11 +224,15 @@ class GateTest {
                 "break(nature & !block_entity)", "break(self & !contents)",
                 "break(structure & !structure(#minecraft:village) & !block_entity)",
                 "place(!hazard_item)", "place(hazard_item & !near(owner) & !near(other))",
-                "attack(hostile)", "attack(nature & !named & !villager)", "use_block(*)", "use_entity(nature)",
-                "use_entity(self)", "take(owner)", "take(self)", "take(structure & !structure(#minecraft:village))",
-                "command(help)", "command(list)", "command(me)", "command(msg)", "command(teammsg)",
+                "attack(hostile)", "attack(nature & !named & !villager)", "use_block(!contents)",
+                "use_block(contents & owner)", "use_block(contents & self)",
+                "use_block(contents & structure & !structure(#minecraft:village))", "use_entity(nature)",
+                "use_entity(self)", "command(help)", "command(list)", "command(me)", "command(msg)", "command(teammsg)",
                 "command(seed)", "command(random)"), FactoryRules.ALLOW);
         assertTrue(FactoryRules.layer().deny().isEmpty(), "出厂层不写死任何拒绝;拒绝只在硬规则与主人的 deny 行");
+        assertEquals(FactoryRules.HARD, FactoryRules.hard().stream().map(Rule::toString).toList(), "每一行都解析得了");
+        assertEquals(FactoryRules.ASK, FactoryRules.layer().ask().stream().map(Rule::toString).toList());
+        assertEquals(FactoryRules.ALLOW, FactoryRules.layer().allow().stream().map(Rule::toString).toList());
     }
 
     // ==================== 谁的 ====================
@@ -250,6 +301,17 @@ class GateTest {
                 Action.place(POS, world.getBlockState(POS), Items.DIRT), world).kind(), "盖掉别人的方块也不行");
         assertTrue(gate(placed).judge(Action.place(POS.above(), Blocks.AIR.defaultBlockState(), Items.LAVA_BUCKET), world)
                 .reason().contains("hard rule"), "别人的东西旁边放岩浆也是硬规则");
+        BlockPos chest = POS.north();
+        world.set(chest, Blocks.CHEST.defaultBlockState());
+        placed.record(chest, STRANGERS);
+        Verdict open = gate(placed).judge(Action.useBlock(chest, world.getBlockState(chest)), world);
+        assertEquals(Verdict.Kind.DENY, open.kind(), "别人装着东西的箱子打不开:打开就是动里面的东西");
+        assertTrue(open.reason().contains("hard rule use_block(other & contents)"), open.reason());
+        BlockPos door = POS.south();
+        world.set(door, Blocks.OAK_DOOR.defaultBlockState());
+        placed.record(door, STRANGERS);
+        assertTrue(gate(placed).judge(Action.useBlock(door, world.getBlockState(door)), world).allowed(),
+                "别人的门照样开:里面没装东西");
 
         // 服主关了硬规则:没有哪一行说到别人的,问
         Gate noHard = new Gate(HER, Layers.policy(Mode.ASK, List.of(), RuleSet.EMPTY, FactoryRules.layer()), placed, Structures.NONE, false, List.of(), Hits.NONE);
@@ -326,8 +388,9 @@ class GateTest {
         world.set(chest, Blocks.CHEST.defaultBlockState());
         assertEquals("break(block_entity)", gate.judge(dig(world, chest), world).rule().toString(),
                 "结构里的战利品箱:带方块实体的不进 allow 行,问");
-        assertTrue(gate.judge(Action.take(chest, world.getBlockState(chest), Items.DIRT), world).allowed(),
-                "废弃结构里的战利品箱随便拿");
+        assertEquals("use_block(contents & structure & !structure(#minecraft:village))",
+                gate.judge(Action.useBlock(chest, world.getBlockState(chest)), world).rule().toString(),
+                "废弃结构里的战利品箱随便开、随便拿");
         world.set(POS.west(), Blocks.OAK_PLANKS.defaultBlockState());
         placed.record(POS.west(), OWNERS);
         assertEquals("break(owner)", gate.judge(dig(world, POS.west()), world).rule().toString(),
@@ -421,7 +484,8 @@ class GateTest {
         Action dig = dig(world, POS);
         ConsentItem item = gate.consentItem(dig, gate.judge(dig, world), world);
         assertEquals("break(owner & minecraft:cobblestone)", item.remember().toString());
-        assertTrue(item.remember().matches(new ActView(dig, new Facts(world, placed, null, HER, Structures.NONE, false))),
+        assertTrue(item.remember().matches(new ActView(dig, new Facts(world, placed, null, HER, Structures.NONE, false,
+                        Groups.registered()))),
                 "记下的规则盖得住这次问的动作");
 
         // 主人自己写的 ask 行带取反项:原样留着
@@ -532,11 +596,13 @@ class GateTest {
 
     @Test
     void whatCannotBeUndoneIsRegisteredPerVerb() {
-        assertTrue(Groups.VOCABULARY.get("owner").irreversibleOn().contains(Verb.ATTACK), "打死主人的宠物撤不回");
-        assertTrue(Groups.VOCABULARY.get("self").irreversibleOn().contains(Verb.ATTACK));
-        assertTrue(Groups.VOCABULARY.get("other").irreversibleOn().contains(Verb.ATTACK));
-        assertTrue(Groups.VOCABULARY.get("contents").irreversibleOn().contains(Verb.BREAK), "拆装着东西的容器撤不回");
-        assertTrue(Groups.VOCABULARY.get("named").irreversibleOn().isEmpty(), "打有名字的不算撤不回");
-        assertFalse(Groups.VOCABULARY.get("owner").irreversibleOn().contains(Verb.BREAK), "拆主人的墙撤得回(放回去)");
+        Vocabulary vocabulary = Groups.vocabulary(Groups.registered());
+        assertTrue(vocabulary.get("owner").irreversibleOn().contains(Verb.ATTACK), "打死主人的宠物撤不回");
+        assertTrue(vocabulary.get("self").irreversibleOn().contains(Verb.ATTACK));
+        assertTrue(vocabulary.get("other").irreversibleOn().contains(Verb.ATTACK));
+        assertTrue(vocabulary.get("contents").irreversibleOn().contains(Verb.BREAK), "拆装着东西的容器撤不回");
+        assertTrue(vocabulary.get("contents").irreversibleOn().contains(Verb.USE_BLOCK), "动容器里的东西撤不回");
+        assertTrue(vocabulary.get("named").irreversibleOn().isEmpty(), "打有名字的不算撤不回");
+        assertFalse(vocabulary.get("owner").irreversibleOn().contains(Verb.BREAK), "拆主人的墙撤得回(放回去)");
     }
 }

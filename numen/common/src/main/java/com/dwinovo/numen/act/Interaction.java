@@ -437,7 +437,7 @@ public final class Interaction {
     }
 
     /**
-     * 右键按下去了:记下游戏交回的话;这一下打开了界面也记下来,连同它是右键哪儿打开的({@link MenuOrigin})。对着方块、实体、空气按的
+     * 右键按下去了:记下游戏交回的话;这一下打开了界面也记下来。对着方块、实体、空气按的
      * 三条路都从这里过——手里的东西对着空气用也能打开界面(模组的背包、无线终端)。
      */
     private void landed(Mouse.Use.Pressed pressed) {
@@ -446,8 +446,6 @@ public final class Interaction {
         }
         if (pressed.opened()) {
             opened = true;
-            MenuOrigin.opened(player, pressed.hit() instanceof BlockHitResult hit
-                    && hit.getType() == HitResult.Type.BLOCK ? hit.getBlockPos() : null);
         }
     }
 

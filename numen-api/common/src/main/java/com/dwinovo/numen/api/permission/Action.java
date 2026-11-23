@@ -19,7 +19,7 @@ import java.util.TreeSet;
  * @param pos     方块动作的格子;实体动作、丢弃与指令为 null
  * @param state   方块动作发生时那一格的方块状态(挖:要挖的;放:要被盖掉的;右键:被点的)
  * @param entity  实体动作的对象
- * @param item    放/拿/丢的物品;规划期还不知道会用哪种耗材时为 null
+ * @param item    放/丢的物品;规划期还不知道会用哪种耗材时为 null
  * @param command 执行的游戏指令;其余动作为 null
  */
 public record Action(Verb kind, BlockPos pos, BlockState state, Entity entity, Item item, CommandLine command) {
@@ -62,10 +62,6 @@ public record Action(Verb kind, BlockPos pos, BlockState state, Entity entity, I
 
     public static Action useEntity(Entity target) {
         return new Action(Verb.USE_ENTITY, null, null, target, null, null);
-    }
-
-    public static Action take(BlockPos container, BlockState state, Item item) {
-        return new Action(Verb.TAKE, container, state, null, item, null);
     }
 
     public static Action drop(Item item) {

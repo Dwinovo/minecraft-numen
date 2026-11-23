@@ -61,7 +61,7 @@ import java.util.function.Predicate;
  *
  *   /numen permission mode &lt;name&gt; [ask|bypass|observe]     show or set a companion's permission mode
  *   /numen permission rules list                          the caller's rows, then the factory rows
- *   /numen permission rules add &lt;deny|ask|allow&gt; &lt;rule&gt;  append a row, e.g. ask take(*)
+ *   /numen permission rules add &lt;deny|ask|allow&gt; &lt;rule&gt;  append a row, e.g. ask drop(*)
  *   /numen permission rules remove &lt;deny|ask|allow&gt; &lt;n&gt;   remove row n (1-based, as listed)
  *   /numen permission rules reset                         clear the caller's three tables
  *   /numen consent &lt;allow|remember&gt; &lt;id&gt; | deny &lt;id&gt; [note]   answer a pending consent request
