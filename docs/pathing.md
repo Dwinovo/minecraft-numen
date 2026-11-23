@@ -280,7 +280,7 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
 | 8 | 这一格能不能放进去、真实落点 | `isReplaceable`、`Interaction.placementOf`、`ExecHarness`、建造各一份;瞄准高草、单层雪时按"命中面前一格"算，权限问错格、实际账漏记(推断) | Numen API 的 `Replaceable`;落点以鼠标 `Mouse.Use` 返回为准 |
 | 9 | 物理上能不能挖 | `MovementHelper.avoidBreaking`;挖矿任务重复调一遍并自带基岩规则;建造自判 `destroySpeed==-1`;`canHarvest` 注释说成本模型会否决，实际不查 | 第 1 层 `DigRules` |
 | 10 | 挖多久 | `ToolSet` 自己重写原版公式(只看快捷栏，没有水下、离地减速);执行用原版 `getDestroyProgress`;感知另算一份 | Numen API 的 `DigTime`(身体与规划共用),身体上的事实是 `DigTime.Mining` |
-| 11 | 用哪把工具 | 定价 `ToolSet`(快捷栏)、执行 `ToolSelect`(全背包)、挖矿 `bestToolFor`;规划不计价的镐子执行照拿 | `ToolChoice`(由身体快照建，看全背包),规划执行共用 |
+| 11 | 用哪把工具 | 定价 `ToolSet`(快捷栏)、执行 `ToolSelect`(全背包)、挖矿 `bestToolFor`;规划不计价的镐子执行照拿 | `ToolChoice`(由身体快照建，看全背包),规划执行共用;要对的工具才有掉落的方块先只在收得到掉落的工具里挑,一件没有且材料够时 `Work` 先经 `Kit` 做一件(`Tools` 定适格、`CraftPlan` 定可做)再挖 |
 | 12 | 有没有料 ★ | `ThrowawayBlocks.available`、`CalculationContext.hasThrowaway`(和"许不许改地形"折成一个布尔)、`shortageAdvice`(自己扫背包);取料又有两套 | `Materials` 端口 |
 | 13 | 下一块用什么料 | 拆回定价按垫路料算，执行先问建造登记 | `Materials.next` 与 `PlacementAdvice` 端口 |
 | 14 | 许不许动 | 规划 `permissionMultiplier`、账单再问一遍、`PlayerNav.admits`;执行放置直接调 `Permission.judge`;`BuildCalculationContext` 对图纸格不问权限、漏了按种类禁挖 | `TerrainPolicy`(规划)端口与她的鼠标(执行)读同一个 `Gate`;模型的走路只由它们决定能不能动哪一格(工具与任务里不另判),主人拒了的格这一趟里当墙归 `Trip` |

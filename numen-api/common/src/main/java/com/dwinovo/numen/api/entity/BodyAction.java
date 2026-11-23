@@ -22,4 +22,10 @@ public sealed interface BodyAction {
 
     /** 创造模式凭空取了一叠 {@code item},放在快捷栏第 {@code to} 格。 */
     record Conjured(Item item, int to) implements BodyAction {}
+
+    /**
+     * 在合成格里做了一次,做出 {@code made} 件 {@code item}:材料从背包扣,产物进背包。寻路为挖一格备工具时会做这一步;
+     * 回执要说出去(模型得知道原木变成了木板、木板变成了镐)。
+     */
+    record Crafted(Item item, int made) implements BodyAction {}
 }

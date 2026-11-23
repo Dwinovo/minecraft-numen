@@ -39,7 +39,7 @@ abstract class Control {
         this.rig = rig;
         this.m = m;
         this.stride = stride;
-        this.work = new Work(rig, m.kind());
+        this.work = new Work(rig, m);
     }
 
     /** 飞行({@link MoveKind#flight})不走单步控制器:连着的几步飞行当一整段跟({@link AirControl})。 */

@@ -74,6 +74,10 @@ class NavTextTest {
         assertEquals("", NavText.journey(List.of(), List.of(), List.of(), List.of(), NavText.Flights.NONE), "什么都没做就什么都不说");
         assertEquals("En route I took a stack of dirt from the creative inventory.",
                 NavText.journey(List.of(), List.of(new BodyAction.Conjured(Items.DIRT, 0)), List.of(), List.of(), NavText.Flights.NONE), "只有身体动作也要说");
+        assertEquals("En route I crafted 4 oak_planks and crafted 1 wooden_pickaxe.",
+                NavText.journey(List.of(), List.of(new BodyAction.Crafted(Items.OAK_PLANKS, 4),
+                        new BodyAction.Crafted(Items.WOODEN_PICKAXE, 1)), List.of(), List.of(), NavText.Flights.NONE),
+                "做出来的东西也要说");
     }
 
     @Test

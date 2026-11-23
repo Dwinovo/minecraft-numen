@@ -11,6 +11,7 @@ import com.dwinovo.numen.pathing.Vanilla;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LiquidBlock;
@@ -133,6 +134,52 @@ class DiggingTest {
         ToolChoice.Pick pick = new ToolChoice(body).best(Blocks.STONE.defaultBlockState());
         assertEquals(5, pick.slot());
         assertEquals(Items.DIAMOND_PICKAXE, pick.tool().getItem());
+    }
+
+    /**
+     * 要对的工具才有掉落的方块:先只在挖得动的工具里挑,哪怕另有一件更快但挖了没掉落的。金镐附了效率五挖铁矿只要几刻,
+     * 但它不到石镐的等级;石镐慢一点,收得到铁。
+     */
+    @Test
+    void aToolThatHarvestsIsPickedOverAFasterOneThatDoesNot() {
+        List<ItemStack> inventory = new ArrayList<>();
+        for (int i = 0; i < 36; i++) {
+            inventory.add(ItemStack.EMPTY);
+        }
+        ItemStack golden = new ItemStack(Items.GOLDEN_PICKAXE);
+        golden.enchant(Enchantments.BLOCK_EFFICIENCY, 5);
+        inventory.set(0, golden);
+        inventory.set(1, new ItemStack(Items.STONE_PICKAXE));
+        ToolChoice tools = new ToolChoice(Fixtures.body(Vanilla.SURVIVAL, GameType.SURVIVAL, 20, inventory));
+        assertEquals(1, tools.best(Blocks.IRON_ORE.defaultBlockState()).slot(),
+                "金镐快,但挖铁矿没有掉落:先挑石镐");
+    }
+
+    /** 一件适格的都没有:行为与以前一样,用最快的,接受慢/无掉落(金镐挖铁矿快,但不够等级)。 */
+    @Test
+    void withoutAHarvestingToolTheFastestIsStillUsed() {
+        List<ItemStack> inventory = new ArrayList<>();
+        for (int i = 0; i < 36; i++) {
+            inventory.add(ItemStack.EMPTY);
+        }
+        ItemStack golden = new ItemStack(Items.GOLDEN_PICKAXE);
+        golden.enchant(Enchantments.BLOCK_EFFICIENCY, 5);
+        inventory.set(0, golden);
+        ToolChoice tools = new ToolChoice(Fixtures.body(Vanilla.SURVIVAL, GameType.SURVIVAL, 20, inventory));
+        assertEquals(0, tools.best(Blocks.IRON_ORE.defaultBlockState()).slot(), "没有适格的镐,金镐就是现有的最快");
+    }
+
+    /** 做好的木镐与手上的铁剑:挖石头拿镐,不拿剑。 */
+    @Test
+    void aCraftedPickaxeBeatsTheSwordInHand() {
+        List<ItemStack> inventory = new ArrayList<>();
+        for (int i = 0; i < 36; i++) {
+            inventory.add(ItemStack.EMPTY);
+        }
+        inventory.set(0, new ItemStack(Items.IRON_SWORD));
+        inventory.set(5, new ItemStack(Items.WOODEN_PICKAXE));
+        ToolChoice tools = new ToolChoice(Fixtures.body(Vanilla.SURVIVAL, GameType.SURVIVAL, 20, inventory));
+        assertEquals(5, tools.best(Blocks.STONE.defaultBlockState()).slot());
     }
 
     // ==================== 能不能挖 ====================
