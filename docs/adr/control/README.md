@@ -28,6 +28,7 @@ AI 怎么操控一个服务端玩家。网站上的长文是《怎么让 AI 操�
 | [0022](0022-light-click-receipts.md) | 11-23 | 点一下的回执只说游戏接没接,之后变了什么她自己看 | 已接受,已落地 |
 | [0023](0023-mods-belong-to-plugins-no-generic-fallback.md) | 11-23 | 模组的事归插件:不留通用的兜底,`numen.container` 只说原版容器 | 已接受,已落地;修订 0021 |
 | [0024](0024-look-answers-are-named-fields.md) | 11-23 | 看:方块、实体、物品各一个问题,回答是带名字的字段,登记带名字 | 已接受,已落地;修订 0021 |
+| [0025](0025-permission-judges-does-not-recognise.md) | 11-24 | 权限层只判不认:动作去掉 `take`,"这一下会做什么"与规则里的词由懂的人登记 | 已接受,已落地 |
 
 ## 沿着一件事看
 
