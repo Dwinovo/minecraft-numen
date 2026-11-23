@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 一个插件的门登记进各张表的东西都归在它的作用域下:撤回(关开关、重载)把每张表里它那一条撤干净,重登把 setup 再跑一遍,
- * 撤回之后它原来那扇门不再登记任何东西。表本身:函数组、事件类型、同伴事件订阅、值转换、穿戴来源、随附的 Lua 模块与内容目录。
+ * 撤回之后它原来那扇门不再登记任何东西。表本身:函数组、事件类型、同伴事件订阅、值转换、穿戴来源、一个问题的回答者、随附的 Lua 模块与内容目录。
  */
 class NumenPluginScopeTest {
 
@@ -61,6 +61,9 @@ class NumenPluginScopeTest {
             return value.label();
         }
     };
+
+    /** 一个测试自己出的题,只用来验回答者的登记与撤回。 */
+    private static final Question<String> PROBE = Question.of("gt_scope:probe");
 
     /** 一组测试函数。 */
     public static final class Scoped {
@@ -111,6 +114,7 @@ class NumenPluginScopeTest {
             numen.on(CompanionEvent.ABORT, id -> heard.incrementAndGet());
             numen.codec(Marker.class, MARKER);
             numen.registerGear(gear);
+            numen.answer(PROBE, "gt_scope says");
             numen.bundleContent(dir);
         });
 
@@ -120,6 +124,7 @@ class NumenPluginScopeTest {
         assertNotNull(BuiltinModules.get("gt_scope.probe"));
         assertTrue(Shipped.bundles().stream().anyMatch(b -> b.source().equals("gt_scope")));
         assertEquals(Set.of("gt_scope_kind"), NumenPlugins.gearKinds(null, (ItemStack) null));
+        assertEquals(List.of("gt_scope says"), PROBE.answerers());
         CompanionEvents.fire(CompanionEvent.ABORT, UUID.randomUUID());
         assertEquals(1, heard.get());
 
@@ -132,6 +137,7 @@ class NumenPluginScopeTest {
         assertNull(BuiltinModules.get("gt_scope.probe"));
         assertTrue(Shipped.bundles().stream().noneMatch(b -> b.source().equals("gt_scope")));
         assertEquals(Set.of(), NumenPlugins.gearKinds(null, (ItemStack) null));
+        assertEquals(List.of(), PROBE.answerers());
         CompanionEvents.fire(CompanionEvent.ABORT, UUID.randomUUID());
         assertEquals(1, heard.get(), "a withdrawn plugin hears nothing");
         assertEquals(Status.DISABLED, row("gt_scope").status());
@@ -144,6 +150,7 @@ class NumenPluginScopeTest {
         assertTrue(codecKnown());
         assertNotNull(BuiltinModules.get("gt_scope.probe"));
         assertEquals(Set.of("gt_scope_kind"), NumenPlugins.gearKinds(null, (ItemStack) null));
+        assertEquals(List.of("gt_scope says"), PROBE.answerers());
         CompanionEvents.fire(CompanionEvent.ABORT, UUID.randomUUID());
         assertEquals(2, heard.get());
         assertEquals(Status.LOADED, row("gt_scope").status());

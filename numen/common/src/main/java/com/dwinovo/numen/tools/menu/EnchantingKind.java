@@ -53,9 +53,9 @@ final class EnchantingKind implements MenuKind.Chooses<EnchantmentMenu> {
                     Call.of("numen.gui.choose", 1));
         }
         int n = first.numberIn("option", menu.costs.length);
-        String before = Receipt.stack(menu.getSlot(0).getItem());
+        String before = StackLine.of(menu.getSlot(0).getItem());
         her.packets().menuButton(n - 1);
-        if (Receipt.stack(menu.getSlot(0).getItem()).equals(before)) {
+        if (StackLine.of(menu.getSlot(0).getItem()).equals(before)) {
             throw refused(menu, her, n);
         }
         return "pressed enchanting option " + n;
@@ -71,7 +71,7 @@ final class EnchantingKind implements MenuKind.Chooses<EnchantmentMenu> {
         int cost = menu.costs[n - 1];
         if (cost <= 0) {
             return new ApiError(ErrorKind.FAILED, "nothing was enchanted: the table offers nothing at option " + n
-                    + " for " + Receipt.stack(item) + " — numen.gui.view shows which options are offered",
+                    + " for " + StackLine.of(item) + " — numen.gui.view shows which options are offered",
                     Call.of("numen.gui.view"));
         }
         int lapis = menu.getGoldCount();

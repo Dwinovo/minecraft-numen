@@ -315,6 +315,11 @@ public final class NumenPlugins {
         }
 
         @Override
+        public <T> void answer(Question<T> question, T answerer) {
+            open().add(question.register(answerer));
+        }
+
+        @Override
         public void rangedWeapon(com.dwinovo.numen.api.combat.RangedWeapon weapon) {
             open().add(com.dwinovo.numen.api.combat.RangedWeapons.register(weapon));
         }

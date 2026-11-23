@@ -136,7 +136,72 @@ public class InteractGameTests {
             helper.assertTrue(press.succeeded() && companion.containerMenu instanceof net.minecraft.world.inventory.ChestMenu
                             && press.reply().contains("\"menu\"") && press.reply().contains("minecraft:diamond"),
                     "use item did not hand back the chest window: " + press.reply());
+            helper.assertTrue(press.outcome().contains("opened a window: ChestMenu")
+                            && !press.outcome().contains("nothing visibly changed"),
+                    "the receipt does not say the click opened a window: " + press.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /**
+     * 插件登记的回答者(control 0020):她右键之后,插件说的那一句和原版回答者说的一起进了回执;旁边一个抛异常的回答者只丢它自己那一条,
+     * 这一下照常做成。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
+    public static void a_plugins_witness_adds_its_line_to_the_click_receipt(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_witnessed", new BlockPos(4, 2, 8), false);
+        companion.setXRot(-30f);
+        companion.getInventory().add(new ItemStack(Items.SNOWBALL, 4));
+        // 回答者全服的同伴都问得到:只认这一条用例的她,不论成败都撤掉
+        com.dwinovo.numen.api.NumenPlugins.register("gt_witness", numen -> {
+            numen.answer(com.dwinovo.numen.api.Questions.WITNESS, (her, focus) -> {
+                if (her == companion) {
+                    throw new IllegalStateException("a broken witness");
+                }
+                return null;
+            });
+            numen.answer(com.dwinovo.numen.api.Questions.WITNESS, (her, focus) -> {
+                if (her != companion) {
+                    return null;
+                }
+                int before = her.getInventory().countItem(Items.SNOWBALL);
+                return now -> java.util.List.of("gt_witness saw snowballs " + before + " -> "
+                        + now.getInventory().countItem(Items.SNOWBALL));
+            });
+        });
+        com.dwinovo.numen.api.gametest.TestCleanup.whenFinished(helper,
+                () -> com.dwinovo.numen.api.NumenPlugins.roster().withdraw("gt_witness"));
+        ToolRun toss = lua(companion, "numen.use.item({item = \"minecraft:snowball\"})");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(toss.done(), "use item has not finished");
+            helper.assertTrue(toss.succeeded() && toss.outcome().contains("gt_witness saw snowballs 4 -> 3")
+                            && toss.outcome().contains("inventory: -1 minecraft:snowball"),
+                    "the receipt does not carry the plugin's line beside the vanilla ones: " + toss.outcome());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 物品还是那件、里面的数据变了:打火石点着一堆营火,回执里写着手里那件多了耐久损耗(背包的增减看不到这个)。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
+    public static void a_click_reports_what_changed_inside_the_held_item(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos campfire = helper.absolutePos(new BlockPos(6, 2, 8));
+        level.setBlockAndUpdate(campfire, Blocks.CAMPFIRE.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.CampfireBlock.LIT, false));
+        NumenPlayer companion = spawnAt(helper, "gametest_lighter", new BlockPos(4, 2, 8), false);
+        companion.getInventory().add(new ItemStack(Items.FLINT_AND_STEEL));
+        ToolRun light = lua(companion, "numen.use.block(" + xyz(campfire) + ", {item = \"minecraft:flint_and_steel\"})");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(light.done(), "use block has not finished");
+            helper.assertTrue(light.succeeded()
+                            && level.getBlockState(campfire).getValue(net.minecraft.world.level.block.CampfireBlock.LIT),
+                    "the campfire was not lit: " + light.reply());
+            helper.assertTrue(light.outcome().contains("in your main hand: minecraft:flint_and_steel -> "
+                            + "minecraft:flint_and_steel[damage 1/64]"),
+                    "the receipt does not say the flint and steel wore down: " + light.outcome());
+            CompanionFactory.despawn(level.getServer(), companion);
         });
     }
 

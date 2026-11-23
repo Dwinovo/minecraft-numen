@@ -9,7 +9,8 @@ import com.dwinovo.numen.api.task.TaskState;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.FailureType;
 import com.dwinovo.numen.act.Interaction;
-import com.dwinovo.numen.act.PressReceipt;
+import com.dwinovo.numen.api.witness.Focus;
+import com.dwinovo.numen.api.witness.Ledger;
 import com.dwinovo.numen.nav.NavText;
 import com.dwinovo.numen.nav.Terrain;
 import com.dwinovo.numen.task.base.InReachTask;
@@ -39,8 +40,8 @@ import java.util.List;
 public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRecord, com.dwinovo.numen.tools.Clicks.Pressed> {
 
     private Interaction interaction;
-    /** 按键前的世界快照,收尾时对账出"真发生了什么"(见 {@link PressReceipt})。 */
-    private PressReceipt receipt;
+    /** 这一下的账本:按下去之前开,收场时结出"真发生了什么"。 */
+    private Ledger ledger;
     private java.util.List<String> changes = List.of();
     private long holdUntil = -1;       // game tick to release a fixed-duration hold (holdTicks > 0)
     private String successMsg = "done";
@@ -136,7 +137,7 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
             boolean fallthroughOk =
                     InteractAtTaskRecord.bodyBoundReason(player.getMainHandItem().getItem()) == null
                     && InteractAtTaskRecord.bodyBoundReason(player.getOffhandItem().getItem()) == null;
-            receipt = PressReceipt.before(player, r.aim);
+            ledger = Ledger.open(player, Focus.on(r.aim));
             interaction = Interaction.forHit(player, hit, button(), r.holdTicks, fallthroughOk, r.sneak);
             if (interaction == null) {       // left-click on air — a swing, nothing to do
                 successMsg = "nothing under the aim (left-click in the air)";
@@ -159,7 +160,7 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
                 yield TaskState.SUCCESS;
             }
             case FAILED -> {
-                fail(interaction.failReason(), interaction.failType());
+                fail(interaction.failReason() + changedSoFar(), interaction.failType());
                 yield TaskState.FAILED;
             }
             case RUNNING -> TaskState.RUNNING;
@@ -223,17 +224,21 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
     }
 
     /**
-     * 收尾对账:回执只报事实,不判成败。"按键被消费"不等于"发生了什么"——
-     * 船可以吃掉点击却因站位碰撞一无所成,此前这里会报一句裸的成功,模型
-     * 就当船已经放下了。什么都没变时明说,她自己决定挪个位置再试还是放弃。
+     * 收尾结账:回执只报事实,不判成败。"按键被消费"不等于"发生了什么"——船可以吃掉点击却因站位碰撞一无所成。什么都没变时明说,
+     * 她自己决定挪个位置再试还是放弃。
      */
     private String settle() {
-        changes = receipt == null ? List.of() : receipt.diff(player);
+        changes = ledger == null ? List.of() : ledger.close();
         if (changes.isEmpty()) {
-            return " — but nothing visibly changed (inventory, health, riding, aimed block, nearby "
-                    + "entities all as before). If you expected an effect, reposition or rethink.";
+            return " — but nothing visibly changed. If you expected an effect, reposition or rethink.";
         }
         return " — " + String.join("; ", changes);
+    }
+
+    /** 没做成就收场(失败、超时、被叫停)时,按下去之后已经变了的事,接在那句话后面;还没按、或什么都没变是空串。 */
+    private String changedSoFar() {
+        changes = ledger == null ? List.of() : ledger.close();
+        return changes.isEmpty() ? "" : " — what did change: " + String.join("; ", changes);
     }
 
     /** Release the interaction, then the nav + overlay (base default). */
@@ -265,11 +270,11 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
 
     @Override
     protected String timeoutMessage() {
-        return "timed out before interacting at " + (r.aim != null ? aimLabel() : "forward");
+        return "timed out before interacting at " + (r.aim != null ? aimLabel() : "forward") + changedSoFar();
     }
 
     @Override
     protected String cancelledMessage() {
-        return r.getToolName() + " interrupted";
+        return r.getToolName() + " interrupted" + changedSoFar();
     }
 }

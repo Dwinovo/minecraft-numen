@@ -31,7 +31,9 @@ public final class Clicks {
                           @Doc("The cell aimed at.") Optional<BlockPos> aim,
                           @Doc("The entity the click landed on, by its id.") Optional<String> entityId,
                           @Doc("The block the click used, when it opened or worked a station.") Optional<BlockAt> block,
-                          @Doc("What changed: your inventory, health and riding, the block, new entities; empty means the click did nothing.")
+                          @Doc("What changed, one fact each: on you (inventory, the data inside an item you hold, health, food, "
+                                  + "effects, riding), the aimed block, the entity's gear, entities that appeared, a "
+                                  + "window; empty means nothing that is watched changed.")
                           List<String> changes) implements Pressed {}
 
     /**

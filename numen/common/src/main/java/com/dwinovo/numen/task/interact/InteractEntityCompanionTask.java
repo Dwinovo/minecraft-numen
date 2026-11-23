@@ -9,6 +9,8 @@ import com.dwinovo.numen.api.task.TaskState;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.FailureType;
 import com.dwinovo.numen.act.Interaction;
+import com.dwinovo.numen.api.witness.Focus;
+import com.dwinovo.numen.api.witness.Ledger;
 import com.dwinovo.numen.task.base.InReachTask;
 import com.dwinovo.numen.task.base.Precondition;
 import com.dwinovo.numen.task.move.Arrival;
@@ -31,8 +33,8 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
 
     private Entity entity;
     private Interaction interaction;
-    /** 按键前的世界快照,收尾时对账出"真发生了什么"。 */
-    private com.dwinovo.numen.act.PressReceipt receipt;
+    /** 这一下的账本:按下去之前开,收场时结出"真发生了什么"。 */
+    private Ledger ledger;
     private List<String> changes = List.of();
     private long holdUntil = -1;
     private boolean acted = false;     // landed at least one press (death then = success, not failure)
@@ -82,8 +84,8 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
         // the target slipped away before we could touch it.
         if (entity == null || !entity.isAlive()) {
             if (acted) {
-                successMsg = r.button == MouseButton.LEFT
-                        ? "defeated " + targetName() : "done with " + targetName();
+                successMsg = (r.button == MouseButton.LEFT
+                        ? "defeated " + targetName() : "done with " + targetName()) + settle();
                 return TaskState.SUCCESS;
             }
             fail("the target entity is gone before I could reach it", FailureType.TARGET_LOST);
@@ -139,7 +141,7 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
             boolean fallthroughOk =
                     InteractAtTaskRecord.bodyBoundReason(player.getMainHandItem().getItem()) == null
                     && InteractAtTaskRecord.bodyBoundReason(player.getOffhandItem().getItem()) == null;
-            receipt = com.dwinovo.numen.act.PressReceipt.before(player, null, entity);
+            ledger = Ledger.open(player, Focus.on(entity));
             interaction = Interaction.forHit(player, hit, button(), r.holdTicks, fallthroughOk, r.sneak).pointing(r.at);
             if (r.holdTicks > 0) {
                 holdUntil = player.level().getGameTime() + r.holdTicks;
@@ -153,7 +155,7 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
                 yield TaskState.SUCCESS;
             }
             case FAILED -> {
-                fail(interaction.failReason(), interaction.failType());
+                fail(interaction.failReason() + changedSoFar(), interaction.failType());
                 yield TaskState.FAILED;
             }
             case RUNNING -> TaskState.RUNNING;
@@ -179,13 +181,19 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
         return verb + " " + targetName() + (r.sneak ? " while sneaking" : "");
     }
 
-    /** 收尾对账,与 use block 同款:只报事实,判断留给读回执的人。 */
+    /** 收尾结账,与 use block 同款:只报事实,判断留给读回执的人。 */
     private String settle() {
-        changes = receipt == null ? List.of() : receipt.diff(player);
+        changes = ledger == null ? List.of() : ledger.close();
         if (changes.isEmpty()) {
-            return "";   // 实体交互多数不留可见痕迹(交易开了界面、动物进了求爱态),不硬报"没变"
+            return "";   // 实体交互多数不留看得见的痕迹(动物进了求爱态),不硬报"没变"
         }
         return " — " + String.join("; ", changes);
+    }
+
+    /** 没做成就收场(失败、超时、被叫停)时,按下去之后已经变了的事,接在那句话后面;还没按、或什么都没变是空串。 */
+    private String changedSoFar() {
+        changes = ledger == null ? List.of() : ledger.close();
+        return changes.isEmpty() ? "" : " — what did change: " + String.join("; ", changes);
     }
 
     /** Release the interaction, then the nav + overlay (base default). */
@@ -213,11 +221,11 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
 
     @Override
     protected String timeoutMessage() {
-        return "timed out before interacting with " + targetName();
+        return "timed out before interacting with " + targetName() + changedSoFar();
     }
 
     @Override
     protected String cancelledMessage() {
-        return r.getToolName() + " interrupted";
+        return r.getToolName() + " interrupted" + changedSoFar();
     }
 }

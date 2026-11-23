@@ -95,8 +95,9 @@ public final class UseApi {
             + "clicked, and the result says so and names the next step. It never moves, never swaps tools, never "
             + "clears the way.")
     @Note("Placing near your owner's things may ask your owner first; the call waits for the answer.")
-    @Note("Otherwise the result reports what actually changed (your inventory and experience, health, riding, the aimed block, new entities); no change "
-            + "listed means the click did nothing.")
+    @Note("Otherwise the result reports what actually changed: on you (inventory and experience, the data inside an "
+            + "item you carry, health, food, effects, riding), the aimed block, entities that appeared; no change listed "
+            + "means nothing that is watched changed.")
     @SeeAlso({"numen.gui.view", "numen.use.hit", "numen.use.entity"})
     public static Pending<Clicks.Pressed> block(ServerCall call, Block args) {
         return call.sync(BlockActionOps.interactAt(call, MouseButton.RIGHT, args.cell(), holdTicks(args.hold()),

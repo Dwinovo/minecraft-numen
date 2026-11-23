@@ -110,7 +110,12 @@ public final class NumenContent {
                 PathDebugPayload.STREAM_CODEC, PathDebugPayload::handle);
     }
 
-    /** 把 Numen 的五条生存本能链插进 Numen API 的竞价调度(链登记口)。 */
+    /**
+     * 把 Numen 的五条生存本能链插进 Numen API 的竞价调度(链登记口)。
+     *
+     * <p>TODO 这是特化:这里和 {@code NumenReflexes.registerAll} 直接调 {@code BrainChains}、{@code ReflexRegistry},
+     * 没有走插件那扇门({@code NumenApi});门上开出登记本能链的口子后,改成从门登记。
+     */
     private static void registerReflexes() {
         // 注册号小的先问 —— 与原版 addGoal(int priority, goal) 同一惯例:摔落缓冲 > 换气 > 逃跑 > 自卫 > 脱困。
         // 逃跑压过自卫:扛不住时先跑,跑不掉它让出身体,自卫接着打。
@@ -162,6 +167,8 @@ public final class NumenContent {
             // 原版的弓与弩是远程武器的两个提供者,和模组的枪走同一张表(弓先登记,同档里排在弩前)
             numen.rangedWeapon(com.dwinovo.numen.task.combat.VanillaRanged.BOW);
             numen.rangedWeapon(com.dwinovo.numen.task.combat.VanillaRanged.CROSSBOW);
+            // "这次动作前后变了什么"原版的那几样回答者,和模组的回答者走同一扇门、同一个问题
+            com.dwinovo.numen.witness.VanillaWitnesses.install(numen);
         });
     }
 

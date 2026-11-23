@@ -76,7 +76,7 @@ final class TraderKind implements MenuKind.Chooses<MerchantMenu> {
         if (!ItemStack.isSameItemSameComponents(menu.getSlot(2).getItem(), offer.getResult())) {
             throw refused(her, n, offer);
         }
-        return "selected trade " + n + ": the result slot (window slot 2) holds " + Receipt.stack(menu.getSlot(2).getItem());
+        return "selected trade " + n + ": the result slot (window slot 2) holds " + StackLine.of(menu.getSlot(2).getItem());
     }
 
     /** 这笔没备好:卖空了,或者她带的付不起——读到的事实。 */
@@ -88,7 +88,7 @@ final class TraderKind implements MenuKind.Chooses<MerchantMenu> {
         List<String> asks = new ArrayList<>();
         for (ItemStack cost : new ItemStack[] {offer.getCostA(), offer.getCostB()}) {
             if (!cost.isEmpty()) {
-                asks.add(Receipt.stack(cost) + " (you carry " + PlayerInv.carriedCount(her.getInventory(), cost.getItem())
+                asks.add(StackLine.of(cost) + " (you carry " + PlayerInv.carriedCount(her.getInventory(), cost.getItem())
                         + ")");
             }
         }

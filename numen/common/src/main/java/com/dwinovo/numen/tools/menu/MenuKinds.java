@@ -7,6 +7,8 @@ import com.dwinovo.numen.api.permission.ConsentItem;
 import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.api.sdk.Pending;
 import com.dwinovo.numen.api.sdk.ServerCall;
+import com.dwinovo.numen.api.witness.Focus;
+import com.dwinovo.numen.api.witness.Ledger;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.tools.GuiOps;
@@ -106,8 +108,8 @@ public final class MenuKinds {
     }
 
     /**
-     * 开着的有名堂的界面,连同它的种类。做一件事是同一套步骤:过权限层(这种界面会动到世界里的东西时)、等回来再认一次界面还是它、记下
-     * 前后的样子、让种类去发包读回来、把变了的事如实报告并交回新的界面。
+     * 开着的有名堂的界面,连同它的种类。做一件事是同一套步骤:过权限层(这种界面会动到世界里的东西时)、等回来再认一次界面还是它、开账
+     * ({@link Ledger})、让种类去发包读回来、结账把变了的事如实报告并交回新的界面。
      */
     private static final class Bound<M extends AbstractContainerMenu> {
 
@@ -171,9 +173,9 @@ public final class MenuKinds {
                     throw new ApiError(ErrorKind.FAILED, "the " + kind.name() + " window closed while waiting",
                             Call.of("numen.gui.view"));
                 }
-                Receipt before = Receipt.open(her);
+                Ledger ledger = Ledger.open(her, Focus.SELF);
                 String did = deed.get();
-                List<String> changes = before.changes(her);
+                List<String> changes = ledger.close();
                 Pending<GuiOps.Window> done = Pending.create();
                 done.report(changes.isEmpty() ? did + "." : did + ": " + String.join("; ", changes) + ".");
                 done.complete(GuiOps.window(her));

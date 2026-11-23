@@ -1,77 +1,33 @@
 package com.dwinovo.numen.api.entity;
 
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
- * 一次动作前后她的身体变了什么:背包与经验、血量、骑乘,以及装备有没有用坏。"身体做的一切都要如实报告给模型"在动作这一层的
- * 唯一出处——点一下、挖、打这些动作的回执都拿它说,各自不再写一份判据。
+ * 一件活从开始到现在,她身上用坏了哪些装备。装备用坏任何活里都可能发生(挖、打、走路垫块),所以每件活的回执都带这一句:活开始时
+ * {@link #open} 记下,收尾时问 {@link #broken}。
  *
- * <p>只报事实(多了什么、少了什么、血从多少到多少、骑上了什么),不下结论。动作开始时 {@link #open} 拍一张,收尾时问
- * {@link #changes}(背包、血量、骑乘)与 {@link #broken}(用坏的装备)。两样分开问:装备用坏任何动作里都可能发生,每件活的
- * 回执都要带;背包的增减是点一下这类动作的结果,挖、捡、合成有自己的账。
+ * <p>身体别的变化(背包与经验、血量、骑乘、手里那件东西里的数据……)是点一下这类动作的结果,由登记的回答者说
+ * ({@link com.dwinovo.numen.api.witness.Ledger});挖、捡、合成有自己的账。
  */
 public final class BodyDelta {
 
-    /** 血量差小于它不算变:浮点误差。 */
-    private static final float HEALTH_EPSILON = 1.0E-3f;
-
-    private final Belongings carried;
-    private final float health;
-    private final Entity vehicle;
     private final long brokenMark;
 
     private BodyDelta(NumenPlayer her) {
-        this.carried = Belongings.of(her);
-        this.health = her.getHealth();
-        this.vehicle = her.getVehicle();
         this.brokenMark = her.brokenGearMark();
     }
 
-    /** 此刻拍一张。 */
+    /** 此刻记下。 */
     public static BodyDelta open(NumenPlayer her) {
         return new BodyDelta(her);
     }
 
-    /** 从拍照到现在,背包与经验、血量、骑乘各自的变化,每一条是一件真发生的事;都没变是空表。 */
-    public List<String> changes(NumenPlayer her) {
-        List<String> facts = new ArrayList<>();
-        String items = carried.itemChange(her);
-        if (!items.isEmpty()) {
-            facts.add("inventory: " + items);
-        }
-        String xp = carried.experienceChange(her);
-        if (!xp.isEmpty()) {
-            facts.add(xp);
-        }
-        String hp = healthChange(health, her.getHealth());
-        if (!hp.isEmpty()) {
-            facts.add(hp);
-        }
-        Entity now = her.getVehicle();
-        if (now != vehicle) {
-            if (vehicle != null) {
-                facts.add("no longer riding " + describe(vehicle));
-            }
-            if (now != null) {
-                facts.add("now riding " + describe(now));
-            }
-        }
-        return facts;
-    }
-
-    /** 血量从 {@code before} 到 {@code after} 的那一条事实;差在浮点误差以内算没变,是空串。 */
-    static String healthChange(float before, float after) {
-        return Math.abs(after - before) >= HEALTH_EPSILON ? "health: " + number(before) + " -> " + number(after) : "";
-    }
-
     /**
-     * 从拍照到现在用坏的装备,写成一段圆括号里的话,接在任何回执后面都读得通;没有是空串。
+     * 从记下到现在用坏的装备,写成一段圆括号里的话,接在任何回执后面都读得通;没有是空串。
      */
     public String broken(NumenPlayer her) {
         List<NumenPlayer.BrokenGear> gone = her.brokenGearSince(brokenMark);
@@ -91,14 +47,5 @@ public final class BodyDelta {
             case OFFHAND -> "in your off hand";
             default -> "on your " + slot.getName();
         };
-    }
-
-    private static String describe(Entity entity) {
-        return com.dwinovo.numen.api.sdk.EntityLabel.shown(entity);
-    }
-
-    /** 血量按原版的点数写,整数不带小数点。 */
-    private static String number(float value) {
-        return value == Math.rint(value) ? String.valueOf((int) value) : String.format(Locale.ROOT, "%.1f", value);
     }
 }

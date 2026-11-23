@@ -93,6 +93,21 @@ public interface NumenApi {
             com.dwinovo.numen.api.task.TaskFactory.Runner<R> runner);
 
     /**
+     * 回答一个问题:登记一个回答者。问题是出题一方放在常量里的 {@link Question}(Numen API 自己出的列在 {@link Questions}),它要用的时候把
+     * 登记着的回答者问一圈。原版的回答由 Numen 从这同一个方法登记;你的模组懂的那一部分——你的物品右键之后变了什么、你的界面读出来
+     * 是什么——登记在这里,不用改 Numen。
+     *
+     * <pre>{@code
+     * numen.answer(Questions.WITNESS, new MyWandWitness());
+     * }</pre>
+     *
+     * <p>你也可以自己出题:在自己的类里放一个 {@code Question.of("mymod:…")} 常量,别的插件拿它登记回答者,你用
+     * {@link Question#answerers()} 问。在门里登记,插件撤回时一起撤。回答者在哪一侧被问由出题的一方说(Numen API 出的题都在服务端问);
+     * 登记两侧都跑,在 {@code NumenPlugins.register} 的块里直接调。
+     */
+    <T> void answer(Question<T> question, T answerer);
+
+    /**
      * 登记一种远程武器的提供者:攻击任务打远处的东西时问它"这件认不认得、此刻能不能射、弹道什么样、怎么起一发"
      * ({@link com.dwinovo.numen.api.combat.RangedWeapon})。弓和弩是 Numen 自己的两个提供者,模组的枪、魔杖这样的新名词加在这里;
      * 该不该打由权限层裁决,提供者只管怎么射。在门里登记,插件撤回时一起撤。
