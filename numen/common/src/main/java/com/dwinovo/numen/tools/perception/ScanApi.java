@@ -253,8 +253,9 @@ public final class ScanApi {
             + "(an end_portal_frame's has_eye), hardness, whether the tool in hand is right, an estimated dig time, and "
             + "whether it is within your reach.")
     @Note("details holds the rest, one fact per line: a sign's text on both sides; what the block holds — items, fluid, "
-            + "energy — on chests, furnaces and most modded machines, tanks and batteries; and whatever a mod's "
-            + "integration tells about its own blocks. Storage-network terminals (AE2/RS) show only their local buffer, "
+            + "energy — on chests, furnaces and most modded machines, tanks and batteries; on a furnace, blast furnace "
+            + "or smoker also how many seconds the fuel being burned lasts and how far the item being cooked is; and "
+            + "whatever a mod's integration tells about its own blocks. Storage-network terminals (AE2/RS) show only their local buffer, "
             + "not the whole network.")
     @Note("What a block holds and how full it is are read here. Putting in and taking out are the block's own group "
             + "of functions: numen.container for a chest or a barrel, numen.furnace, numen.brewing and the others.")
