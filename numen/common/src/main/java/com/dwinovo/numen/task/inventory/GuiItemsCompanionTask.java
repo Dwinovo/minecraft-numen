@@ -9,22 +9,27 @@ import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.task.TaskState;
 
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ResultSlot;
 import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * 在她打开的界面里按种类搬东西:一刻一步,和 {@code gui move}/{@code gui quick} 同一种搬法({@link ContainerOps}),整叠够数就
- * 整叠挪到另一边,只要一部分就放进另一边一格空的或同样东西的格。从容器里拿出来的那一步点下去之前交给权限层,和 {@code gui quick}
- * 一样。搬够了、这一种没了、另一边放不下了就收场,回执说搬了几件、为什么停在那儿。
+ * 整叠挪到另一边,只要一部分就放进另一边一格空的或同样东西的格;界面那一侧限了格时,放进去总是落在那几格里。从容器里拿出来的那一步
+ * 点下去之前交给权限层,和 {@code gui quick} 一样。搬够了、这一种没了、另一边放不下了就收场,回执说搬了几件、为什么停在那儿。
  */
 public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsTaskRecord, Integer> {
 
     private final ContainerOps ops = new ContainerOps();
     private int moved;
+    /** 搬了的东西,按种类记件数,先搬的在前。 */
+    private final Map<Item, Integer> kinds = new LinkedHashMap<>();
     /** 没搬够就停下时的缘由;搬够了或这一种搬完了是 null。 */
     private String stopped;
     private String done = "done";
@@ -55,15 +60,17 @@ public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsT
             return finish();
         }
         ContainerOps.Move move;
-        if (from.getItem().getCount() <= left) {
+        // 界面那一侧限了格的放:落在哪一格由这次调用定,不走"整叠挪到另一边"(那是界面自己分)
+        if (from.getItem().getCount() <= left && !(r.put && r.slotted())) {
             move = new ContainerOps.Move(from.index, null, null);
         } else {
             Slot to = target(menu, from.getItem());
             if (to == null) {
-                stopped = "there is no room on the other side for part of a stack";
+                stopped = r.slotted() ? "that slot is full or does not take " + itemName()
+                        : "there is no room on the other side for part of a stack";
                 return finish();
             }
-            move = new ContainerOps.Move(from.index, to.index, left);
+            move = new ContainerOps.Move(from.index, to.index, Math.min(left, from.getItem().getCount()));
         }
         Action take = ContainerOps.taking(move, player);
         if (take != null) {
@@ -77,6 +84,7 @@ public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsT
                 return TaskState.FAILED;
             }
         }
+        Item kind = from.getItem().getItem();
         int before = onSource(menu);
         ops.step(move, player);
         int step = before - onSource(menu);
@@ -85,6 +93,7 @@ public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsT
             return finish();
         }
         moved += step;
+        kinds.merge(kind, step, Integer::sum);
         return TaskState.RUNNING;
     }
 
@@ -106,17 +115,25 @@ public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsT
     /** 搬出来的那一侧里第一格这种东西;没有是 null。放进去从她的背包搬,拿出来从界面那一侧搬。 */
     private Slot source(AbstractContainerMenu menu) {
         for (Slot slot : menu.slots) {
-            if (sourceSide(slot) && slot.getItem().is(r.item)) {
+            if (sourceSide(slot) && wanted(slot)) {
                 return slot;
             }
         }
         return null;
     }
 
-    /** 另一侧能放下一部分的一格:空的,或同样东西还没满。没有是 null。 */
+    /** 搬出来的那一侧的这一格里是不是这次要搬的:种类对得上(不点名就是有东西),在界面那一侧时还得是限定的那几格。 */
+    private boolean wanted(Slot slot) {
+        ItemStack stack = slot.getItem();
+        boolean kind = r.item == null ? !stack.isEmpty() : stack.is(r.item);
+        return kind && (r.put || r.covers(slot.index));
+    }
+
+    /** 另一侧能放下一部分的一格:空的,或同样东西还没满;放进界面时还得是限定的那几格。没有是 null。 */
     private Slot target(AbstractContainerMenu menu, ItemStack stack) {
         for (Slot slot : menu.slots) {
-            if (sourceSide(slot) || slot instanceof ResultSlot || !slot.mayPlace(stack)) {
+            if (sourceSide(slot) || slot instanceof ResultSlot || !slot.mayPlace(stack)
+                    || (r.put && !r.covers(slot.index))) {
                 continue;
             }
             ItemStack there = slot.getItem();
@@ -136,7 +153,7 @@ public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsT
     private int onSource(AbstractContainerMenu menu) {
         int n = 0;
         for (Slot slot : menu.slots) {
-            if (sourceSide(slot) && slot.getItem().is(r.item)) {
+            if (sourceSide(slot) && wanted(slot)) {
                 n += slot.getItem().getCount();
             }
         }
@@ -144,7 +161,12 @@ public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsT
     }
 
     private String itemName() {
-        return BuiltInRegistries.ITEM.getKey(r.item).getPath();
+        return r.itemName();
+    }
+
+    /** 搬了的东西,按种类记件数,先搬的在前;一件都没搬是空表。 */
+    public Map<Item, Integer> kinds() {
+        return Collections.unmodifiableMap(kinds);
     }
 
     /** 搬了几件:{@code numen.gui.put}、{@code numen.gui.take} 交回的值。 */

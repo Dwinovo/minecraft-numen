@@ -175,7 +175,7 @@ public final class InvApi {
     @Example("numen.inv.drop(\"minecraft:cobblestone\", {count = 32})")
     @Example("numen.inv.drop(\"rotten_flesh\")")
     @Note("Asks your owner first unless their rules allow it; the call waits for the answer.")
-    @Note("Dropped items despawn after 5 minutes. To store things, numen.inv.store puts them into a chest instead.")
+    @Note("Dropped items despawn after 5 minutes. To store things, numen.container.put puts them into a chest instead.")
     @Note("Drops one kind of stack: the one in your main hand, else the first slot (numen.inv.items lists the kinds, "
             + "say a shulker box with contents and an empty one). The result names the stack with its detail and the other "
             + "stacks of the item that stay.")

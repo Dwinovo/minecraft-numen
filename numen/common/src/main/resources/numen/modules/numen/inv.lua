@@ -1,4 +1,4 @@
--- Making, storing, fetching, smelting and giving: the inv functions put together with walks and windows.
+-- Making, smelting and giving: the inv functions put together with walks, crafting windows and furnaces.
 local M = {}
 
 local function id(item)
@@ -122,37 +122,14 @@ function M.make(item, count)
   return craft()
 end
 
----Walk to a container (a chest, a barrel …), open it, put count of item in (all you carry by default) and close it.
----@param at Pos|Block The container.
----@param item string
----@param count? integer
----@return integer moved How many went in.
-function M.store(at, item, count)
-  local w = open(at)
-  return closing(function()
-    return w:put(id(item), count)
-  end)
-end
-
----Walk to a container, open it, take count of item out (all it holds by default) and close it.
----@param at Pos|Block The container.
----@param item string
----@param count? integer
----@return integer moved How many came out.
-function M.fetch(at, item, count)
-  local w = open(at)
-  return closing(function()
-    return w:take(id(item), count)
-  end)
-end
-
----Smelt count of item (all you carry by default) in a furnace, blast furnace or smoker: walk to it, put the item in
----and opts.fuel (default minecraft:coal, one per 8 items), stand by until the input is used up and nothing is cooking
----(numen.time.wait_until, opts.timeout seconds, default 12 per item), take every output out and close it.
+---Smelt count of item (all you carry by default) in a furnace, blast furnace or smoker: put the item in
+---(numen.furnace.input) and opts.fuel (numen.furnace.fuel, default minecraft:coal, one per 8 items), then stand by and
+---take out what is cooked every 2 seconds (numen.furnace.take) until count items have come out. It stops waiting when
+---nothing new has come out for opts.patience seconds (default 15): the fuel ran out or the item does not cook.
 ---@param furnace Pos|Block
 ---@param item string
 ---@param count? integer
----@param opts? {fuel?: string, timeout?: number}
+---@param opts? {fuel?: string, patience?: number}
 ---@return integer took How many items it took out.
 function M.smelt(furnace, item, count, opts)
   item = id(item)
@@ -161,23 +138,19 @@ function M.smelt(furnace, item, count, opts)
   if count == 0 then
     raise("no_material", "you carry no " .. item .. " to smelt")
   end
-  local w = open(furnace)
-  return closing(function()
-    w:put(item, count)
-    w:put(id(opts.fuel or "minecraft:coal"), math.ceil(count / 8))
-    numen.time.wait_until(function()
-      local now = numen.gui.view()
-      return numen.gui.count(item) == 0 and (now.data[3] or 0) == 0
-    end, {every = 2, timeout = opts.timeout or count * 12})
-    local took = 0
-    for _, s in ipairs(numen.gui.view().slots) do
-      if s.output and s.item then
-        took = took + s.count
-        numen.gui.quick(s.index)
-      end
+  count = numen.furnace.input(furnace, item, count)
+  numen.furnace.fuel(furnace, id(opts.fuel or "minecraft:coal"), math.ceil(count / 8))
+  local took, idle = 0, 0
+  while took < count and idle < (opts.patience or 15) do
+    numen.time.wait(2)
+    local got = 0
+    for _, s in ipairs(numen.furnace.take(furnace)) do
+      got = got + s.count
     end
-    return took
-  end)
+    took = took + got
+    idle = got > 0 and 0 or idle + 2
+  end
+  return took
 end
 
 ---Give count of item (all you carry by default) to a player or another entity: walk within 2 blocks of them

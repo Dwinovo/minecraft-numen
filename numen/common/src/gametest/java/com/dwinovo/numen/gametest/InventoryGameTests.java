@@ -516,20 +516,20 @@ public class InventoryGameTests {
         });
     }
 
-    /** 存进箱子再取出来:numen.inv.store 走过去放进 20 块圆石,numen.inv.fetch 取回 5 块;箱子里剩 15,界面合上。 */
+    /** 存进箱子再取出来:numen.container.put 走过去放进 20 块圆石,numen.container.take 取回 5 块;箱子里剩 15,界面合上。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
-    public static void store_and_fetch_go_through_the_chest(GameTestHelper helper) {
+    public static void container_put_and_take_go_through_the_chest(GameTestHelper helper) {
         BlockPos chest = helper.absolutePos(new BlockPos(11, 2, 7));
         helper.getLevel().setBlockAndUpdate(chest, Blocks.CHEST.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_stocker", new BlockPos(3, 2, 7), false);
         companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 20));
-        ToolRun run = lua(companion, "local chest = " + xyz(chest) + "\nlocal put = numen.inv.store(chest, "
-                + "\"cobblestone\")\nlocal took = numen.inv.fetch(chest, \"cobblestone\", 5)\nreturn put .. \"/\" .. took");
+        ToolRun run = lua(companion, "local chest = " + xyz(chest) + "\nlocal put = numen.container.put(chest, "
+                + "\"cobblestone\")\nlocal took = numen.container.take(chest, \"cobblestone\", 5)\nreturn put .. \"/\" .. took");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(run.done(), "the program has not finished");
             helper.assertTrue(run.ranToTheEnd() && run.receipt().contains("20/5"),
-                    "store and fetch did not move 20 and 5: " + run.receipt());
+                    "put and take did not move 20 and 5: " + run.receipt());
             var box = (net.minecraft.world.level.block.entity.ChestBlockEntity) helper.getLevel().getBlockEntity(chest);
             int inChest = 0;
             for (int i = 0; i < box.getContainerSize(); i++) {
@@ -538,6 +538,59 @@ public class InventoryGameTests {
             helper.assertTrue(inChest == 15 && companion.getInventory().countItem(Items.COBBLESTONE) == 5,
                     "the chest holds " + inChest + ", she carries " + companion.getInventory().countItem(Items.COBBLESTONE));
             helper.assertTrue(companion.containerMenu == companion.inventoryMenu, "the chest was left open");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /**
+     * 熔炉的三件事各说各的格:原木当燃料放,进的是燃料格(按 Shift 点的话原木会进原料格去烧木炭);粗铁放进原料格;还没烧出来时取产物
+     * 交回空表,不算失败。界面每次都合上。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void furnace_fuel_and_input_land_in_their_own_slots(GameTestHelper helper) {
+        BlockPos furnace = helper.absolutePos(new BlockPos(5, 2, 7));
+        helper.getLevel().setBlockAndUpdate(furnace, Blocks.FURNACE.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_stoker", new BlockPos(3, 2, 7), false);
+        companion.getInventory().add(new ItemStack(Items.OAK_LOG, 4));
+        companion.getInventory().add(new ItemStack(Items.RAW_IRON, 2));
+        ToolRun run = lua(companion, "local f = " + xyz(furnace) + "\nlocal out = numen.furnace.take(f)\n"
+                + "local fuel = numen.furnace.fuel(f, \"oak_log\", 3)\nlocal input = numen.furnace.input(f, \"raw_iron\")\n"
+                + "return #out .. \"/\" .. fuel .. \"/\" .. input");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(run.done(), "the program has not finished");
+            helper.assertTrue(run.ranToTheEnd() && run.receipt().contains("0/3/2"),
+                    "take, fuel and input did not hand back 0, 3 and 2: " + run.receipt());
+            var oven = (net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity) helper.getLevel().getBlockEntity(furnace);
+            helper.assertTrue(oven.getItem(0).is(Items.RAW_IRON) && oven.getItem(0).getCount() == 2,
+                    "the input slot holds " + oven.getItem(0));
+            // 燃料格里的原木点着一根就少一根:三根里至少还剩两根,而且没有一根进了原料格
+            helper.assertTrue(oven.getItem(1).is(Items.OAK_LOG) && oven.getItem(1).getCount() >= 2
+                            && companion.getInventory().countItem(Items.OAK_LOG) == 1,
+                    "the fuel slot holds " + oven.getItem(1) + ", she carries "
+                            + companion.getInventory().countItem(Items.OAK_LOG) + " log(s)");
+            helper.assertTrue(companion.containerMenu == companion.inventoryMenu, "the furnace was left open");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 对着一块打不开界面的方块放东西:开工之前就拒绝,什么都没点下去——手里的圆石没有被右键放到石头上。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void container_put_on_a_block_with_no_window_is_refused_before_any_click(GameTestHelper helper) {
+        BlockPos stone = helper.absolutePos(new BlockPos(5, 2, 7));
+        helper.getLevel().setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_misplacer", new BlockPos(3, 2, 7), false);
+        companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 8));
+        ToolRun put = lua(companion, "numen.container.put(" + xyz(stone) + ", \"cobblestone\")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(put.done(), "the call has not finished");
+            helper.assertTrue(!put.succeeded() && put.outcome().contains("has no window to open"),
+                    "putting into a stone was not refused up front: " + put.outcome());
+            helper.assertTrue(companion.getInventory().countItem(Items.COBBLESTONE) == 8
+                            && helper.getLevel().getBlockState(stone.above()).isAir()
+                            && helper.getLevel().getBlockState(stone.west()).isAir(),
+                    "a cobblestone was placed against the stone");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }

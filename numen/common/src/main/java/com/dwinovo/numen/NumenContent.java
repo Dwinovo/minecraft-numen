@@ -160,6 +160,8 @@ public final class NumenContent {
             com.dwinovo.numen.tools.work.FightApi.install(numen);
             com.dwinovo.numen.tools.interact.UseApi.install(numen);
             com.dwinovo.numen.tools.interact.GuiApi.install(numen);
+            com.dwinovo.numen.tools.station.ContainerApi.install(numen);
+            com.dwinovo.numen.tools.station.FurnaceApi.install(numen);
             com.dwinovo.numen.tools.inventory.InvApi.install(numen);
             com.dwinovo.numen.tools.inventory.GearApi.install(numen);
             com.dwinovo.numen.tools.inventory.CreativeApi.install(numen);
@@ -193,6 +195,7 @@ public final class NumenContent {
         TaskFactory.register(FishTaskRecord.class, (p, r) -> new FishCompanionTask(p, r));
         TaskFactory.register(BuildTaskRecord.class, (p, r) -> new BuildCompanionTask(p, r));
         TaskFactory.register(InteractAtTaskRecord.class, (p, r) -> new InteractAtCompanionTask(p, r));
+        com.dwinovo.numen.task.station.StationCompanionTask.register();
         TaskFactory.register(InteractEntityTaskRecord.class, (p, r) -> new InteractEntityCompanionTask(p, r));
         TaskFactory.register(LocateStructureTaskRecord.class, (p, r) -> new LocateStructureCompanionTask(p, r));
         TaskFactory.register(LocateBiomeTaskRecord.class, (p, r) -> new LocateBiomeCompanionTask(p, r));

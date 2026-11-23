@@ -59,6 +59,8 @@
 | `gui.*` | 开着的界面(Window):看(有名堂的界面 `screen` 按种类说话,选项编号从 1 起)、按种类放进拿出、挪一格、整叠挪、选一项(`choose`:附魔台、切石机、织布机、交易、信标)、改名(铁砧)、翻页(讲台)、开关一格(合成器)、按 E(`open`)、关 | 不开界面(开是 `use.block`) |
 | `inv.read` / `inv.write` | 读背包里书的标题作者各页;往书与笔里写页并可署名(发 `EditBook`,读回) | 不合成书 |
 | `inv.craft` | 在开着的合成格里照一条配方合一次 | 不挑配方、不找工作台 |
+| `container.put` / `container.take` | 对一样装东西的目标(箱子、木桶、没有自己那一组函数的机器)放进去、取出来:走过去右键、搬、合上,界面只在这一件活里(control 0021);放进哪一格由它自己分 | 不认它是什么 |
+| `furnace.input` / `furnace.fuel` / `furnace.take` | 熔炉的三件事各说各的格:放原料、放燃料、取产物;放下或取走就交回 | 不等烧完 |
 | `work.fish` | 抛一竿,钓上来或如实失败 | 不再抛 |
 | `time.wait` | 站着等几秒,主人一喊停就停 | — |
 
@@ -71,7 +73,7 @@
 | `work.mine(cluster)` | `work.dig(cluster)` 自己走到够得着、挖 → `work.collect` 捡,那一团挖完为止,返回挖了几格 |
 | `fight.clear(radius)` | `scan.entities("hostile")` + 一只一只 `fight.attack` |
 | `inv.make(item, count)` | `inv.make` 读原版来源挑一条料够的合成配方 → 2x2 在自己的格里、3x3 开工作台(开着的、16 格内走过去的、或把带着的放在身边)→ `inv.craft` 到够数 → 关上它开的台 |
-| `inv.store` / `inv.fetch` / `inv.smelt` / `inv.give` | 走过去 `use.block` 开箱子(熔炉)、`Window:put`/`take`、关上;烧炼中间 `time.wait_until` 等烧完;给人是走到身边 `inv.drop` |
+| `inv.smelt` / `inv.give` | 烧炼是 `furnace.input`、`furnace.fuel` 放下,隔两秒 `furnace.take` 取一次,够数或久没出新的就收;给人是走到身边 `inv.drop` |
 | `time.wait_until(ready, opts)` | 看一眼,不成就 `time.wait` 一会儿再看,超时抛 `timeout` |
 | `shape.*` | 画格子,叫法与操作对齐 WorldEdit(设计稿 `docs/shape-worldedit.md`):选区 `cuboid`、`cyl`、`sphere`、`poly`、`convex` 与 `set`、`walls`、`faces`、`expand`…;`cyl`/`hcyl`、`sphere`/`hsphere`、`cone`、`pyramid`、`line`、`curve`、`generate` 画形状;`layer` 画字符网格;`copy`、`cut`、`fill`、`drain`、`snow`、`gravity`、`morph` 等读世界的操作(只读已加载区块,不写,交回 Cells);`feature`、`structure`、`forest`、`forestgen`、`flora`、`pumpkins` 让原版的生成器跑在记录用的世界上(真实世界一格不动),`feature`、`structure`、`forest` 交回 `{cells, lost}`(`lost` 是 Cells 装不下的实体与方块实体数据);交回 Cells |
 
