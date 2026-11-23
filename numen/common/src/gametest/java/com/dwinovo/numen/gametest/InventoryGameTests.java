@@ -455,8 +455,8 @@ public class InventoryGameTests {
     }
 
     /**
-     * 同名的两叠里点名哪一叠:她背着一个空潜影盒(格号靠前,只写 id 取的是它)和一个装着钻石的,把 numen.inv.items() 里带描述的那一项
-     * 原样交给 numen.gear.hold,拿到主手的是装着钻石的那一个。
+     * 同名的两叠里点名哪一叠:她背着一个空潜影盒(格号靠前,只写 id 取的是它)和一个装着钻石的,把 numen.inv.items() 里 details 说它
+     * 装着东西(contents)的那一项原样交给 numen.gear.hold,拿到主手的是装着钻石的那一个。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
     public static void holding_an_entry_of_the_list_takes_that_kind(GameTestHelper helper) {
@@ -468,7 +468,7 @@ public class InventoryGameTests {
         companion.getInventory().setItem(0, new ItemStack(Items.SHULKER_BOX));
         companion.getInventory().setItem(1, full);
         ToolRun hold = lua(companion, "for _, s in ipairs(numen.inv.items()) do\n"
-                + "  if s.detail then numen.gear.hold(s) end\nend");
+                + "  if s.details.contents then numen.gear.hold(s) end\nend");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(hold.done(), "gear hold has not finished");

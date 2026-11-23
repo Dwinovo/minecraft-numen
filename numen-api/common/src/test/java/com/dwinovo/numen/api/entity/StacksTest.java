@@ -1,9 +1,11 @@
 package com.dwinovo.numen.api.entity;
 
+import com.dwinovo.numen.api.Questions;
+import com.dwinovo.numen.api.agent.scope.Handle;
 import com.mojang.brigadier.exceptions.BuiltInExceptionProvider;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.core.component.DataComponents;
-import net.minecraft.network.chat.Component;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ItemContainerContents;
@@ -12,16 +14,23 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** 背包里的叠怎么合成"种"、一种怎么描述:物品与组件都相同才算同一种,模型靠描述把同名的几种分开。 */
+/**
+ * 背包里的叠怎么合成"种"、一种怎么写成那句短话:物品与组件都相同才算同一种;有回答者说得出区别的,它说的写在 id 后面,模型靠它把同名的
+ * 几种分开。这里登记一个只认"容器里装着什么"的回答者({@code gt_holds}),原版的回答者在 Numen 那边、另有测试。
+ */
 class StacksTest {
 
     private static BuiltInExceptionProvider brigadierWords;
+    /** 测试用的回答者;这张表是全进程共用的,测完撤掉。 */
+    private static Handle holds;
 
     @BeforeAll
     static void boot() {
@@ -35,11 +44,20 @@ class StacksTest {
             booted = false;
         }
         Assumptions.assumeTrue(booted, "Minecraft could not be bootstrapped headless");
+        holds = Questions.ITEM.register("gt_holds", (her, stack) -> {
+            Map<String, Object> held = new LinkedHashMap<>();
+            stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).nonEmptyItems().forEach(
+                    inside -> held.put(BuiltInRegistries.ITEM.getKey(inside.getItem()).toString(), inside.getCount()));
+            return held;
+        });
     }
 
     @AfterAll
     static void restore() {
         CommandSyntaxException.BUILT_IN_EXCEPTIONS = brigadierWords;
+        if (holds != null) {
+            holds.close();
+        }
     }
 
     private static ItemStack boxHolding(int diamonds) {
@@ -58,13 +76,13 @@ class StacksTest {
         assertEquals(Stacks.code(boxHolding(3).copyWithCount(1)), Stacks.code(kinds.get(1).sample()),
                 "同一种的叠记号相同,和件数无关");
         assertEquals(4, kinds.stream().map(kind -> Stacks.code(kind.sample())).distinct().count(), "不同的种记号不同");
-        assertEquals("minecraft:shulker_box", StackLabel.of(kinds.get(0).sample()));
+        assertEquals("minecraft:shulker_box", StackLabel.of(null, kinds.get(0).sample()));
         assertEquals(2, kinds.get(0).count());
-        assertEquals("minecraft:shulker_box[holds diamond x3]", StackLabel.of(kinds.get(1).sample()));
+        assertEquals("minecraft:shulker_box[gt_holds={minecraft:diamond=3}]", StackLabel.of(null, kinds.get(1).sample()));
         assertEquals(2, kinds.get(1).count());
-        assertEquals("minecraft:dirt", StackLabel.of(kinds.get(2).sample()));
+        assertEquals("minecraft:dirt", StackLabel.of(null, kinds.get(2).sample()));
         assertEquals(7, kinds.get(2).count());
-        assertEquals("minecraft:shulker_box[holds diamond x4]", StackLabel.of(kinds.get(3).sample()));
+        assertEquals("minecraft:shulker_box[gt_holds={minecraft:diamond=4}]", StackLabel.of(null, kinds.get(3).sample()));
     }
 
     /** 拿哪一叠:主手那一格是它就用它,否则按格号最靠前的那一叠;同一种的各叠都列上,件数合计。 */
@@ -94,15 +112,15 @@ class StacksTest {
         Stacks.Pick pick = Stacks.pick(inventory, full).orElseThrow();
         assertEquals(List.of(5, 7), pick.slots());
         assertEquals(2, pick.count());
-        assertEquals("minecraft:shulker_box[holds diamond x3]", StackLabel.of(pick.sample()));
+        assertEquals("minecraft:shulker_box[gt_holds={minecraft:diamond=3}]", StackLabel.of(null, pick.sample()));
         assertTrue(full.matches(inventory.getItem(7)));
         assertFalse(full.matches(inventory.getItem(2)), "空盒不是点名的那一种");
         assertTrue(Stacks.pick(inventory, Stacks.Which.exactly(boxHolding(4))).isEmpty(), "身上没有的一种取不到");
     }
 
-    /** 区别落在描述没写出来的组件值上(custom_data 不同):仍是两种,清单里各有自己的写法。 */
+    /** 区别落在没有回答者认得的组件值上(custom_data 不同):仍是两种,各有自己的记号,写出来一样。 */
     @Test
-    void kindsThatRenderTheSameAreStillTwoKindsWithTheirOwnLabels() {
+    void kindsNobodyTellsApartAreStillTwoKindsAndReadTheSame() {
         ItemStack a = new ItemStack(Items.STICK);
         a.set(DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag("a")));
         ItemStack b = new ItemStack(Items.STICK);
@@ -110,9 +128,9 @@ class StacksTest {
         List<Stacks.Kind> kinds = Stacks.kinds(List.of(a, b, a.copy()));
         assertEquals(2, kinds.size());
         assertEquals(2, kinds.get(0).count());
-        assertEquals(StackLabel.detail(a), StackLabel.detail(b));
-        List<String> details = StackLabel.details(kinds.stream().map(Stacks.Kind::sample).toList());
-        assertEquals(List.of("with custom_data; variant 1", "with custom_data; variant 2"), details);
+        assertFalse(Stacks.code(kinds.get(0).sample()).equals(Stacks.code(kinds.get(1).sample())), "两种的记号不同");
+        assertEquals("minecraft:stick", StackLabel.of(null, a));
+        assertEquals("minecraft:stick", StackLabel.of(null, b));
     }
 
     private static net.minecraft.nbt.CompoundTag tag(String v) {
@@ -121,14 +139,12 @@ class StacksTest {
         return t;
     }
 
+    /** 回答者说的原样在 {@code details} 里;没人说话的一叠是空表,写出来只有 id。回执正文里的写法不带命名空间。 */
     @Test
-    void whatTellsAStackApartIsSaidAndAPlainItemSaysNothing() {
-        assertEquals("", StackLabel.detail(new ItemStack(Items.DIRT)));
-        ItemStack named = new ItemStack(Items.DIAMOND_PICKAXE);
-        named.set(DataComponents.CUSTOM_NAME, Component.literal("Dig"));
-        assertEquals("named “Dig”", StackLabel.detail(named));
-        ItemStack worn = new ItemStack(Items.DIAMOND_PICKAXE);
-        worn.setDamageValue(12);
-        assertEquals("damage 12/" + worn.getMaxDamage(), StackLabel.detail(worn));
+    void whatTheAnswerersSayIsInDetailsAndAPlainItemSaysNothing() {
+        assertEquals(Map.of(), StackLabel.details(null, new ItemStack(Items.DIRT)));
+        assertEquals("dirt", StackLabel.brief(null, new ItemStack(Items.DIRT)));
+        assertEquals(Map.of("gt_holds", Map.of("minecraft:diamond", 3L)), StackLabel.details(null, boxHolding(3)));
+        assertEquals("shulker_box[gt_holds={minecraft:diamond=3}]", StackLabel.brief(null, boxHolding(3)));
     }
 }

@@ -2,6 +2,7 @@ package com.dwinovo.numen.task.build;
 import com.dwinovo.numen.api.task.Activity;
 import com.dwinovo.numen.build.BuildValidity;
 
+import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.entity.StackLabel;
 import com.dwinovo.numen.api.sdk.ServerCall;
 import com.dwinovo.numen.api.task.TaskRecord;
@@ -91,12 +92,13 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
 
     /**
      * 放下一格;{@code replacing} 是先拆掉了挡着的东西再放,{@code directly} 是手放不出那个样子、直接写进去的,{@code spent}
-     * 是为它花掉的每一叠。
+     * 是为它花掉的每一叠,{@code her} 是放的那一位(花掉的叠写成什么样问的是她)。
      */
-    public void placedOne(boolean replacing, boolean directly, List<net.minecraft.world.item.ItemStack> spent) {
+    public void placedOne(NumenPlayer her, boolean replacing, boolean directly, List<net.minecraft.world.item.ItemStack> spent) {
         for (net.minecraft.world.item.ItemStack stack : spent) {
-            if (!StackLabel.detail(stack).isEmpty()) {
-                spentWithData.merge(StackLabel.brief(stack), stack.getCount(), Integer::sum);
+            Map<String, Map<String, Object>> details = StackLabel.details(her, stack);
+            if (!details.isEmpty()) {
+                spentWithData.merge(StackLabel.brief(stack, details), stack.getCount(), Integer::sum);
             }
         }
         placed++;
@@ -108,7 +110,7 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
         }
     }
 
-    /** 花掉的带数据的叠,写成 {@code shulker_box[holds diamond x3] x1, ...};一叠都没有为空。 */
+    /** 花掉的带数据的叠,写成 {@code shulker_box[contents={minecraft:diamond=3}] x1, ...};一叠都没有为空。 */
     public String spentWithData() {
         StringBuilder out = new StringBuilder();
         spentWithData.forEach((label, n) -> out.append(out.length() > 0 ? ", " : "").append(label).append(" x").append(n));

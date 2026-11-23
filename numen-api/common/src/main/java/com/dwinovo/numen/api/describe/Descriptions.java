@@ -20,7 +20,8 @@ public final class Descriptions {
     private Descriptions() {}
 
     /**
-     * @param question 问的是哪一种东西({@link com.dwinovo.numen.api.Questions#BLOCK}、{@link com.dwinovo.numen.api.Questions#ENTITY})
+     * @param question 问的是哪一种东西({@link com.dwinovo.numen.api.Questions#BLOCK}、{@link com.dwinovo.numen.api.Questions#ENTITY}、
+     *                 {@link com.dwinovo.numen.api.Questions#ITEM})
      * @param target   看的是谁
      * @return 回答者的名字到它说的字段
      */

@@ -1,6 +1,8 @@
 package com.dwinovo.numen.api.agent.request;
 
 
+import com.dwinovo.numen.api.Questions;
+import com.dwinovo.numen.api.agent.scope.Handle;
 import com.mojang.brigadier.exceptions.BuiltInExceptionProvider;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.world.item.ItemStack;
@@ -12,6 +14,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -54,6 +57,11 @@ class InventoryBlockTest {
                 selected, offhand, List.of(), "", "", 1L, Nearby.NONE);
     }
 
+    /** 这份快照的背包块。问回答者时没有身体可给:这里登记的回答者都不读它。 */
+    private static String inventory(BodySnapshot snapshot) {
+        return RuntimeState.renderInventory(snapshot, null);
+    }
+
     // ==================== 碰着水的 ====================
 
     /** 水况片段挂在 {@code <runtime_state>} 里:在水里有这一段,不在水里一个字都没有。 */
@@ -61,7 +69,7 @@ class InventoryBlockTest {
     @Test
     void theRuntimeStateSaysWhatTimeItIsInTheGame() {
         assumeTrue(booted);
-        assertTrue(new RuntimeState(java.util.UUID.randomUUID(), () -> null, () -> null, () -> 3 * 24000L + 15250L).xml()
+        assertTrue(new RuntimeState(java.util.UUID.randomUUID(), () -> null, () -> null, () -> null, () -> 3 * 24000L + 15250L).xml()
                 .contains("<now day=\"3\" t=\"21:15\"/>"));
     }
 
@@ -70,9 +78,9 @@ class InventoryBlockTest {
     void theRuntimeStateNamesTheLanguageOfTheOwnersGame() {
         assumeTrue(booted);
         java.util.UUID her = java.util.UUID.randomUUID();
-        assertTrue(new RuntimeState(her, () -> null, () -> "Chinese (China)", () -> 0L).xml()
+        assertTrue(new RuntimeState(her, () -> null, () -> null, () -> "Chinese (China)", () -> 0L).xml()
                 .contains("<owner language=\"Chinese (China)\"/>"));
-        assertFalse(new RuntimeState(her, () -> null, () -> null, () -> 0L).xml().contains("<owner"));
+        assertFalse(new RuntimeState(her, () -> null, () -> null, () -> null, () -> 0L).xml().contains("<owner"));
     }
 
     @Test
@@ -81,11 +89,11 @@ class InventoryBlockTest {
         java.util.UUID her = java.util.UUID.randomUUID();
         BodySnapshot wet = new BodySnapshot(true, List.of(), List.of(), 20, 5f, 0, ItemStack.EMPTY, List.of(), "",
                 com.dwinovo.numen.api.entity.WaterState.render(true, true, 240, 300, ""), 1L, Nearby.NONE);
-        assertTrue(new RuntimeState(her, () -> wet, () -> null, () -> 0L).xml()
+        assertTrue(new RuntimeState(her, () -> null, () -> wet, () -> null, () -> 0L).xml()
                 .contains("<water>In water, head under water; air left 12s.</water>"));
         BodySnapshot dry = new BodySnapshot(true, List.of(), List.of(), 20, 5f, 0, ItemStack.EMPTY, List.of(), "",
                 com.dwinovo.numen.api.entity.WaterState.render(false, false, 300, 300, ""), 1L, Nearby.NONE);
-        assertFalse(new RuntimeState(her, () -> dry, () -> null, () -> 0L).xml().contains("water"));
+        assertFalse(new RuntimeState(her, () -> null, () -> dry, () -> null, () -> 0L).xml().contains("water"));
     }
 
     // ==================== 身上在生效的 ====================
@@ -132,39 +140,19 @@ class InventoryBlockTest {
         assertEquals("", block);
     }
 
-    // ==================== 瓶子里装的是什么 ====================
+    // ==================== 同名的几种 ====================
 
-    /** 三瓶不同的药水不能长成同一行 —— item id 全是 minecraft:potion,内容在组件里。 */
-    @Test
-    void potionsAreToldApartByWhatIsInThem() {
-        assumeTrue(booted);
-        String block = RuntimeState.renderInventory(snapshot(0, ItemStack.EMPTY,
-                potion(net.minecraft.world.item.alchemy.Potions.HEALING),
-                potion(net.minecraft.world.item.alchemy.Potions.POISON)));
-        assertTrue(block.contains("minecraft:potion[healing]"), block);
-        assertTrue(block.contains("minecraft:potion[poison]"), block);
-    }
-
-    /** 强化/延长是不同的药水,不能被抹平成同一个名字。 */
-    @Test
-    void strengthAndDurationVariantsKeepTheirOwnNames() {
-        assumeTrue(booted);
-        String block = RuntimeState.renderInventory(snapshot(0, ItemStack.EMPTY,
-                potion(net.minecraft.world.item.alchemy.Potions.STRONG_HEALING)));
-        assertTrue(block.contains("minecraft:potion[strong_healing]"), block);
-    }
-
-    /** 不带药水组件的东西一个字都不该多出来。 */
+    /** 没人有话说的东西,id 后面一个字都不该多出来。 */
     @Test
     void ordinaryItemsGainNoSuffix() {
         assumeTrue(booted);
-        String block = RuntimeState.renderInventory(snapshot(0, ItemStack.EMPTY,
+        String block = inventory(snapshot(0, ItemStack.EMPTY,
                 new ItemStack(Items.DIRT)));
         assertTrue(block.contains("minecraft:dirt x1"), block);
         assertFalse(block.contains("minecraft:dirt["), block);
     }
 
-    /** 同一种物品里装着钻石的潜影盒与空盒是两行,各自带着描述;模型选得出要哪一个。 */
+    /** 同一种物品里装着钻石的潜影盒与空盒是两行,有回答者说话的那一行带着它说的;模型选得出要哪一个。 */
     @Test
     void sameItemWithDifferentContentsIsListedApart() {
         assumeTrue(booted);
@@ -172,34 +160,35 @@ class InventoryBlockTest {
         full.set(net.minecraft.core.component.DataComponents.CONTAINER,
                 net.minecraft.world.item.component.ItemContainerContents.fromItems(
                         List.of(new ItemStack(Items.DIAMOND, 3))));
-        String block = RuntimeState.renderInventory(snapshot(0, ItemStack.EMPTY,
-                new ItemStack(Items.SHULKER_BOX), full));
-        assertTrue(block.contains("carrying=minecraft:shulker_box x1, "
-                + "minecraft:shulker_box[holds diamond x3] x1"), block);
+        // 这张表是全进程共用的:登记的回答者不论成败都撤掉
+        Handle answerer = Questions.ITEM.register("gt_holds", (her, stack) -> {
+            long stacks = stack.getOrDefault(net.minecraft.core.component.DataComponents.CONTAINER,
+                    net.minecraft.world.item.component.ItemContainerContents.EMPTY).nonEmptyStream().count();
+            return stacks == 0 ? null : Map.of("stacks", stacks);
+        });
+        try {
+            String block = inventory(snapshot(0, ItemStack.EMPTY,
+                    new ItemStack(Items.SHULKER_BOX), full));
+            assertTrue(block.contains("carrying=minecraft:shulker_box x1, "
+                    + "minecraft:shulker_box[gt_holds={stacks=1}] x1"), block);
+        } finally {
+            answerer.close();
+        }
     }
 
-    /** 两种只差在描述没写出来的组件值上:清单里仍是两行,各有序号。 */
+    /** 两种不一样的叠没有回答者说得出区别:写出来一样,清单里是一行,件数加在一起。 */
     @Test
-    void kindsThatRenderTheSameStayTwoLines() {
+    void kindsNobodyTellsApartAreOneLineWithTheirCountsTogether() {
         assumeTrue(booted);
         ItemStack a = new ItemStack(Items.STICK);
         a.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData
                 .of(new net.minecraft.nbt.CompoundTag()));
         net.minecraft.nbt.CompoundTag tag = new net.minecraft.nbt.CompoundTag();
         tag.putString("k", "b");
-        ItemStack b = new ItemStack(Items.STICK);
+        ItemStack b = new ItemStack(Items.STICK, 2);
         b.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
-        String block = RuntimeState.renderInventory(snapshot(0, ItemStack.EMPTY, a, b));
-        assertTrue(block.contains("carrying=minecraft:stick[with custom_data; variant 1] x1, "
-                + "minecraft:stick[with custom_data; variant 2] x1"), block);
-    }
-
-    private static ItemStack potion(
-            net.minecraft.core.Holder<net.minecraft.world.item.alchemy.Potion> potion) {
-        ItemStack stack = new ItemStack(Items.POTION);
-        stack.set(net.minecraft.core.component.DataComponents.POTION_CONTENTS,
-                new net.minecraft.world.item.alchemy.PotionContents(potion));
-        return stack;
+        String block = inventory(snapshot(0, ItemStack.EMPTY, a, b));
+        assertTrue(block.contains("carrying=minecraft:stick x3\n"), block);
     }
 
     // ==================== 手上拿的 ====================
@@ -207,7 +196,7 @@ class InventoryBlockTest {
     @Test
     void theMainHandIsWhicheverSlotIsSelected() {
         assumeTrue(booted);
-        String block = RuntimeState.renderInventory(snapshot(1, ItemStack.EMPTY,
+        String block = inventory(snapshot(1, ItemStack.EMPTY,
                 new ItemStack(Items.DIRT), new ItemStack(Items.IRON_PICKAXE)));
         assertTrue(block.contains("main minecraft:iron_pickaxe"), block);
     }
@@ -216,14 +205,14 @@ class InventoryBlockTest {
     @Test
     void aSelectedSlotWithNothingBehindItReadsAsEmpty() {
         assumeTrue(booted);
-        String block = RuntimeState.renderInventory(snapshot(4, ItemStack.EMPTY));
+        String block = inventory(snapshot(4, ItemStack.EMPTY));
         assertTrue(block.contains("main (empty)"), block);
     }
 
     @Test
     void anEmptyOffHandSaysSoRatherThanGoingMissing() {
         assumeTrue(booted);
-        String block = RuntimeState.renderInventory(snapshot(0, ItemStack.EMPTY,
+        String block = inventory(snapshot(0, ItemStack.EMPTY,
                 new ItemStack(Items.DIRT)));
         assertTrue(block.contains("off (empty)"), block);
     }
@@ -235,7 +224,7 @@ class InventoryBlockTest {
     @Test
     void whatSheHoldsIsNeverCountedTwice() {
         assumeTrue(booted);
-        String block = RuntimeState.renderInventory(snapshot(0, ItemStack.EMPTY,
+        String block = inventory(snapshot(0, ItemStack.EMPTY,
                 new ItemStack(Items.FURNACE, 64)));
         assertTrue(block.contains("carrying=minecraft:furnace x64"), block);
         assertTrue(block.contains("holding (already counted above)=main minecraft:furnace"), block);
@@ -246,7 +235,7 @@ class InventoryBlockTest {
     @Test
     void theOffHandStackIsAlsoInTheTotalsAndNotRepeated() {
         assumeTrue(booted);
-        String block = RuntimeState.renderInventory(snapshot(0, new ItemStack(Items.TORCH, 12),
+        String block = inventory(snapshot(0, new ItemStack(Items.TORCH, 12),
                 new ItemStack(Items.DIRT, 3)));
         assertTrue(block.contains("off minecraft:torch"), block);
         assertFalse(block.contains("x12"), block);   // 副手是装备槽,不在 36 格总数里,也不另报数量
@@ -258,7 +247,7 @@ class InventoryBlockTest {
     @Test
     void thesameItemInSeveralSlotsIsOneTotal() {
         assumeTrue(booted);
-        String block = RuntimeState.renderInventory(snapshot(0, ItemStack.EMPTY,
+        String block = inventory(snapshot(0, ItemStack.EMPTY,
                 new ItemStack(Items.COBBLESTONE, 64),
                 new ItemStack(Items.COBBLESTONE, 64),
                 new ItemStack(Items.COBBLESTONE, 22)));
@@ -268,7 +257,7 @@ class InventoryBlockTest {
     @Test
     void emptySlotsAreNotListed() {
         assumeTrue(booted);
-        String block = RuntimeState.renderInventory(snapshot(0, ItemStack.EMPTY,
+        String block = inventory(snapshot(0, ItemStack.EMPTY,
                 new ItemStack(Items.DIRT, 3), ItemStack.EMPTY, ItemStack.EMPTY));
         assertTrue(block.contains("carrying=minecraft:dirt x3"), block);
         assertFalse(block.contains("air"), block);
@@ -278,7 +267,7 @@ class InventoryBlockTest {
     @Test
     void anEmptyBodySaysNothingOutLoud() {
         assumeTrue(booted);
-        String block = RuntimeState.renderInventory(snapshot(0, ItemStack.EMPTY));
+        String block = inventory(snapshot(0, ItemStack.EMPTY));
         assertTrue(block.contains("carrying=nothing"), block);
     }
 
@@ -287,7 +276,7 @@ class InventoryBlockTest {
     @Test
     void theBlockNamesItselfSoTheModelCanTellItApartFromToolOutput() {
         assumeTrue(booted);
-        String block = RuntimeState.renderInventory(snapshot(0, ItemStack.EMPTY,
+        String block = inventory(snapshot(0, ItemStack.EMPTY,
                 new ItemStack(Items.DIRT)));
         assertTrue(block.startsWith("<inventory>"), block);
         assertTrue(block.endsWith("</inventory>"), block);
@@ -297,7 +286,7 @@ class InventoryBlockTest {
     @Test
     void itTellsHerNotToRediscoverThisWithATool() {
         assumeTrue(booted);
-        String block = RuntimeState.renderInventory(snapshot(0, ItemStack.EMPTY));
+        String block = inventory(snapshot(0, ItemStack.EMPTY));
         assertTrue(block.contains("numen.status.self()"), block);
     }
 

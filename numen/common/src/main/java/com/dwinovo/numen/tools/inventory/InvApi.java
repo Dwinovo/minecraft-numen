@@ -57,24 +57,32 @@ public final class InvApi {
 
     /** 背包 36 格里的东西按"物品与组件都相同"合成一种,先见先列;每一种带着它的记号,原样交回来就点名了这一种。 */
     @Fn("What you carry in your backpack, one entry per kind of item.")
-    @Example("for _, s in ipairs(numen.inv.items()) do print(s.item, s.count, s.detail) end")
+    @Example("for _, s in ipairs(numen.inv.items()) do print(s.item, s.count, s.kind) end")
+    @Example("for _, s in ipairs(numen.inv.items()) do\n  local e = s.details.enchantments\n  if e and "
+            + "e[\"minecraft:silk_touch\"] then numen.gear.hold(s) end\nend")
     @Note("Instant and read-only. Only the backpack (hotbar included): what you wear and hold in the off hand is in "
             + "<worn>. Empty means an empty table.")
     @Note("Stacks of one item that differ — a shulker box with diamonds in it and an empty one, two different potions — "
-            + "are separate entries, each with a detail. Naming only the item in a call picks the stack in your main "
-            + "hand, else the first slot, and the result says which. To use another one, pass its entry where the "
-            + "function takes an item you carry: numen.gear.hold(numen.inv.items()[2]).")
+            + "are separate entries, told apart by their details. Naming only the item in a call picks the stack in "
+            + "your main hand, else the first slot, and the result says which. To use another one, pass its entry "
+            + "where the function takes an item you carry: numen.gear.hold(numen.inv.items()[2]).")
+    @Note("details is a table with one named entry per kind of fact, there only when the stack differs from a new "
+            + "item in that way; a plain item has an empty table. display = {name, lore}: a custom name, and the "
+            + "lines written on the item. enchantments and stored_enchantments (an enchanted book) = level by "
+            + "enchantment id. contents = how many by item id, for what a shulker box or a bundle holds. potion = "
+            + "{id, effects}: the potion id (minecraft:strong_healing) and the ids of effects added on top. banner "
+            + "= {layers}, each {pattern, color} from the bottom up. head = {owner, uuid}. bees = {count}. "
+            + "durability = {used, max}, once it has been used. A mod's integration adds entries of its own for "
+            + "its items.")
     @Note("An entry names its kind for as long as you carry that kind, wherever its stacks lie. Once you carry none "
             + "of it (a shulker box whose contents changed is another kind), passing the entry fails with not_found.")
     @SeeAlso("numen.inv.count")
     public static List<StackInfo> items(ServerCall call) {
         Inventory inventory = call.her().getInventory();
-        List<Stacks.Kind> kinds = Stacks.kinds(inventory.items.subList(0,
-                Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size())));
-        List<String> details = StackLabel.details(kinds.stream().map(Stacks.Kind::sample).toList());
         List<StackInfo> out = new ArrayList<>();
-        for (int i = 0; i < kinds.size(); i++) {
-            out.add(StackInfo.of(kinds.get(i), details.get(i)));
+        for (Stacks.Kind kind : Stacks.kinds(inventory.items.subList(0,
+                Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size())))) {
+            out.add(StackInfo.of(kind, StackLabel.details(call.her(), kind.sample())));
         }
         return out;
     }
@@ -182,7 +190,8 @@ public final class InvApi {
     @Note("Dropped items despawn after 5 minutes. To store things, numen.container.put puts them into a chest instead.")
     @Note("Drops one kind of stack: the one in your main hand, else the first slot (numen.inv.items lists the kinds, "
             + "say a shulker box with contents and an empty one), or the kind whose entry of numen.inv.items() you pass "
-            + "as item. The result names the stack with its detail and the other stacks of the item that stay.")
+            + "as item. The result names the stack the way <inventory> writes it, with what is known about it in "
+            + "brackets after the id, and the other stacks of the item that stay.")
     @Note("Returns how many were dropped and how many remain.")
     @SeeAlso("numen.use.block")
     public static Pending<DropCompanionTask.Dropped> drop(ServerCall call, Drop args) {

@@ -176,7 +176,7 @@ public final class CompanionLoop {
         }
         this.convo = new ConvoState(msg -> log.append(msg, conversation));
         this.memory = new MemoryPreamble(NoteBook.of(companion));
-        this.runtime = new RuntimeState(companion, parts.snapshot(), parts.ownerLanguage(), parts.dayTime());
+        this.runtime = new RuntimeState(companion, parts.body(), parts.snapshot(), parts.ownerLanguage(), parts.dayTime());
         this.queue = new EventQueue(JsonlJournal.atFile(home.file(INBOX), home.io()));
         this.goalDoc = new JsonDoc(home.file(GOAL), JsonDoc.Format.of(1), home.io());
         this.bindingDoc = new JsonDoc(home.file(Bindings.FILE), JsonDoc.Format.of(1), home.io());

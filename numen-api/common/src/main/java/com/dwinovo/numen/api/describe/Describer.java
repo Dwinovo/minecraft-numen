@@ -22,9 +22,11 @@ import java.util.Map;
  * 加下划线,英文(读的是模型)。要字段有固定的先后就交回 {@link java.util.LinkedHashMap},否则按名字排。
  *
  * <p>规矩:只说事实;不判能不能做(那是权限层的事);不改世界、不动她的身体。别的回答者说了什么你看不到也改不了,回答之间不讲先后。
- * 抛了异常只丢你这一条、记进日志,别的回答照常。在服务端主线程上被叫,她每细看一次就问一次,别在这里做慢事。
+ * 抛了异常只丢你这一条、记进日志,别的回答照常。在服务端主线程上被叫,她每细看一次就问一次(物品是清单里的每一种、回执里写到的
+ * 每一叠都问),别在这里做慢事。
  *
- * @param <T> 看的是什么:一格方块({@link net.minecraft.core.BlockPos})、一只实体({@link net.minecraft.world.entity.Entity})
+ * @param <T> 看的是什么:一格方块({@link net.minecraft.core.BlockPos})、一只实体({@link net.minecraft.world.entity.Entity})、
+ *            一叠物品({@link net.minecraft.world.item.ItemStack})
  */
 @FunctionalInterface
 public interface Describer<T> {

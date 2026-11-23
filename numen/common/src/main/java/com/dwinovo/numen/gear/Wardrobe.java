@@ -111,7 +111,7 @@ public final class Wardrobe {
         }
         int src = pick.get().slot();
         ItemStack one = pick.get().sample();
-        String what = StackLabel.brief(one);   // 说清穿的、拿的是哪一叠:同名的几叠不一样时,模型靠这一句知道
+        String what = StackLabel.brief(body, one);   // 说清穿的、拿的是哪一叠:同名的几叠不一样时,模型靠这一句知道
 
         String where = slot;
         List<GearSlot> candidates = List.of();

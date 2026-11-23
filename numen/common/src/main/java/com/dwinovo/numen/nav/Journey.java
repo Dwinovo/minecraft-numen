@@ -6,6 +6,7 @@ import java.util.List;
 
 import com.dwinovo.numen.pathing.api.Report;
 import com.dwinovo.numen.api.entity.BodyAction;
+import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.drive.DiveLog;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 
@@ -100,10 +101,11 @@ public final class Journey {
     }
 
     /**
-     * 回执末尾那一段;什么都没改、身体没为走路做什么、没潜过水、没飞过、也没被拒过时是空串。{@code flying}:此刻身体还在飞。
+     * 回执末尾那一段;什么都没改、身体没为走路做什么、没潜过水、没飞过、也没被拒过时是空串。{@code her}:这本账是谁的;
+     * {@code flying}:此刻身体还在飞。
      */
-    public String describe(boolean flying) {
-        return NavText.journey(entries, actions, dives, rulings, new NavText.Flights(flown, launches, landings, flying, glides, alighted));
+    public String describe(NumenPlayer her, boolean flying) {
+        return NavText.journey(her, entries, actions, dives, rulings, new NavText.Flights(flown, launches, landings, flying, glides, alighted));
     }
 
     /**

@@ -42,7 +42,7 @@ public class StationGameTests {
         ToolRun run = lua(companion, "local t = " + xyz(table) + "\nlocal o = numen.enchant.options(t, \"diamond_sword\")\n"
                 + "local r = numen.enchant.apply(t, \"diamond_sword\", 1)\n"
                 + "return #o.options .. \"/\" .. tostring(o.options[1].offered) .. \"/\" .. o.levels .. \"/\" .. r.item "
-                + ".. \"/\" .. tostring(r.detail ~= nil)");
+                + ".. \"/\" .. tostring(r.details.enchantments ~= nil)");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(run.done(), "the program has not finished");
@@ -147,12 +147,13 @@ public class StationGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_weaver", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.WHITE_BANNER));
         companion.getInventory().add(new ItemStack(Items.RED_DYE));
-        ToolRun weave = lua(companion, "return numen.loom.weave(" + xyz(loom)
-                + ", \"white_banner\", \"red_dye\", \"stripe_bottom\").detail");
+        ToolRun weave = lua(companion, "local layer = numen.loom.weave(" + xyz(loom)
+                + ", \"white_banner\", \"red_dye\", \"stripe_bottom\").details.banner.layers[1]\n"
+                + "return layer.pattern .. \" \" .. layer.color");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(weave.done(), "the program has not finished");
-            helper.assertTrue(weave.ranToTheEnd() && weave.receipt().contains("stripe_bottom red"),
+            helper.assertTrue(weave.ranToTheEnd() && weave.receipt().contains("minecraft:stripe_bottom red"),
                     "weave did not hand back the banner with its pattern: " + weave.receipt());
             var banner = companion.getInventory().items.stream().filter(it -> it.is(Items.WHITE_BANNER)).findFirst();
             var layers = banner.map(it -> it.getOrDefault(DataComponents.BANNER_PATTERNS,

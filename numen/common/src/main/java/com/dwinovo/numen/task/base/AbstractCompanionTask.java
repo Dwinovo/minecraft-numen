@@ -297,7 +297,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord<V>, V>
         // 不会读到 cleanup 放掉的导航、手势和跟踪。收场时要先结账的(回执要报它)放在 closeBooks 里
         closeBooks();
         // 路上真动过的地形跟着每一种收场走:成功也好失败也罢,挖了什么、放了什么就说什么;主人点过头的也说
-        String travelled = soFar().describe(Snapshots.flying(player));
+        String travelled = soFar().describe(player, Snapshots.flying(player));
         String broken = bodyAtStart == null ? "" : bodyAtStart.broken(player);
         String enRoute = (travelled.isEmpty() ? "" : " " + travelled)
                 + gate.allowanceNote()

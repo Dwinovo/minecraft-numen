@@ -81,8 +81,8 @@ public final class LoomApi {
                 "the pattern item")));
         steps.add(new Deed((menu, her) -> {
             ItemStack woven = weave((LoomMenu) menu, her, pattern, args.item().isPresent());
-            made.set(Stations.product(woven));
-            return "wove " + pattern.getPath() + ": " + StackLabel.brief(woven);
+            made.set(Stations.product(her, woven));
+            return "wove " + pattern.getPath() + ": " + StackLabel.brief(woven, made.get().details());
         }));
         steps.add(Move.take(null, null, new int[] {RESULT}, "the result", false));
         steps.add(Move.take(null, null, INPUTS, null, true));

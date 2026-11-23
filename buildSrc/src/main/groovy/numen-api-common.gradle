@@ -149,7 +149,7 @@ tasks.register('apiJar', Jar) {
     include 'com/dwinovo/numen/api/NumenGateway*.class'
     include 'com/dwinovo/numen/api/NumenPlugin*.class'  // NumenPlugin 与 NumenPlugins
     include 'com/dwinovo/numen/api/Question*.class'     // Question 与 Questions:扩展点是一个问题常量,回答者经 NumenApi.answer 登记
-    include 'com/dwinovo/numen/api/describe/**'         // "这是什么"的回答者(方块、实体同一个样子)与问一圈的那一处——插件自己写的"看"问同一处
+    include 'com/dwinovo/numen/api/describe/**'         // "这是什么"的回答者(方块、实体、物品同一个样子)、问一圈的那一处与回答写成一行短话的那一处——插件自己写的"看"问同一处
     include 'com/dwinovo/numen/api/gear/**'
     include 'com/dwinovo/numen/api/plugin/PluginRoster*.class'  // NumenPlugins.admit 的参数类型 Source;联动型插件(含 Numen 的闸门)用它报到
     include 'com/dwinovo/numen/api/PluginTags*.class'  // Paper 端:插件在引导阶段把自带的标签文件装进服务端(只有 Paper 的成品里有它)

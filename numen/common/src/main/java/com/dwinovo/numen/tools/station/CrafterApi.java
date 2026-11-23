@@ -92,7 +92,7 @@ public final class CrafterApi {
             if (crafter.isSlotDisabled(slot) == on) {
                 ItemStack held = crafter.getSlot(slot).getItem();
                 throw new ApiError(ErrorKind.FAILED, "slot " + slot + " of the crafter stayed " + (on ? "off" : "on")
-                        + (held.isEmpty() ? "" : ": it holds " + StackLabel.brief(held) + " x" + held.getCount()), null);
+                        + (held.isEmpty() ? "" : ": it holds " + StackLabel.brief(her, held) + " x" + held.getCount()), null);
             }
             changed[0] = true;
             return "switched slot " + slot + " " + state;

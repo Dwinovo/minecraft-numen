@@ -133,18 +133,18 @@ public final class AnvilApi {
         if (result.isEmpty()) {
             // 原版的铁砧界面在要花 40 级以上时写"过于昂贵"、不给结果
             String why = cost >= 40 ? "the work would cost " + cost + " experience levels, which it refuses as too expensive"
-                    : combining ? StackLabel.brief(item) + " and "
-                            + StackLabel.brief(menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).getItem()) + " do not combine"
+                    : combining ? StackLabel.brief(her, item) + " and "
+                            + StackLabel.brief(her, menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).getItem()) + " do not combine"
                     : name != null && item.getHoverName().getString().equals(name) ? "the item is already named \""
                             + name + "\""
-                    : "it makes nothing of " + StackLabel.brief(item);
+                    : "it makes nothing of " + StackLabel.brief(her, item);
             throw new ApiError(ErrorKind.FAILED, "the anvil shows no result: " + why, null);
         }
         boolean free = her.hasInfiniteMaterials();
         if (!free && her.experienceLevel < cost) {
             throw new ApiError(ErrorKind.FAILED, "the anvil asks " + cost + " experience levels for "
-                    + StackLabel.brief(result) + "; you have " + her.experienceLevel, null);
+                    + StackLabel.brief(her, result) + "; you have " + her.experienceLevel, null);
         }
-        return new AnvilWork(Stations.product(result), free ? 0 : cost);
+        return new AnvilWork(Stations.product(her, result), free ? 0 : cost);
     }
 }

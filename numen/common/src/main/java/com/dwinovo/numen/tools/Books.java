@@ -107,7 +107,7 @@ public final class Books {
                 return;
             }
             BodyAction moved = grip.action();
-            out.report((moved == null ? "" : NavText.actions(List.of(moved)) + "; ") + "wrote " + pages.size()
+            out.report((moved == null ? "" : NavText.actions(her, List.of(moved)) + "; ") + "wrote " + pages.size()
                     + " pages" + (title == null ? " into the book and quill" : " and signed it \"" + title + "\"")
                     + " in hotbar slot " + slot + ".");
             out.complete(now.get());

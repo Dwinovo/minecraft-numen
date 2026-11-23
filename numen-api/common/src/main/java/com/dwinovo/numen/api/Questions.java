@@ -3,6 +3,7 @@ package com.dwinovo.numen.api;
 import com.dwinovo.numen.api.describe.Describer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.item.ItemStack;
 
 /**
  * Numen API 自己出的题,都列在这里。回答者经 {@link NumenApi#answer} 登记;原版的回答由 Numen 从同一扇门登记,和插件一个写法。
@@ -22,4 +23,11 @@ public final class Questions {
      * 见 {@link Describer}。
      */
     public static final Question<Describer<Entity>> ENTITY = Question.of("entity");
+
+    /**
+     * 这一叠物品和一件新物品有什么不一样:每个回答者说它认得的那部分(附魔、里面装着什么、你的模组存在物品上的数据),各归在自己的
+     * 名字下。和新物品没有区别的一叠没人说话。背包清单里的每一种、回执里写到的每一叠都问一圈
+     * ({@link com.dwinovo.numen.api.entity.StackLabel}),比细看一格方块问得勤。回答者只读这一叠,不改它。见 {@link Describer}。
+     */
+    public static final Question<Describer<ItemStack>> ITEM = Question.of("item");
 }

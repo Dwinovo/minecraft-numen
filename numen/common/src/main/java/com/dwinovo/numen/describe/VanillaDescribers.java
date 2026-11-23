@@ -7,8 +7,11 @@ import com.dwinovo.numen.api.platform.Services;
 import com.dwinovo.numen.api.platform.services.BlockStorageReading;
 import com.dwinovo.numen.tools.Signs;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.component.DataComponentType;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
@@ -17,19 +20,30 @@ import net.minecraft.world.entity.animal.horse.AbstractHorse;
 import net.minecraft.world.entity.npc.VillagerData;
 import net.minecraft.world.entity.npc.VillagerDataHolder;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.alchemy.PotionContents;
+import net.minecraft.world.item.component.BundleContents;
+import net.minecraft.world.item.component.ItemContainerContents;
+import net.minecraft.world.item.component.ItemLore;
+import net.minecraft.world.item.component.ResolvableProfile;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity;
+import net.minecraft.world.level.block.entity.BannerPatternLayers;
+import net.minecraft.world.level.block.entity.BeehiveBlockEntity;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.TreeMap;
 
 /**
  * 原版里"这是什么"的回答者,一个只说一样。方块:告示牌上的字、一格方块里存着的物品流体能量、熔炉烧到哪了;实体:村民的职业与等级、
- * 驯没驯服、身上穿的拿的。经插件的门登记({@link #install}),和模组的回答者同一个写法;多认一样就是在这里多写一个、列进
- * {@link #install}。每个回答者说的是几个字段,归在它登记的名字下。方块、实体本身的事(id、状态、硬度、位置、血量、主人)不在这里,
- * 那是 {@code numen.scan} 自己读的。
+ * 驯没驯服、身上穿的拿的;物品:起的名字与说明、附魔、存着的附魔、里面装着什么、药水、旗帜图案、头颅的主人、蜂数、用掉的耐久。
+ * 经插件的门登记({@link #install}),和模组的回答者同一个写法;多认一样就是在这里多写一个、列进 {@link #install}。每个回答者说的是
+ * 几个字段,归在它登记的名字下。方块、实体本身的事(id、状态、硬度、位置、血量、主人)不在这里,那是 {@code numen.scan} 自己读的;
+ * 物品的回答者只说这一叠和一件新物品不一样的地方,物品的 id 与件数由用的一方写。
  */
 public final class VanillaDescribers {
 
@@ -42,6 +56,15 @@ public final class VanillaDescribers {
         numen.answer(Questions.ENTITY, "villager", VanillaDescribers::villager);
         numen.answer(Questions.ENTITY, "tame", VanillaDescribers::tame);
         numen.answer(Questions.ENTITY, "equipment", VanillaDescribers::equipment);
+        numen.answer(Questions.ITEM, "display", VanillaDescribers::display);
+        numen.answer(Questions.ITEM, "enchantments", VanillaDescribers::enchantments);
+        numen.answer(Questions.ITEM, "stored_enchantments", VanillaDescribers::storedEnchantments);
+        numen.answer(Questions.ITEM, "contents", VanillaDescribers::contents);
+        numen.answer(Questions.ITEM, "potion", VanillaDescribers::potion);
+        numen.answer(Questions.ITEM, "banner", VanillaDescribers::banner);
+        numen.answer(Questions.ITEM, "head", VanillaDescribers::head);
+        numen.answer(Questions.ITEM, "bees", VanillaDescribers::bees);
+        numen.answer(Questions.ITEM, "durability", VanillaDescribers::durability);
     }
 
     // ---- 方块 ----
@@ -231,6 +254,132 @@ public final class VanillaDescribers {
             held.put("count", stack.getCount());
             out.put(slot.getName(), held);
         }
+        return out;
+    }
+
+    // ---- 物品 ----
+
+    /**
+     * 这一叠上和一件新物品不一样的那个组件的值;没有这个组件、或和新物品的一样(物品自带的默认值:潜影盒带着一个空的容器组件),是 null。
+     * 物品的回答者都从这里读,所以一件白货谁也不说话。
+     */
+    private static <T> T changed(ItemStack stack, DataComponentType<T> type) {
+        Optional<? extends T> value = stack.getComponentsPatch().get(type);
+        return value == null ? null : value.orElse(null);
+    }
+
+    /** 起的名字与写在物品上的说明:{@code name} 是起的名字,{@code lore} 是说明的每一行;没有的那一项不写。 */
+    static Map<String, Object> display(NumenPlayer her, ItemStack stack) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        Component name = changed(stack, DataComponents.CUSTOM_NAME);
+        if (name != null) {
+            out.put("name", name.getString());
+        }
+        ItemLore lore = changed(stack, DataComponents.LORE);
+        if (lore != null && !lore.lines().isEmpty()) {
+            out.put("lore", lore.lines().stream().map(Component::getString).toList());
+        }
+        return out;
+    }
+
+    /** 物品上的附魔:附魔的 id 到等级。 */
+    static Map<String, Object> enchantments(NumenPlayer her, ItemStack stack) {
+        return levels(changed(stack, DataComponents.ENCHANTMENTS));
+    }
+
+    /** 存在物品里、还没附到哪件东西上的附魔(附魔书):附魔的 id 到等级。 */
+    static Map<String, Object> storedEnchantments(NumenPlayer her, ItemStack stack) {
+        return levels(changed(stack, DataComponents.STORED_ENCHANTMENTS));
+    }
+
+    /** 一组附魔写成"附魔的 id → 等级",按 id 排;没有是 null。 */
+    private static Map<String, Object> levels(ItemEnchantments enchantments) {
+        if (enchantments == null) {
+            return null;
+        }
+        Map<String, Object> out = new TreeMap<>();
+        enchantments.entrySet().forEach(entry -> out.put(entry.getKey().getRegisteredName(), entry.getIntValue()));
+        return out;
+    }
+
+    /** 物品里装着的东西(潜影盒这类容器物品、收纳袋):物品的 id 到件数,同一种物品的几叠合计,先见先列。 */
+    static Map<String, Object> contents(NumenPlayer her, ItemStack stack) {
+        Map<String, Integer> totals = new LinkedHashMap<>();
+        ItemContainerContents container = changed(stack, DataComponents.CONTAINER);
+        if (container != null) {
+            container.nonEmptyItems().forEach(held -> count(totals, held));
+        }
+        BundleContents bundle = changed(stack, DataComponents.BUNDLE_CONTENTS);
+        if (bundle != null) {
+            bundle.items().forEach(held -> count(totals, held));
+        }
+        return new LinkedHashMap<>(totals);
+    }
+
+    private static void count(Map<String, Integer> totals, ItemStack held) {
+        totals.merge(BuiltInRegistries.ITEM.getKey(held.getItem()).toString(), held.getCount(), Integer::sum);
+    }
+
+    /**
+     * 瓶子里装的是什么(药水、喷溅药水、滞留药水、药箭的物品 id 各只有一个,内容在这里):{@code id} 是药水的 id
+     * ({@code minecraft:strong_healing}),{@code effects} 是另外加上的效果的 id(没有预设药水、只带效果的也在这里);没有的那一项不写。
+     */
+    static Map<String, Object> potion(NumenPlayer her, ItemStack stack) {
+        PotionContents contents = changed(stack, DataComponents.POTION_CONTENTS);
+        if (contents == null) {
+            return null;
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        contents.potion().ifPresent(potion -> out.put("id", potion.getRegisteredName()));
+        if (!contents.customEffects().isEmpty()) {
+            out.put("effects", contents.customEffects().stream()
+                    .map(effect -> effect.getEffect().getRegisteredName()).toList());
+        }
+        return out;
+    }
+
+    /** 旗帜上的图案:{@code layers} 从最底下一层起,每层是 {@code pattern}(图案的 id)与 {@code color}(染料的颜色)。 */
+    static Map<String, Object> banner(NumenPlayer her, ItemStack stack) {
+        BannerPatternLayers patterns = changed(stack, DataComponents.BANNER_PATTERNS);
+        if (patterns == null || patterns.layers().isEmpty()) {
+            return null;
+        }
+        List<Object> layers = new ArrayList<>();
+        for (BannerPatternLayers.Layer layer : patterns.layers()) {
+            Map<String, Object> one = new LinkedHashMap<>();
+            one.put("pattern", layer.pattern().getRegisteredName());
+            one.put("color", layer.color().getName());
+            layers.add(one);
+        }
+        return Map.of("layers", layers);
+    }
+
+    /** 头颅是谁的:{@code owner} 是那位玩家的名字,{@code uuid} 是他的 UUID;头颅上没记的那一项不写。 */
+    static Map<String, Object> head(NumenPlayer her, ItemStack stack) {
+        ResolvableProfile profile = changed(stack, DataComponents.PROFILE);
+        if (profile == null) {
+            return null;
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        profile.name().ifPresent(name -> out.put("owner", name));
+        profile.id().ifPresent(id -> out.put("uuid", id.toString()));
+        return out;
+    }
+
+    /** 蜂巢、蜂箱里住着几只蜜蜂:{@code count}。 */
+    static Map<String, Object> bees(NumenPlayer her, ItemStack stack) {
+        List<BeehiveBlockEntity.Occupant> bees = changed(stack, DataComponents.BEES);
+        return bees == null || bees.isEmpty() ? null : Map.of("count", bees.size());
+    }
+
+    /** 用掉的耐久:{@code used} 是已经用掉的,{@code max} 是全新时的;没用过的不说。 */
+    static Map<String, Object> durability(NumenPlayer her, ItemStack stack) {
+        if (!stack.isDamaged()) {
+            return null;
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("used", stack.getDamageValue());
+        out.put("max", stack.getMaxDamage());
         return out;
     }
 }

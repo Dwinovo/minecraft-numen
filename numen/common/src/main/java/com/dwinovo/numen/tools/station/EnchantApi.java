@@ -109,8 +109,8 @@ public final class EnchantApi {
                 Move.put(Stacks.Which.of(Items.LAPIS_LAZULI), n, LAPIS, "payment"),
                 new Deed((menu, her) -> {
                     ItemStack now = press((EnchantmentMenu) menu, her, n, options);
-                    made.set(Stations.product(now));
-                    return "option " + n + " made it " + StackLabel.brief(now);
+                    made.set(Stations.product(her, now));
+                    return "option " + n + " made it " + StackLabel.brief(now, made.get().details());
                 }),
                 Move.take(null, null, ITEM, null, false),
                 Move.take(Items.LAPIS_LAZULI, null, LAPIS, null, true)), made::get);
@@ -148,7 +148,7 @@ public final class EnchantApi {
         int cost = menu.costs[n - 1];
         if (cost <= 0) {
             return new ApiError(ErrorKind.FAILED, "nothing was enchanted: the table offers nothing at option " + n
-                    + " for " + StackLabel.brief(item), options);
+                    + " for " + StackLabel.brief(her, item), options);
         }
         return new ApiError(ErrorKind.FAILED, "nothing was enchanted: option " + n + " asks for " + Math.max(cost, n)
                 + " experience levels and " + n + " lapis lazuli; you have " + her.experienceLevel + " levels and put in "

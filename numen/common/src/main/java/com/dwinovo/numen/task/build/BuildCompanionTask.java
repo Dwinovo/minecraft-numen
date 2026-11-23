@@ -542,7 +542,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (directly) {
             written.add(pos);
         }
-        r.placedOne(occupied, directly, placement.spent());
+        r.placedOne(player, occupied, directly, placement.spent());
         if (!target.matches(now)) {
             // 放下去了,原版随即弹掉或改了样子:以世界为准,不算完成、不记账,这一次也不重放。动过手,算这一刻的预算
             missed.put(pos.asLong(), new Miss(BuildOutstanding.Cause.DID_NOT_STAY, whyNotStay(target, now)));

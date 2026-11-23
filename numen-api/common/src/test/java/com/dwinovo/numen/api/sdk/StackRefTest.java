@@ -76,7 +76,7 @@ class StackRefTest {
         Map<String, Object> entry = new LinkedHashMap<>();
         entry.put("item", "minecraft:shulker_box");
         entry.put("count", 1L);
-        entry.put("detail", "holds diamond x3");
+        entry.put("details", Map.of("contents", Map.of("minecraft:diamond", 3L)));
         entry.put("kind", "3f9a1c21");
         StackRef ref = codec().decode(entry);
         assertEquals(new StackRef(Items.SHULKER_BOX, "3f9a1c21"), ref);

@@ -318,12 +318,16 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
 - **位置只有一种写法**:一格是 Pos `{x = 120, y = 64, z = -35}`,一列是 `{x = …, z = …}`,一个高度是 `{y = …}`。小数按所在的
   那一格算(`BlockPos.containing`),所以 `status.self().pos` 原样能交。任何带 `pos` 字段的表(Block、Entity、Item、一团的
   `nearest`)放在位置那一格就是它的 `pos`;收实体的参数收编号或带 `id` 的表。读法只在 `Positions` 一处。
-- **她带着的一样东西有两种写法**:物品 id,或 `numen.inv.items()` 交回的那一项(Stack,带 `item`、`count`、`detail`、`kind`)。只写 id
+- **她带着的一样东西有两种写法**:物品 id,或 `numen.inv.items()` 交回的那一项(Stack,带 `item`、`count`、`details`、`kind`)。只写 id
   是这种物品的哪一叠都行——拿到手上、丢、穿戴取主手那一叠、否则格号最小的那一叠;交回那一项就只用那一种(装着钻石的潜影盒与空盒、
   附魔的剑与没附魔的)。收它的参数:`use.block/item/entity` 的 `item`、`gear.wear`、`gear.hold`、`inv.eat`、`inv.drop`、
   `container.put` 以及各工作方块那一组里从她背包放进去的每一样。说一种物品本身的参数(`inv.count`、配方、`container.take`、
   `gear.remove`)只收 id。一项凭它的记号(`kind`,从物品与组件算出来)认,那一种的叠挪到哪一格都认得;她已经没有那一种了是
-  `not_found`。落到具体一叠只在 `Stacks` 一处,参数的读法在 `StackRef`。
+  `not_found`。落到具体一叠只在 `Stacks` 一处,参数的读法在 `StackRef`。`details` 是登记在物品这个问题(`Questions.ITEM`)下的
+  回答者说的,各归在回答者的名字下,只说这一叠和一件新物品不一样的地方(原版:`display` 起的名字与说明、`enchantments`、
+  `stored_enchantments`、`contents` 里面装着什么、`potion`、`banner`、`head`、`bees`、`durability`),白货是空表。每一轮的背包清单与
+  回执里把一叠东西写成 `id[名字={键=值}]` 的那句短话出自同一份回答(`StackLabel`,写法在 `AnswerText`):超过三项的列表或表只写三项,
+  后面记还有几项。
 - **旧写法删了**:`{120, 64, -35}`、`"120 64 -35"`、`"120,64,-35"` 都是 `bad_argument`,`hint` 是改好的那一整行调用;
   只给了一列却要一格,说缺 y。删的理由:同一处位置三种写法,模型在三种之间来回猜,查询结果也交不进动作。
 - 共用的类在 `LuaCodecs`:`Pos`、`Block`、`Entity`、`Item`(继承 Entity)、`Stack`、`Cells`、`Error`;各组自己的类(`Plan`、`Leg`、

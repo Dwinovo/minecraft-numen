@@ -294,11 +294,13 @@ public final class NavText {
      * 例如 {@code En route I had to break 2 oak_planks (120,64,-33; 120,65,-33) and place 1 cobblestone (121,64,-33).
      * I also stepped off the boat. I went under water once: 12 s without a breath from 10,40,5 to 20,40,5, air down to
      * 60/300. I flew 31 blocks (took off at 1,64,5; landed at 30,64,5).}
+     *
+     * @param her 走这一趟的那一位:换到手上的那一叠写成什么样问的是她
      */
-    public static String journey(List<EditLedger.Entry> entries, List<BodyAction> actions, List<DiveLog.Dive> dives,
-                                 List<Ruling> rulings, Flights flights) {
+    public static String journey(NumenPlayer her, List<EditLedger.Entry> entries, List<BodyAction> actions,
+                                 List<DiveLog.Dive> dives, List<Ruling> rulings, Flights flights) {
         String edits = edits(entries);
-        String done = actions(actions);
+        String done = actions(her, actions);
         String under = dives(dives);
         String flight = flight(flights);
         String refused = refusals(rulings);
@@ -543,24 +545,24 @@ public final class NavText {
     }
 
     /** 身体动作的正文,同样的动作归成一条,例如 {@code stepped off the boat and took cobblestone into my hand (3 times)}。 */
-    public static String actions(List<BodyAction> actions) {
+    public static String actions(NumenPlayer her, List<BodyAction> actions) {
         Map<String, Integer> counted = new LinkedHashMap<>();
         for (BodyAction action : actions) {
-            counted.merge(action(action), 1, Integer::sum);
+            counted.merge(action(her, action), 1, Integer::sum);
         }
         List<String> parts = new ArrayList<>();
         counted.forEach((text, n) -> parts.add(n == 1 ? text : text + " (" + n + " times)"));
         return andJoined(parts);
     }
 
-    private static String action(BodyAction action) {
+    private static String action(NumenPlayer her, BodyAction action) {
         return switch (action) {
             case BodyAction.Held h when h.item() == Items.AIR -> "put away what was in my hand";
-            case BodyAction.Held h when h.from() == Hotbar.OFFHAND -> "swapped " + StackLabel.brief(h.stack())
+            case BodyAction.Held h when h.from() == Hotbar.OFFHAND -> "swapped " + StackLabel.brief(her, h.stack())
                     + " from my offhand into my hand";
-            case BodyAction.Held h when h.from() == h.to() -> "switched to " + StackLabel.brief(h.stack())
+            case BodyAction.Held h when h.from() == h.to() -> "switched to " + StackLabel.brief(her, h.stack())
                     + " in my hotbar";
-            case BodyAction.Held h -> "took " + StackLabel.brief(h.stack()) + " from my inventory into my hand";
+            case BodyAction.Held h -> "took " + StackLabel.brief(her, h.stack()) + " from my inventory into my hand";
             case BodyAction.Conjured c -> "took a stack of " + item(c.item()) + " from the creative inventory";
         };
     }

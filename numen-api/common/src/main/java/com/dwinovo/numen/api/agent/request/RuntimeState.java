@@ -1,12 +1,12 @@
 package com.dwinovo.numen.api.agent.request;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.entity.StackLabel;
 import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.api.agent.inbox.EventClock;
 import com.dwinovo.numen.api.task.Activity;
 
-import java.util.List;
 import java.util.UUID;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
@@ -22,6 +22,8 @@ import java.util.function.Supplier;
 public final class RuntimeState {
 
     private final UUID entityUuid;
+    /** 她此刻的身体;没加载是 {@code null}。背包清单里每一种写成什么样要问回答者({@link StackLabel}),问的是她。 */
+    private final Supplier<NumenPlayer> her;
     /** 最近收到的那份身体状态;一份都没收到是 {@code null}。 */
     private final Supplier<BodySnapshot> body;
     /** 眼前的主人游戏客户端选的语言,英文叫法;他不在游戏里是 {@code null}。{@code <owner>} 照它写。 */
@@ -41,11 +43,14 @@ public final class RuntimeState {
                                boolean standing) {}
 
     /**
+     * @param her           她此刻的身体;没加载时给 {@code null}
      * @param body          最近收到的那份身体状态;一份都没收到时给 {@code null}
      * @param ownerLanguage 眼前的主人游戏客户端选的语言,英文叫法;他不在游戏里时给 {@code null}
      */
-    public RuntimeState(UUID entityUuid, Supplier<BodySnapshot> body, Supplier<String> ownerLanguage, LongSupplier dayTime) {
+    public RuntimeState(UUID entityUuid, Supplier<NumenPlayer> her, Supplier<BodySnapshot> body,
+                        Supplier<String> ownerLanguage, LongSupplier dayTime) {
         this.entityUuid = entityUuid;
+        this.her = her;
         this.body = body;
         this.ownerLanguage = ownerLanguage;
         this.dayTime = dayTime;
@@ -196,7 +201,7 @@ public final class RuntimeState {
         }
         inventoryMissingLogged = false;
         if (snapshot == inventoryRenderedFrom) return inventoryRendered;
-        inventoryRendered = renderInventory(snapshot);
+        inventoryRendered = renderInventory(snapshot, her.get());
         inventoryRenderedFrom = snapshot;
         // 这行只在快照真换了新的时才打,所以"年龄"读的是"这段时间背包没变过",不是延迟。
         // 背包明明变了却不见这一行,才是链路断了。
@@ -275,19 +280,17 @@ public final class RuntimeState {
         return out.toString();
     }
 
-    static String renderInventory(BodySnapshot snapshot) {
-        // 物品与组件都相同的叠合成一行(Stacks.kinds,和选叠同一个"种"),不同的分行:装着钻石的潜影盒与空盒、不同的药水各占一行,
-        // 描述见 StackLabel(写得一样的几种它会加序号)
-        List<Stacks.Kind> kinds = Stacks.kinds(snapshot.items());
-        List<String> details = StackLabel.details(kinds.stream().map(Stacks.Kind::sample).toList());
+    static String renderInventory(BodySnapshot snapshot, NumenPlayer her) {
+        // 物品与组件都相同的叠合成一种(Stacks.kinds,和选叠同一个"种"),每一种写成 StackLabel 的那句短话:装着钻石的潜影盒与空盒、
+        // 不同的药水各占一行。两种写出来一样(没有回答者说得出区别)就是同一行,件数加在一起;numen.inv.items() 里它们仍是两项
         java.util.TreeMap<String, Integer> totals = new java.util.TreeMap<>();
-        for (int i = 0; i < kinds.size(); i++) {
-            totals.put(StackLabel.of(kinds.get(i).sample(), details.get(i)), kinds.get(i).count());
+        for (Stacks.Kind kind : Stacks.kinds(snapshot.items())) {
+            totals.merge(StackLabel.of(her, kind.sample()), kind.count(), Integer::sum);
         }
         StringBuilder items = new StringBuilder();
         totals.forEach((label, count) -> {
             if (items.length() > 0) items.append(", ");
-            items.append(xml(label)).append(" x").append(count);
+            items.append(text(label)).append(" x").append(count);
         });
         // 总数看不出占了几格,空格数照实写上:一格都不空时,不叠在已有那堆上的东西就捡不起来。
         long empty = snapshot.items().stream().filter(net.minecraft.world.item.ItemStack::isEmpty).count();
@@ -296,20 +299,23 @@ public final class RuntimeState {
         // 向它,结构上就没什么可重复计的。
         return "<inventory>Everything your body carries right now, totalled across all 36 backpack "
                 + "slots — trust it and do not spend a call on numen.status.self() to rediscover it. "
-                + "Stacks of one item that differ (a shulker box with contents, another potion) are listed apart; "
-                + "naming only the item picks the one in your main hand, else the first slot; passing its entry of "
+                + "Stacks of one item that differ (a shulker box with contents, another potion) are listed apart, "
+                + "each with what is known about it in brackets after its id, as name={field=value}. A list or "
+                + "table in there with more than three entries shows the first three and how many more there are "
+                + "(…+2); the entry of that stack in numen.inv.items() has all of them under details. "
+                + "Naming only the item picks the one in your main hand, else the first slot; passing its entry of "
                 + "numen.inv.items() picks that one. "
                 + "A newer result wins over this."
                 + "\ncarrying=" + (items.length() == 0 ? "nothing" : items)
                 + "\nempty slots=" + empty + " of " + snapshot.items().size()
-                + "\nholding (already counted above)=main " + describe(snapshot.mainHand())
-                + ", off " + describe(snapshot.offhand())
+                + "\nholding (already counted above)=main " + describe(her, snapshot.mainHand())
+                + ", off " + describe(her, snapshot.offhand())
                 + "</inventory>";
     }
 
     /** 手上拿的<b>是什么</b>,不含数量——数量归 {@code carrying} 一处管。 */
-    private static String describe(net.minecraft.world.item.ItemStack stack) {
-        return stack.isEmpty() ? "(empty)" : xml(StackLabel.of(stack));
+    private static String describe(NumenPlayer her, net.minecraft.world.item.ItemStack stack) {
+        return stack.isEmpty() ? "(empty)" : text(StackLabel.of(her, stack));
     }
 
     private static String truncate(String s, int max) {
@@ -318,11 +324,14 @@ public final class RuntimeState {
     }
 
     private static String xml(String value) {
+        return text(value).replace("\"", "&quot;").replace("'", "&apos;");
+    }
+
+    /** 写在两个标签之间的字:只转 {@code & < >}。引号在这里不必转,物品短话里字符串的引号原样留着。 */
+    private static String text(String value) {
         if (value == null) return "";
         return value.replace("&", "&amp;")
                 .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;")
-                .replace("'", "&apos;");
+                .replace(">", "&gt;");
     }
 }

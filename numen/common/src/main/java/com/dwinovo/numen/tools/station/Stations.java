@@ -1,5 +1,6 @@
 package com.dwinovo.numen.tools.station;
 
+import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.entity.StackLabel;
 import com.dwinovo.numen.api.sdk.CellOrEntity;
 import com.dwinovo.numen.api.sdk.Doc;
@@ -20,6 +21,7 @@ import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
@@ -41,8 +43,10 @@ public final class Stations {
     @Doc("What a station made, as it is now.")
     public record Product(@Doc("The item id, minecraft:diamond_sword.") String item,
                           @Doc("How many.") int count,
-                          @Doc("What tells it apart from the same item without it: enchantments, a custom name, a "
-                                  + "banner's patterns, damage. Absent for a plain item.") Optional<String> detail) {}
+                          @Doc("What tells it apart from a new item of its id, one named entry per kind of fact: "
+                                  + "the same entries as details in numen.inv.items (enchantments, display, "
+                                  + "banner, durability and the others). Empty for a plain item.")
+                          Map<String, Map<String, Object>> details) {}
 
     /** 对一格方块。别的组里也对着一格做事的函数({@code numen.inv.craft} 在工作台上合)同用这一个。 */
     public static <V> Pending<V> at(ServerCall call, BlockPos block, Class<? extends AbstractContainerMenu> menu,
@@ -75,15 +79,14 @@ public final class Stations {
         return BuiltInRegistries.ITEM.getKey(item).toString();
     }
 
-    /** 这一叠写成交回的值。 */
-    static Product product(ItemStack stack) {
-        return product(stack, stack.getCount());
+    /** 这一叠写成交回的值;关于它回答者们说的问的是 {@code her}。 */
+    static Product product(NumenPlayer her, ItemStack stack) {
+        return product(her, stack, stack.getCount());
     }
 
     /** 同上,件数由调用方给(几次做出来的合在一起)。 */
-    static Product product(ItemStack stack, int count) {
-        String detail = StackLabel.detail(stack);
-        return new Product(id(stack.getItem()), count, detail.isEmpty() ? Optional.empty() : Optional.of(detail));
+    static Product product(NumenPlayer her, ItemStack stack, int count) {
+        return new Product(id(stack.getItem()), count, StackLabel.details(her, stack));
     }
 
     /**
@@ -100,7 +103,7 @@ public final class Stations {
             if (made.isEmpty()) {
                 throw new ApiError(ErrorKind.FAILED, nothing.get(), null);
             }
-            into.set(product(made));
+            into.set(product(her, made));
             return null;
         });
     }

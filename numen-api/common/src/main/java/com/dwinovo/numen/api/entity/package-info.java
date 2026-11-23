@@ -11,8 +11,9 @@
  * click on, and where a placed block lands).
  *
  * <p>Which carried stack an item id means is answered in one place, {@link Stacks#pick} (the main hand's stack, else the first
- * slot; two stacks are the same kind only when item and components both match), and {@link StackLabel} is the one sentence that
- * tells same-id stacks apart in the model's inventory listing and in receipts.
+ * slot; two stacks are the same kind only when item and components both match), and {@link StackLabel} is the one short text that
+ * tells same-id stacks apart in the model's inventory listing and in receipts, written from what the answerers of
+ * {@link com.dwinovo.numen.api.Questions#ITEM} say about the stack.
  *
  * <p>The rest of this package is {@link com.dwinovo.numen.api.Internal @Internal}:
  * companion lifecycle ({@link Companions}), creation / indexing

@@ -90,7 +90,7 @@ public final class TradeApi {
         Entity trader = call.entity(args.trader());
         AtomicReference<TradeOffers> read = new AtomicReference<>();
         return Stations.at(call, args.trader(), MerchantMenu.class, KIND, List.of(new Deed((menu, her) -> {
-            read.set(read((MerchantMenu) menu, trader));
+            read.set(read((MerchantMenu) menu, her, trader));
             return "read its " + read.get().offers().size() + " trades";
         })), read::get);
     }
@@ -124,17 +124,17 @@ public final class TradeApi {
                         bought))), bought::get);
     }
 
-    private static TradeOffers read(MerchantMenu menu, Entity trader) {
+    private static TradeOffers read(MerchantMenu menu, NumenPlayer her, Entity trader) {
         MerchantOffers offers = menu.getOffers();
         List<TradeOffer> trades = new ArrayList<>();
         for (int i = 0; i < offers.size(); i++) {
             MerchantOffer offer = offers.get(i);
             List<Stations.Product> asks = new ArrayList<>();
-            asks.add(Stations.product(offer.getCostA()));
+            asks.add(Stations.product(her, offer.getCostA()));
             if (!offer.getCostB().isEmpty()) {
-                asks.add(Stations.product(offer.getCostB()));
+                asks.add(Stations.product(her, offer.getCostB()));
             }
-            trades.add(new TradeOffer(i + 1, asks, Stations.product(offer.getResult()), offer.getUses(),
+            trades.add(new TradeOffer(i + 1, asks, Stations.product(her, offer.getResult()), offer.getUses(),
                     offer.getMaxUses(), offer.isOutOfStock()));
         }
         return trader instanceof VillagerDataHolder villager
@@ -175,7 +175,7 @@ public final class TradeApi {
                     break;
                 }
                 if (room(menu, her, result) < result.getCount()) {
-                    throw new ApiError(ErrorKind.FAILED, "your inventory has no room for " + StackLabel.brief(result)
+                    throw new ApiError(ErrorKind.FAILED, "your inventory has no room for " + StackLabel.brief(her, result)
                             + " x" + result.getCount() + (made == 0 ? "" : " (after " + made + " of " + times
                             + " trades, which got you " + got + ")"), null);
                 }
@@ -187,12 +187,13 @@ public final class TradeApi {
         } finally {
             settle(menu, her);
         }
-        into.set(new Bought(made, Stations.product(given, got), Optional.ofNullable(stopped)));
+        into.set(new Bought(made, Stations.product(her, given, got), Optional.ofNullable(stopped)));
         List<String> paid = new ArrayList<>();
-        paid(paid, offer.getCostA(), payA - carried(her, offer.getCostA()));
-        paid(paid, offer.getCostB(), payB - carried(her, offer.getCostB()));
+        paid(paid, her, offer.getCostA(), payA - carried(her, offer.getCostA()));
+        paid(paid, her, offer.getCostB(), payB - carried(her, offer.getCostB()));
         return "made trade " + n + " " + made + " time" + (made == 1 ? "" : "s") + ": paid " + String.join(" and ", paid)
-                + ", got " + got + " " + StackLabel.brief(given) + (stopped == null ? "" : "; stopped there: " + stopped);
+                + ", got " + got + " " + StackLabel.brief(given, into.get().got().details())
+                + (stopped == null ? "" : "; stopped there: " + stopped);
     }
 
     /** 这一笔一次都没做成:卖空了,或者她带的付不起——读到的事实。 */
@@ -204,7 +205,7 @@ public final class TradeApi {
         List<String> asks = new ArrayList<>();
         for (ItemStack cost : new ItemStack[] {offer.getCostA(), offer.getCostB()}) {
             if (!cost.isEmpty()) {
-                asks.add(cost.getCount() + " " + StackLabel.brief(cost) + " (you carry " + carried(her, cost) + ")");
+                asks.add(cost.getCount() + " " + StackLabel.brief(her, cost) + " (you carry " + carried(her, cost) + ")");
             }
         }
         return new ApiError(ErrorKind.NO_MATERIAL, "trade " + n + " asks for " + String.join(" and ", asks), offers);
@@ -215,9 +216,9 @@ public final class TradeApi {
         return cost.isEmpty() ? 0 : PlayerInv.carriedCount(her.getInventory(), cost.getItem());
     }
 
-    private static void paid(List<String> into, ItemStack cost, int count) {
+    private static void paid(List<String> into, NumenPlayer her, ItemStack cost, int count) {
         if (count > 0) {
-            into.add(count + " " + StackLabel.brief(cost));
+            into.add(count + " " + StackLabel.brief(her, cost));
         }
     }
 

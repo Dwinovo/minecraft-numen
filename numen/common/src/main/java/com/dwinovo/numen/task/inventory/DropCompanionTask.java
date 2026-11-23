@@ -80,10 +80,10 @@ public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTask
             player.drop(out, false);
         }
         inv.setChanged();
-        what = pick.map(p -> StackLabel.brief(p.sample())).orElse(r.label);
+        what = pick.map(p -> StackLabel.brief(player, p.sample())).orElse(r.label);
         doneMessage = "dropped " + dropped + "x " + what
                 + (dropped < r.count ? " (only had " + dropped + ")" : "")
-                + others(inv, pick);
+                + others(player, pick);
         succeed();   // work is done — finalize this same tick, before a Stop can mislabel it
         return TaskState.SUCCESS;
     }
@@ -100,15 +100,15 @@ public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTask
     /**
      * 同一种物品里没丢的别的叠,一句话:模型指的是哪一叠由它自己定,丢完得知道另外还剩什么。没有别的叠为空串。
      */
-    private static String others(Inventory inv, Optional<Stacks.Pick> pick) {
+    private static String others(NumenPlayer player, Optional<Stacks.Pick> pick) {
         if (pick.isEmpty()) {
             return "";
         }
         List<String> left = new ArrayList<>();
-        for (Stacks.Kind kind : Stacks.kinds(inv.items)) {
+        for (Stacks.Kind kind : Stacks.kinds(player.getInventory().items)) {
             if (kind.sample().is(pick.get().sample().getItem())
                     && !Stacks.sameKind(kind.sample(), pick.get().sample())) {
-                left.add(StackLabel.brief(kind.sample()) + " x" + kind.count());
+                left.add(StackLabel.brief(player, kind.sample()) + " x" + kind.count());
             }
         }
         return left.isEmpty() ? "" : "; other stacks of it stay: " + String.join(", ", left);
