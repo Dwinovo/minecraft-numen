@@ -1,9 +1,9 @@
 package com.dwinovo.numen.task.inventory;
 
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.api.task.Activity;
 import com.dwinovo.numen.api.sdk.ServerCall;
 import com.dwinovo.numen.api.task.TaskRecord;
-import net.minecraft.world.item.Item;
 
 /**
  * Typed task descriptor for {@code gear wear} and {@code gear hold}: "take this item out of my inventory and
@@ -19,16 +19,16 @@ public final class EquipTaskRecord extends TaskRecord<com.dwinovo.numen.gear.War
     /** 穿脱都是当场的事,期限只防卡死,给得宽一点。{@link UnequipTaskRecord} 用同一个。 */
     static final long TIMEOUT_TICKS = 5 * 20;
 
-    /** The item to equip (must be in the 36 backpack slots). */
-    public final Item item;
+    /** The kind to equip (must be in the 36 backpack slots). */
+    public final Stacks.Which which;
     /** Target slot name, or {@code null} to auto-choose. */
     public final String slot;
     /** Human-readable label for messages / debug overlay (e.g. "wooden_pickaxe"). */
     public final String label;
 
-    public EquipTaskRecord(ServerCall source, Item item, String slot, String label) {
+    public EquipTaskRecord(ServerCall source, Stacks.Which which, String slot, String label) {
         super(source, source.her().level().getGameTime() + TIMEOUT_TICKS);
-        this.item = item;
+        this.which = which;
         this.slot = slot;
         this.label = label;
     }

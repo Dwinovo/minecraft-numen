@@ -3,6 +3,7 @@ package com.dwinovo.numen.tools.inventory;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.NumenApi;
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.gear.Wardrobe;
 import com.dwinovo.numen.task.inventory.EquipTaskRecord;
 import com.dwinovo.numen.task.inventory.UnequipTaskRecord;
@@ -15,6 +16,7 @@ import com.dwinovo.numen.api.sdk.Omitted;
 import com.dwinovo.numen.api.sdk.Pending;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 import com.dwinovo.numen.api.sdk.ServerCall;
+import com.dwinovo.numen.api.sdk.StackRef;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -36,7 +38,7 @@ public final class GearApi {
     }
 
     /** 穿哪一件、穿在哪。 */
-    public record Wear(@Doc("The item to put on; it must be in your backpack.") Item item,
+    public record Wear(@Doc("The item to put on; it must be in your backpack.") StackRef item,
                        @Doc("Where to put it: a slot name listed in <worn>.")
                        @Omitted("choose automatically: a free slot that takes it (swapping out what was there)")
                        Optional<String> slot) {}
@@ -56,7 +58,8 @@ public final class GearApi {
     @SeeAlso({"numen.gear.hold", "numen.gear.remove"})
     public static Pending<Wardrobe.Change> wear(ServerCall call, Wear args) {
         String slot = args.slot().map(s -> s.toLowerCase(Locale.ROOT)).orElse(null);
-        String id = BuiltInRegistries.ITEM.getKey(args.item()).toString();
+        Stacks.Which which = args.item().in(call.her().getInventory());
+        String id = BuiltInRegistries.ITEM.getKey(which.item()).toString();
         if (Wardrobe.ARMOR.equals(slot)) {
             throw new ApiError(ErrorKind.BAD_ARGUMENT, "slot = \"armor\" is only for numen.gear.remove (it means all "
                     + "four armor pieces)", Call.of("numen.gear.wear", id));
@@ -66,14 +69,14 @@ public final class GearApi {
                     Wardrobe.OFFHAND.equals(slot) ? Call.of("numen.gear.hold", id, Map.of("hand", "off"))
                             : Call.of("numen.gear.hold", id));
         }
-        return call.sync(new EquipTaskRecord(call, args.item(), slot, BuiltInRegistries.ITEM.getKey(args.item()).getPath()));
+        return call.sync(new EquipTaskRecord(call, which, slot, BuiltInRegistries.ITEM.getKey(which.item()).getPath()));
     }
 
     /** 哪只手。 */
     public enum Hand { MAIN, OFF }
 
     /** 拿哪一件、哪只手。 */
-    public record Hold(@Doc("The item to hold; it must be in your backpack.") Item item,
+    public record Hold(@Doc("The item to hold; it must be in your backpack.") StackRef item,
                        @Doc("Which hand.")
                        @Omitted("the hand Minecraft puts it in: a shield to the off hand, anything else to the main hand")
                        Optional<Hand> hand) {}
@@ -83,14 +86,17 @@ public final class GearApi {
     @Example("numen.gear.hold(\"minecraft:iron_pickaxe\")")
     @Example("numen.gear.hold(\"minecraft:torch\", {hand = \"off\"})")
     @Note("It only moves the item: nothing is used, poured or thrown, so a water bucket stays full.")
+    @Note("Naming only the item picks the stack in your main hand, else the first slot holding it. When you carry "
+            + "stacks of it that differ (an enchanted sword and a plain one), pass the entry of numen.inv.items() for "
+            + "the one you mean. The result says which stack you hold.")
     @Note("The main hand is the hotbar slot you hold, so nothing comes out of it; what the off hand held goes back "
             + "into your backpack, and with no room for it nothing changes.")
     @SeeAlso({"numen.gear.wear", "numen.gear.remove"})
     public static Pending<Wardrobe.Change> hold(ServerCall call, Hold args) {
-        Item item = args.item();
+        Stacks.Which which = args.item().in(call.her().getInventory());
         String slot = args.hand().map(h -> h == Hand.OFF ? Wardrobe.OFFHAND : Wardrobe.MAINHAND)
-                .orElseGet(() -> Wardrobe.handFor(call.her(), new ItemStack(item)));
-        return call.sync(new EquipTaskRecord(call, item, slot, BuiltInRegistries.ITEM.getKey(item).getPath()));
+                .orElseGet(() -> Wardrobe.handFor(call.her(), new ItemStack(which.item())));
+        return call.sync(new EquipTaskRecord(call, which, slot, BuiltInRegistries.ITEM.getKey(which.item()).getPath()));
     }
 
     /** 摘什么。 */

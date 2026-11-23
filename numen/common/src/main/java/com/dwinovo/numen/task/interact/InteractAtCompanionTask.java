@@ -2,7 +2,6 @@ package com.dwinovo.numen.task.interact;
 import com.dwinovo.numen.api.permission.GatedAct.Permit;
 import com.dwinovo.numen.api.permission.GatedAct.PermitState;
 import com.dwinovo.numen.task.MouseButton;
-import com.dwinovo.numen.PlayerInv;
 
 import com.dwinovo.numen.api.task.TaskState;
 
@@ -53,10 +52,10 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
 
     @Override
     protected List<Precondition> preconditions() {
-        // If an item to use was named, fail fast unless we actually carry it.
-        return List.of(() -> r.item == null || PlayerInv.count(player.getInventory(), r.item) > 0 ? null
+        // If an item to use was named, fail fast unless a stack of that kind is where the grip reaches (backpack, off hand).
+        return List.of(() -> r.which == null || player.hotbar().count(r.which) > 0 ? null
                 : new Precondition.Failure(
-                        "don't have " + BuiltInRegistries.ITEM.getKey(r.item).getPath() + " to use",
+                        "don't have " + BuiltInRegistries.ITEM.getKey(r.which.item()).getPath() + " to use",
                         FailureType.NO_MATERIAL));
     }
 
@@ -76,8 +75,8 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
     protected TaskState act() {
         // Resolve the crosshair once we're in position, then drive the action.
         if (interaction == null) {
-            if (r.item != null) {
-                player.hotbar().grip(r.item);
+            if (r.which != null) {
+                player.hotbar().grip(r.which);
             }
             // 右键点可点的目标:看向它看得见的那一面(与走过去的到达目标 Arrival.use 同一个视线函数),哪一面都看不见就看格心。
             // 左键、空气与流体都看格心;对水面右键的原版含义正是"射线穿过去,物品自己找水"(桶、船),落点不另说。

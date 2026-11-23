@@ -10,6 +10,7 @@ import com.dwinovo.numen.api.sdk.Pending;
 import com.dwinovo.numen.api.sdk.Positional;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 import com.dwinovo.numen.api.sdk.ServerCall;
+import com.dwinovo.numen.api.sdk.StackRef;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.task.station.StationTaskRecord.Deed;
@@ -18,7 +19,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.inventory.BeaconMenu;
-import net.minecraft.world.item.Item;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,7 +53,7 @@ public final class BeaconApi {
 
     /** 哪座信标、付什么、主副效果。 */
     public record Set(@Doc("The beacon's cell.") BlockPos beacon,
-                      @Doc("The item to pay with, minecraft:iron_ingot: one of them is used up.") Item pay,
+                      @Doc("The item to pay with, minecraft:iron_ingot: one of them is used up.") StackRef pay,
                       @Doc("The primary effect by name, haste.") String primary,
                       @Doc("The secondary effect by name: regeneration, or the primary again.")
                       @Omitted("set no secondary effect") @Positional Optional<String> secondary) {}
@@ -77,7 +77,7 @@ public final class BeaconApi {
                     allowed((BeaconMenu) menu, primary, secondary);
                     return null;
                 }),
-                Move.put(args.pay(), 1, PAYMENT, "payment"),
+                Move.put(args.pay().in(call.her().getInventory()), 1, PAYMENT, "payment"),
                 new Deed((menu, her) -> {
                     BeaconMenu beacon = (BeaconMenu) menu;
                     her.packets().setBeacon(Optional.of(primary), Optional.ofNullable(secondary));

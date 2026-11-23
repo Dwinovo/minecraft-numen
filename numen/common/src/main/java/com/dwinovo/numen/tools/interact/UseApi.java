@@ -4,6 +4,7 @@ import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.task.MouseButton;
 import com.dwinovo.numen.tools.BlockActionOps;
 import com.dwinovo.numen.tools.Clicks;
@@ -19,11 +20,11 @@ import com.dwinovo.numen.api.sdk.Omitted;
 import com.dwinovo.numen.api.sdk.Pending;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 import com.dwinovo.numen.api.sdk.ServerCall;
+import com.dwinovo.numen.api.sdk.StackRef;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.decoration.ArmorStand;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.phys.Vec3;
 
 import com.dwinovo.numen.api.permission.Action;
@@ -68,7 +69,7 @@ public final class UseApi {
                         @Doc("How long to hold the button, in seconds (up to 60); the press ends early once the action "
                                 + "completes.") @Omitted("press once") Optional<Double> hold,
                         @Doc("An item from your inventory to take in hand first, e.g. minecraft:bone_meal.")
-                        @Omitted("use what you hold") Optional<Item> item,
+                        @Omitted("use what you hold") Optional<StackRef> item,
                         @Doc("Hold sneak while pressing, as a player holds Shift and clicks; while riding, that steps "
                                 + "you off first (numen.use.dismount() does just that).")
                         @Omitted("press standing") Optional<Boolean> sneak) {}
@@ -78,7 +79,8 @@ public final class UseApi {
     @Example("numen.use.block({x = 120, y = 63, z = -35}, {item = \"minecraft:bucket\"})")
     @Example("numen.use.block({x = 120, y = 64, z = -35}, {item = \"minecraft:oak_planks\", sneak = true})")
     @Note("With item, the stack taken in hand is the one already in your main hand, else the first slot holding that item "
-            + "(numen.inv.items lists stacks that differ, e.g. a shulker box with contents); the result says which.")
+            + "(numen.inv.items lists stacks that differ, e.g. a shulker box with contents); the result says which. Pass "
+            + "an entry of numen.inv.items() as item to take exactly that kind.")
     @Note("Storing, taking and working at a block have their own functions, which take the block as an argument: "
             + "numen.container for a chest or a barrel, numen.furnace, numen.anvil, numen.enchant and the other "
             + "groups named after a block. numen.scan.block reads what a block holds.")
@@ -100,14 +102,14 @@ public final class UseApi {
     @SeeAlso({"numen.scan.block", "numen.use.hit", "numen.use.entity"})
     public static Pending<Clicks.Clicked> block(ServerCall call, Block args) {
         return call.sync(BlockActionOps.interactAt(call, MouseButton.RIGHT, args.cell(), holdTicks(args.hold()),
-                args.item().orElse(null), args.sneak().orElse(false)));
+                carried(call, args.item()), args.sneak().orElse(false)));
     }
 
     /** 朝前方右键。 */
     public record Press(@Doc("How long to hold the button, in seconds (up to 60).") @Omitted("press once")
                         Optional<Double> hold,
                         @Doc("An item from your inventory to take in hand first.") @Omitted("use what you hold")
-                        Optional<Item> item,
+                        Optional<StackRef> item,
                         @Doc("Hold sneak while pressing.") @Omitted("press standing") Optional<Boolean> sneak) {}
 
     @Fn("Right-click at nothing in particular: the held item acts straight ahead, where you face.")
@@ -119,7 +121,7 @@ public final class UseApi {
     @SeeAlso("numen.use.block")
     public static Pending<Clicks.Clicked> item(ServerCall call, Press args) {
         return call.sync(BlockActionOps.interactAt(call, MouseButton.RIGHT, null, holdTicks(args.hold()),
-                args.item().orElse(null), args.sneak().orElse(false)));
+                carried(call, args.item()), args.sneak().orElse(false)));
     }
 
     /** 右键一只实体。 */
@@ -127,7 +129,7 @@ public final class UseApi {
                            @Doc("How long to hold the button, in seconds (up to 60).") @Omitted("press once")
                            Optional<Double> hold,
                            @Doc("An item from your inventory to take in hand first.") @Omitted("use what you hold")
-                           Optional<Item> item,
+                           Optional<StackRef> item,
                            @Doc("Hold sneak while pressing.") @Omitted("press standing") Optional<Boolean> sneak,
                            @Doc("Which part of an armor stand to click: head, chest, legs, feet, hand or offhand. With "
                                    + "an item in hand it goes to the slot the item belongs in; with an empty hand it takes "
@@ -159,7 +161,7 @@ public final class UseApi {
             at = args.at().get().pointOn(stand);
         }
         return call.sync(BlockActionOps.interactEntity(call, MouseButton.RIGHT, target,
-                holdTicks(args.hold()), args.item().orElse(null), args.sneak().orElse(false), at));
+                holdTicks(args.hold()), carried(call, args.item()), args.sneak().orElse(false), at));
     }
 
     /** 左键点什么。 */
@@ -188,6 +190,11 @@ public final class UseApi {
     /** 点名的那只此刻得在附近:不在当场失败,不先受理再失败。 */
     private static EntityRef present(ServerCall call, EntityRef ref) {
         return EntityRef.of(call.entity(ref));
+    }
+
+    /** 点名要先拿到手上的那一样,落到她此刻背包里的哪一种;没点名(用手上的)是 null。 */
+    private static Stacks.Which carried(ServerCall call, Optional<StackRef> item) {
+        return item.map(ref -> ref.in(call.her().getInventory())).orElse(null);
     }
 
     /** 按住的秒数折成刻,至少一刻;不写是 0,按一下。 */

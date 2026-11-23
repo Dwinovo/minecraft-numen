@@ -42,7 +42,7 @@
 
 | 函数 | 只管 | 不管 |
 |---|---|---|
-| `scan.*` | 读世界:`scan.blocks` 交回相连的团(Cluster)、`scan.map`、`scan.block`(方块本身的事,加上登记着的回答者说的:告示牌的字、里面存着什么,control 0021)、`scan.sight` | 不存任何东西 |
+| `scan.*` | 读世界:`scan.blocks` 交回相连的团(Cluster)、`scan.map`、`scan.block`(方块本身的事,加上登记着的回答者说的:告示牌的字、里面存着什么、炉子的燃料还烧几秒与那一件烧到百分之几,control 0021)、`scan.sight` | 不存任何东西 |
 | `move.walk` | 去一处:Pos、方块、实体、团、Cells、一列、一个高度;可选一个距离。只走(游、挖、搭),从不飞;身体在飞先落地。默认可挖可搭、只看价钱,能不能动哪一格由权限层在动手那一刻定(§十一) | 不捡、不用 |
 | `move.fly` | 同样的去处与距离(可以是半空的一格),只用创造飞行:到点悬停;不许飞当场拒绝,下一步是 `move.walk`,穿着鞘翅的再给 `move.glide` | 不碰鞘翅 |
 | `move.glide` | 去一列 `{x, z}`(给格、方块、实体取它所在的那一列,y 不参与;只有高度没有列,拒绝),只用鞘翅:走到起飞点、起飞、巡航,水平进入目标 16 格就降落,落在最近的安全落点(天然实心方块、头顶是空柱、不在边沿、不在液体里),落地就是这一趟的结束;回执说落在哪一格、离目标水平多远、烟花与耐久;缺鞘翅、烟花(少于 5 支)、耐久(少于 5 点)、起飞的地方当场拒绝,目标已在 16 格内也拒绝 | 不走最后一截;没进 16 格就落了地:离目标超过 96 格且烟花耐久够就再起飞,否则收工并说离目标多远,不改成走路 |
@@ -318,9 +318,15 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
 - **位置只有一种写法**:一格是 Pos `{x = 120, y = 64, z = -35}`,一列是 `{x = …, z = …}`,一个高度是 `{y = …}`。小数按所在的
   那一格算(`BlockPos.containing`),所以 `status.self().pos` 原样能交。任何带 `pos` 字段的表(Block、Entity、Item、一团的
   `nearest`)放在位置那一格就是它的 `pos`;收实体的参数收编号或带 `id` 的表。读法只在 `Positions` 一处。
+- **她带着的一样东西有两种写法**:物品 id,或 `numen.inv.items()` 交回的那一项(Stack,带 `item`、`count`、`detail`、`kind`)。只写 id
+  是这种物品的哪一叠都行——拿到手上、丢、穿戴取主手那一叠、否则格号最小的那一叠;交回那一项就只用那一种(装着钻石的潜影盒与空盒、
+  附魔的剑与没附魔的)。收它的参数:`use.block/item/entity` 的 `item`、`gear.wear`、`gear.hold`、`inv.eat`、`inv.drop`、
+  `container.put` 以及各工作方块那一组里从她背包放进去的每一样。说一种物品本身的参数(`inv.count`、配方、`container.take`、
+  `gear.remove`)只收 id。一项凭它的记号(`kind`,从物品与组件算出来)认,那一种的叠挪到哪一格都认得;她已经没有那一种了是
+  `not_found`。落到具体一叠只在 `Stacks` 一处,参数的读法在 `StackRef`。
 - **旧写法删了**:`{120, 64, -35}`、`"120 64 -35"`、`"120,64,-35"` 都是 `bad_argument`,`hint` 是改好的那一整行调用;
   只给了一列却要一格,说缺 y。删的理由:同一处位置三种写法,模型在三种之间来回猜,查询结果也交不进动作。
-- 共用的类在 `LuaCodecs`:`Pos`、`Block`、`Entity`、`Item`(继承 Entity)、`Cells`、`Error`;各组自己的类(`Plan`、`Leg`、
+- 共用的类在 `LuaCodecs`:`Pos`、`Block`、`Entity`、`Item`(继承 Entity)、`Stack`、`Cells`、`Error`;各组自己的类(`Plan`、`Leg`、
   `Step`、`Ask`、`Stop`、`Costs`、`Placed`、`tlm.Maid`……)从函数签名里的 record 来(§十三)。
 
 ### 返回
@@ -557,8 +563,8 @@ public final class LocateApi {                         // 一组:一个公开类
   Map.of("arrive", "dig"))` 写,不手拼。查不到不是失败:交回空表或 nil。函数说参数此刻不成立抛 `IllegalArgumentException`,和读不成
   同一种 `bad_argument`(附用法与帮助的写法)。
 - **值转换**(`LuaCodecs`):record 是一张表(字段说明来自 `@Doc`,`@Folded` 的字段收起来,`@Flatten` 的第一个组件摊进这张表并成为
-  父类,`@Methods("numen.scan")` 说值带的方法写在哪个模块),枚举是小写的名字,内置 `Pos`、`Block`、`Entity`、`Item`、`EntityRef`、
-  `Place`、`Target`……;一种自己的类型登记一次 `numen.codec(X.class, codec)`(读、写与签名里写成什么在同一个对象上)。类名:Numen API 自己的
+  父类,`@Methods("numen.scan")` 说值带的方法写在哪个模块),枚举是小写的名字,内置 `Pos`、`Block`、`Entity`、`Item`、`Stack`、`EntityRef`、
+  `StackRef`、`Place`、`Target`……;一种自己的类型登记一次 `numen.codec(X.class, codec)`(读、写与签名里写成什么在同一个对象上)。类名:Numen API 自己的
   不带前缀(`Plan`、`Clicked`),插件的带名字空间(`tlm.Maid`)。
 - **够不着、用一只实体、过权限是原语**:`call.entity(ref)` 认出点名的实体(不在了是 `not_found`),`call.reach(entity, Reach.hand())`
   量够不够得着(够不着是 `out_of_reach`,`hint` 是走过去的那一行),`call.use(entity, reach, deed)` 是这三样加上权限层的

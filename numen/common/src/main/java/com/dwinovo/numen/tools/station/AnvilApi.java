@@ -3,6 +3,7 @@ package com.dwinovo.numen.tools.station;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.entity.StackLabel;
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Example;
 import com.dwinovo.numen.api.sdk.Fn;
@@ -11,6 +12,7 @@ import com.dwinovo.numen.api.sdk.Omitted;
 import com.dwinovo.numen.api.sdk.Pending;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 import com.dwinovo.numen.api.sdk.ServerCall;
+import com.dwinovo.numen.api.sdk.StackRef;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.task.station.StationTaskRecord.Deed;
@@ -18,7 +20,6 @@ import com.dwinovo.numen.task.station.StationTaskRecord.Move;
 import com.dwinovo.numen.task.station.StationTaskRecord.Step;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.inventory.AnvilMenu;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
@@ -52,9 +53,9 @@ public final class AnvilApi {
 
     /** 哪座铁砧、哪件东西、合上什么。 */
     public record Combine(@Doc("The anvil's cell.") BlockPos anvil,
-                          @Doc("The item to work on, minecraft:diamond_pickaxe: one you carry.") Item item,
+                          @Doc("The item to work on, minecraft:diamond_pickaxe: one you carry.") StackRef item,
                           @Doc("What goes onto it: another of the same item, an enchanted book, or the material it is "
-                                  + "repaired with.") Item other,
+                                  + "repaired with.") StackRef other,
                           @Doc("Also name the result.") @Omitted("keep its name") Optional<String> name,
                           @Doc("How many of other to put in: a repair with its material uses up one or more.")
                           @Omitted("one") Optional<Integer> count) {}
@@ -64,18 +65,21 @@ public final class AnvilApi {
     @Example("numen.anvil.combine({x = 120, y = 64, z = -35}, \"minecraft:iron_pickaxe\", \"minecraft:iron_ingot\", "
             + "{count = 2, name = \"Digger\"})")
     @Note("Walks up to the anvil when it is out of reach, puts the two in, takes the result and anything left of "
-            + "other back. The item and other taken are the first of each in your inventory.")
+            + "other back. The item and other taken are the first of each in your inventory; pass an entry of "
+            + "numen.inv.items() for either to name which one (the damaged pickaxe, the book with the enchantment "
+            + "you want).")
     @Note("Returns the item as it is now and the experience levels it cost. When the two do not combine, or you "
             + "have fewer levels than it costs, it fails saying so, and what was put in comes back to you.")
     @SeeAlso("numen.anvil.rename")
     public static Pending<AnvilWork> combine(ServerCall call, Combine args) {
         Integer count = Stations.count("count", args.count());
-        return work(call, args.anvil(), args.item(), args.other(), count == null ? 1 : count, args.name().orElse(null));
+        return work(call, args.anvil(), args.item().in(call.her().getInventory()),
+                args.other().in(call.her().getInventory()), count == null ? 1 : count, args.name().orElse(null));
     }
 
     /** 哪座铁砧、哪件东西、叫什么。 */
     public record Rename(@Doc("The anvil's cell.") BlockPos anvil,
-                         @Doc("The item to name, minecraft:iron_sword: one you carry.") Item item,
+                         @Doc("The item to name, minecraft:iron_sword: one you carry.") StackRef item,
                          @Doc("Its new name, up to " + AnvilMenu.MAX_NAME_LENGTH + " characters.") String name) {}
 
     @Fn("Give an item you carry a name at an anvil.")
@@ -85,7 +89,7 @@ public final class AnvilApi {
             + "you, when you have fewer levels than it costs or the item already has that name.")
     @SeeAlso("numen.anvil.combine")
     public static Pending<AnvilWork> rename(ServerCall call, Rename args) {
-        return work(call, args.anvil(), args.item(), null, 0, args.name());
+        return work(call, args.anvil(), args.item().in(call.her().getInventory()), null, 0, args.name());
     }
 
     /**
@@ -94,8 +98,8 @@ public final class AnvilApi {
      * @param other 合上去的那一件;只改名是 null
      * @param name  要起的名字;不改名是 null
      */
-    private static Pending<AnvilWork> work(ServerCall call, BlockPos anvil, Item item, Item other, int count,
-                                           String name) {
+    private static Pending<AnvilWork> work(ServerCall call, BlockPos anvil, Stacks.Which item, Stacks.Which other,
+                                           int count, String name) {
         if (name != null && (name.isBlank() || name.length() > AnvilMenu.MAX_NAME_LENGTH)) {
             throw new ApiError(ErrorKind.BAD_ARGUMENT, "a name is 1 to " + AnvilMenu.MAX_NAME_LENGTH + " characters",
                     null);

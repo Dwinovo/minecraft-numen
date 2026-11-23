@@ -2,11 +2,11 @@ package com.dwinovo.numen.task.interact;
 import com.dwinovo.numen.api.task.Activity;
 import com.dwinovo.numen.task.MouseButton;
 
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.api.sdk.EntityRef;
 import com.dwinovo.numen.api.sdk.ServerCall;
 import com.dwinovo.numen.api.task.TaskRecord;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.world.item.Item;
 
 /**
  * Typed descriptor for {@code use entity} — the entity-aimed half of the native
@@ -32,7 +32,7 @@ public final class InteractEntityTaskRecord extends TaskRecord<com.dwinovo.numen
     public final MouseButton button;
     public final EntityRef entity;
     public final int holdTicks;
-    public final Item item;        // null → use whatever is in hand; else equip this first (food / shears / weapon)
+    public final Stacks.Which which;   // null → use whatever is in hand; else take this kind in hand first (food / shears / weapon)
     public final boolean sneak;
     /** 点在实体身上的哪一点(相对它的位置),先发 INTERACT_AT;不指定为 null。 */
     public final net.minecraft.world.phys.Vec3 at;
@@ -42,13 +42,13 @@ public final class InteractEntityTaskRecord extends TaskRecord<com.dwinovo.numen
      */
     public final boolean keepsWindow;
 
-    public InteractEntityTaskRecord(ServerCall source, MouseButton button, EntityRef entity, int holdTicks, Item item,
-                                    boolean sneak, net.minecraft.world.phys.Vec3 at, boolean keepsWindow) {
+    public InteractEntityTaskRecord(ServerCall source, MouseButton button, EntityRef entity, int holdTicks,
+                                    Stacks.Which which, boolean sneak, net.minecraft.world.phys.Vec3 at, boolean keepsWindow) {
         super(source, source.her().level().getGameTime() + TIMEOUT_TICKS);
         this.button = button;
         this.entity = entity;
         this.holdTicks = holdTicks;
-        this.item = item;
+        this.which = which;
         this.sneak = sneak;
         this.at = at;
         this.keepsWindow = keepsWindow;
@@ -57,7 +57,7 @@ public final class InteractEntityTaskRecord extends TaskRecord<com.dwinovo.numen
     @Override
     public String describe() {
         return getToolName() + " " + (button == MouseButton.LEFT ? "left" : "right")
-                + (item != null ? " " + BuiltInRegistries.ITEM.getKey(item).getPath() : "")
+                + (which != null ? " " + BuiltInRegistries.ITEM.getKey(which.item()).getPath() : "")
                 + " " + entity + (holdTicks != 0 ? " hold=" + holdTicks : "") + (sneak ? " sneak" : "");
     }
 

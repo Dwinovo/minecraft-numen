@@ -297,7 +297,8 @@ public final class RuntimeState {
         return "<inventory>Everything your body carries right now, totalled across all 36 backpack "
                 + "slots — trust it and do not spend a call on numen.status.self() to rediscover it. "
                 + "Stacks of one item that differ (a shulker box with contents, another potion) are listed apart; "
-                + "naming only the item picks the one in your main hand, else the first slot. "
+                + "naming only the item picks the one in your main hand, else the first slot; passing its entry of "
+                + "numen.inv.items() picks that one. "
                 + "A newer result wins over this."
                 + "\ncarrying=" + (items.length() == 0 ? "nothing" : items)
                 + "\nempty slots=" + empty + " of " + snapshot.items().size()

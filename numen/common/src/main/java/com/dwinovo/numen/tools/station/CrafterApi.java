@@ -12,13 +12,13 @@ import com.dwinovo.numen.api.sdk.Pending;
 import com.dwinovo.numen.api.sdk.Positional;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 import com.dwinovo.numen.api.sdk.ServerCall;
+import com.dwinovo.numen.api.sdk.StackRef;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.task.station.StationTaskRecord.Deed;
 import com.dwinovo.numen.task.station.StationTaskRecord.Move;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.inventory.CrafterMenu;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.List;
@@ -43,7 +43,7 @@ public final class CrafterApi {
     /** 哪台合成器、哪一格、放什么、放几件。 */
     public record Put(@Doc("The crafter's cell.") BlockPos crafter,
                       @Doc("The slot of its 3x3 grid, 0 to 8, counted row by row from the top left.") int slot,
-                      @Doc("The item, minecraft:iron_ingot.") Item item,
+                      @Doc("The item, minecraft:iron_ingot.") StackRef item,
                       @Doc("How many.") @Omitted("all you carry of it, up to a stack") @Positional Optional<Integer> count) {}
 
     @Fn("Put items of one kind from your inventory into one slot of a crafter's grid.")
@@ -54,7 +54,8 @@ public final class CrafterApi {
     @SeeAlso({"numen.crafter.toggle", "numen.scan.block"})
     public static Pending<Integer> put(ServerCall call, Put args) {
         int slot = slot(args.slot());
-        Move put = Move.put(args.item(), Stations.count("count", args.count()), new int[] {slot}, "slot " + slot);
+        Move put = Move.put(args.item().in(call.her().getInventory()), Stations.count("count", args.count()),
+                new int[] {slot}, "slot " + slot);
         return Stations.at(call, args.crafter(), CrafterMenu.class, KIND, List.of(
                 new Deed((menu, her) -> {
                     if (((CrafterMenu) menu).isSlotDisabled(slot)) {

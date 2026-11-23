@@ -39,7 +39,7 @@ public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTask
         return List.of(
                 () -> player.level() instanceof ServerLevel ? null
                         : new Precondition.Failure("not on a server level", FailureType.UNKNOWN),
-                () -> Stacks.pick(player.getInventory(), r.item).isPresent() ? null
+                () -> Stacks.pick(player.getInventory(), r.which).isPresent() ? null
                         : new Precondition.Failure("no " + r.label + " in inventory to drop",
                                 FailureType.NO_MATERIAL));
     }
@@ -54,7 +54,7 @@ public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTask
      * 不许就带着理由收场。
      */
     private TaskState tryDrop() {
-        Permit permit = gate().permit(com.dwinovo.numen.api.permission.Action.drop(r.item));
+        Permit permit = gate().permit(com.dwinovo.numen.api.permission.Action.drop(r.which.item()));
         if (permit.state() == PermitState.WAITING) {
             return TaskState.RUNNING;
         }
@@ -65,12 +65,12 @@ public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTask
         Inventory inv = player.getInventory();
         // 丢的是背包里<b>真实的那几叠</b>:从格子里拆出来的栈带着自己的全部组件
         // (附魔/耐久/改名/容器内容物),不按数量销毁再 new ItemStack 重造——凭空重造只属于创造模式的 creative give。
-        // 丢哪一种由 Stacks.pick 定(只说了 id、背包里有几种不同的叠时,是主手那叠、否则第一格那叠),只丢这一种,
+        // 丢哪一种由 Stacks.pick 定(只说了 id、背包里有几种不同的叠时,是主手那叠、否则第一格那叠;点名了一种就是那一种),只丢这一种,
         // 别的叠一件不动;回执说丢的是哪一种、剩下的还有哪些。
         // Toss like a real player: native Player.drop(stack, false) throws each stack in the facing
         // direction with vanilla motion + pickup delay and fires the drop event (mods watching item
         // tosses see it) — instead of hand-building an ItemEntity with a made-up velocity.
-        Optional<Stacks.Pick> pick = Stacks.pick(inv, r.item);
+        Optional<Stacks.Pick> pick = Stacks.pick(inv, r.which);
         dropped = Math.min(r.count, pick.map(Stacks.Pick::count).orElse(0));
         int remaining = dropped;
         for (int slot : pick.map(Stacks.Pick::slots).orElse(List.of())) {
@@ -120,7 +120,7 @@ public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTask
     @Override
     protected Dropped value() {
         return new Dropped(what == null ? r.label : what, dropped,
-                PlayerInv.carriedCount(player.getInventory(), r.item));
+                PlayerInv.carriedCount(player.getInventory(), r.which.item()));
     }
 
     @Override

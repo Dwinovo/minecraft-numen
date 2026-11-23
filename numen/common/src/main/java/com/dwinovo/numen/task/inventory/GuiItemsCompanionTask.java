@@ -130,10 +130,10 @@ public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsT
         return null;
     }
 
-    /** 搬出来的那一侧的这一格里是不是这次要搬的:种类对得上(不点名就是有东西),在界面那一侧时还得是限定的那几格。 */
+    /** 搬出来的那一侧的这一格里是不是这次要搬的:是要的那一种(不点名就是有东西),在界面那一侧时还得是限定的那几格。 */
     private boolean wanted(Slot slot) {
         ItemStack stack = slot.getItem();
-        boolean kind = r.item == null ? !stack.isEmpty() : stack.is(r.item);
+        boolean kind = r.which == null ? !stack.isEmpty() : r.which.matches(stack);
         return kind && (r.put || r.covers(slot.index));
     }
 

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.plugins.tlm;
 
+import com.dwinovo.numen.api.entity.Stacks;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
@@ -20,14 +21,14 @@ final class GuiMoves {
 
     private GuiMoves() {}
 
-    /** 把她背包里的 {@code item} 搬进 {@code into} 这几格,至多 {@code count} 件;先并进已有的同一种,再放空格。 */
-    static void give(ServerPlayer her, Item item, int count, List<Slot> into) {
+    /** 把她背包里 {@code which} 要的那一种搬进 {@code into} 这几格,至多 {@code count} 件;先并进已有的同一种,再放空格。 */
+    static void give(ServerPlayer her, Stacks.Which which, int count, List<Slot> into) {
         int left = count;
         for (Slot own : own(her)) {
             if (left <= 0) {
                 return;
             }
-            if (!own.getItem().is(item)) {
+            if (!which.matches(own.getItem())) {
                 continue;
             }
             int have = own.getItem().getCount();
@@ -80,10 +81,10 @@ final class GuiMoves {
         return room;
     }
 
-    /** 她背包里第一叠 {@code item}(开着的界面里她自己的那些格);没有是空的。 */
-    static ItemStack carriedStack(ServerPlayer her, Item item) {
+    /** 她背包里 {@code which} 要的第一叠(开着的界面里她自己的那些格);没有是空的。 */
+    static ItemStack carriedStack(ServerPlayer her, Stacks.Which which) {
         for (Slot own : own(her)) {
-            if (own.getItem().is(item)) {
+            if (which.matches(own.getItem())) {
                 return own.getItem();
             }
         }

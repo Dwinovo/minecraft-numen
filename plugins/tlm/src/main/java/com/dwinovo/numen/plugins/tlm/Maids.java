@@ -3,6 +3,7 @@ package com.dwinovo.numen.plugins.tlm;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.api.sdk.EntityInfo;
 import com.dwinovo.numen.api.sdk.EntityLabel;
@@ -449,27 +450,27 @@ final class Maids {
     }
 
     /**
-     * 把她背包里的 {@code item} 递到女仆的 {@code place} 那一处,至多 {@code count} 件。那一页得开着({@link #open})。
+     * 把她背包里 {@code which} 要的那一种递到女仆的 {@code place} 那一处,至多 {@code count} 件。那一页得开着({@link #open})。
      * 那一处一件都收不下时不动手,带着读到的事实失败:车万女仆的格子不收这种东西、那一格放着别的、没有空位。
      */
-    static void give(ServerPlayer her, Entity maid, Item item, int count, MaidApi.Place place) {
+    static void give(ServerPlayer her, Entity maid, Stacks.Which which, int count, MaidApi.Place place) {
         List<Slot> into = slots(her, maid, place);
-        ItemStack stack = GuiMoves.carriedStack(her, item);
+        ItemStack stack = GuiMoves.carriedStack(her, which);
         if (GuiMoves.room(into, stack) == 0) {
-            String id = BuiltInRegistries.ITEM.getKey(item).toString();
+            String id = BuiltInRegistries.ITEM.getKey(which.item()).toString();
             String where = label(maid) + "'s " + word(place);
             if (into.stream().noneMatch(slot -> slot.mayPlace(stack))) {
                 throw new ApiError(ErrorKind.FAILED, "TLM does not let " + id + " into " + where + ".", null);
             }
             ItemStack inTheWay = into.size() == 1 ? into.get(0).getItem() : ItemStack.EMPTY;
-            if (!inTheWay.isEmpty() && !inTheWay.is(item)) {
+            if (!inTheWay.isEmpty() && !inTheWay.is(which.item())) {
                 String other = BuiltInRegistries.ITEM.getKey(inTheWay.getItem()).toString();
                 throw new ApiError(ErrorKind.FAILED, where + " holds " + other + "; take that out first.",
                         Call.of("tlm.maid.take", EntityLabel.of(maid), other));
             }
             throw new ApiError(ErrorKind.FAILED, where + " has no room for " + id + ".", null);
         }
-        GuiMoves.give(her, item, count, into);
+        GuiMoves.give(her, which, count, into);
     }
 
     /**

@@ -2,7 +2,6 @@ package com.dwinovo.numen.task.interact;
 import com.dwinovo.numen.api.permission.GatedAct.Permit;
 import com.dwinovo.numen.api.permission.GatedAct.PermitState;
 import com.dwinovo.numen.task.MouseButton;
-import com.dwinovo.numen.PlayerInv;
 
 import com.dwinovo.numen.api.task.TaskState;
 
@@ -52,9 +51,9 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
                                     FailureType.TARGET_LOST)
                             : null;
                 },
-                () -> r.item == null || PlayerInv.count(player.getInventory(), r.item) > 0 ? null
+                () -> r.which == null || player.hotbar().count(r.which) > 0 ? null
                         : new Precondition.Failure("don't have "
-                                + BuiltInRegistries.ITEM.getKey(r.item).getPath() + " to use on it",
+                                + BuiltInRegistries.ITEM.getKey(r.which.item()).getPath() + " to use on it",
                                 FailureType.NO_MATERIAL));
     }
 
@@ -128,8 +127,8 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
             }
         }
         if (interaction == null) {
-            if (r.item != null) {
-                player.hotbar().grip(r.item);
+            if (r.which != null) {
+                player.hotbar().grip(r.which);
             }
             // 兜底开关与 use block 同一条身体约束(政策的唯一出处在那份记录上):
             // 实体没吃掉点击才轮到物品自用,手里是食物/珍珠时宁可不兜。

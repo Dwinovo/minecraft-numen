@@ -4,6 +4,7 @@ import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -11,6 +12,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 
@@ -448,6 +450,35 @@ public class InventoryGameTests {
                     "the reply does not say the shield is in her off hand: " + equip.outcome());
             helper.assertTrue(companion.getOffhandItem().is(Items.SHIELD), "the shield is not in her off hand");
             helper.assertTrue(companion.getInventory().countItem(Items.SHIELD) == 1, "the shield was duplicated");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /**
+     * 同名的两叠里点名哪一叠:她背着一个空潜影盒(格号靠前,只写 id 取的是它)和一个装着钻石的,把 numen.inv.items() 里带描述的那一项
+     * 原样交给 numen.gear.hold,拿到主手的是装着钻石的那一个。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void holding_an_entry_of_the_list_takes_that_kind(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_boxpicker", new BlockPos(4, 2, 4), false);
+        ItemStack full = new ItemStack(Items.SHULKER_BOX);
+        full.set(DataComponents.CONTAINER,
+                ItemContainerContents.fromItems(java.util.List.of(new ItemStack(Items.DIAMOND, 3))));
+        companion.getInventory().selected = 5;   // 主手是空的那格
+        companion.getInventory().setItem(0, new ItemStack(Items.SHULKER_BOX));
+        companion.getInventory().setItem(1, full);
+        ToolRun hold = lua(companion, "for _, s in ipairs(numen.inv.items()) do\n"
+                + "  if s.detail then numen.gear.hold(s) end\nend");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(hold.done(), "gear hold has not finished");
+            helper.assertTrue(hold.succeeded(), "holding the entry failed: " + hold.outcome());
+            ItemStack held = companion.getMainHandItem();
+            helper.assertTrue(held.is(Items.SHULKER_BOX)
+                            && held.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).stream()
+                                    .anyMatch(s -> s.is(Items.DIAMOND)),
+                    "the box in her main hand is not the one holding diamonds: " + held + " " + hold.outcome());
+            helper.assertTrue(companion.getInventory().countItem(Items.SHULKER_BOX) == 2, "a box left her backpack");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }

@@ -1,6 +1,7 @@
 package com.dwinovo.numen.tools.station;
 
 import com.dwinovo.numen.api.NumenApi;
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Example;
 import com.dwinovo.numen.api.sdk.Fn;
@@ -10,10 +11,10 @@ import com.dwinovo.numen.api.sdk.Pending;
 import com.dwinovo.numen.api.sdk.Positional;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 import com.dwinovo.numen.api.sdk.ServerCall;
+import com.dwinovo.numen.api.sdk.StackRef;
 import com.dwinovo.numen.task.station.StationTaskRecord.Move;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.inventory.BrewingStandMenu;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 
 import java.util.List;
@@ -39,18 +40,19 @@ public final class BrewingApi {
 
     /** 哪座酿造台、放什么、放几件。 */
     public record Load(@Doc("The brewing stand's cell.") BlockPos stand,
-                       @Doc("The item, minecraft:potion.") Item item,
+                       @Doc("The item, minecraft:potion.") StackRef item,
                        @Doc("How many.") @Omitted("all you carry of it that fit") @Positional Optional<Integer> count) {}
 
     @Fn("Put bottles into a brewing stand's three bottle slots, one bottle a slot.")
     @Example("numen.brewing.bottles({x = 120, y = 64, z = -35}, \"minecraft:potion\")")
     @Note("Walks up to the stand when it is out of reach, puts the bottles in and closes it. It returns at once, "
-            + "without waiting for the brewing. The bottles taken are the first of that item in your inventory.")
+            + "without waiting for the brewing. The bottles taken are the first of that item in your inventory; "
+            + "pass an entry of numen.inv.items() to put in one kind of potion only.")
     @Note("Returns how many went in: fewer than asked when the free slots ran out. None at all fails: no_material "
             + "when you carry none, failed when no slot is free or the item is no bottle.")
     @SeeAlso({"numen.brewing.ingredient", "numen.brewing.fuel", "numen.brewing.take"})
     public static Pending<Integer> bottles(ServerCall call, Load args) {
-        return load(call, args.stand(), args.item(), args.count(), BOTTLES, "bottles");
+        return load(call, args.stand(), args.item().in(call.her().getInventory()), args.count(), BOTTLES, "bottles");
     }
 
     @Fn("Put items into a brewing stand's ingredient slot.")
@@ -60,7 +62,8 @@ public final class BrewingApi {
             + "another one.")
     @SeeAlso({"numen.brewing.bottles", "numen.brewing.fuel", "numen.scan.block"})
     public static Pending<Integer> ingredient(ServerCall call, Load args) {
-        return load(call, args.stand(), args.item(), args.count(), INGREDIENT, "the ingredient");
+        return load(call, args.stand(), args.item().in(call.her().getInventory()), args.count(), INGREDIENT,
+                "the ingredient");
     }
 
     /** 哪座酿造台、放几件燃料。 */
@@ -73,10 +76,10 @@ public final class BrewingApi {
             + "the slot is full.")
     @SeeAlso({"numen.brewing.bottles", "numen.brewing.ingredient"})
     public static Pending<Integer> fuel(ServerCall call, Fuel args) {
-        return load(call, args.stand(), Items.BLAZE_POWDER, args.count(), FUEL, "fuel");
+        return load(call, args.stand(), Stacks.Which.of(Items.BLAZE_POWDER), args.count(), FUEL, "fuel");
     }
 
-    private static Pending<Integer> load(ServerCall call, BlockPos stand, Item item, Optional<Integer> count,
+    private static Pending<Integer> load(ServerCall call, BlockPos stand, Stacks.Which item, Optional<Integer> count,
                                          int[] slots, String role) {
         Move put = Move.put(item, Stations.count("count", count), slots, role);
         return Stations.at(call, stand, BrewingStandMenu.class, KIND, List.of(put), () -> put.moved().count());

@@ -1,6 +1,7 @@
 package com.dwinovo.numen.tools.station;
 
 import com.dwinovo.numen.api.NumenApi;
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Example;
 import com.dwinovo.numen.api.sdk.Fn;
@@ -8,6 +9,7 @@ import com.dwinovo.numen.api.sdk.Note;
 import com.dwinovo.numen.api.sdk.Pending;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 import com.dwinovo.numen.api.sdk.ServerCall;
+import com.dwinovo.numen.api.sdk.StackRef;
 import com.dwinovo.numen.task.station.StationTaskRecord.Move;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.inventory.CartographyTableMenu;
@@ -37,12 +39,12 @@ public final class CartographyApi {
 
     /** 哪张制图台、哪张地图。 */
     public record OnMap(@Doc("The cartography table's cell.") BlockPos cartographyTable,
-                        @Doc("The map, minecraft:filled_map: one you carry.") Item map) {}
+                        @Doc("The map, minecraft:filled_map: one you carry.") StackRef map) {}
 
     @Fn("Extend a map you carry at a cartography table, using one paper: the result covers a larger area.")
     @Example("numen.cartography.extend({x = 120, y = 64, z = -35}, \"minecraft:filled_map\")")
     @Note("Walks up to the table when it is out of reach, puts the map and one paper in and takes the result. The "
-            + "map taken is the first in your inventory.")
+            + "map taken is the first in your inventory; pass an entry of numen.inv.items() to name which map.")
     @Note("Returns the map as it is now. When the table makes nothing of it, it fails saying so, and the map and "
             + "the paper come back to you.")
     @SeeAlso({"numen.cartography.copy", "numen.cartography.lock"})
@@ -78,8 +80,8 @@ public final class CartographyApi {
     private static Pending<Stations.Product> work(ServerCall call, OnMap args, Item with, String withName) {
         AtomicReference<Stations.Product> made = new AtomicReference<>();
         return Stations.at(call, args.cartographyTable(), CartographyTableMenu.class, KIND, List.of(
-                Move.put(args.map(), 1, MAP, "the map"),
-                Move.put(with, 1, OTHER, "what it is worked with"),
+                Move.put(args.map().in(call.her().getInventory()), 1, MAP, "the map"),
+                Move.put(Stacks.Which.of(with), 1, OTHER, "what it is worked with"),
                 Stations.result(CartographyTableMenu.RESULT_SLOT, made, () -> "the cartography table shows no result "
                         + "for this map with " + withName),
                 Move.take(null, null, RESULT, "the result", false),

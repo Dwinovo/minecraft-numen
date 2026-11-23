@@ -11,6 +11,7 @@ import com.dwinovo.numen.api.sdk.Pending;
 import com.dwinovo.numen.api.sdk.Positional;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 import com.dwinovo.numen.api.sdk.ServerCall;
+import com.dwinovo.numen.api.sdk.StackRef;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.task.station.StationTaskRecord.Deed;
@@ -49,7 +50,7 @@ public final class StonecutterApi {
 
     /** 哪台切石机、切什么、切成什么、切几件。 */
     public record Cut(@Doc("The stonecutter's cell.") BlockPos stonecutter,
-                      @Doc("The item to cut, minecraft:stone: one you carry.") Item item,
+                      @Doc("The item to cut, minecraft:stone: one you carry.") StackRef item,
                       @Doc("What to cut it into, minecraft:stone_bricks.") Item result,
                       @Doc("How many of item to cut.") @Omitted("all you carry of it, up to a stack") @Positional
                       Optional<Integer> count) {}
@@ -67,10 +68,10 @@ public final class StonecutterApi {
         ServerLevel level = call.her().serverLevel();
         // 这种东西切不切得出要的那一样,配方表里就有:不走到切石机跟前、不放料就能说
         recipe(level.getRecipeManager().getRecipesFor(RecipeType.STONECUTTING,
-                new SingleRecipeInput(new ItemStack(args.item())), level), args, level.registryAccess());
+                new SingleRecipeInput(new ItemStack(args.item().item())), level), args, level.registryAccess());
         Move take = Move.take(args.result(), null, RESULT, "the result", false);
         return Stations.at(call, args.stonecutter(), StonecutterMenu.class, KIND, List.of(
-                Move.put(args.item(), count, INPUT, "the input"),
+                Move.put(args.item().in(call.her().getInventory()), count, INPUT, "the input"),
                 new Deed((menu, her) -> {
                     StonecutterMenu cutter = (StonecutterMenu) menu;
                     int n = recipe(cutter.getRecipes(), args, her.level().registryAccess());
@@ -78,7 +79,7 @@ public final class StonecutterApi {
                     if (cutter.getSelectedRecipeIndex() != n
                             || cutter.getSlot(StonecutterMenu.RESULT_SLOT).getItem().isEmpty()) {
                         throw new ApiError(ErrorKind.FAILED, "the stonecutter did not start cutting "
-                                + Stations.id(args.item()) + " into " + Stations.id(args.result()), null);
+                                + Stations.id(args.item().item()) + " into " + Stations.id(args.result()), null);
                     }
                     return null;
                 }),
@@ -100,7 +101,7 @@ public final class StonecutterApi {
             }
             makes.add(Stations.id(made.getItem()));
         }
-        String item = Stations.id(args.item());
+        String item = Stations.id(args.item().item());
         String result = Stations.id(args.result());
         if (makes.isEmpty()) {
             throw new ApiError(ErrorKind.NOT_FOUND, "a stonecutter cuts nothing out of " + item,

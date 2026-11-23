@@ -12,6 +12,7 @@ import com.dwinovo.numen.api.entity.Controls;
 import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.api.entity.Look;
 import com.dwinovo.numen.api.entity.Mouse;
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.pathing.plan.BodySnapshot;
 import com.dwinovo.numen.pathing.plan.Materials;
 import com.dwinovo.numen.pathing.plan.Mobility;
@@ -207,7 +208,7 @@ final class Rig implements Craft {
 
     @Override
     public boolean holdRocket() {
-        Hotbar.Grip grip = hotbar.grip(Items.FIREWORK_ROCKET);
+        Hotbar.Grip grip = hotbar.grip(Stacks.Which.of(Items.FIREWORK_ROCKET));
         act(grip.action());
         return grip.ready();
     }

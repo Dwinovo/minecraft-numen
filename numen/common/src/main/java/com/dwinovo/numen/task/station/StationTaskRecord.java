@@ -1,6 +1,7 @@
 package com.dwinovo.numen.task.station;
 
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.api.sdk.EntityRef;
 import com.dwinovo.numen.api.sdk.ServerCall;
 import com.dwinovo.numen.api.task.TaskRecord;
@@ -66,22 +67,22 @@ public final class StationTaskRecord<V> extends TaskRecord<V> {
     /**
      * 搬东西:放进去从她的背包搬到界面那一侧,拿出来反过来。
      *
-     * @param item     搬哪一种;拿的时候 null 是那几格里有什么拿什么
+     * @param which    搬哪一种:放进去的是她带着的那一种(只说了物品,或点名的一种),拿出来的按物品认;拿的时候 null 是那几格里有什么拿什么
      * @param count    搬几件;null 是全搬
      * @param slots    界面那一侧只动这几格;null 是每一格,放进哪一格由界面自己分
      * @param role     这几格在这种目标里叫什么({@code fuel}、{@code the output}),回执里用;没有名堂是 null
      * @param optional 一件都没有也算做完(取产物时还没烧出来)
      * @param moved    搬完之后搬了什么,由这件活填
      */
-    public record Move(boolean put, Item item, Integer count, int[] slots, String role, boolean optional, Moved moved)
-            implements Step {
+    public record Move(boolean put, Stacks.Which which, Integer count, int[] slots, String role, boolean optional,
+                       Moved moved) implements Step {
 
-        public static Move put(Item item, Integer count, int[] slots, String role) {
-            return new Move(true, item, count, slots, role, false, new Moved());
+        public static Move put(Stacks.Which which, Integer count, int[] slots, String role) {
+            return new Move(true, which, count, slots, role, false, new Moved());
         }
 
         public static Move take(Item item, Integer count, int[] slots, String role, boolean optional) {
-            return new Move(false, item, count, slots, role, optional, new Moved());
+            return new Move(false, item == null ? null : Stacks.Which.of(item), count, slots, role, optional, new Moved());
         }
     }
 

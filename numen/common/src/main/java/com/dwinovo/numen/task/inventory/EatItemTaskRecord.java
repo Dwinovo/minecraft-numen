@@ -1,9 +1,9 @@
 package com.dwinovo.numen.task.inventory;
 
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.api.task.Activity;
 import com.dwinovo.numen.api.sdk.ServerCall;
 import com.dwinovo.numen.api.task.TaskRecord;
-import net.minecraft.world.item.Item;
 
 /**
  * Typed task descriptor for {@code inv eat}: consume a food / drink from the
@@ -16,14 +16,14 @@ public final class EatItemTaskRecord extends TaskRecord<EatCompanionTask.Ate> {
     /** Generous — covers any food's eat duration (most ~1.6s) plus buffer. */
     private static final long TIMEOUT_TICKS = 15 * 20;
 
-    /** The food item to eat (one is consumed on completion). */
-    public final Item item;
+    /** The kind of food to eat (one is consumed on completion). */
+    public final Stacks.Which which;
     /** Human-readable label for messages / debug overlay (e.g. "golden_apple"). */
     public final String label;
 
-    public EatItemTaskRecord(ServerCall source, Item item, String label) {
+    public EatItemTaskRecord(ServerCall source, Stacks.Which which, String label) {
         super(source, source.her().level().getGameTime() + TIMEOUT_TICKS);
-        this.item = item;
+        this.which = which;
         this.label = label;
     }
 

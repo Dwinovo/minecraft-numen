@@ -2,6 +2,7 @@ package com.dwinovo.numen.task.interact;
 import com.dwinovo.numen.api.task.Activity;
 import com.dwinovo.numen.task.MouseButton;
 
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.api.sdk.ServerCall;
 import com.dwinovo.numen.api.task.TaskRecord;
 import net.minecraft.core.BlockPos;
@@ -36,7 +37,7 @@ public final class InteractAtTaskRecord extends TaskRecord<com.dwinovo.numen.too
     public final MouseButton button;
     public final BlockPos aim;     // null → current facing (in-air use)
     public final int holdTicks;
-    public final Item item;        // null → use whatever is already in hand; else equip this first
+    public final Stacks.Which which;   // null → use whatever is already in hand; else take this kind in hand first
     public final boolean sneak;
     /**
      * 这一下打开的界面留着不合:只有 {@code StationCompanionTask} 这样派,它接着在那个界面里做事、做完自己合。别的点击是 false,
@@ -44,13 +45,13 @@ public final class InteractAtTaskRecord extends TaskRecord<com.dwinovo.numen.too
      */
     public final boolean keepsWindow;
 
-    public InteractAtTaskRecord(ServerCall source, MouseButton button, BlockPos aim, int holdTicks, Item item,
+    public InteractAtTaskRecord(ServerCall source, MouseButton button, BlockPos aim, int holdTicks, Stacks.Which which,
                                 boolean sneak, boolean keepsWindow) {
         super(source, source.her().level().getGameTime() + TIMEOUT_TICKS);
         this.button = button;
         this.aim = aim != null ? aim.immutable() : null;
         this.holdTicks = holdTicks;
-        this.item = item;
+        this.which = which;
         this.sneak = sneak;
         this.keepsWindow = keepsWindow;
     }
@@ -78,7 +79,7 @@ public final class InteractAtTaskRecord extends TaskRecord<com.dwinovo.numen.too
     @Override
     public String describe() {
         return getToolName() + " " + (button == MouseButton.LEFT ? "left" : "right")
-                + (item != null ? " " + BuiltInRegistries.ITEM.getKey(item).getPath() : "")
+                + (which != null ? " " + BuiltInRegistries.ITEM.getKey(which.item()).getPath() : "")
                 + (aim != null ? " @" + aim.getX() + "," + aim.getY() + "," + aim.getZ() : " (forward)")
                 + (holdTicks != 0 ? " hold=" + holdTicks : "") + (sneak ? " sneak" : "");
     }

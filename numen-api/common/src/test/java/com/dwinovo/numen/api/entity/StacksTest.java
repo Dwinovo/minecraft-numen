@@ -15,6 +15,8 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** 背包里的叠怎么合成"种"、一种怎么描述:物品与组件都相同才算同一种,模型靠描述把同名的几种分开。 */
 class StacksTest {
@@ -53,6 +55,9 @@ class StacksTest {
                 new ItemStack(Items.DIRT, 5), new ItemStack(Items.SHULKER_BOX), boxHolding(3), boxHolding(4),
                 ItemStack.EMPTY, new ItemStack(Items.DIRT, 2)));
         assertEquals(4, kinds.size());
+        assertEquals(Stacks.code(boxHolding(3).copyWithCount(1)), Stacks.code(kinds.get(1).sample()),
+                "同一种的叠记号相同,和件数无关");
+        assertEquals(4, kinds.stream().map(kind -> Stacks.code(kind.sample())).distinct().count(), "不同的种记号不同");
         assertEquals("minecraft:shulker_box", StackLabel.of(kinds.get(0).sample()));
         assertEquals(2, kinds.get(0).count());
         assertEquals("minecraft:shulker_box[holds diamond x3]", StackLabel.of(kinds.get(1).sample()));
@@ -68,12 +73,31 @@ class StacksTest {
         net.minecraft.world.entity.player.Inventory inventory = new net.minecraft.world.entity.player.Inventory(null);
         inventory.setItem(1, new ItemStack(Items.COBBLESTONE, 16));
         inventory.setItem(4, new ItemStack(Items.COBBLESTONE, 16));
-        Stacks.Pick pick = Stacks.pick(inventory, Items.COBBLESTONE).orElseThrow();
+        Stacks.Pick pick = Stacks.pick(inventory, Stacks.Which.of(Items.COBBLESTONE)).orElseThrow();
         assertEquals(1, pick.slot(), "主手空着:取靠前的第 1 格,不动第 4 格");
         assertEquals(List.of(1, 4), pick.slots());
         assertEquals(32, pick.count());
         inventory.selected = 4;
-        assertEquals(4, Stacks.pick(inventory, Items.COBBLESTONE).orElseThrow().slot(), "主手那一格就是它");
+        assertEquals(4, Stacks.pick(inventory, Stacks.Which.of(Items.COBBLESTONE)).orElseThrow().slot(),
+                "主手那一格就是它");
+    }
+
+    /** 点名了一种:只认那一种的叠,排在前面的同名另一种不取;只说物品时取的是靠前的那一种。 */
+    @Test
+    void aNamedKindTakesOnlyItsOwnStacksPastAnEarlierStackOfTheSameItem() {
+        net.minecraft.world.entity.player.Inventory inventory = new net.minecraft.world.entity.player.Inventory(null);
+        inventory.setItem(2, new ItemStack(Items.SHULKER_BOX));
+        inventory.setItem(5, boxHolding(3));
+        inventory.setItem(7, boxHolding(3));
+        assertEquals(2, Stacks.pick(inventory, Stacks.Which.of(Items.SHULKER_BOX)).orElseThrow().slot());
+        Stacks.Which full = Stacks.Which.exactly(inventory.getItem(5));
+        Stacks.Pick pick = Stacks.pick(inventory, full).orElseThrow();
+        assertEquals(List.of(5, 7), pick.slots());
+        assertEquals(2, pick.count());
+        assertEquals("minecraft:shulker_box[holds diamond x3]", StackLabel.of(pick.sample()));
+        assertTrue(full.matches(inventory.getItem(7)));
+        assertFalse(full.matches(inventory.getItem(2)), "空盒不是点名的那一种");
+        assertTrue(Stacks.pick(inventory, Stacks.Which.exactly(boxHolding(4))).isEmpty(), "身上没有的一种取不到");
     }
 
     /** 区别落在描述没写出来的组件值上(custom_data 不同):仍是两种,清单里各有自己的写法。 */

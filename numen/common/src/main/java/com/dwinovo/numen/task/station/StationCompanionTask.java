@@ -1,8 +1,8 @@
 package com.dwinovo.numen.task.station;
 
 import com.dwinovo.numen.FailureType;
-import com.dwinovo.numen.PlayerInv;
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.api.task.Task;
 import com.dwinovo.numen.api.task.TaskFactory;
 import com.dwinovo.numen.api.task.TaskResult;
@@ -88,8 +88,8 @@ public final class StationCompanionTask<V> extends AbstractCompanionTask<Station
         }
         for (Step step : r.steps) {
             if (step instanceof Move move && move.put()) {
-                checks.add(() -> PlayerInv.count(player.getInventory(), move.item()) > 0 ? null
-                        : new Precondition.Failure("you carry no " + name(move.item()), FailureType.NO_MATERIAL));
+                checks.add(() -> Stacks.pick(player.getInventory(), move.which()).isPresent() ? null
+                        : new Precondition.Failure("you carry no " + name(move.which().item()), FailureType.NO_MATERIAL));
             }
         }
         return checks;
@@ -157,7 +157,7 @@ public final class StationCompanionTask<V> extends AbstractCompanionTask<Station
     private TaskState move(Move step) {
         if (mover == null) {
             mover = new GuiItemsCompanionTask(player, new GuiItemsTaskRecord(r.source,
-                    player.level().getGameTime() + MOVE_TICKS, step.item(), step.count(), step.put(), step.slots()));
+                    player.level().getGameTime() + MOVE_TICKS, step.which(), step.count(), step.put(), step.slots()));
         }
         GuiItemsCompanionTask moving = mover;
         TaskResult moved = runChild(moving);
@@ -173,7 +173,7 @@ public final class StationCompanionTask<V> extends AbstractCompanionTask<Station
         if (!moved.success()) {
             boolean none = lastFailure() == FailureType.TARGET_LOST;
             if (!(none && step.optional())) {
-                String what = step.item() == null ? "nothing" : "no " + name(step.item());
+                String what = step.which() == null ? "nothing" : "no " + name(step.which().item());
                 shut();
                 fail((none ? (step.put() ? "you carry " + what : where + " holds " + what + role(step, " in "))
                         : where + ": " + moved.message()) + soFar() + handedBack, lastFailure(), moved.hint());

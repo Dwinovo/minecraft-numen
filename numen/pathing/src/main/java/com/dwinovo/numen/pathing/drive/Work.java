@@ -2,6 +2,7 @@ package com.dwinovo.numen.pathing.drive;
 
 import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.api.entity.Mouse;
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.pathing.drive.Blockage.Hitch;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.MoveKind;
@@ -118,7 +119,7 @@ final class Work {
     private Beat place(Edit.Place edit) {
         ServerPlayer body = rig.entity;
         BlockPos pos = edit.pos();
-        Hotbar.Grip grip = rig.hotbar.grip(edit.block().asItem());
+        Hotbar.Grip grip = rig.hotbar.grip(Stacks.Which.of(edit.block().asItem()));
         rig.act(grip.action());
         if (!grip.ready()) {
             return new Beat.Blocked(new Blockage(pos, rig.world().getBlockState(pos), move, null, Hitch.NO_MATERIALS));
@@ -159,7 +160,7 @@ final class Work {
      */
     private Beat pour(Edit.Catch caught) {
         ServerPlayer body = rig.entity;
-        Hotbar.Grip grip = rig.hotbar.grip(Items.WATER_BUCKET);
+        Hotbar.Grip grip = rig.hotbar.grip(Stacks.Which.of(Items.WATER_BUCKET));
         rig.act(grip.action());
         if (!grip.ready()) {
             return new Beat.Blocked(new Blockage(caught.pos(), rig.world().getBlockState(caught.pos()), move, null,
@@ -196,7 +197,7 @@ final class Work {
             scooped = true;
             return Beat.WORKED;
         }
-        Hotbar.Grip grip = rig.hotbar.grip(Items.BUCKET);
+        Hotbar.Grip grip = rig.hotbar.grip(Stacks.Which.of(Items.BUCKET));
         rig.act(grip.action());
         if (!grip.ready()) {
             return new Beat.Blocked(new Blockage(pos, rig.world().getBlockState(pos), move, null, Hitch.NO_MATERIALS));

@@ -37,15 +37,15 @@ public final class EatCompanionTask extends AbstractCompanionTask<EatItemTaskRec
 
     @Override
     protected List<Precondition> preconditions() {
-        return List.of(() -> refusal(WorkProfile.of(player).hasHunger(), PlayerInv.count(player.getInventory(), r.item),
-                r.item, r.label));
+        return List.of(() -> refusal(WorkProfile.of(player).hasHunger(), player.hotbar().count(r.which),
+                r.which.item(), r.label));
     }
 
     /**
      * 吃之前就办不成的理由,按次序第一条;都不成立为 {@code null}。
      *
      * @param hasHunger 她有没有饥饿(创造模式没有)
-     * @param carried   背包里这种东西有几件
+     * @param carried   拿得到手上的(背包与副手)这一种有几件
      */
     static Precondition.Failure refusal(boolean hasHunger, int carried, net.minecraft.world.item.Item item, String label) {
         // 无饥饿画像(创造)下:吃的动作会执行但食物不扣、饥饿不涨,
@@ -66,13 +66,13 @@ public final class EatCompanionTask extends AbstractCompanionTask<EatItemTaskRec
 
     @Override
     protected void onStart() {
-        beforeCount = PlayerInv.count(player.getInventory(), r.item);
+        beforeCount = PlayerInv.count(player.getInventory(), r.which.item());
         beforeHp = player.getHealth();
         beforeFood = player.getFoodData().getFoodLevel();
         // Take the food in hand (the precondition guarantees she carries it), then start a native held use with
         // that hand. The use() call decides whether eating begins (e.g. full hunger on non-always-eat food won't
         // start) — we read the outcome on completion.
-        player.hotbar().grip(r.item);
+        player.hotbar().grip(r.which);
         eat = Interaction.useInAir(player, Interaction.Timing.hold());
     }
 
@@ -91,7 +91,7 @@ public final class EatCompanionTask extends AbstractCompanionTask<EatItemTaskRec
     /** The held use finished. If an item was actually consumed, report the hunger/HP it restored;
      *  otherwise the body declined to eat (typically already full) — say so rather than claim success. */
     private TaskState finish() {
-        int now = PlayerInv.count(player.getInventory(), r.item);
+        int now = PlayerInv.count(player.getInventory(), r.which.item());
         if (now >= beforeCount) {
             fail("didn't eat " + r.label + " — already full (hunger " + beforeFood + "/20). Kept it.",
                     FailureType.UNKNOWN);

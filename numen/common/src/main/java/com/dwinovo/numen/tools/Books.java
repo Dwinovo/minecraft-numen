@@ -3,6 +3,7 @@ package com.dwinovo.numen.tools;
 import com.dwinovo.numen.api.entity.BodyAction;
 import com.dwinovo.numen.api.entity.Hotbar;
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Pending;
@@ -85,7 +86,7 @@ public final class Books {
             throw new ApiError(ErrorKind.BAD_ARGUMENT, "a title is 1 to " + WrittenBookContent.TITLE_MAX_LENGTH
                     + " characters", null);
         }
-        Hotbar.Grip grip = her.hotbar().grip(Items.WRITABLE_BOOK);
+        Hotbar.Grip grip = her.hotbar().grip(Stacks.Which.of(Items.WRITABLE_BOOK));
         if (!grip.ready()) {
             throw new ApiError(ErrorKind.NOT_FOUND, "you carry no book and quill", Call.of("numen.inv.make",
                     "minecraft:writable_book"));

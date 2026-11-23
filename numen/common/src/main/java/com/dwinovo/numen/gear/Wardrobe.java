@@ -95,17 +95,17 @@ public final class Wardrobe {
     // ---------------------------------------------------------------------
 
     /**
-     * 把背包里的一件 {@code item} 穿上或拿到手上。
+     * 把背包里 {@code which} 要的那一种穿上一件或拿到手上。
      *
      * @param slot {@code null} = 自动选位:归某类穿戴位置管的进那类位置,不归任何来源管的不是穿的东西,如实失败;
      *             否则是 {@code mainhand}、{@code offhand}(拿到手上,见 {@link #handFor})或 {@code <worn>} 里的槽名
      */
-    public static Outcome wear(NumenPlayer body, Item item, String slot) {
+    public static Outcome wear(NumenPlayer body, Stacks.Which which, String slot) {
         Inventory inv = body.getInventory();
-        String label = label(item);
+        String label = label(which.item());
         Sheet data = new Sheet();
         data.item = label;
-        Optional<Stacks.Pick> pick = Stacks.pick(inv, item);
+        Optional<Stacks.Pick> pick = Stacks.pick(inv, which);
         if (pick.isEmpty()) {
             return Outcome.failed("no " + label + " in inventory to equip", FailureType.NO_MATERIAL, data);
         }
@@ -119,7 +119,7 @@ public final class Wardrobe {
             Set<String> kinds = NumenPlugins.gearKinds(body, one);
             if (kinds.isEmpty()) {
                 return Outcome.failed(label + " is not something you wear — numen.gear.hold(\""
-                        + BuiltInRegistries.ITEM.getKey(item) + "\") takes it in hand", FailureType.UNKNOWN, data);
+                        + BuiltInRegistries.ITEM.getKey(which.item()) + "\") takes it in hand", FailureType.UNKNOWN, data);
             } else {
                 candidates = named(body, kinds);
                 if (candidates.isEmpty()) {

@@ -3,6 +3,7 @@ package com.dwinovo.numen.tools.station;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.entity.StackLabel;
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Example;
@@ -11,6 +12,7 @@ import com.dwinovo.numen.api.sdk.Note;
 import com.dwinovo.numen.api.sdk.Pending;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 import com.dwinovo.numen.api.sdk.ServerCall;
+import com.dwinovo.numen.api.sdk.StackRef;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.task.station.StationTaskRecord.Deed;
@@ -19,7 +21,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.inventory.EnchantmentMenu;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantment;
@@ -63,7 +64,7 @@ public final class EnchantApi {
 
     /** 哪张台、哪件东西。 */
     public record Look(@Doc("The enchanting table's cell.") BlockPos enchantingTable,
-                       @Doc("The item to enchant, minecraft:diamond_sword: one you carry.") Item item) {}
+                       @Doc("The item to enchant, minecraft:diamond_sword: one you carry.") StackRef item) {}
 
     @Fn("What an enchanting table offers for an item you carry: its three options and your levels.")
     @Example("for _, o in ipairs(numen.enchant.options({x = 120, y = 64, z = -35}, \"minecraft:diamond_sword\").options) "
@@ -74,7 +75,7 @@ public final class EnchantApi {
     public static Pending<EnchantOptions> options(ServerCall call, Look args) {
         AtomicReference<EnchantOptions> read = new AtomicReference<>();
         return Stations.at(call, args.enchantingTable(), EnchantmentMenu.class, KIND, List.of(
-                Move.put(args.item(), 1, ITEM, "the item to enchant"),
+                Move.put(args.item().in(call.her().getInventory()), 1, ITEM, "the item to enchant"),
                 new Deed((menu, her) -> {
                     read.set(read((EnchantmentMenu) menu, her));
                     return null;
@@ -84,7 +85,7 @@ public final class EnchantApi {
 
     /** 哪张台、哪件东西、第几项。 */
     public record Apply(@Doc("The enchanting table's cell.") BlockPos enchantingTable,
-                        @Doc("The item to enchant, minecraft:diamond_sword: one you carry.") Item item,
+                        @Doc("The item to enchant, minecraft:diamond_sword: one you carry.") StackRef item,
                         @Doc("Which option, 1 to 3, as numen.enchant.options numbers them.") int option) {}
 
     @Fn("Enchant an item you carry at an enchanting table with one of its three options.")
@@ -101,10 +102,11 @@ public final class EnchantApi {
             throw new ApiError(ErrorKind.BAD_ARGUMENT, "an enchanting table has options 1 to 3; " + n + " is not one",
                     options);
         }
+        Stacks.Which item = args.item().in(call.her().getInventory());
         AtomicReference<Stations.Product> made = new AtomicReference<>();
         return Stations.at(call, args.enchantingTable(), EnchantmentMenu.class, KIND, List.of(
-                Move.put(args.item(), 1, ITEM, "the item to enchant"),
-                Move.put(Items.LAPIS_LAZULI, n, LAPIS, "payment"),
+                Move.put(item, 1, ITEM, "the item to enchant"),
+                Move.put(Stacks.Which.of(Items.LAPIS_LAZULI), n, LAPIS, "payment"),
                 new Deed((menu, her) -> {
                     ItemStack now = press((EnchantmentMenu) menu, her, n, options);
                     made.set(Stations.product(now));

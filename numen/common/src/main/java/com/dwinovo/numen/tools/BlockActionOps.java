@@ -3,6 +3,7 @@ package com.dwinovo.numen.tools;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.area.Cells;
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.api.sdk.EntityRef;
 import com.dwinovo.numen.api.sdk.ServerCall;
@@ -15,7 +16,6 @@ import com.dwinovo.numen.task.interact.InteractEntityTaskRecord;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -98,22 +98,22 @@ public final class BlockActionOps {
      * {@code use block}({@code aim} 是那一格)与 {@code use item}({@code aim} 为 null,朝她此刻面对的方向)。
      *
      * @param holdTicks 按住几刻;0 是按一下
-     * @param item      先拿到手上的物品;用手上的为 null
+     * @param which     先拿到手上的那一种;用手上的为 null
      * @param sneak     按住潜行再点
      */
     public static InteractAtTaskRecord interactAt(ServerCall source, MouseButton button, BlockPos aim, int holdTicks,
-                                                  Item item, boolean sneak) {
-        String bodyBound = InteractAtTaskRecord.bodyBoundReason(item);
+                                                  Stacks.Which which, boolean sneak) {
+        String bodyBound = InteractAtTaskRecord.bodyBoundReason(which == null ? null : which.item());
         if (bodyBound != null) {
             throw new ApiError(ErrorKind.BAD_ARGUMENT, bodyBound, null);
         }
-        return new InteractAtTaskRecord(source, button, aim, holdTicks, item, sneak, false);
+        return new InteractAtTaskRecord(source, button, aim, holdTicks, which, sneak, false);
     }
 
     /** {@code use entity}:参数同 {@link #interactAt},按的是那一只实体;{@code at} 是点在它身上的哪一点(相对位置),不指定为 null。 */
     public static InteractEntityTaskRecord interactEntity(ServerCall source, MouseButton button, EntityRef entity,
-                                                          int holdTicks, Item item, boolean sneak,
+                                                          int holdTicks, Stacks.Which which, boolean sneak,
                                                           net.minecraft.world.phys.Vec3 at) {
-        return new InteractEntityTaskRecord(source, button, entity, holdTicks, item, sneak, at, false);
+        return new InteractEntityTaskRecord(source, button, entity, holdTicks, which, sneak, at, false);
     }
 }

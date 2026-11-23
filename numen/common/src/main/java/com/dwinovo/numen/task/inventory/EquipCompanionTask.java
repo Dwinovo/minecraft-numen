@@ -24,7 +24,7 @@ public final class EquipCompanionTask extends AbstractCompanionTask<EquipTaskRec
 
     @Override
     protected void onStart() {
-        outcome = Wardrobe.wear(player, r.item, r.slot);
+        outcome = Wardrobe.wear(player, r.which, r.slot);
         if (outcome.ok()) {
             succeed();
         } else {

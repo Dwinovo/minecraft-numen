@@ -26,7 +26,7 @@ final class BuildInventory {
 
     /** 要放的这一种:放哪一叠只由 {@link Stacks#pick} 定;一件都没有为空。 */
     Optional<Stacks.Pick> pick(Item item) {
-        return Stacks.pick(player.getInventory(), item);
+        return Stacks.pick(player.getInventory(), Stacks.Which.of(item));
     }
 
     /**
@@ -52,7 +52,7 @@ final class BuildInventory {
                     spent.add(kind.sample().copyWithCount(n));
                 }
             }
-            current = left > 0 ? Stacks.pick(inventory, kind.sample().getItem()) : Optional.empty();
+            current = left > 0 ? Stacks.pick(inventory, Stacks.Which.of(kind.sample().getItem())) : Optional.empty();
         }
         return spent;
     }

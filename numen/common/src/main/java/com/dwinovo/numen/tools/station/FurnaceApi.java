@@ -10,10 +10,10 @@ import com.dwinovo.numen.api.sdk.Pending;
 import com.dwinovo.numen.api.sdk.Positional;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 import com.dwinovo.numen.api.sdk.ServerCall;
+import com.dwinovo.numen.api.sdk.StackRef;
 import com.dwinovo.numen.task.station.StationTaskRecord.Move;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.inventory.AbstractFurnaceMenu;
-import net.minecraft.world.item.Item;
 
 import java.util.List;
 import java.util.Optional;
@@ -38,7 +38,7 @@ public final class FurnaceApi {
 
     /** 哪座炉、放什么、放几件。 */
     public record Load(@Doc("The furnace's cell.") BlockPos furnace,
-                       @Doc("The item, minecraft:raw_iron.") Item item,
+                       @Doc("The item, minecraft:raw_iron.") StackRef item,
                        @Doc("How many.") @Omitted("all you carry of it") @Positional Optional<Integer> count) {}
 
     @Fn("Put items into a furnace's input slot, to be cooked.")
@@ -64,7 +64,7 @@ public final class FurnaceApi {
     }
 
     private static Pending<Integer> load(ServerCall call, Load args, int[] slots, String role) {
-        Move put = Move.put(args.item(), args.count().orElse(null), slots, role);
+        Move put = Move.put(args.item().in(call.her().getInventory()), args.count().orElse(null), slots, role);
         return Stations.at(call, args.furnace(), AbstractFurnaceMenu.class, KIND, List.of(put), () -> put.moved().count());
     }
 

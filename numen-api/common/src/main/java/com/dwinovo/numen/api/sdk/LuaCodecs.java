@@ -27,8 +27,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li>字符串、整数、小数、布尔、{@code void};枚举是它的几个小写名字之一;{@link ResourceLocation} 是 id,不写命名空间就是
  *       {@code minecraft:};一种物品、一种方块({@code Item}、{@code Block} 的 Java 类型)是它的 id,认不出的读不成。</li>
  *   <li>位置只有一种写法 {@code Pos}:{@link BlockPos} 是一格(读到小数按所在的一格算,任何带 {@code pos} 的表——方块、实体、掉落物——
- *       放在一格的地方就是它的 {@code pos}),{@link Vec3} 是身体与实体的位置(两位小数)。{@link EntityRef}、{@link Place}、
- *       {@link Target} 各有一种写法,见它们自己。</li>
+ *       放在一格的地方就是它的 {@code pos}),{@link Vec3} 是身体与实体的位置(两位小数)。{@link EntityRef}、{@link StackRef}、
+ *       {@link Place}、{@link Target} 各有一种写法,见它们自己。</li>
  *   <li>{@code List<T>}、{@code Map<String, T>};record 是一张表,组件名从驼峰换成下划线就是字段名,{@code Optional} 组件可以没有,
  *       类名是 {@code <名字空间>.<类名>}(第一个用到它的函数的名字空间;{@link #SHARED} 里共用的几种没有名字空间)。</li>
  *   <li>插件自己的类型:{@code numen.codec(MyThing.class, codec)}。</li>
@@ -120,16 +120,18 @@ public final class LuaCodecs {
         BY_CLASS.put(BlockPos.class, Positions.CELL);
         BY_CLASS.put(Vec3.class, Positions.EXACT);
         BY_CLASS.put(EntityRef.class, EntityRef.CODEC);
+        BY_CLASS.put(StackRef.class, StackRef.CODEC);
         BY_CLASS.put(Place.class, Place.CODEC);
         BY_CLASS.put(Target.class, Target.CODEC);
         BY_CLASS.put(CellOrEntity.class, CellOrEntity.CODEC);
         BY_CLASS.put(BlockAt.class, record(BlockAt.class, "Block"));
         BY_CLASS.put(EntityInfo.class, record(EntityInfo.class, "Entity"));
         BY_CLASS.put(ItemInfo.class, record(ItemInfo.class, "Item"));
+        BY_CLASS.put(StackInfo.class, record(StackInfo.class, "Stack"));
     }
 
     /** 帮助与系统提示里列出的共用类,按这个顺序:索引里有它们,一组的帮助不再重复。 */
-    public static final List<String> SHARED = List.of("Pos", "Block", "Entity", "Item", "Cells", "Region", "Error");
+    public static final List<String> SHARED = List.of("Pos", "Block", "Entity", "Item", "Stack", "Cells", "Region", "Error");
 
     /**
      * 登记一种类型的值转换(插件经 {@code NumenApi.codec} 来)。它声明的类一并登记。

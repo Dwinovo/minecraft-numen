@@ -1,25 +1,25 @@
 package com.dwinovo.numen.task.inventory;
 
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.api.task.Activity;
 import com.dwinovo.numen.api.sdk.ServerCall;
 import com.dwinovo.numen.api.task.TaskRecord;
-import net.minecraft.world.item.Item;
 
 /**
- * Typed task descriptor for {@code inv drop}: toss {@code count} of
- * {@code item} out of the entity's inventory onto the ground.
+ * Typed task descriptor for {@code inv drop}: toss {@code count} of the kind
+ * {@code which} names out of the entity's inventory onto the ground.
  */
 public final class DropItemsTaskRecord extends TaskRecord<DropCompanionTask.Dropped> {
 
     private static final long TIMEOUT_TICKS = 10 * 20;
 
-    public final Item item;
+    public final Stacks.Which which;
     public final int count;
     public final String label;
 
-    public DropItemsTaskRecord(ServerCall source, Item item, int count, String label) {
+    public DropItemsTaskRecord(ServerCall source, Stacks.Which which, int count, String label) {
         super(source, source.her().level().getGameTime() + TIMEOUT_TICKS);
-        this.item = item;
+        this.which = which;
         this.count = count;
         this.label = label;
     }

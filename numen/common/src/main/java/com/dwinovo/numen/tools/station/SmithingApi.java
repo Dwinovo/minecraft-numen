@@ -1,6 +1,7 @@
 package com.dwinovo.numen.tools.station;
 
 import com.dwinovo.numen.api.NumenApi;
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Example;
 import com.dwinovo.numen.api.sdk.Fn;
@@ -8,10 +9,10 @@ import com.dwinovo.numen.api.sdk.Note;
 import com.dwinovo.numen.api.sdk.Pending;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 import com.dwinovo.numen.api.sdk.ServerCall;
+import com.dwinovo.numen.api.sdk.StackRef;
 import com.dwinovo.numen.task.station.StationTaskRecord.Move;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.inventory.SmithingMenu;
-import net.minecraft.world.item.Item;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -37,27 +38,31 @@ public final class SmithingApi {
 
     /** 哪张锻造台、三样东西。 */
     public record Forge(@Doc("The smithing table's cell.") BlockPos smithingTable,
-                        @Doc("The smithing template, minecraft:netherite_upgrade_smithing_template.") Item template,
-                        @Doc("The item it is applied to, minecraft:diamond_sword.") Item base,
-                        @Doc("The material added, minecraft:netherite_ingot.") Item addition) {}
+                        @Doc("The smithing template, minecraft:netherite_upgrade_smithing_template.") StackRef template,
+                        @Doc("The item it is applied to, minecraft:diamond_sword.") StackRef base,
+                        @Doc("The material added, minecraft:netherite_ingot.") StackRef addition) {}
 
     @Fn("Make an item at a smithing table from a template, a base item and an addition you carry.")
     @Example("numen.smithing.forge({x = 120, y = 64, z = -35}, \"minecraft:netherite_upgrade_smithing_template\", "
             + "\"minecraft:diamond_sword\", \"minecraft:netherite_ingot\")")
     @Note("Walks up to the table when it is out of reach, puts one of each in and takes the result. The base "
-            + "taken is the first of that item in your inventory.")
+            + "taken is the first of that item in your inventory; pass an entry of numen.inv.items() to name which "
+            + "one.")
     @Note("Returns the item made. When the three make nothing together it fails saying so, and they come back to "
             + "you.")
     @SeeAlso("numen.inv.recipes")
     public static Pending<Stations.Product> forge(ServerCall call, Forge args) {
+        Stacks.Which template = args.template().in(call.her().getInventory());
+        Stacks.Which base = args.base().in(call.her().getInventory());
+        Stacks.Which addition = args.addition().in(call.her().getInventory());
         AtomicReference<Stations.Product> made = new AtomicReference<>();
         return Stations.at(call, args.smithingTable(), SmithingMenu.class, KIND, List.of(
-                Move.put(args.template(), 1, TEMPLATE, "the template"),
-                Move.put(args.base(), 1, BASE, "the base"),
-                Move.put(args.addition(), 1, ADDITION, "the addition"),
+                Move.put(template, 1, TEMPLATE, "the template"),
+                Move.put(base, 1, BASE, "the base"),
+                Move.put(addition, 1, ADDITION, "the addition"),
                 Stations.result(SmithingMenu.RESULT_SLOT, made, () -> "the smithing table shows no result: "
-                        + Stations.id(args.template()) + ", " + Stations.id(args.base()) + " and "
-                        + Stations.id(args.addition()) + " make nothing together"),
+                        + Stations.id(template.item()) + ", " + Stations.id(base.item()) + " and "
+                        + Stations.id(addition.item()) + " make nothing together"),
                 Move.take(null, null, RESULT, "the result", false),
                 Move.take(null, null, INPUTS, null, true)), made::get);
     }

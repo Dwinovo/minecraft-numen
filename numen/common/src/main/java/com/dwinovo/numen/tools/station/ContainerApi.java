@@ -11,6 +11,7 @@ import com.dwinovo.numen.api.sdk.Pending;
 import com.dwinovo.numen.api.sdk.Positional;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 import com.dwinovo.numen.api.sdk.ServerCall;
+import com.dwinovo.numen.api.sdk.StackRef;
 import com.dwinovo.numen.task.station.StationTaskRecord.Move;
 import net.minecraft.world.item.Item;
 
@@ -35,7 +36,7 @@ public final class ContainerApi {
     /** 往哪儿放、放什么、放几件。 */
     public record Put(@Doc("The container: its cell (a Pos, a Block), or an entity that opens one when right-clicked (a "
             + "chest minecart).") CellOrEntity target,
-                      @Doc("The item, minecraft:cobblestone.") Item item,
+                      @Doc("The item, minecraft:cobblestone.") StackRef item,
                       @Doc("How many.") @Omitted("all you carry of it") @Positional Optional<Integer> count) {}
 
     @Fn("Put items of one kind from your inventory into a container: all of them, or count.")
@@ -43,12 +44,14 @@ public final class ContainerApi {
     @Example("numen.container.put(chest, \"minecraft:coal\", 8)")
     @Note("Walks up to it when it is out of reach, opens it, puts the items in and closes it; the walk is told in the "
             + "result. The container decides which slot each stack lands in.")
+    @Note("Naming only the item puts in every stack of it. To put in one kind of it only (the empty shulker boxes, not "
+            + "the full one), pass that kind's entry of numen.inv.items() as item.")
     @Note("Returns how many went in; fewer than asked when it ran out of room. None at all fails: no_material when you "
             + "carry none, failed when there is no room.")
     @Note("What it holds is read with numen.scan.block, without opening it.")
     @SeeAlso({"numen.container.take", "numen.scan.block"})
     public static Pending<Integer> put(ServerCall call, Put args) {
-        Move put = Move.put(args.item(), args.count().orElse(null), null, null);
+        Move put = Move.put(args.item().in(call.her().getInventory()), args.count().orElse(null), null, null);
         return Stations.at(call, args.target(), null, KIND, List.of(put), () -> put.moved().count());
     }
 

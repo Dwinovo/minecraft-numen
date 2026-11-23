@@ -3,6 +3,7 @@ package com.dwinovo.numen.plugins.tlm;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.entity.Stacks;
 import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.EntityInfo;
@@ -17,6 +18,7 @@ import com.dwinovo.numen.api.sdk.Pending;
 import com.dwinovo.numen.api.sdk.Positional;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 import com.dwinovo.numen.api.sdk.ServerCall;
+import com.dwinovo.numen.api.sdk.StackRef;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -452,7 +454,7 @@ public final class MaidApi {
 
     /** 递给谁、递什么、递几件、放到她身上哪一处。 */
     public record Give(@Doc("The maid.") EntityRef maid,
-                       @Doc("The item, minecraft:wheat_seeds.") Item item,
+                       @Doc("The item, minecraft:wheat_seeds.") StackRef item,
                        @Doc("How many.") @Omitted("all you carry of it") @Positional Optional<Integer> count,
                        @Doc("Where on her: backpack (her own slots and her backpack), mainhand, offhand, head, chest, "
                                + "legs, feet, or bauble.") @Omitted("backpack") Optional<Place> slot) {}
@@ -464,17 +466,20 @@ public final class MaidApi {
     @Note("TLM decides what a slot takes: an armour slot only what fits it, the bauble slots only baubles. A hand or "
             + "armour slot that holds something else takes nothing; take that out first.")
     @Note("Returns how many went over; fewer than asked when she ran out of room. None at all fails and says why.")
+    @Note("Naming only the item hands over any stack of it. To hand over one kind of it only (the enchanted bow, not "
+            + "the plain one), pass that kind's entry of numen.inv.items() as item.")
     @SeeAlso({"tlm.maid.take", "tlm.maid.info"})
     public static Pending<Integer> give(ServerCall call, Give args) {
-        Item item = args.item();
+        Stacks.Which which = args.item().in(call.her().getInventory());
+        Item item = which.item();
         int count = atLeastOne(args.count());
         Place place = args.slot().orElse(Place.BACKPACK);
-        mustCarry(call.her(), item);
+        mustCarry(call.her(), which);
         return call.use(maid(call, args.maid()), GUI, still -> {
             NumenPlayer her = call.her();
-            mustCarry(her, item);
+            mustCarry(her, which);
             int had = carried(her, item);
-            inGui(her, still, place == Place.BAUBLE, () -> Maids.give(her, still, item, count, place));
+            inGui(her, still, place == Place.BAUBLE, () -> Maids.give(her, still, which, count, place));
             return had - carried(her, item);
         });
     }
@@ -558,9 +563,9 @@ public final class MaidApi {
         return n;
     }
 
-    private static void mustCarry(NumenPlayer her, Item item) {
-        if (carried(her, item) == 0) {
-            throw new ApiError(ErrorKind.NO_MATERIAL, "you carry no " + id(item), null);
+    private static void mustCarry(NumenPlayer her, Stacks.Which which) {
+        if (Stacks.pick(her.getInventory(), which).isEmpty()) {
+            throw new ApiError(ErrorKind.NO_MATERIAL, "you carry no " + id(which.item()), null);
         }
     }
 

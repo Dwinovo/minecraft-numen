@@ -8,7 +8,6 @@ import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
 /**
@@ -64,32 +63,45 @@ public final class Hotbar {
     }
 
     /**
-     * 让一只手拿着 {@code item},右键就能用上它:主手已经是它,或主手空着而副手是它(原版右键主手用不了就试副手),
-     * 什么也不做;背包里有就拿到主手(拿哪一叠由 {@link Stacks#pick} 定);只在副手、主手又占着,就交换主副手;创造模式背包里没有就凭空取一叠。
+     * 让一只手拿着 {@code which} 要的那一种,右键就能用上它:主手已经是它,或主手空着而副手是它(原版右键主手用不了就试副手),
+     * 什么也不做;背包里有就拿到主手(拿哪一叠由 {@link Stacks#pick} 定);只在副手、主手又占着,就交换主副手;创造模式背包里没有就
+     * 凭空取一叠——只在哪一叠都行时,点名的一种不在身上取不出来。
      *
      * @return 拿到了没有、拿在哪只手上,连同做了什么(没做为 null)
      */
-    public Grip grip(Item item) {
+    public Grip grip(Stacks.Which which) {
         Inventory inventory = body.getInventory();
         ItemStack main = inventory.getSelected();
-        if (main.is(item)) {
+        if (which.matches(main)) {
             return new Grip(InteractionHand.MAIN_HAND, null);
         }
-        if (main.isEmpty() && body.getOffhandItem().is(item)) {
+        if (main.isEmpty() && which.matches(body.getOffhandItem())) {
             return new Grip(InteractionHand.OFF_HAND, null);
         }
-        Optional<Stacks.Pick> pick = Stacks.pick(inventory, item);
+        Optional<Stacks.Pick> pick = Stacks.pick(inventory, which);
         if (pick.isPresent()) {
             return new Grip(InteractionHand.MAIN_HAND, hold(pick.get().slot()).orElse(null));
         }
-        if (body.getOffhandItem().is(item)) {
+        if (which.matches(body.getOffhandItem())) {
             return new Grip(InteractionHand.MAIN_HAND, hold(OFFHAND).orElse(null));
         }
-        if (body.gameMode.isCreative()) {
-            inventory.setPickedItem(new ItemStack(item));
-            return new Grip(InteractionHand.MAIN_HAND, new BodyAction.Conjured(item, inventory.selected));
+        if (which.exact() == null && body.gameMode.isCreative()) {
+            inventory.setPickedItem(new ItemStack(which.item()));
+            return new Grip(InteractionHand.MAIN_HAND, new BodyAction.Conjured(which.item(), inventory.selected));
         }
         return new Grip(null, null);
+    }
+
+    /** {@link #grip} 够得着的地方——主背包与副手——里 {@code which} 要的那一种一共几件。 */
+    public int count(Stacks.Which which) {
+        int n = 0;
+        for (ItemStack stack : body.getInventory().items) {
+            if (which.matches(stack)) {
+                n += stack.getCount();
+            }
+        }
+        ItemStack offhand = body.getOffhandItem();
+        return which.matches(offhand) ? n + offhand.getCount() : n;
     }
 
     /**

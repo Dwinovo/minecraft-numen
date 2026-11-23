@@ -25,11 +25,12 @@ import com.dwinovo.numen.api.sdk.Pending;
 import com.dwinovo.numen.api.sdk.Rest;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 import com.dwinovo.numen.api.sdk.ServerCall;
+import com.dwinovo.numen.api.sdk.StackInfo;
+import com.dwinovo.numen.api.sdk.StackRef;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Item;
 
 import java.util.ArrayList;
@@ -54,42 +55,26 @@ public final class InvApi {
         VanillaKnowledge.install(numen);
     }
 
-    /** 背包里的一种东西。 */
-    public record Stack(@Doc("The item id, minecraft:cobblestone.") String item,
-                        @Doc("How many you carry of this kind, all its stacks together.") int count,
-                        @Doc("What tells this kind apart from the same item without it: a shulker box's contents, a "
-                                + "custom name, enchantments, a potion's effect. Absent for a plain item.")
-                        Optional<String> detail) {
-
-        /** 一叠(或合起来的一种)东西在模型眼里的样子:物品 id、件数,区别由 {@link StackLabel#detail} 说。 */
-        public static Stack of(ItemStack sample, int count) {
-            return of(sample, count, StackLabel.detail(sample));
-        }
-
-        /** 同上,描述由调用方给({@link StackLabel#details} 排过重的)。 */
-        public static Stack of(ItemStack sample, int count, String detail) {
-            return new Stack(BuiltInRegistries.ITEM.getKey(sample.getItem()).toString(), count,
-                    detail.isEmpty() ? Optional.empty() : Optional.of(detail));
-        }
-    }
-
-    /** 背包 36 格里的东西按"物品与组件都相同"合成一种,先见先列。 */
+    /** 背包 36 格里的东西按"物品与组件都相同"合成一种,先见先列;每一种带着它的记号,原样交回来就点名了这一种。 */
     @Fn("What you carry in your backpack, one entry per kind of item.")
     @Example("for _, s in ipairs(numen.inv.items()) do print(s.item, s.count, s.detail) end")
     @Note("Instant and read-only. Only the backpack (hotbar included): what you wear and hold in the off hand is in "
             + "<worn>. Empty means an empty table.")
     @Note("Stacks of one item that differ — a shulker box with diamonds in it and an empty one, two different potions — "
             + "are separate entries, each with a detail. Naming only the item in a call picks the stack in your main "
-            + "hand, else the first slot, and the result says which.")
+            + "hand, else the first slot, and the result says which. To use another one, pass its entry where the "
+            + "function takes an item you carry: numen.gear.hold(numen.inv.items()[2]).")
+    @Note("An entry names its kind for as long as you carry that kind, wherever its stacks lie. Once you carry none "
+            + "of it (a shulker box whose contents changed is another kind), passing the entry fails with not_found.")
     @SeeAlso("numen.inv.count")
-    public static List<Stack> items(ServerCall call) {
+    public static List<StackInfo> items(ServerCall call) {
         Inventory inventory = call.her().getInventory();
         List<Stacks.Kind> kinds = Stacks.kinds(inventory.items.subList(0,
                 Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size())));
         List<String> details = StackLabel.details(kinds.stream().map(Stacks.Kind::sample).toList());
-        List<Stack> out = new ArrayList<>();
+        List<StackInfo> out = new ArrayList<>();
         for (int i = 0; i < kinds.size(); i++) {
-            out.add(Stack.of(kinds.get(i).sample(), kinds.get(i).count(), details.get(i)));
+            out.add(StackInfo.of(kinds.get(i), details.get(i)));
         }
         return out;
     }
@@ -170,7 +155,7 @@ public final class InvApi {
     }
 
     /** 吃哪一样。 */
-    public record Eat(@Doc("The food or drink to consume: something you carry.") Item item) {}
+    public record Eat(@Doc("The food or drink to consume: something you carry.") StackRef item) {}
 
     @Fn("Eat or drink something from your inventory.")
     @Example("numen.inv.eat(\"minecraft:cooked_beef\")")
@@ -180,11 +165,12 @@ public final class InvApi {
     @Note("Refused at once, keeping the food, when you don't carry it or it isn't food or drink; fails the same way "
             + "when you are already full.")
     public static Job<EatCompanionTask.Ate> eat(ServerCall call, Eat args) {
-        return Job.of(new EatItemTaskRecord(call, args.item(), BuiltInRegistries.ITEM.getKey(args.item()).getPath()));
+        Stacks.Which which = args.item().in(call.her().getInventory());
+        return Job.of(new EatItemTaskRecord(call, which, BuiltInRegistries.ITEM.getKey(which.item()).getPath()));
     }
 
     /** 丢哪一样、丢几件。 */
-    public record Drop(@Doc("The item to drop.") Item item,
+    public record Drop(@Doc("The item to drop.") StackRef item,
                        @Doc("How many to drop (1-999); more than you carry of that stack drops all of it.")
                        @Omitted("drop all you carry of that stack") Optional<Integer> count) {}
 
@@ -195,16 +181,16 @@ public final class InvApi {
     @Note("Asks your owner first unless their rules allow it; the call waits for the answer.")
     @Note("Dropped items despawn after 5 minutes. To store things, numen.container.put puts them into a chest instead.")
     @Note("Drops one kind of stack: the one in your main hand, else the first slot (numen.inv.items lists the kinds, "
-            + "say a shulker box with contents and an empty one). The result names the stack with its detail and the other "
-            + "stacks of the item that stay.")
+            + "say a shulker box with contents and an empty one), or the kind whose entry of numen.inv.items() you pass "
+            + "as item. The result names the stack with its detail and the other stacks of the item that stay.")
     @Note("Returns how many were dropped and how many remain.")
     @SeeAlso("numen.use.block")
     public static Pending<DropCompanionTask.Dropped> drop(ServerCall call, Drop args) {
-        Item item = args.item();
-        int carried = Stacks.pick(call.her().getInventory(), item).map(Stacks.Pick::count).orElse(0);
+        Stacks.Which which = args.item().in(call.her().getInventory());
+        int carried = Stacks.pick(call.her().getInventory(), which).map(Stacks.Pick::count).orElse(0);
         int n = args.count().orElse(Math.max(1, carried));
-        return call.sync(new DropItemsTaskRecord(call, item, Math.clamp(n, 1, DROP_MAX_COUNT),
-                BuiltInRegistries.ITEM.getKey(item).getPath()));
+        return call.sync(new DropItemsTaskRecord(call, which, Math.clamp(n, 1, DROP_MAX_COUNT),
+                BuiltInRegistries.ITEM.getKey(which.item()).getPath()));
     }
 
     /** 读哪一种书。 */

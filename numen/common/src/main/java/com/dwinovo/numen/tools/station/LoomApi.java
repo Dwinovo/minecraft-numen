@@ -10,6 +10,7 @@ import com.dwinovo.numen.api.sdk.Note;
 import com.dwinovo.numen.api.sdk.Omitted;
 import com.dwinovo.numen.api.sdk.Pending;
 import com.dwinovo.numen.api.sdk.ServerCall;
+import com.dwinovo.numen.api.sdk.StackRef;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.task.station.StationTaskRecord.Deed;
@@ -21,7 +22,6 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.LoomMenu;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BannerPattern;
 import net.minecraft.world.level.block.entity.BannerPatternLayers;
@@ -54,11 +54,11 @@ public final class LoomApi {
 
     /** 哪台织布机、哪面旗帜、什么染料、什么图案。 */
     public record Weave(@Doc("The loom's cell.") BlockPos loom,
-                        @Doc("The banner, minecraft:white_banner: one you carry.") Item banner,
-                        @Doc("The dye the pattern is woven in, minecraft:red_dye.") Item dye,
+                        @Doc("The banner, minecraft:white_banner: one you carry.") StackRef banner,
+                        @Doc("The dye the pattern is woven in, minecraft:red_dye.") StackRef dye,
                         @Doc("The pattern's id, minecraft:stripe_bottom.") ResourceLocation pattern,
                         @Doc("The banner pattern item a pattern is woven from, minecraft:creeper_banner_pattern.")
-                        @Omitted("weave a pattern that needs no such item") Optional<Item> item) {}
+                        @Omitted("weave a pattern that needs no such item") Optional<StackRef> item) {}
 
     @Fn("Weave one pattern onto a banner you carry at a loom.")
     @Example("numen.loom.weave({x = 120, y = 64, z = -35}, \"minecraft:white_banner\", \"minecraft:red_dye\", \"stripe_bottom\")")
@@ -75,9 +75,10 @@ public final class LoomApi {
         }
         AtomicReference<Stations.Product> made = new AtomicReference<>();
         List<Step> steps = new ArrayList<>();
-        steps.add(Move.put(args.banner(), 1, BANNER, "the banner"));
-        steps.add(Move.put(args.dye(), 1, DYE, "the dye"));
-        args.item().ifPresent(item -> steps.add(Move.put(item, 1, PATTERN, "the pattern item")));
+        steps.add(Move.put(args.banner().in(call.her().getInventory()), 1, BANNER, "the banner"));
+        steps.add(Move.put(args.dye().in(call.her().getInventory()), 1, DYE, "the dye"));
+        args.item().ifPresent(item -> steps.add(Move.put(item.in(call.her().getInventory()), 1, PATTERN,
+                "the pattern item")));
         steps.add(new Deed((menu, her) -> {
             ItemStack woven = weave((LoomMenu) menu, her, pattern, args.item().isPresent());
             made.set(Stations.product(woven));
