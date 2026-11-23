@@ -150,7 +150,6 @@ tasks.register('apiJar', Jar) {
     include 'com/dwinovo/numen/api/NumenPlugin*.class'  // NumenPlugin 与 NumenPlugins
     include 'com/dwinovo/numen/api/Question*.class'     // Question 与 Questions:扩展点是一个问题常量,回答者经 NumenApi.answer 登记
     include 'com/dwinovo/numen/api/Focus*.class'        // 问题说"对着谁"用的那个值:一格方块或一只实体
-    include 'com/dwinovo/numen/api/witness/**'          // "这次动作前后变了什么"的回答者与账本——插件自己写的任务用同一本
     include 'com/dwinovo/numen/api/describe/**'         // "这是什么"的回答者与问一圈的那一处——插件自己写的"看"问同一处
     include 'com/dwinovo/numen/api/gear/**'
     include 'com/dwinovo/numen/api/plugin/PluginRoster*.class'  // NumenPlugins.admit 的参数类型 Source;联动型插件(含 Numen 的闸门)用它报到

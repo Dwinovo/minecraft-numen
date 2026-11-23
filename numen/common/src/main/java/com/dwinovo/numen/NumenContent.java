@@ -167,9 +167,7 @@ public final class NumenContent {
             // 原版的弓与弩是远程武器的两个提供者,和模组的枪走同一张表(弓先登记,同档里排在弩前)
             numen.rangedWeapon(com.dwinovo.numen.task.combat.VanillaRanged.BOW);
             numen.rangedWeapon(com.dwinovo.numen.task.combat.VanillaRanged.CROSSBOW);
-            // "这次动作前后变了什么"原版的那几样回答者,和模组的回答者走同一扇门、同一个问题
-            com.dwinovo.numen.witness.VanillaWitnesses.install(numen);
-            // "这是什么"原版的那几样回答者(告示牌的字、方块里存着什么),同一扇门
+            // "这是什么"原版的那几样回答者(告示牌的字、方块里存着什么),和模组的回答者走同一扇门、同一个问题
             com.dwinovo.numen.describe.VanillaDescribers.install(numen);
         });
     }

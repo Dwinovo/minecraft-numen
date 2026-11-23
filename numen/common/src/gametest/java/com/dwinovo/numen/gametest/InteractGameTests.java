@@ -136,72 +136,45 @@ public class InteractGameTests {
             helper.assertTrue(press.succeeded() && companion.containerMenu instanceof net.minecraft.world.inventory.ChestMenu
                             && press.reply().contains("\"menu\"") && press.reply().contains("minecraft:diamond"),
                     "use item did not hand back the chest window: " + press.reply());
-            helper.assertTrue(press.outcome().contains("opened a window: ChestMenu")
-                            && !press.outcome().contains("nothing visibly changed"),
-                    "the receipt does not say the click opened a window: " + press.outcome());
+            helper.assertTrue(press.outcome().contains(" — accepted"),
+                    "the receipt does not say the chest took the click: " + press.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
 
     /**
-     * 插件登记的回答者(control 0020):她右键之后,插件说的那一句和原版回答者说的一起进了回执;旁边一个抛异常的回答者只丢它自己那一条,
-     * 这一下照常做成。
+     * 右键的回执只说游戏接没接(control 0022):拿打火石点一堆没点着的营火,营火接了这一下,回执写 accepted、营火点着了;空手右键一块石头,
+     * 谁都不理,回执写 not accepted,这一下照常算做完。回执里没有"变了什么"。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
-    public static void a_plugins_witness_adds_its_line_to_the_click_receipt(GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_witnessed", new BlockPos(4, 2, 8), false);
-        companion.setXRot(-30f);
-        companion.getInventory().add(new ItemStack(Items.SNOWBALL, 4));
-        // 回答者全服的同伴都问得到:只认这一条用例的她,不论成败都撤掉
-        com.dwinovo.numen.api.NumenPlugins.register("gt_witness", numen -> {
-            numen.answer(com.dwinovo.numen.api.Questions.WITNESS, (her, focus) -> {
-                if (her == companion) {
-                    throw new IllegalStateException("a broken witness");
-                }
-                return null;
-            });
-            numen.answer(com.dwinovo.numen.api.Questions.WITNESS, (her, focus) -> {
-                if (her != companion) {
-                    return null;
-                }
-                int before = her.getInventory().countItem(Items.SNOWBALL);
-                return now -> java.util.List.of("gt_witness saw snowballs " + before + " -> "
-                        + now.getInventory().countItem(Items.SNOWBALL));
-            });
-        });
-        com.dwinovo.numen.api.gametest.TestCleanup.whenFinished(helper,
-                () -> com.dwinovo.numen.api.NumenPlugins.roster().withdraw("gt_witness"));
-        ToolRun toss = lua(companion, "numen.use.item({item = \"minecraft:snowball\"})");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(toss.done(), "use item has not finished");
-            helper.assertTrue(toss.succeeded() && toss.outcome().contains("gt_witness saw snowballs 4 -> 3")
-                            && toss.outcome().contains("inventory: -1 minecraft:snowball"),
-                    "the receipt does not carry the plugin's line beside the vanilla ones: " + toss.outcome());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 物品还是那件、里面的数据变了:打火石点着一堆营火,回执里写着手里那件多了耐久损耗(背包的增减看不到这个)。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
-    public static void a_click_reports_what_changed_inside_the_held_item(GameTestHelper helper) {
+    public static void a_right_click_says_whether_the_game_accepted_it(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos campfire = helper.absolutePos(new BlockPos(6, 2, 8));
         level.setBlockAndUpdate(campfire, Blocks.CAMPFIRE.defaultBlockState()
                 .setValue(net.minecraft.world.level.block.CampfireBlock.LIT, false));
-        NumenPlayer companion = spawnAt(helper, "gametest_lighter", new BlockPos(4, 2, 8), false);
-        companion.getInventory().add(new ItemStack(Items.FLINT_AND_STEEL));
-        ToolRun light = lua(companion, "numen.use.block(" + xyz(campfire) + ", {item = \"minecraft:flint_and_steel\"})");
+        BlockPos stone = helper.absolutePos(new BlockPos(6, 2, 3));
+        level.setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
+        NumenPlayer lighter = spawnAt(helper, "gametest_lighter", new BlockPos(4, 2, 8), false);
+        lighter.getInventory().add(new ItemStack(Items.FLINT_AND_STEEL));
+        NumenPlayer idler = spawnAt(helper, "gametest_idler", new BlockPos(4, 2, 3), false);
+        ToolRun light = lua(lighter, "numen.use.block(" + xyz(campfire) + ", {item = \"minecraft:flint_and_steel\"})");
+        ToolRun poke = lua(idler, "numen.use.block(" + xyz(stone) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(light.done(), "use block has not finished");
+            helper.assertTrue(light.done() && poke.done(), "the clicks have not finished");
             helper.assertTrue(light.succeeded()
                             && level.getBlockState(campfire).getValue(net.minecraft.world.level.block.CampfireBlock.LIT),
                     "the campfire was not lit: " + light.reply());
-            helper.assertTrue(light.outcome().contains("in your main hand: minecraft:flint_and_steel -> "
-                            + "minecraft:flint_and_steel[damage 1/64]"),
-                    "the receipt does not say the flint and steel wore down: " + light.outcome());
-            CompanionFactory.despawn(level.getServer(), companion);
+            helper.assertTrue(light.outcome().contains(" — accepted")
+                            && light.result(com.dwinovo.numen.tools.Clicks.Pressed.class)
+                                    instanceof com.dwinovo.numen.tools.Clicks.Clicked lit && lit.accepted(),
+                    "the receipt does not say the campfire took the click and nothing more: " + light.outcome());
+            helper.assertTrue(poke.succeeded() && poke.outcome().contains("not accepted: nothing there responds")
+                            && poke.result(com.dwinovo.numen.tools.Clicks.Pressed.class)
+                                    instanceof com.dwinovo.numen.tools.Clicks.Clicked poked && !poked.accepted(),
+                    "an empty-handed click on stone is not reported as ignored: " + poke.outcome());
+            CompanionFactory.despawn(level.getServer(), lighter);
+            CompanionFactory.despawn(level.getServer(), idler);
         });
     }
 
@@ -276,7 +249,7 @@ public class InteractGameTests {
 
     // ---- numen.use.entity:挤奶;numen.use.block:门、放方块 ----
 
-    /** 拿空桶右键手边的一头牛:挤了奶,空桶换成了一桶牛奶,回执写明少了一个桶、多了一桶奶。 */
+    /** 拿空桶右键手边的一头牛:挤了奶,空桶换成了一桶牛奶;回执只说牛接了这一下,背包里变了什么她自己看。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_entity_milks_a_cow(GameTestHelper helper) {
         var cow = net.minecraft.world.entity.EntityType.COW.create(helper.getLevel());
@@ -293,14 +266,14 @@ public class InteractGameTests {
             helper.assertTrue(milk.succeeded() && companion.getInventory().countItem(Items.MILK_BUCKET) == 1
                             && companion.getInventory().countItem(Items.BUCKET) == 0,
                     "the bucket was not filled with milk: " + milk.outcome());
-            helper.assertTrue(milk.outcome().contains("-1 minecraft:bucket") && milk.outcome().contains("+1 minecraft:milk_bucket"),
-                    "the reply does not say the bucket became milk: " + milk.outcome());
+            helper.assertTrue(milk.outcome().contains(" — accepted") && !milk.outcome().contains("milk_bucket"),
+                    "the reply does not say just that the cow took the click: " + milk.outcome());
             cow.discard();
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
 
-    /** 右键一扇关着的木门:门开了;再右键一次:门又关上。两次回执都说出了门的变化。 */
+    /** 右键一扇关着的木门:门开了;再右键一次:门又关上。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_at_opens_then_closes_a_door(GameTestHelper helper) {
         BlockPos lower = helper.absolutePos(new BlockPos(6, 2, 4));

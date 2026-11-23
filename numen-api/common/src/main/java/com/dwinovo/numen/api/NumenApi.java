@@ -94,11 +94,11 @@ public interface NumenApi {
 
     /**
      * 回答一个问题:登记一个回答者。问题是出题一方放在常量里的 {@link Question}(Numen API 自己出的列在 {@link Questions}),它要用的时候把
-     * 登记着的回答者问一圈。原版的回答由 Numen 从这同一个方法登记;你的模组懂的那一部分——你的物品右键之后变了什么、你的机器是什么
-     * 和在干什么——登记在这里,不用改 Numen。
+     * 登记着的回答者问一圈。原版的回答由 Numen 从这同一个方法登记;你的模组懂的那一部分——你的机器是什么、在干什么、
+     * 能对它用哪些函数——登记在这里,不用改 Numen。
      *
      * <pre>{@code
-     * numen.answer(Questions.WITNESS, new MyWandWitness());
+     * numen.answer(Questions.DESCRIBE, new MySmelterDescriber());
      * }</pre>
      *
      * <p>你也可以自己出题:在自己的类里放一个 {@code Question.of("mymod:…")} 常量,别的插件拿它登记回答者,你用

@@ -12,7 +12,7 @@ import java.util.List;
 
 /**
  * 界面里一格放着的一叠,写成一行:{@code minecraft:diamond_sword (named X; sharpness 2)},带数量;空的是 {@code empty}。
- * 界面里做一件事前后格子变了什么、各种界面读回来的结果,用的是这同一个写法。
+ * 各种界面读回来的结果用的是这同一个写法。
  */
 public final class StackLine {
 

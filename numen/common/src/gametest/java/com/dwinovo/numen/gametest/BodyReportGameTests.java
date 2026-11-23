@@ -23,8 +23,8 @@ import java.util.List;
 import static com.dwinovo.numen.gametest.GameTestKit.*;
 
 /**
- * 身体做的事如实报告:一次动作的回执说明她背包里多了什么少了什么、血量与骑乘的变化、手里的装备用坏了;她没要求而自己发生的
- * (进度奖励进了背包)用事件。都从 Lua 入口调。
+ * 身体做的事如实报告:点一下的回执说游戏接没接(之后身上、世界里变了什么她自己看,control 0022),一件活里手里的装备用坏了写进
+ * 那件活的结果;她没要求而自己发生的(进度奖励进了背包)用事件。都从 Lua 入口调。
  */
 public class BodyReportGameTests {
 
@@ -37,9 +37,9 @@ public class BodyReportGameTests {
         Constants.LOG.info("[numen-sample] {} -> {}", what, run.outcome());
     }
 
-    /** 右键带鞍的猪:她骑了上去,回执说骑上了什么。 */
+    /** 右键带鞍的猪:她骑了上去,回执说猪接了这一下(骑着什么在每轮的状态里,不在这句回执里)。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_body_report")
-    public static void riding_a_saddled_pig_is_reported(GameTestHelper helper) {
+    public static void a_right_click_that_mounts_a_pig_says_the_pig_accepted_it(GameTestHelper helper) {
         Pig pig = EntityType.PIG.create(helper.getLevel());
         BlockPos at = helper.absolutePos(new BlockPos(10, 2, 8));
         pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
@@ -52,8 +52,8 @@ public class BodyReportGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(ride.done() && ride.succeeded(), "use entity did not finish: " + ride.outcome());
             helper.assertTrue(companion.getVehicle() == pig, "she is not riding the pig");
-            helper.assertTrue(ride.outcome().contains("now riding " + com.dwinovo.numen.api.sdk.EntityLabel.of(pig)),
-                    "the reply does not say she is riding the pig: " + ride.outcome());
+            helper.assertTrue(ride.outcome().contains(" — accepted"),
+                    "the reply does not say the pig took the click: " + ride.outcome());
             sample("ride a saddled pig", ride);
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });

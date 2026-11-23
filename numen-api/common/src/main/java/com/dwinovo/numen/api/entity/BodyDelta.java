@@ -10,8 +10,7 @@ import java.util.List;
  * 一件活从开始到现在,她身上用坏了哪些装备。装备用坏任何活里都可能发生(挖、打、走路垫块),所以每件活的回执都带这一句:活开始时
  * {@link #open} 记下,收尾时问 {@link #broken}。
  *
- * <p>身体别的变化(背包与经验、血量、骑乘、手里那件东西里的数据……)是点一下这类动作的结果,由登记的回答者说
- * ({@link com.dwinovo.numen.api.witness.Ledger});挖、捡、合成有自己的账。
+ * <p>身体别的变化不在这里:挖、捡、合成有自己的账;点一下之后身上变了什么,她自己看。
  */
 public final class BodyDelta {
 

@@ -138,10 +138,11 @@ public class Mouse {
          * 按了。
          *
          * @param hit     这一下按在准星落着的什么上(方块、实体,或什么也没有)
+         * @param answer  游戏对这一下交回的话
          * @param changes 点中的那一格与它面前那一格(各连同上下一格)里,变了的格
          * @param opened  这一下打开了一个界面(箱子、熔炉、交易、模组机器)
          */
-        record Pressed(HitResult hit, List<Change> changes, boolean opened) implements Use {
+        record Pressed(HitResult hit, Answer answer, List<Change> changes, boolean opened) implements Use {
 
             public Pressed {
                 changes = List.copyOf(changes);
@@ -150,6 +151,19 @@ public class Mouse {
 
         /** 没让按。 */
         record Refused(BlockPos pos, Refusal reason) implements Use {}
+
+        /**
+         * 右键按下去之后游戏交回的话:方块、实体、手里的东西各自对这一下的答复({@link InteractionResult}),两只手、几条路问下来归成一个。
+         * 这是被点的东西自己说的,不是比对世界得出的;它说接了,不等于世界里一定留下了看得见的变化。
+         */
+        enum Answer {
+            /** 有一样接了这一下。 */
+            TAKEN,
+            /** 没有谁接下,其中有的说做不成(方块放不下、桶倒不出)。 */
+            FAILED,
+            /** 谁都没理这一下。 */
+            IGNORED
+        }
 
         Use WAITING = new Waiting();
     }
@@ -524,6 +538,7 @@ public class Mouse {
         BlockHitResult block = hit instanceof BlockHitResult b && hit.getType() == HitResult.Type.BLOCK ? b : null;
         Entity entity = hit instanceof EntityHitResult e ? e.getEntity() : null;
         Map<BlockPos, BlockState> before = block == null ? Map.of() : around(level, block);
+        Use.Answer answer = Use.Answer.IGNORED;
         for (InteractionHand hand : InteractionHand.values()) {
             ItemStack stack = body.getItemInHand(hand);
             if (!stack.isItemEnabled(level.enabledFeatures())) {
@@ -531,14 +546,27 @@ public class Mouse {
             }
             if (block != null) {
                 InteractionResult onBlock = useItemOn(level, stack, hand, block);
-                if (onBlock.consumesAction() || onBlock == InteractionResult.FAIL) {
+                if (onBlock.consumesAction()) {
+                    answer = Use.Answer.TAKEN;
+                    break;
+                }
+                if (onBlock == InteractionResult.FAIL) {
+                    answer = Use.Answer.FAILED;
                     break;
                 }
             } else if (entity != null && useOnEntity(entity, hand, at)) {
+                answer = Use.Answer.TAKEN;
                 break;
             }
-            if ((itemFallthrough || (block == null && entity == null)) && !stack.isEmpty() && useItem(level, stack, hand)) {
-                break;
+            if ((itemFallthrough || (block == null && entity == null)) && !stack.isEmpty()) {
+                InteractionResult onItem = useItem(level, stack, hand);
+                if (onItem.consumesAction()) {
+                    answer = Use.Answer.TAKEN;
+                    break;
+                }
+                if (onItem == InteractionResult.FAIL) {
+                    answer = Use.Answer.FAILED;
+                }
             }
         }
         List<Change> changes = new ArrayList<>();
@@ -549,7 +577,7 @@ public class Mouse {
             }
         });
         boolean opened = body.containerMenu != menuBefore && body.containerMenu != body.inventoryMenu;
-        return new Use.Pressed(hit, changes, opened);
+        return new Use.Pressed(hit, answer, changes, opened);
     }
 
     /**
@@ -589,13 +617,13 @@ public class Mouse {
                 || body.interactOn(entity, hand).consumesAction();    // 物品展示框、拴绳
     }
 
-    /** 用手里的东西({@code useItem});它吃掉了这一下为 true。 */
-    private boolean useItem(ServerLevel level, ItemStack stack, InteractionHand hand) {
+    /** 用手里的东西({@code useItem}),交回它的答复。 */
+    private InteractionResult useItem(ServerLevel level, ItemStack stack, InteractionHand hand) {
         InteractionResult result = body.gameMode.useItem(body, level, stack, hand);
         if (result.shouldSwing()) {
             body.swing(hand);
         }
-        return result.consumesAction();
+        return result;
     }
 
     /** 右键可能改到的几格:点中的那一格、它面前那一格,各连同上下一格。 */

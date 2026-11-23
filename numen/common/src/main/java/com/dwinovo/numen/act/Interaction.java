@@ -109,6 +109,10 @@ public final class Interaction {
     private int held;                 // USE+air: ticks held so far
     private boolean hardFail;         // a fire hit an unrecoverable error
     private boolean opened;           // a press opened a window (a chest, a trade, a machine)
+    /** 右键按下去之后游戏交回的话;按了几下取其中最好的一个,一下都没按到为 null。 */
+    private Mouse.Use.Answer answer;
+    /** 左键按着的那一格碎了。 */
+    private boolean broke;
     private String failReason = "interaction failed";
     private FailureType failType = FailureType.UNKNOWN;
 
@@ -237,6 +241,31 @@ public final class Interaction {
         return opened;
     }
 
+    /** 右键按下去之后游戏交回的话;没按到(左键,或还没轮到按)为 null。 */
+    public Mouse.Use.Answer answer() {
+        return answer;
+    }
+
+    public Button button() {
+        return button;
+    }
+
+    /** 按的是一只实体(不是一格方块,也不是朝空气)。 */
+    public boolean onEntity() {
+        return entity != null;
+    }
+
+    /**
+     * 这一下游戏接没接:右键是方块、实体或手里的东西有一样接了;左键一格是它碎了;左键实体是至少落下去一下。
+     * 只说接没接,不说之后世界变成了什么样。
+     */
+    public boolean accepted() {
+        if (button == Button.USE) {
+            return answer == Mouse.Use.Answer.TAKEN;
+        }
+        return entity != null ? fires > 0 : broke;
+    }
+
     /** Structured cause of a {@link Status#FAILED}, for the reactive task layer to branch on. */
     public FailureType failType() {
         return failType;
@@ -297,7 +326,10 @@ public final class Interaction {
         return switch (player.mouse().dig()) {
             case Mouse.Strike.Swinging swinging -> timing.hold || !swinging.pressed() ? Status.RUNNING
                     : Status.DONE;
-            case Mouse.Strike.Broke broke -> Status.DONE;
+            case Mouse.Strike.Broke done -> {
+                broke = true;
+                yield Status.DONE;
+            }
             case Mouse.Strike.Missed missed -> Status.RUNNING;
             case Mouse.Strike.Refused refused -> {
                 Verdict verdict = refused.reason().verdict();
@@ -405,10 +437,13 @@ public final class Interaction {
     }
 
     /**
-     * 右键按下去了:这一下打开了界面就记下来,连同它是右键哪儿打开的({@link MenuOrigin})。对着方块、实体、空气按的三条路都从这里过——
-     * 手里的东西对着空气用也能打开界面(模组的背包、无线终端)。
+     * 右键按下去了:记下游戏交回的话;这一下打开了界面也记下来,连同它是右键哪儿打开的({@link MenuOrigin})。对着方块、实体、空气按的
+     * 三条路都从这里过——手里的东西对着空气用也能打开界面(模组的背包、无线终端)。
      */
     private void landed(Mouse.Use.Pressed pressed) {
+        if (answer == null || pressed.answer().compareTo(answer) < 0) {
+            answer = pressed.answer();     // 枚举的先后就是好坏:接了、做不成、没人理
+        }
         if (pressed.opened()) {
             opened = true;
             MenuOrigin.opened(player, pressed.hit() instanceof BlockHitResult hit

@@ -144,7 +144,7 @@ public final class GuiApi {
     @Note("Minecraft decides whether it works (levels and lapis for an enchant, materials and uses for a trade, a payment "
             + "item for a beacon) and does nothing when not; the call then fails saying what it needs and what you have.")
     @Note("Setting someone's beacon or trading with their villager may ask your owner first; the call waits for the answer. "
-            + "Returns the window as it is now; what changed is told in the reply.")
+            + "Returns the window as it is now.")
     @SeeAlso({"numen.gui.view", "numen.gui.take", "numen.gui.quick"})
     public static Pending<GuiOps.Window> choose(ServerCall call, Choose args) {
         return MenuKinds.choose(call, args.option(), args.second().orElse(null));

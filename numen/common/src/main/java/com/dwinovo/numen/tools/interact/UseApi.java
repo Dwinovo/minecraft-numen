@@ -95,9 +95,9 @@ public final class UseApi {
             + "clicked, and the result says so and names the next step. It never moves, never swaps tools, never "
             + "clears the way.")
     @Note("Placing near your owner's things may ask your owner first; the call waits for the answer.")
-    @Note("Otherwise the result reports what actually changed: on you (inventory and experience, the data inside an "
-            + "item you carry, health, food, effects, riding), the aimed block, entities that appeared; no change listed "
-            + "means nothing that is watched changed.")
+    @Note("Otherwise the result says whether the game accepted the click (accepted): the block or what you hold acted "
+            + "on it. What the world looks like afterwards is not in the result: numen.scan.block reads the block, "
+            + "numen.scan.entities what is around, numen.inv.items what you carry.")
     @SeeAlso({"numen.gui.view", "numen.use.hit", "numen.use.entity"})
     public static Pending<Clicks.Pressed> block(ServerCall call, Block args) {
         return call.sync(BlockActionOps.interactAt(call, MouseButton.RIGHT, args.cell(), holdTicks(args.hold()),
@@ -115,6 +115,8 @@ public final class UseApi {
     @Example("numen.use.item({item = \"minecraft:snowball\"})")
     @Note("To aim somewhere, `numen.use.block` at that cell instead; air cells work too.")
     @Note("Food and drink go through `numen.inv.eat`, not here.")
+    @Note("The result says whether the game accepted the click (accepted), not what it changed; look afterwards with "
+            + "numen.scan and numen.inv.")
     @SeeAlso("numen.use.block")
     public static Pending<Clicks.Pressed> item(ServerCall call, Press args) {
         return call.sync(BlockActionOps.interactAt(call, MouseButton.RIGHT, null, holdTicks(args.hold()),
@@ -143,8 +145,9 @@ public final class UseApi {
     @Note("Right on a boat or rideable boards it: runtime_state then shows <riding>; `numen.move.walk` sails a boat "
             + "across water, numen.use.dismount() steps off. Never click your own vehicle again.")
     @Note("An armor stand takes its gear by where you click (`at`), like a real client's click on that spot: the click on the "
-            + "spot goes first, a plain click after it. Minecraft decides what fits where; the result lists what changed on the "
-            + "stand and in your hands.")
+            + "spot goes first, a plain click after it. Minecraft decides what fits where; numen.inv.items shows what left "
+            + "your hands or came back to them.")
+    @Note("The result says whether the entity or what you hold accepted the click (accepted), not what it changed.")
     @SeeAlso({"numen.use.block", "numen.use.hit"})
     public static Pending<Clicks.Pressed> entity(ServerCall call, OnEntity args) {
         EntityRef target = present(call, args.entity());
@@ -173,6 +176,7 @@ public final class UseApi {
             + "with its reason and nothing is hit.")
     @Note("Hitting your owner's blocks, pets, named mobs or villagers asks your owner first; the call waits for the "
             + "answer.")
+    @Note("The result says whether the block broke or the hit landed (accepted).")
     @SeeAlso({"numen.use.block", "numen.use.entity"})
     public static Pending<Clicks.Pressed> hit(ServerCall call, Hit args) {
         CellOrEntity target = args.target();
