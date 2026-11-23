@@ -1,6 +1,6 @@
 # 0021 她面前只有看和做:界面只当内部引擎,"这是什么"由回答者说
 
-- 状态:已接受,在落地(看、做已落地;拿掉界面未落地,见文末);"没人适配的模组机器也通用"的几处被
+- 状态:已接受,已落地(看、做、拿掉界面三步都落地了,见文末);"没人适配的模组机器也通用"的几处被
   [0023](0023-mods-belong-to-plugins-no-generic-fallback.md) 修订
 - 日期:2026-11-23
 - 另见:[0020](0020-questions-answered-by-whoever-knows.md)(问问题的机制;本条取代它的决定 5)、0005(一条命令只做一件事)、
@@ -183,3 +183,21 @@
   问 `MenuKinds.takeOut`,删 `tools.menu` 时要把它搬到搬东西的那一处。
 - 测试:GameTest `StationGameTests`(批 `numen_station`),每组一条从函数入口走完整一趟,附魔另有一条等级不够时如实说、东西都回来;
   `RefusedArgumentsTest` 加了派活之前退回的三条。
+
+第 3 步(拿掉界面)已落地:
+
+- 删掉的:`numen.gui.*`(`GuiApi`)、`Window`(`GuiOps`)、出厂模块 `numen.gui`(`gui.lua`)、`tools.menu` 整个包(界面种类的那张表)、
+  只给 `gui.move`、`gui.quick` 用的 `TransferTaskRecord` 与它的任务,以及只剩它们在用的:`ConsentItem.unknownWindow`(来历不明的
+  界面问主人)、读界面数据槽的平台服务 `syncedDataSlots` 与它的访问器。
+- 点一下只交回一种值(`Clicks.Clicked`):`numen.use.block`、`item`、`entity`、`hit` 都是它。这一下打开了界面,两个点击任务在回执
+  拼好之前当场合上,回执与值都不提。`StationCompanionTask` 派的点击是唯一的例外,记录上带着 `keepsWindow`,界面留给它接着用、
+  它做完自己合。"没有定的"里"`numen.use.block` 点开了界面怎么办"就这样定了:合上,不交回"看"的那几行(她要看就 `numen.scan.block`)。
+- `ContainerOps` 只剩搬东西的点击(`Move`、取东西要过权限层的那个动作、点下去的一步),只给 `GuiItemsCompanionTask` 用。讲台的书靠
+  界面上的钮取下这件原版事实写在整叠取走的那一处(界面是 `LecternMenu` 就按 `BUTTON_TAKE_BOOK`)。
+- 随之没有了、也不补的:骑着的坐骑的物品栏(原 `numen.gui.open`),按格看与挪她自己背包里的东西(原 `numen.gui.view`、`move`)。
+  同一种物品有几叠不一样的时,点名物品取的是主手那一叠、否则格号最小的那一叠;把另一叠挪进主手的办法现在没有。
+- 测试:`ContainerGameTests` 整个删了(每条的主角都是删掉的函数,同样的行为在 `StationGameTests`、`InventoryGameTests` 里从新函数
+  走),其中往满箱子里放那一条改从 `numen.container.put` 走(`container_put_into_a_full_chest_says_it_is_full`);取别人箱子里的
+  东西先问主人改从 `numen.container.take` 走;右键箱子那一条(`use_block_sneaking_puts_a_block_on_a_chest_instead_of_opening_it`)
+  加了"回执说接了、界面已经合上";`ArriveGameTests` 里隔着高草点箱子的两条原来看界面开没开,改看回执(点到的是谁、接没接);
+  来历不明的界面问主人、`numen.use.item` 交回界面两条随功能删掉。

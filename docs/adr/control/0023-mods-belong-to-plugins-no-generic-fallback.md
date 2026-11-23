@@ -1,6 +1,6 @@
 # 0023 模组的事归插件:不留通用的兜底
 
-- 状态:已接受(说明已改;`numen.gui.*` 未拿掉,见 0021)
+- 状态:已接受,已落地(说明已改;`numen.gui.*` 已随 0021 的第 3 步拿掉)
 - 日期:2026-11-23
 - 另见:[0021](0021-look-and-do-no-windows-for-the-model.md)(本条修订它的几处,见"修订了什么")、
   [0020](0020-questions-answered-by-whoever-knows.md)(问题与登记的门)
