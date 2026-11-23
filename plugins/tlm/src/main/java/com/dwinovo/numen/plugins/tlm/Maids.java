@@ -3,6 +3,7 @@ package com.dwinovo.numen.plugins.tlm;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.api.sdk.EntityInfo;
 import com.dwinovo.numen.api.sdk.EntityLabel;
 import com.github.tartaricacid.touhoulittlemaid.api.event.MaidTamedEvent;
@@ -47,12 +48,16 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.items.IItemHandler;
+import net.neoforged.neoforge.items.SlotItemHandler;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.handling.ServerPayloadContext;
 
@@ -99,15 +104,6 @@ final class Maids {
     static final int NAME_MAX = 32;
 
     private Maids() {}
-
-    /** 界面的一页在车万女仆界面边上的页签编号({@link TabIndex})。 */
-    private static int tabIndex(MaidApi.Tab tab) {
-        return switch (tab) {
-            case BACKPACK -> TabIndex.MAIN;
-            case BAUBLE -> TabIndex.BAUBLE;
-            case CURIOS -> TabIndex.CURIOS;
-        };
-    }
 
     /** 一只女仆在设置页上的四样:家模式、拾取、骑乘、日程。日程的三种就是 {@link MaidSchedule} 的名字。 */
     record Settings(boolean home, boolean pickup, boolean ride, MaidApi.Schedule schedule) {}
@@ -196,7 +192,8 @@ final class Maids {
     }
 
     /**
-     * 一只女仆的详情({@code tlm.maid.info}):清单里的她({@link #row}),加上设置页的其余几样、好感、背包、日程点与每一个工作模式。
+     * 一只女仆的详情({@code tlm.maid.info}):清单里的她({@link #row}),加上设置页的其余几样、好感、背包、带着的东西、日程点与
+     * 每一个工作模式。
      */
     static MaidApi.Detail detail(Entity entity, NumenPlayer her) {
         EntityMaid maid = (EntityMaid) entity;
@@ -209,7 +206,8 @@ final class Maids {
                 points.isConfigured() ? Optional.of(new MaidApi.SchedulePoints(points.getWorkPos().immutable(),
                         points.getIdlePos().immutable(), points.getSleepPos().immutable(),
                         points.getDimension().toString())) : Optional.empty(),
-                preferences(maid), equipment(maid), effects(maid), maid.getExperience(), maid.getIsInvulnerable(),
+                preferences(maid), equipment(maid), kinds(maid.getAvailableBackpackInv()), kinds(maid.getMaidBauble()),
+                effects(maid), maid.getExperience(), maid.getIsInvulnerable(),
                 BuiltInRegistries.ACTIVITY.getKey(maid.getScheduleDetail()).toString(), maid.isSleeping(),
                 Optional.ofNullable(maid.getTarget()).map(EntityInfo::of), tasks(maid));
     }
@@ -225,6 +223,32 @@ final class Maids {
             }
         }
         return worn;
+    }
+
+    /** 一处存着的东西,按种类合计,先见的在前。 */
+    private static List<MaidApi.Held> kinds(IItemHandler handler) {
+        Map<Item, Integer> counts = new LinkedHashMap<>();
+        for (int i = 0; i < handler.getSlots(); i++) {
+            ItemStack stack = handler.getStackInSlot(i);
+            if (!stack.isEmpty()) {
+                counts.merge(stack.getItem(), stack.getCount(), Integer::sum);
+            }
+        }
+        List<MaidApi.Held> rows = new ArrayList<>();
+        counts.forEach((item, n) -> rows.add(new MaidApi.Held(BuiltInRegistries.ITEM.getKey(item).toString(), n)));
+        return rows;
+    }
+
+    /** 这一处存着几件 {@code item}。 */
+    private static int count(IItemHandler handler, Item item) {
+        int n = 0;
+        for (int i = 0; i < handler.getSlots(); i++) {
+            ItemStack stack = handler.getStackInSlot(i);
+            if (stack.is(item)) {
+                n += stack.getCount();
+            }
+        }
+        return n;
     }
 
     private static MaidApi.Held held(ItemStack stack) {
@@ -372,14 +396,6 @@ final class Maids {
         return ((EntityMaid) maid).isSleeping();
     }
 
-    /** 她此刻开着的是不是这只女仆的界面,开着的话是哪一种菜单;没开是 null。 */
-    static String showing(ServerPlayer her, Entity maid) {
-        if (her.containerMenu instanceof AbstractMaidContainer menu && menu.getMaid() == maid) {
-            return BuiltInRegistries.MENU.getKey(menu.getType()).toString();
-        }
-        return null;
-    }
-
     // ---- 做:和界面上按下那个按钮同一个包 ----
 
     /** 切工作模式,和任务列表上点一个按钮一样。 */
@@ -421,9 +437,101 @@ final class Maids {
                 from(her, MaidModelPackage.TYPE));
     }
 
-    /** 打开界面的一页,和点边上的页签一样。 */
-    static void open(ServerPlayer her, Entity maid, MaidApi.Tab tab) {
-        ToggleTabPackage.handle(new ToggleTabPackage(maid.getId(), tabIndex(tab)), from(her, ToggleTabPackage.TYPE));
+    // ---- 递东西:开她界面的一页,在里面点格子 ----
+
+    /**
+     * 打开界面的一页,和点边上的页签一样:主页(穿的、拿的、她自己的格子与背包)或饰品页。车万女仆开没开,读她此刻开着的界面说。
+     */
+    static boolean open(ServerPlayer her, Entity maid, boolean baubles) {
+        ToggleTabPackage.handle(new ToggleTabPackage(maid.getId(), baubles ? TabIndex.BAUBLE : TabIndex.MAIN),
+                from(her, ToggleTabPackage.TYPE));
+        return her.containerMenu instanceof AbstractMaidContainer menu && menu.getMaid() == maid;
+    }
+
+    /**
+     * 把她背包里的 {@code item} 递到女仆的 {@code place} 那一处,至多 {@code count} 件。那一页得开着({@link #open})。
+     * 那一处一件都收不下时不动手,带着读到的事实失败:车万女仆的格子不收这种东西、那一格放着别的、没有空位。
+     */
+    static void give(ServerPlayer her, Entity maid, Item item, int count, MaidApi.Place place) {
+        List<Slot> into = slots(her, maid, place);
+        ItemStack stack = GuiMoves.carriedStack(her, item);
+        if (GuiMoves.room(into, stack) == 0) {
+            String id = BuiltInRegistries.ITEM.getKey(item).toString();
+            String where = label(maid) + "'s " + word(place);
+            if (into.stream().noneMatch(slot -> slot.mayPlace(stack))) {
+                throw new ApiError(ErrorKind.FAILED, "TLM does not let " + id + " into " + where + ".", null);
+            }
+            ItemStack inTheWay = into.size() == 1 ? into.get(0).getItem() : ItemStack.EMPTY;
+            if (!inTheWay.isEmpty() && !inTheWay.is(item)) {
+                String other = BuiltInRegistries.ITEM.getKey(inTheWay.getItem()).toString();
+                throw new ApiError(ErrorKind.FAILED, where + " holds " + other + "; take that out first.",
+                        Call.of("tlm.maid.take", EntityLabel.of(maid), other));
+            }
+            throw new ApiError(ErrorKind.FAILED, where + " has no room for " + id + ".", null);
+        }
+        GuiMoves.give(her, item, count, into);
+    }
+
+    /**
+     * 把女仆身上的 {@code item} 拿进她的背包,至多 {@code count} 件。开着主页时先拿她自己的格子与背包里的,再是手里的、穿着的;
+     * 开着饰品页时拿饰品。
+     */
+    static void take(ServerPlayer her, Entity maid, Item item, int count, boolean baubles) {
+        List<Slot> from = new ArrayList<>();
+        for (MaidApi.Place place : MaidApi.Place.values()) {
+            if ((place == MaidApi.Place.BAUBLE) == baubles) {
+                from.addAll(slots(her, maid, place));
+            }
+        }
+        GuiMoves.take(her, item, count, from);
+    }
+
+    /** 女仆身上一共有几件 {@code item}:她自己的格子与背包、手里的、穿着的、饰品。 */
+    static int carries(Entity entity, Item item) {
+        EntityMaid maid = (EntityMaid) entity;
+        return count(maid.getAvailableBackpackInv(), item) + count(maid.getHandsInvWrapper(), item)
+                + count(maid.getArmorInvWrapper(), item) + count(maid.getMaidBauble(), item);
+    }
+
+    /** 她的饰品里有没有 {@code item}。 */
+    static boolean wearsBauble(Entity maid, Item item) {
+        return count(((EntityMaid) maid).getMaidBauble(), item) > 0;
+    }
+
+    /**
+     * 她开着的这只女仆的界面里属于 {@code place} 这一处的格子,按界面里的先后。认的是那一格背后是女仆的哪一份存储:界面的格子
+     * 就是照这几份建的。
+     */
+    private static List<Slot> slots(ServerPlayer her, Entity entity, MaidApi.Place place) {
+        EntityMaid maid = (EntityMaid) entity;
+        IItemHandler of = switch (place) {
+            case BACKPACK -> maid.getMaidInv();
+            case MAINHAND, OFFHAND -> maid.getHandsInvWrapper();
+            case HEAD, CHEST, LEGS, FEET -> maid.getArmorInvWrapper();
+            case BAUBLE -> maid.getMaidBauble();
+        };
+        // 手与盔甲那两份里一格一个装备位,编号就是装备位在它那一类里的编号
+        int index = switch (place) {
+            case BACKPACK, BAUBLE -> -1;
+            default -> EquipmentSlot.valueOf(place.name()).getIndex();
+        };
+        List<Slot> found = new ArrayList<>();
+        for (Slot slot : her.containerMenu.slots) {
+            if (slot instanceof SlotItemHandler shown && shown.getItemHandler() == of
+                    && (index < 0 || slot.getContainerSlot() == index)) {
+                found.add(slot);
+            }
+        }
+        return found;
+    }
+
+    /** 这一处在回执里的叫法。 */
+    private static String word(MaidApi.Place place) {
+        return switch (place) {
+            case BACKPACK -> "backpack";
+            case BAUBLE -> "bauble slots";
+            default -> place.name().toLowerCase(Locale.ROOT) + " slot";
+        };
     }
 
     /** 这个包由她发来时 NeoForge 会交给 {@code handle} 的那个上下文,理由见类注释。 */

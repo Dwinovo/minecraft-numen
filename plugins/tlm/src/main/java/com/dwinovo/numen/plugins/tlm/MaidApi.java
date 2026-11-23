@@ -14,12 +14,15 @@ import com.dwinovo.numen.api.sdk.Fn;
 import com.dwinovo.numen.api.sdk.Note;
 import com.dwinovo.numen.api.sdk.Omitted;
 import com.dwinovo.numen.api.sdk.Pending;
+import com.dwinovo.numen.api.sdk.Positional;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 import com.dwinovo.numen.api.sdk.ServerCall;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,7 +30,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * {@code tlm.maid}:她养的女仆——名下有哪些、一只的详情、切工作模式、改设置、攻击名单、改名、换模型、打开界面的一页。
+ * {@code tlm.maid}:她养的女仆——名下有哪些、一只的详情、切工作模式、改设置、攻击名单、改名、换模型、递东西给她、从她身上拿回来。
  *
  * <p>都在服务端:女仆是世界里的实体。读的(清单、详情、攻击名单、模型)当场回、不问主人;做的是人在女仆界面里按的按钮,每一个都是用这只女仆
  * ({@link ServerCall#use}:够不够得着、权限层的 {@code use_entity}、放行后再认一次),放行了才调车万女仆的包({@link Maids})。和
@@ -45,8 +48,8 @@ public final class MaidApi {
     /** 日程:白天干活、夜里干活、全天干活。 */
     public enum Schedule { DAY, NIGHT, ALL }
 
-    /** 界面的一页。 */
-    public enum Tab { BACKPACK, BAUBLE, CURIOS }
+    /** 女仆身上放东西的一处:她自己的格子与背包、两只手、四件盔甲、饰品栏。 */
+    public enum Place { BACKPACK, MAINHAND, OFFHAND, HEAD, CHEST, LEGS, FEET, BAUBLE }
 
     /** 她拾取什么:物品、经验,或两样都捡。 */
     public enum PickupKind { ITEM, XP, ALL }
@@ -115,8 +118,8 @@ public final class MaidApi {
     @Doc("Where she works, idles and sleeps on her schedule.")
     public record SchedulePoints(BlockPos work, BlockPos idle, BlockPos sleep, String dimension) {}
 
-    /** 身上穿着或拿着的一样。 */
-    @Doc("What she wears or holds in one equipment slot.")
+    /** 她身上的一样东西:穿着的、拿着的、带着的。 */
+    @Doc("An item on her and how many.")
     public record Held(String item, int count) {}
 
     /** 身上的一个药水效果。 */
@@ -137,6 +140,8 @@ public final class MaidApi {
                          Preferences preferences,
                          @Doc("By slot: mainhand, offhand, head, chest, legs, feet; an empty slot is left out.")
                          Map<String, Held> equipment,
+                         @Doc("What her own slots and her backpack hold, one row per kind of item.") List<Held> items,
+                         @Doc("The baubles she wears.") List<Held> baubles,
                          List<Effect> effects,
                          @Doc("The experience she carries.") int experience,
                          @Doc("Whether she cannot be hurt.") boolean invulnerable,
@@ -150,7 +155,8 @@ public final class MaidApi {
     public record Which(@Doc("The maid: her Maid or Entity, or her id as tlm.maid.list or numen.scan.entities "
             + "lists it.") EntityRef maid) {}
 
-    @Fn("One maid in full: settings, gear, effects, what she is doing, and every work mode with what it needs.")
+    @Fn("One maid in full: settings, gear, what she carries, effects, what she is doing, and every work mode with "
+            + "what it needs.")
     @Example("tlm.maid.info(\"maid@3f9a1c\")")
     @Example("for _, t in ipairs(tlm.maid.info(\"maid@3f9a1c\").tasks) do print(t.task, t.can_switch) end")
     @Note("Read-only, from any distance, any maid (someone else's too).")
@@ -444,40 +450,129 @@ public final class MaidApi {
         });
     }
 
-    /** 开哪一只的哪一页。 */
-    public record Open(@Doc("The maid.") EntityRef maid,
-                       @Doc("Which page of her GUI: backpack = armour, hands, her own slots and her backpack; bauble = her "
-                               + "bauble slots; curios = her Curios slots (with Curios installed).")
-                       @Omitted("open the backpack page") Optional<Tab> tab) {}
+    /** 递给谁、递什么、递几件、放到她身上哪一处。 */
+    public record Give(@Doc("The maid.") EntityRef maid,
+                       @Doc("The item, minecraft:wheat_seeds.") Item item,
+                       @Doc("How many.") @Omitted("all you carry of it") @Positional Optional<Integer> count,
+                       @Doc("Where on her: backpack (her own slots and her backpack), mainhand, offhand, head, chest, "
+                               + "legs, feet, or bauble.") @Omitted("backpack") Optional<Place> slot) {}
 
-    /** 开了的界面。 */
-    @Doc("The maid GUI now open.")
-    public record Opened(@Doc("Her id.") String maid, @Doc("The menu now open.") String menu) {}
-
-    @Fn("Open a page of one of your maids' GUI, then work it with numen.gui.view.")
-    @Example("tlm.maid.open(\"maid@3f9a1c\")")
-    @Example("tlm.maid.open(\"maid@3f9a1c\", {tab = \"bauble\"})")
-    @Note("Then `numen.gui.view()` lists its slots, `numen.gui.move` and `numen.gui.quick` move items (armour, hand, "
-            + "backpack or bauble slots), `numen.gui.close()` closes it. It stays open while you stay within reach.")
-    @Note("The same reach, owner rule and asking as tlm.maid.task. A sleeping maid does not open.")
-    @SeeAlso({"numen.gui.view", "numen.gui.move", "numen.gui.close"})
-    public static Pending<Opened> open(ServerCall call, Open args) {
-        Tab tab = args.tab().orElse(Tab.BACKPACK);
+    @Fn("Hand items from your inventory to one of your maids: into her backpack, or onto a slot she holds or wears.")
+    @Example("tlm.maid.give(\"maid@3f9a1c\", \"minecraft:wheat_seeds\", 16)")
+    @Example("tlm.maid.give(\"maid@3f9a1c\", \"minecraft:bow\", 1, {slot = \"mainhand\"})")
+    @Note("The same reach, owner rule and asking as tlm.maid.task. A sleeping maid takes nothing.")
+    @Note("TLM decides what a slot takes: an armour slot only what fits it, the bauble slots only baubles. A hand or "
+            + "armour slot that holds something else takes nothing; take that out first.")
+    @Note("Returns how many went over; fewer than asked when she ran out of room. None at all fails and says why.")
+    @SeeAlso({"tlm.maid.take", "tlm.maid.info"})
+    public static Pending<Integer> give(ServerCall call, Give args) {
+        Item item = args.item();
+        int count = atLeastOne(args.count());
+        Place place = args.slot().orElse(Place.BACKPACK);
+        mustCarry(call.her(), item);
         return call.use(maid(call, args.maid()), GUI, still -> {
             NumenPlayer her = call.her();
-            Maids.open(her, still, tab);
-            String menu = Maids.showing(her, still);
-            if (menu != null) {
-                return new Opened(EntityLabel.of(still), menu);
-            }
-            String said = "TLM did not open the " + tab.name().toLowerCase(java.util.Locale.ROOT) + " page of "
-                    + Maids.label(still) + ".";
-            if (Maids.asleep(still)) {
-                throw new ApiError(ErrorKind.FAILED, said + " She is asleep; a sleeping maid's GUI does not open.",
-                        null);
-            }
-            throw refused(her, still, null, said, null);
+            mustCarry(her, item);
+            int had = carried(her, item);
+            inGui(her, still, place == Place.BAUBLE, () -> Maids.give(her, still, item, count, place));
+            return had - carried(her, item);
         });
+    }
+
+    /** 从谁身上拿、拿什么、拿几件。 */
+    public record Take(@Doc("The maid.") EntityRef maid,
+                       @Doc("The item, minecraft:wheat.") Item item,
+                       @Doc("How many.") @Omitted("all she has of it") @Positional Optional<Integer> count) {}
+
+    @Fn("Take items from one of your maids into your inventory.")
+    @Example("tlm.maid.take(\"maid@3f9a1c\", \"minecraft:wheat\")")
+    @Example("tlm.maid.take(\"maid@3f9a1c\", \"minecraft:arrow\", 16)")
+    @Note("It takes from her backpack first, then what she holds, what she wears, and her baubles. What she has is in "
+            + "tlm.maid.info: equipment, items, baubles.")
+    @Note("The same reach, owner rule and asking as tlm.maid.task. A sleeping maid gives nothing.")
+    @Note("Returns how many came over; fewer than asked when she had no more or your inventory filled up. None at all "
+            + "fails: not_found when she has none.")
+    @SeeAlso({"tlm.maid.give", "tlm.maid.info"})
+    public static Pending<Integer> take(ServerCall call, Take args) {
+        Item item = args.item();
+        int count = atLeastOne(args.count());
+        Entity maid = maid(call, args.maid());
+        mustHave(maid, item);
+        return call.use(maid, GUI, still -> {
+            NumenPlayer her = call.her();
+            mustHave(still, item);
+            int had = carried(her, item);
+            inGui(her, still, false, () -> Maids.take(her, still, item, count, false));
+            int got = carried(her, item) - had;
+            if (got < count && Maids.wearsBauble(still, item)) {
+                int more = count - got;
+                inGui(her, still, true, () -> Maids.take(her, still, item, more, true));
+                got = carried(her, item) - had;
+            }
+            if (got == 0) {
+                boolean room = her.getInventory().getFreeSlot() >= 0
+                        || her.getInventory().getSlotWithRemainingSpace(new ItemStack(item)) >= 0;
+                throw new ApiError(ErrorKind.FAILED, room
+                        ? "TLM does not let the " + id(item) + " off " + Maids.label(still) + " (armour cursed with "
+                                + "binding stays on)."
+                        : "your inventory has no room for " + id(item) + ".", null);
+            }
+            return got;
+        });
+    }
+
+    /**
+     * 打开她界面的一页、在里面做 {@code work}、合上:界面只在这一次调用里。车万女仆没开这一页就失败,说它的规矩此刻怎么说。
+     */
+    private static void inGui(NumenPlayer her, Entity maid, boolean baubles, Runnable work) {
+        if (!Maids.open(her, maid, baubles)) {
+            String said = "TLM did not open the GUI of " + Maids.label(maid) + ".";
+            throw Maids.asleep(maid)
+                    ? new ApiError(ErrorKind.FAILED, said + " She is asleep; a sleeping maid's GUI does not open.", null)
+                    : refused(her, maid, null, said, null);
+        }
+        try {
+            work.run();
+        } finally {
+            her.closeContainer();
+        }
+    }
+
+    /** 件数:不写是有多少算多少,写了得是 1 以上。 */
+    private static int atLeastOne(Optional<Integer> count) {
+        if (count.isPresent() && count.get() < 1) {
+            throw new ApiError(ErrorKind.BAD_ARGUMENT, "count is " + count.get() + "; give 1 or more, or leave it out "
+                    + "for all of it", null);
+        }
+        return count.orElse(Integer.MAX_VALUE);
+    }
+
+    /** 她背包那 36 格里有几件 {@code item}:女仆界面里搬东西只经这些格,递过去、拿回来几件都按它前后的差算。 */
+    private static int carried(NumenPlayer her, Item item) {
+        int n = 0;
+        for (ItemStack stack : her.getInventory().items) {
+            if (stack.is(item)) {
+                n += stack.getCount();
+            }
+        }
+        return n;
+    }
+
+    private static void mustCarry(NumenPlayer her, Item item) {
+        if (carried(her, item) == 0) {
+            throw new ApiError(ErrorKind.NO_MATERIAL, "you carry no " + id(item), null);
+        }
+    }
+
+    private static void mustHave(Entity maid, Item item) {
+        if (Maids.carries(maid, item) == 0) {
+            throw new ApiError(ErrorKind.NOT_FOUND, Maids.label(maid) + " has no " + id(item) + " on her; "
+                    + "tlm.maid.info lists what she has", Call.of("tlm.maid.info", EntityLabel.of(maid)));
+        }
+    }
+
+    private static String id(Item item) {
+        return BuiltInRegistries.ITEM.getKey(item).toString();
     }
 
     /** 点名的那只女仆;不在或不是女仆就失败。 */

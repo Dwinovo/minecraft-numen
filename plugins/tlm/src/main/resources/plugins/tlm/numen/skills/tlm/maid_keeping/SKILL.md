@@ -1,11 +1,11 @@
 ---
 name: maid_keeping
-description: How raising maids works in Touhou Little Maid — taming, the maid screen and its bauble page, backpacks, sitting and following, what each work mode needs, schedule / home / pickup settings, power points, and after a maid dies: the tombstone, the film, and the conditions and costs of the two ways to revive her (altar and shrine).
+description: How raising maids works in Touhou Little Maid — taming, what a maid wears and carries, baubles, backpacks, sitting and following, what each work mode needs, schedule / home / pickup settings, power points, and after a maid dies: the tombstone, the film, and the conditions and costs of the two ways to revive her (altar and shrine).
 ---
 
 # Raising Touhou Little Maid maids
 
-You can raise maids the way your owner does. The functions are in the `tlm` group: `tlm.maid.list`, `tlm.maid.info`, `tlm.maid.open`, `tlm.maid.task`, `tlm.maid.config` and so on;
+You can raise maids the way your owner does. The functions are in the `tlm` group: `tlm.maid.list`, `tlm.maid.info`, `tlm.maid.give`, `tlm.maid.take`, `tlm.maid.task`, `tlm.maid.config` and so on;
 look up how to call them with `numen.api.help("tlm.maid.task")` and the like. A maid's entity id comes from `numen.scan.entities` or `tlm.maid.list`, and changes after a server restart.
 
 ## What you can see
@@ -19,10 +19,10 @@ look up how to call them with `numen.api.help("tlm.maid.task")` and the like. A 
 - A wild maid is tamed by right-clicking her with **cake**; having the cake in your inventory is enough. When it works you receive a `maid_tamed` event and she is yours from then on.
 - Someone else's maid cannot be tamed with cake.
 
-## Screen, equipment and backpack
+## Equipment, backpack and baubles
 
-- Her screen only opens within about 7 blocks of her. It holds her armor, main hand and off hand, her own few slots and her backpack; in `numen.gui.view` your inventory slots come first and hers after.
-- Baubles are on another page (`bauble`), and with Curios installed there is a `curios` page as well.
+- A maid has four armor slots, a main hand and an off hand, six slots of her own, and more slots when she wears a backpack. Her things can be handled only within about 7 blocks of her, and not while she sleeps.
+- Baubles go in separate bauble slots, which take only Touhou Little Maid's baubles. Two rows of them are open at favorability level 0 and 1, four rows at level 2, all of them from level 3.
 - **A backpack is worn**: right-click her while holding one (for example `touhou_little_maid:maid_backpack_small`). Right-clicking her with **shears** takes the backpack off: the old backpack returns to your hand and what was in it drops at her feet.
 
 ## Sitting and following
@@ -35,7 +35,7 @@ look up how to call them with `numen.api.help("tlm.maid.task")` and the like. A 
 - Each work mode needs particular things: ranged attack needs a bow in her hand and arrows in her slots (`has_bow` and `has_arrow` in `works_with`); farming needs seeds in her slots.
 - After switching the work mode the receipt reads back the task she has now; if it did not change, Touhou Little Maid did not go along, and the receipt gives its rule.
 - Settings: schedule (`day` works by day, `night` works by night and sleeps by day, `all` works around the clock); **home mode** (she works at home and no longer follows you; if no schedule point was ever set, where she stands is home); the pickup switch (she does not pick things up off the ground).
-- For your own maids, switching work, changing settings and opening the screen need no asking by default; when your owner has written a rule that says to ask, your owner is asked first and it happens once they answer.
+- For your own maids, switching work, changing settings, handing her things and taking them back need no asking by default; when your owner has written a rule that says to ask, your owner is asked first and it happens once they answer.
 
 ## A maid's death and revival
 

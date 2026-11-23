@@ -15,7 +15,6 @@ import com.github.tartaricacid.touhoulittlemaid.entity.passive.EntityMaid;
 import com.github.tartaricacid.touhoulittlemaid.entity.passive.PickType;
 import com.github.tartaricacid.touhoulittlemaid.init.InitRecipes;
 import com.github.tartaricacid.touhoulittlemaid.init.InitTaskData;
-import com.github.tartaricacid.touhoulittlemaid.inventory.container.AbstractMaidContainer;
 import com.google.gson.JsonElement;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.BeforeBatch;
@@ -28,7 +27,6 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
@@ -360,44 +358,35 @@ public class TlmGameTests {
         });
     }
 
-    /** 开背包页,再用 {@code gui move} 把她背包里的一把种子放进女仆自己的第一格。 */
+    /** 把种子递进女仆的背包、把弓递到她主手上,再拿回三颗种子:东西到了说的那一处,界面没有留着开。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
-    public static void the_backpack_page_takes_seeds_by_use_transfer(GameTestHelper helper) {
+    public static void give_and_take_move_items_between_her_and_her_maid(GameTestHelper helper) {
         NumenPlayer her = keeper(helper, "gametest_tlm_packer", new BlockPos(3, 2, 3));
         her.getInventory().add(new ItemStack(Items.WHEAT_SEEDS, 5));
+        her.getInventory().add(new ItemStack(Items.BOW));
         EntityMaid maid = maidAt(helper, new BlockPos(5, 2, 3));
         maid.tame(her);
 
-        ToolRun open = lua(her, "tlm.maid.open(" + ref(maid) + ", {tab = \"backpack\"})");
-        AtomicReference<ToolRun> moved = new AtomicReference<>();
-        steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(open.succeeded()
-                                && her.containerMenu instanceof AbstractMaidContainer menu && menu.getMaid() == maid,
-                        "her backpack page is not open — tlm open said: " + open.reply()))
-                .thenExecute(() -> {
-                    // 女仆自己背包的第 0 格:先在那一格放一个记号,菜单里显示着这个记号的格子就是它
-                    ItemStack marker = new ItemStack(Items.STICK);
-                    maid.getMaidInv().setStackInSlot(0, marker);
-                    int from = -1;
-                    int to = -1;
-                    for (int i = 0; i < her.containerMenu.slots.size(); i++) {
-                        Slot slot = her.containerMenu.slots.get(i);
-                        if (from < 0 && slot.container == her.getInventory() && slot.getItem().is(Items.WHEAT_SEEDS)) {
-                            from = i;
-                        }
-                        if (to < 0 && slot.getItem() == marker) {
-                            to = i;
-                        }
-                    }
-                    maid.getMaidInv().setStackInSlot(0, ItemStack.EMPTY);
-                    helper.assertTrue(from >= 0 && to >= 0, "no seed slot or no maid slot 0 in the open GUI");
-                    moved.set(lua(her, "numen.gui.move(" + from + ", " + to + ")"));
-                })
-                .thenWaitUntil(() -> helper.assertTrue(maid.getMaidInv().getStackInSlot(0).is(Items.WHEAT_SEEDS),
-                        "the seeds did not go into her slot — gui move said: "
-                                + (moved.get() == null ? null : moved.get().outcome())))
-                .thenExecute(() -> leave(helper, her, maid))
-                .thenSucceed();
+        ToolRun run = lua(her, "local m = " + ref(maid) + "\n"
+                + "tlm.maid.give(m, \"minecraft:wheat_seeds\")\n"
+                + "tlm.maid.give(m, \"minecraft:bow\", 1, {slot = \"mainhand\"})\n"
+                + "return tlm.maid.take(m, \"minecraft:wheat_seeds\", 3)");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(run.receipt() != null && run.ranToTheEnd(), "give and take failed: " + run.receipt());
+            helper.assertTrue(maid.getMainHandItem().is(Items.BOW), "the bow is not in her main hand: " + run.receipt());
+            int kept = 0;
+            for (int i = 0; i < maid.getMaidInv().getSlots(); i++) {
+                ItemStack stack = maid.getMaidInv().getStackInSlot(i);
+                kept += stack.is(Items.WHEAT_SEEDS) ? stack.getCount() : 0;
+            }
+            helper.assertTrue(kept == 2 && her.getInventory().countItem(Items.WHEAT_SEEDS) == 3
+                            && her.getInventory().countItem(Items.BOW) == 0,
+                    "the maid keeps " + kept + " seeds and the companion has "
+                            + her.getInventory().countItem(Items.WHEAT_SEEDS) + ": " + run.receipt());
+            helper.assertTrue(her.containerMenu == her.inventoryMenu, "the maid's GUI was left open");
+            leave(helper, her, maid);
+        });
     }
 
     /** 离得太远:{@code tlm task} 不走路,当场失败,给出照抄就能走过去的那一行,女仆的工作没动。 */
