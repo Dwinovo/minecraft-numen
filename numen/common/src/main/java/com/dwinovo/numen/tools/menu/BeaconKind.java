@@ -1,5 +1,6 @@
 package com.dwinovo.numen.tools.menu;
 
+import com.dwinovo.numen.tools.station.BeaconEffects;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.sdk.Call;

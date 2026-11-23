@@ -1,5 +1,6 @@
 package com.dwinovo.numen.task.station;
 
+import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.sdk.EntityRef;
 import com.dwinovo.numen.api.sdk.ServerCall;
 import com.dwinovo.numen.api.task.TaskRecord;
@@ -33,12 +34,12 @@ public final class StationTaskRecord<V> extends TaskRecord<V> {
     public final Class<? extends AbstractContainerMenu> menu;
     /** 函数管这种目标叫什么({@code furnace}、{@code container}),回执里用。 */
     public final String kind;
-    public final List<Move> steps;
-    /** 做完之后交回的值,从各步搬了什么里读。 */
+    public final List<Step> steps;
+    /** 做完之后交回的值,从各步留下的东西里读。 */
     public final Supplier<V> value;
 
     public StationTaskRecord(ServerCall source, BlockPos block, EntityRef entity,
-                             Class<? extends AbstractContainerMenu> menu, String kind, List<Move> steps,
+                             Class<? extends AbstractContainerMenu> menu, String kind, List<? extends Step> steps,
                              Supplier<V> value) {
         super(source, source.her().level().getGameTime() + TIMEOUT_TICKS);
         if ((block == null) == (entity == null)) {
@@ -59,8 +60,11 @@ public final class StationTaskRecord<V> extends TaskRecord<V> {
                 : entity.label());
     }
 
+    /** 界面里的一步:搬东西({@link Move}),或当场做完的一件事({@link Deed})。 */
+    public sealed interface Step permits Move, Deed {}
+
     /**
-     * 界面里的一步:搬东西。放进去从她的背包搬到界面那一侧,拿出来反过来。
+     * 搬东西:放进去从她的背包搬到界面那一侧,拿出来反过来。
      *
      * @param item     搬哪一种;拿的时候 null 是那几格里有什么拿什么
      * @param count    搬几件;null 是全搬
@@ -69,7 +73,8 @@ public final class StationTaskRecord<V> extends TaskRecord<V> {
      * @param optional 一件都没有也算做完(取产物时还没烧出来)
      * @param moved    搬完之后搬了什么,由这件活填
      */
-    public record Move(boolean put, Item item, Integer count, int[] slots, String role, boolean optional, Moved moved) {
+    public record Move(boolean put, Item item, Integer count, int[] slots, String role, boolean optional, Moved moved)
+            implements Step {
 
         public static Move put(Item item, Integer count, int[] slots, String role) {
             return new Move(true, item, count, slots, role, false, new Moved());
@@ -78,6 +83,23 @@ public final class StationTaskRecord<V> extends TaskRecord<V> {
         public static Move take(Item item, Integer count, int[] slots, String role, boolean optional) {
             return new Move(false, item, count, slots, role, optional, new Moved());
         }
+    }
+
+    /**
+     * 界面里当场做完的一件事:选一项、改个名、读一眼。把原版客户端会发的那个包交给原版,再读回来界面真的变了没有。
+     */
+    public record Deed(Act act) implements Step {}
+
+    /** {@link Deed} 做的事。 */
+    @FunctionalInterface
+    public interface Act {
+
+        /**
+         * @param menu 这件活打开的界面(已经认过是 {@link StationTaskRecord#menu} 那一种)
+         * @return 做了什么,一句话,进回执(整件活只是读一眼的,说读了什么);夹在别的步骤中间、没什么可说的是 null
+         * @throws com.dwinovo.numen.script.ApiError 原版没让做:说读到的事实(要多少、有多少)
+         */
+        String perform(AbstractContainerMenu menu, NumenPlayer her);
     }
 
     /** 一步搬完之后搬了什么:按种类记件数,先搬的在前。这一步还没做是空的。 */

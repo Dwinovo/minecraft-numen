@@ -8,9 +8,11 @@ import com.dwinovo.numen.task.inventory.DropCompanionTask;
 import com.dwinovo.numen.task.inventory.DropItemsTaskRecord;
 import com.dwinovo.numen.task.inventory.EatCompanionTask;
 import com.dwinovo.numen.task.inventory.EatItemTaskRecord;
+import com.dwinovo.numen.task.station.StationTaskRecord.Deed;
 import com.dwinovo.numen.tools.Books;
 import com.dwinovo.numen.tools.CraftOps;
 import com.dwinovo.numen.tools.ItemNames;
+import com.dwinovo.numen.tools.station.Stations;
 import com.dwinovo.numen.api.knowledge.Recipe;
 import com.dwinovo.numen.api.sdk.ClientCall;
 import com.dwinovo.numen.api.sdk.Doc;
@@ -23,6 +25,7 @@ import com.dwinovo.numen.api.sdk.Pending;
 import com.dwinovo.numen.api.sdk.Rest;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 import com.dwinovo.numen.api.sdk.ServerCall;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
@@ -32,12 +35,13 @@ import net.minecraft.world.item.Item;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * {@code numen.inv}:背包里的东西——有什么、有几件,配方、能合什么、在开着的格里合一次,吃、丢。
+ * {@code numen.inv}:背包里的东西——有什么、有几件,配方、能合什么、合一次(在她自己的 2x2 格里,或点名的一张工作台上),吃、丢。
  *
- * <p>都在服务端执行。查询与合成当场回;丢是有界短活(经 {@link ServerCall#sync}),每次都过权限层,可能等主人答复;吃是占身体的活——咀嚼要
- * 时间,收尾才回到程序。挑配方、找工作台、走过去、开合关的组合是 Lua 模块 {@code numen.inv.make},不在这一组的 Java 里。
+ * <p>都在服务端执行。查询与在自己格里的合成当场回;在工作台上合、丢是有界短活(经 {@link ServerCall#sync}),丢每次都过权限层,可能等主人
+ * 答复;吃是占身体的活——咀嚼要时间,收尾才回到程序。挑配方、找工作台的组合是 Lua 模块 {@code numen.inv.make},不在这一组的 Java 里。
  */
 public final class InvApi {
 
@@ -122,33 +126,48 @@ public final class InvApi {
 
     @Fn("Every crafting recipe you can craft right now from what you carry.")
     @Example("for _, r in ipairs(numen.inv.craftable()) do print(r.item, r.grid) end")
-    @Note("Instant and read-only, like the recipe book: a grid 3 recipe still needs a crafting table open to craft "
-            + "it. numen.inv.craft(id) crafts one in the open grid; numen.inv.make(item) picks the recipe and the "
-            + "table for you.")
+    @Note("Instant and read-only, like the recipe book: a grid 3 recipe is crafted at a crafting table, "
+            + "numen.inv.craft(id, {at = cell}), a grid 2 one in your own grid, numen.inv.craft(id); "
+            + "numen.inv.make(item) picks the recipe and the table for you.")
     @SeeAlso({"numen.inv.craft", "numen.inv.recipes"})
     public static List<Recipe> craftable(ServerCall call) {
         return CraftOps.craftable(call.her());
     }
 
-    /** 照哪条配方合、要几件。 */
+    /** 照哪条配方合、要几件、在哪张工作台上。 */
     public record Craft(@Doc("The recipe's id, from numen.inv.recipes or numen.inv.craftable.") ResourceLocation recipe,
                         @Doc("How many of the item you want (1-4096).") @Omitted("one craft")
-                        Optional<Integer> count) {}
+                        Optional<Integer> count,
+                        @Doc("A crafting table's cell: craft there, in its 3x3 grid.")
+                        @Omitted("craft in your own 2x2 grid") Optional<BlockPos> at) {}
 
-    @Fn("Craft once in the crafting grid you have open: lay one recipe into it and take the result.")
+    @Fn("Craft once: lay one recipe into a crafting grid and take the result. The grid is your own 2x2, or a "
+            + "crafting table's 3x3 when you say which table with at.")
     @Example("numen.inv.craft(\"minecraft:oak_planks\", {count = 8})")
-    @Example("numen.inv.craft(\"minecraft:stick\", {count = 16})")
-    @Note("The grid is the one open now: your own 2x2 when nothing else is; a 3x3 recipe needs a crafting table opened "
-            + "with numen.use.block first. It never walks, opens or closes anything; numen.inv.make picks the recipe "
-            + "and the table for you.")
+    @Example("numen.inv.craft(\"minecraft:chest\", {at = {x = 120, y = 64, z = -35}})")
+    @Note("Without at it crafts where you stand, in your own grid. With at it walks up to that crafting table "
+            + "when it is out of reach, crafts in its grid and closes it; the walk is told in the result. "
+            + "numen.inv.make picks the recipe and finds the table for you.")
     @Note("One call lays up to a stack per cell, so it may craft fewer than count; more says whether another call "
             + "can make the rest.")
-    @Note("Missing materials fail with kind no_material and the exact shortfall (data.missing), touching nothing.")
-    @Note("Only [crafting] recipes. A furnace is numen.inv.smelt; other stations are numen.use.block, then the numen.gui "
-            + "functions.")
+    @Note("Missing materials fail with kind no_material and the exact shortfall (data.missing), touching nothing "
+            + "and walking nowhere.")
+    @Note("Only [crafting] recipes. A furnace is numen.inv.smelt, a stonecutter numen.stonecutter.cut, a smithing "
+            + "table numen.smithing.forge.")
     @SeeAlso({"numen.inv.recipes", "numen.inv.craftable"})
-    public static CraftOps.Crafted craft(ServerCall call, Craft args) {
-        return CraftOps.craft(args.recipe(), Math.max(1, args.count().orElse(1)), call.her());
+    public static Pending<CraftOps.Crafted> craft(ServerCall call, Craft args) {
+        int want = Math.max(1, args.count().orElse(1));
+        if (args.at().isEmpty()) {
+            return Pending.of(CraftOps.craft(args.recipe(), want, call.her(), call.her().inventoryMenu));
+        }
+        // 配方在不在、料够不够,走到工作台之前就判:缺料的那几样在错误的数据里
+        CraftOps.ready(args.recipe(), call.her());
+        AtomicReference<CraftOps.Crafted> crafted = new AtomicReference<>();
+        // 不挑界面的类:背着合成格的界面都认(模组的工作台),认不认得由合成那一步看格子
+        return Stations.at(call, args.at().get(), null, "crafting table", List.of(new Deed((menu, her) -> {
+            crafted.set(CraftOps.craft(args.recipe(), want, her, menu));
+            return "crafted " + crafted.get().crafted() + " with " + args.recipe();
+        })), crafted::get);
     }
 
     /** 吃哪一样。 */
@@ -195,7 +214,7 @@ public final class InvApi {
     @Fn("Read the books of one kind you carry: title, author and the text of every page.")
     @Example("for _, b in ipairs(numen.inv.read(\"minecraft:written_book\")) do print(b.title, b.author, b.pages[1]) end")
     @Note("Instant and read-only; one entry per book in your inventory (the off hand too), empty when you carry none. A "
-            + "book on a lectern is read with numen.gui.view().screen.")
+            + "book on a lectern is read with numen.lectern.read.")
     @SeeAlso({"numen.inv.write", "numen.inv.items"})
     public static List<Books.Book> read(ServerCall call, Read args) {
         return Books.carried(call.her(), args.item());

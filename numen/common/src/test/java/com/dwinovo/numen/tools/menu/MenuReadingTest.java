@@ -1,5 +1,6 @@
 package com.dwinovo.numen.tools.menu;
 
+import com.dwinovo.numen.tools.station.BeaconEffects;
 import com.dwinovo.numen.script.ApiError;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;

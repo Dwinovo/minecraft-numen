@@ -69,6 +69,7 @@ public class NumenGameTestSuite extends CompanionGameTestSuite {
                 ShapeGameTests.class,
                 GeneratorGameTests.class,
                 SleepGameTests.class,
+                StationGameTests.class,
                 SurvivalGameTests.class,
                 SwimGameTests.class,
                 TaskControlGameTests.class

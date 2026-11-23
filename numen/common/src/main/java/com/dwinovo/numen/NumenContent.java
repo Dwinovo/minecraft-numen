@@ -162,6 +162,18 @@ public final class NumenContent {
             com.dwinovo.numen.tools.interact.GuiApi.install(numen);
             com.dwinovo.numen.tools.station.ContainerApi.install(numen);
             com.dwinovo.numen.tools.station.FurnaceApi.install(numen);
+            com.dwinovo.numen.tools.station.EnchantApi.install(numen);
+            com.dwinovo.numen.tools.station.AnvilApi.install(numen);
+            com.dwinovo.numen.tools.station.StonecutterApi.install(numen);
+            com.dwinovo.numen.tools.station.LoomApi.install(numen);
+            com.dwinovo.numen.tools.station.TradeApi.install(numen);
+            com.dwinovo.numen.tools.station.BeaconApi.install(numen);
+            com.dwinovo.numen.tools.station.LecternApi.install(numen);
+            com.dwinovo.numen.tools.station.CrafterApi.install(numen);
+            com.dwinovo.numen.tools.station.BrewingApi.install(numen);
+            com.dwinovo.numen.tools.station.SmithingApi.install(numen);
+            com.dwinovo.numen.tools.station.GrindstoneApi.install(numen);
+            com.dwinovo.numen.tools.station.CartographyApi.install(numen);
             com.dwinovo.numen.tools.inventory.InvApi.install(numen);
             com.dwinovo.numen.tools.inventory.GearApi.install(numen);
             com.dwinovo.numen.tools.inventory.CreativeApi.install(numen);

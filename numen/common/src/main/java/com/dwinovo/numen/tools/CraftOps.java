@@ -36,15 +36,17 @@ import java.util.Map;
 import java.util.TreeSet;
 
 /**
- * The {@code inv craft} command: one craft in the crafting grid that is open — lay one batch of a named recipe
+ * The {@code inv craft} command: one craft in a crafting grid — lay one batch of a named recipe
  * (up to a stack per cell) into the REAL grid via menu clicks and shift-take the result once. Everything runs
  * through the vanilla container path ({@code menu.clicked} on a live {@code CraftingMenu} / {@code InventoryMenu}),
  * so recipe-unlock, stats, ingredient remainders (bucket back from milk) and container-observing mods all see a
  * normal player crafting — items never appear out of thin air.
  *
- * <p>The grid is the one open now: her own 2x2 when nothing else is. Which recipe to use, and finding, opening and
- * closing a crafting table, are the Lua module {@code numen.inv.make}'s; the recipe facts it decides with (the
- * smallest grid a recipe fits, what she is short of) are read here, the same as the craft checks them.
+ * <p>The grid is the one of the menu the caller hands in: her own 2x2 ({@code inventoryMenu}), or the one a crafting
+ * table opened inside the job that walks to it and closes it again ({@code numen.inv.craft} with {@code at}).
+ * Which recipe to use and finding a crafting table are the Lua module {@code numen.inv.make}'s; the recipe facts it
+ * decides with (the smallest grid a recipe fits, what she is short of) are read here, the same as the craft checks
+ * them.
  */
 public final class CraftOps {
 
@@ -65,41 +67,28 @@ public final class CraftOps {
                           @Doc("What came back, a bucket from milk.") List<String> gotBack,
                           @Doc("Whether what you carry crafts more of it: call again for the rest.") boolean more) {}
 
-    /** {@code numen.inv.craft}:在开着的格里照 {@code id} 那条配方合一次,至多合到 {@code count} 件。 */
-    public static Crafted craft(ResourceLocation id, int want, NumenPlayer self) {
+    /**
+     * {@code numen.inv.craft}:在 {@code menu} 的合成格里照 {@code id} 那条配方合一次,至多合到 {@code want} 件。
+     *
+     * @param menu 合成格在哪个界面里:她自己的背包界面(2x2),或这件活右键工作台打开的那个
+     */
+    public static Crafted craft(ResourceLocation id, int want, NumenPlayer self, AbstractContainerMenu menu) {
         ServerLevel level = self.serverLevel();
-        RecipeHolder<?> found = level.getRecipeManager().byKey(id).orElse(null);
-        if (found != null && !RecipeBook.isCrafting(found.value())) {
-            throw new ApiError(ErrorKind.FAILED, "recipe " + id + " is not made in a crafting grid: its category is "
-                    + RecipeBook.categoryOf(found.value()),
-                    "numen.inv.recipes(item) shows how it is made and at which station");
-        }
-        if (found == null || !(found.value() instanceof CraftingRecipe recipe) || recipe.isSpecial()
-                || ingredientsOf(recipe).isEmpty()) {
-            throw new ApiError(ErrorKind.NOT_FOUND, "no crafting recipe " + id,
-                    "numen.inv.recipes(item) lists every recipe that makes an item, each with its id");
-        }
-        @SuppressWarnings("unchecked")
-        RecipeHolder<CraftingRecipe> holder = (RecipeHolder<CraftingRecipe>) found;
+        RecipeHolder<CraftingRecipe> holder = named(id, level);
+        CraftingRecipe recipe = holder.value();
         ItemStack result = RecipeProbe.resultOf(recipe, level.registryAccess());
         Item target = result.getItem();
         String name = BuiltInRegistries.ITEM.getKey(target).getPath();
 
-        AbstractContainerMenu menu = self.containerMenu;
         Grid grid = findGrid(menu);
         if (grid == null) {
-            throw new ApiError(ErrorKind.FAILED, "the open window (" + menu.getClass().getSimpleName() + ") has no "
-                    + "crafting grid — numen.gui.close() it to craft in your own 2x2, or numen.use.block a crafting "
-                    + "table", null);
+            throw new ApiError(ErrorKind.FAILED, "it has no crafting grid to craft " + name + " in: craft at a "
+                    + "crafting table", null);
         }
         // 先把搁在格子里的收回来,再数料
         sweepGrid(menu, self, grid);
         List<Ingredient> ings = ingredientsOf(recipe);
-        Map<Item, Integer> pool = poolOf(menu, self);
-        if (feasibleBatch(ings, pool, 1) == 0) {
-            throw new ApiError(ErrorKind.NO_MATERIAL, "not enough materials for " + name + " — missing: "
-                    + String.join(", ", missingFor(ings, pool)), null, Map.of("missing", missingFor(ings, pool)));
-        }
+        enough(ings, name, poolOf(menu, self));
         String tooSmall = gridTooSmall(recipe, name, grid.w(), grid.h());
         if (tooSmall != null) {
             throw new ApiError(ErrorKind.FAILED, tooSmall, null);
@@ -160,6 +149,42 @@ public final class CraftOps {
                 feasibleBatch(ings, after, 1) > 0);
     }
 
+    /**
+     * 走到工作台之前就判得了的:有没有这条合成配方、她背着的料够不够合一次。不够当场按缺料失败,数据里是缺的那几样;不碰任何格子。
+     */
+    public static void ready(ResourceLocation id, NumenPlayer self) {
+        ServerLevel level = self.serverLevel();
+        CraftingRecipe recipe = named(id, level).value();
+        enough(ingredientsOf(recipe), BuiltInRegistries.ITEM.getKey(RecipeProbe.resultOf(recipe, level.registryAccess())
+                .getItem()).getPath(), poolOf(self.inventoryMenu, self));
+    }
+
+    /** {@code id} 那条合成配方;没有、或它不是在合成格里做的,当场失败。 */
+    private static RecipeHolder<CraftingRecipe> named(ResourceLocation id, ServerLevel level) {
+        RecipeHolder<?> found = level.getRecipeManager().byKey(id).orElse(null);
+        if (found != null && !RecipeBook.isCrafting(found.value())) {
+            throw new ApiError(ErrorKind.FAILED, "recipe " + id + " is not made in a crafting grid: its category is "
+                    + RecipeBook.categoryOf(found.value()),
+                    "numen.inv.recipes(item) shows how it is made and at which station");
+        }
+        if (found == null || !(found.value() instanceof CraftingRecipe recipe) || recipe.isSpecial()
+                || ingredientsOf(recipe).isEmpty()) {
+            throw new ApiError(ErrorKind.NOT_FOUND, "no crafting recipe " + id,
+                    "numen.inv.recipes(item) lists every recipe that makes an item, each with its id");
+        }
+        @SuppressWarnings("unchecked")
+        RecipeHolder<CraftingRecipe> holder = (RecipeHolder<CraftingRecipe>) found;
+        return holder;
+    }
+
+    /** {@code pool} 里的料够照这几样合一次;不够按缺料失败,数据里是缺的那几样。 */
+    private static void enough(List<Ingredient> ings, String name, Map<Item, Integer> pool) {
+        if (feasibleBatch(ings, pool, 1) == 0) {
+            throw new ApiError(ErrorKind.NO_MATERIAL, "not enough materials for " + name + " — missing: "
+                    + String.join(", ", missingFor(ings, pool)), null, Map.of("missing", missingFor(ings, pool)));
+        }
+    }
+
     /** {@code numen.inv.craftable}:她背着的料现在合得出的每一条合成配方。 */
     public static List<Recipe> craftable(NumenPlayer self) {
         ServerLevel level = self.serverLevel();
@@ -199,13 +224,13 @@ public final class CraftOps {
                         : java.util.Optional.empty(), java.util.Optional.empty(), List.of());
     }
 
-    /** 开着的 {@code w}×{@code h} 格装不下这条配方时说要开工作台的那句话;装得下是 {@code null}。 */
+    /** {@code w}×{@code h} 的格装不下这条配方时说要去工作台合的那句话;装得下是 {@code null}。 */
     static String gridTooSmall(CraftingRecipe recipe, String name, int w, int h) {
         if (fits(recipe, w, h)) {
             return null;
         }
-        return name + " needs a " + gridOf(recipe) + "x" + gridOf(recipe) + " grid; the open one is " + w + "x" + h
-                + " — numen.use.block a crafting table, then craft again (numen.inv.make finds one and opens it)";
+        return name + " needs a " + gridOf(recipe) + "x" + gridOf(recipe) + " grid; this one is " + w + "x" + h
+                + " — craft it at a crafting table: numen.inv.craft(id, {at = cell}) (numen.inv.make finds one)";
     }
 
     /** 这条合成配方装得下的最小的格:2(她自己的)、3(工作台);更大的(模组工位)是 0。 */

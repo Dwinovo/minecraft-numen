@@ -15,7 +15,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-/** 合成之前看开着的格装不装得下这条配方:装不下就说要几乘几的格、去开工作台,不碰背包。 */
+/** 合成之前看这个格装不装得下这条配方:装不下就说要几乘几的格、去工作台合,不碰背包。 */
 @Tag("mc")
 class CraftOpsTest {
 
@@ -32,11 +32,12 @@ class CraftOpsTest {
                 new ItemStack(Items.CHEST));
     }
 
-    /** 什么都没开时开着的是她自己的 2×2:箱子要 3×3,说去开一张工作台再合。 */
+    /** 不给工作台时用的是她自己的 2×2:箱子要 3×3,说去一张工作台合。 */
     @Test
-    void aThreeByThreeRecipeInHerOwnGridSaysToOpenATable() {
-        assertEquals("chest needs a 3x3 grid; the open one is 2x2 — numen.use.block a crafting table, then craft again "
-                + "(numen.inv.make finds one and opens it)", CraftOps.gridTooSmall(chest(), "chest", 2, 2));
+    void aThreeByThreeRecipeInHerOwnGridSaysToCraftAtATable() {
+        assertEquals("chest needs a 3x3 grid; this one is 2x2 — craft it at a crafting table: "
+                + "numen.inv.craft(id, {at = cell}) (numen.inv.make finds one)",
+                CraftOps.gridTooSmall(chest(), "chest", 2, 2));
     }
 
     @Test

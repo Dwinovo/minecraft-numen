@@ -58,9 +58,21 @@
 | `use.*` | 按一下键:右键一格/一只实体/前方,左键一下 `use.hit`;够不着先走到能按的地方 | 不挖(挖是 `work.dig`) |
 | `gui.*` | 开着的界面(Window):看(有名堂的界面 `screen` 按种类说话,选项编号从 1 起)、按种类放进拿出、挪一格、整叠挪、选一项(`choose`:附魔台、切石机、织布机、交易、信标)、改名(铁砧)、翻页(讲台)、开关一格(合成器)、按 E(`open`)、关 | 不开界面(开是 `use.block`) |
 | `inv.read` / `inv.write` | 读背包里书的标题作者各页;往书与笔里写页并可署名(发 `EditBook`,读回) | 不合成书 |
-| `inv.craft` | 在开着的合成格里照一条配方合一次 | 不挑配方、不找工作台 |
+| `inv.craft` | 照一条配方合一次:不给 `at` 在她自己的 2x2 格里,给了(一张工作台的格)就走过去在它的 3x3 格里合、合完合上;配方在不在、料够不够在走过去之前判 | 不挑配方、不找工作台 |
 | `container.put` / `container.take` | 对一样装东西的目标(箱子、木桶、没有自己那一组函数的机器)放进去、取出来:走过去右键、搬、合上,界面只在这一件活里(control 0021);放进哪一格由它自己分 | 不认它是什么 |
 | `furnace.input` / `furnace.fuel` / `furnace.take` | 熔炉的三件事各说各的格:放原料、放燃料、取产物;放下或取走就交回 | 不等烧完 |
+| `enchant.options` / `enchant.apply` | 附魔台:看它对一件东西给的三项(放进去读、再拿回来,什么都不花);照其中一项附魔(放物品与青金石、按下、取回),没附上就说这一项要什么、她有什么 | 不挑哪一项 |
+| `anvil.combine` / `anvil.rename` | 铁砧:两件合成一件(修、并附魔)、改名;取结果之前读要花的经验,合不成或经验不够如实说 | — |
+| `stonecutter.cut` | 切石机:按产物点名配方,把放进去的料全切了,交回到手几件;切不成在走过去之前就说它能切成哪些 | — |
+| `loom.weave` | 织布机:按图案的 id 往旗帜上织一层;此刻织不了就列出能织的 | — |
+| `trade.offers` / `trade.buy` | 村民与流浪商人(目标是那只实体):看每一笔;把一笔做几次,一下正好一笔,做到中途卖空了、付不起了就停在那儿 | 不挑哪一笔 |
+| `beacon.set` | 信标:按名字定主效果(和副效果),付一件;这座信标的层数不许的,在放付款物品之前就说 | — |
+| `lectern.read` / `lectern.page` / `lectern.take` | 讲台上的书:读全书与翻到第几页、翻到某一页、取下来 | — |
+| `crafter.put` / `crafter.toggle` | 合成器:往点名的一格(0 到 8)放东西、把一格开着或关上 | 不给它红石信号 |
+| `brewing.bottles` / `brewing.ingredient` / `brewing.fuel` / `brewing.take` | 酿造台的四件事各说各的格:放瓶子、放材料、放烈焰粉、取瓶子;放下或取走就交回 | 不等酿完 |
+| `smithing.forge` | 锻造台:模板、底材、添加物做出一件,做不出如实说 | — |
+| `grindstone.disenchant` / `grindstone.repair` | 砂轮:磨掉一件的附魔;两件同样的并成一件 | — |
+| `cartography.extend` / `cartography.copy` / `cartography.lock` | 制图台:把一张地图放大(用纸)、复制(用空地图)、锁定(用玻璃板) | — |
 | `work.fish` | 抛一竿,钓上来或如实失败 | 不再抛 |
 | `time.wait` | 站着等几秒,主人一喊停就停 | — |
 
@@ -72,7 +84,7 @@
 | `work.collect(opts)` | `scan.entities("item")` + 一件件 `move.walk` 走上去(原版玩家走过去就捡起) |
 | `work.mine(cluster)` | `work.dig(cluster)` 自己走到够得着、挖 → `work.collect` 捡,那一团挖完为止,返回挖了几格 |
 | `fight.clear(radius)` | `scan.entities("hostile")` + 一只一只 `fight.attack` |
-| `inv.make(item, count)` | `inv.make` 读原版来源挑一条料够的合成配方 → 2x2 在自己的格里、3x3 开工作台(开着的、16 格内走过去的、或把带着的放在身边)→ `inv.craft` 到够数 → 关上它开的台 |
+| `inv.make(item, count)` | `inv.make` 读原版来源挑一条料够的合成配方 → 2x2 在自己的格里、3x3 找一张工作台(16 格内最近的、或把带着的放在身边)→ `inv.craft` 到够数(3x3 把那张台的格交给它的 `at`) |
 | `inv.smelt` / `inv.give` | 烧炼是 `furnace.input`、`furnace.fuel` 放下,隔两秒 `furnace.take` 取一次,够数或久没出新的就收;给人是走到身边 `inv.drop` |
 | `time.wait_until(ready, opts)` | 看一眼,不成就 `time.wait` 一会儿再看,超时抛 `timeout` |
 | `shape.*` | 画格子,叫法与操作对齐 WorldEdit(设计稿 `docs/shape-worldedit.md`):选区 `cuboid`、`cyl`、`sphere`、`poly`、`convex` 与 `set`、`walls`、`faces`、`expand`…;`cyl`/`hcyl`、`sphere`/`hsphere`、`cone`、`pyramid`、`line`、`curve`、`generate` 画形状;`layer` 画字符网格;`copy`、`cut`、`fill`、`drain`、`snow`、`gravity`、`morph` 等读世界的操作(只读已加载区块,不写,交回 Cells);`feature`、`structure`、`forest`、`forestgen`、`flora`、`pumpkins` 让原版的生成器跑在记录用的世界上(真实世界一格不动),`feature`、`structure`、`forest` 交回 `{cells, lost}`(`lost` 是 Cells 装不下的实体与方块实体数据);交回 Cells |
@@ -431,7 +443,7 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
 | `build.at` 放到放完 | `build.place` 整份走一遍、每格试一次,没放好的在回执里报剩余;要不要再来一轮由模型自己定 |
 | `scan.blocks` 的 `into` 与区域 | `scan.blocks` 交回团,`work.mine(cluster)` 先走后挖(§十二) |
 | `use.block` 的左键、`use.gui/transfer/shift/close` | 左键一下 `use.hit`,挖是 `work.dig`;界面是 `numen.gui` 与 Window |
-| `inv.craft` 找配方、找台、走开合关 | `inv.craft` 在开着的格里合一次,`numen.inv.make` 挑配方与工作台 |
+| `inv.craft` 找配方、找台 | `inv.craft` 在自己的格里或点名的工作台上合一次,`numen.inv.make` 挑配方与工作台 |
 | `inv.take`(创造取物) | `numen.creative.give` |
 | `work.fish` 钓几条、常驻 | 一次调用抛一竿,钓几条是程序里调几次 |
 | `fight.attack` 里的逃跑(DISENGAGE) | 逃跑本能 `FleeChain`(反射层):打不过且有东西在追就跑,跑不掉让出身体接着打 |

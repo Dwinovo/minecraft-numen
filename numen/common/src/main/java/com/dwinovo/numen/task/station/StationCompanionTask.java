@@ -7,6 +7,8 @@ import com.dwinovo.numen.api.task.Task;
 import com.dwinovo.numen.api.task.TaskFactory;
 import com.dwinovo.numen.api.task.TaskResult;
 import com.dwinovo.numen.api.task.TaskState;
+import com.dwinovo.numen.script.ApiError;
+import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.task.MouseButton;
 import com.dwinovo.numen.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.task.base.Precondition;
@@ -16,22 +18,27 @@ import com.dwinovo.numen.task.interact.InteractEntityCompanionTask;
 import com.dwinovo.numen.task.interact.InteractEntityTaskRecord;
 import com.dwinovo.numen.task.inventory.GuiItemsCompanionTask;
 import com.dwinovo.numen.task.inventory.GuiItemsTaskRecord;
+import com.dwinovo.numen.task.station.StationTaskRecord.Deed;
 import com.dwinovo.numen.task.station.StationTaskRecord.Move;
+import com.dwinovo.numen.task.station.StationTaskRecord.Step;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * 对一个目标做一件事({@link StationTaskRecord}):右键它是一件子活(走过去、过权限层、按下去,和 {@code numen.use.block} 同一件),
- * 界面开了就按步骤搬东西(每一步也是子活,从别人的容器里拿东西照旧先过权限层),收场时把界面合上——做成了、失败了、被叫停了都合。
- * 子活的账(路上挖的放的、主人点过的头)并进这件活,回执里说一次。
+ * 界面开了就一步步做——搬东西的每一步也是子活(从别人的容器里拿东西照旧先过权限层),当场做完的事直接做——收场时把界面合上:
+ * 做成了、失败了、被叫停了都合。子活的账(路上挖的放的、主人点过的头)并进这件活,回执里说一次。
  *
- * <p>回执只说做了什么:哪一步搬了几件什么。做到一半收场,已经搬了的照样说。
+ * <p>回执只说做了什么:哪一步搬了几件什么、做了哪件事。做到一半收场,已经做了的照样说;合上界面时原版退回她背包的东西
+ * (附魔台、铁砧这类不存东西的界面,合上就把格子里剩的还给她)也量出来说({@link #shut})。
  */
 public final class StationCompanionTask<V> extends AbstractCompanionTask<StationTaskRecord<V>, V> {
 
@@ -46,8 +53,12 @@ public final class StationCompanionTask<V> extends AbstractCompanionTask<Station
     private int at;
     /** 正在搬的那一步的子活;不在搬是 null。 */
     private GuiItemsCompanionTask mover;
+    /** 到此刻为止做了的几步,一句一步。 */
+    private final List<String> done = new ArrayList<>();
     /** 目标在回执里的叫法:{@code furnace at 10,64,5}。 */
     private String where;
+    /** 合上界面时原版退回她背包的东西,接在回执后面的那半句;没有退回是空串。 */
+    private String handedBack = "";
     private boolean finished;
 
     public StationCompanionTask(NumenPlayer player, StationTaskRecord<V> record) {
@@ -71,14 +82,14 @@ public final class StationCompanionTask<V> extends AbstractCompanionTask<Station
             checks.add(() -> {
                 BlockState state = player.level().getBlockState(r.block);
                 return state.hasBlockEntity() || state.getMenuProvider(player.level(), r.block) != null ? null
-                        : new Precondition.Failure(name(state) + " at " + cell() + " has no window to open: it is not a "
-                                + r.kind, FailureType.UNSUPPORTED);
+                        : new Precondition.Failure(name(state) + " at " + cell() + " has no window to open: it is not "
+                                + a(r.kind), FailureType.UNSUPPORTED);
             });
         }
-        for (Move step : r.steps) {
-            if (step.put()) {
-                checks.add(() -> PlayerInv.count(player.getInventory(), step.item()) > 0 ? null
-                        : new Precondition.Failure("you carry no " + name(step.item()), FailureType.NO_MATERIAL));
+        for (Step step : r.steps) {
+            if (step instanceof Move move && move.put()) {
+                checks.add(() -> PlayerInv.count(player.getInventory(), move.item()) > 0 ? null
+                        : new Precondition.Failure("you carry no " + name(move.item()), FailureType.NO_MATERIAL));
             }
         }
         return checks;
@@ -94,15 +105,20 @@ public final class StationCompanionTask<V> extends AbstractCompanionTask<Station
         if (opened == null) {
             return open();
         }
-        if (player.containerMenu != opened) {
-            fail(where + " closed before the work was done" + soFar(), FailureType.UNKNOWN);
-            return TaskState.FAILED;
-        }
         if (at == r.steps.size()) {
             finished = true;
             return TaskState.SUCCESS;
         }
-        return move(r.steps.get(at));
+        // 有的界面做完一件事自己就合上(讲台的书取下来);那是最后一步时上面已经收场了,到这里就是没做完。正在搬的那一步除外:
+        // 它自己认得界面合了、把已经搬的算数(GuiItemsCompanionTask),让它把这一步收完
+        if (mover == null && player.containerMenu != opened) {
+            fail(where + " closed before the work was done" + soFar(), FailureType.UNKNOWN);
+            return TaskState.FAILED;
+        }
+        return switch (r.steps.get(at)) {
+            case Move move -> move(move);
+            case Deed deed -> perform(deed);
+        };
     }
 
     /** 右键目标,等它的界面打开;开的不是这件活要的那一种就收场。 */
@@ -129,7 +145,7 @@ public final class StationCompanionTask<V> extends AbstractCompanionTask<Station
         }
         opened = player.containerMenu;
         if (r.menu != null && !r.menu.isInstance(opened)) {
-            fail(where + " is not a " + r.kind + ": it opened a " + opened.getClass().getSimpleName(),
+            fail(where + " is not " + a(r.kind) + ": it opened a " + opened.getClass().getSimpleName(),
                     FailureType.UNSUPPORTED);
             return TaskState.FAILED;
         }
@@ -149,12 +165,17 @@ public final class StationCompanionTask<V> extends AbstractCompanionTask<Station
         }
         mover = null;
         step.moved().set(moving.kinds());
+        String line = line(step);
+        if (line != null) {
+            done.add(line);
+        }
         if (!moved.success()) {
             boolean none = lastFailure() == FailureType.TARGET_LOST;
             if (!(none && step.optional())) {
                 String what = step.item() == null ? "nothing" : "no " + name(step.item());
-                fail((none ? (step.put() ? "you carry " + what : where + " holds " + what + slots(step, " in "))
-                        : where + ": " + moved.message()) + soFar(), lastFailure(), moved.hint());
+                shut();
+                fail((none ? (step.put() ? "you carry " + what : where + " holds " + what + role(step, " in "))
+                        : where + ": " + moved.message()) + soFar() + handedBack, lastFailure(), moved.hint());
                 return TaskState.FAILED;
             }
         }
@@ -162,7 +183,24 @@ public final class StationCompanionTask<V> extends AbstractCompanionTask<Station
         return TaskState.RUNNING;
     }
 
-    /** 这一步说成一句;一件都没搬的那一步是 null。 */
+    /** 当场做完的一件事:做成了记下那句话;原版没让做,带着它说的事实收场。 */
+    private TaskState perform(Deed deed) {
+        String line;
+        try {
+            line = deed.act().perform(opened, player);
+        } catch (ApiError refused) {
+            shut();
+            fail(refused.getMessage() + soFar() + handedBack, failure(refused.kind()), refused.hint());
+            return TaskState.FAILED;
+        }
+        if (line != null) {
+            done.add(line);
+        }
+        at++;
+        return TaskState.RUNNING;
+    }
+
+    /** 这一步搬东西说成一句;一件都没搬是 null。 */
     private static String line(Move step) {
         Map<Item, Integer> kinds = step.moved().kinds();
         if (kinds.isEmpty()) {
@@ -170,33 +208,36 @@ public final class StationCompanionTask<V> extends AbstractCompanionTask<Station
         }
         List<String> parts = new ArrayList<>();
         kinds.forEach((item, n) -> parts.add(n + " " + name(item)));
-        return (step.put() ? "put " : "took ") + String.join(", ", parts) + slots(step, step.put() ? " as " : " from ");
+        return (step.put() ? "put " : "took ") + String.join(", ", parts) + role(step, step.put() ? " as " : " from ");
     }
 
-    private static String slots(Move step, String joiner) {
+    private static String role(Move step, String joiner) {
         return step.role() == null ? "" : joiner + step.role();
-    }
-
-    /** 到此刻为止做了的几步,一句一步;一步都没做成是空表。 */
-    private List<String> lines() {
-        List<String> lines = new ArrayList<>();
-        for (Move step : r.steps) {
-            String line = line(step);
-            if (line != null) {
-                lines.add(line);
-            }
-        }
-        return lines;
     }
 
     /** 没做完就收场时接在原因后面的那半句:已经做了的几步;一步都没做成是空串。 */
     private String soFar() {
-        List<String> lines = lines();
-        return lines.isEmpty() ? "" : " — already done: " + String.join("; ", lines);
+        return done.isEmpty() ? "" : " — already done: " + String.join("; ", done);
+    }
+
+    /** 界面里的事没做成的种类,换成这件活收场的种类;对不上的归"没做成"。 */
+    private static FailureType failure(ErrorKind kind) {
+        return switch (kind) {
+            case NO_MATERIAL -> FailureType.NO_MATERIAL;
+            case NOT_FOUND -> FailureType.TARGET_LOST;
+            case DENIED -> FailureType.REFUSED;
+            case OUT_OF_REACH -> FailureType.OUT_OF_REACH;
+            default -> FailureType.UNKNOWN;
+        };
     }
 
     private String cell() {
         return r.block.getX() + "," + r.block.getY() + "," + r.block.getZ();
+    }
+
+    /** 这种目标的叫法带上冠词:{@code a furnace}、{@code an anvil}。 */
+    private static String a(String kind) {
+        return ("aeiou".indexOf(kind.charAt(0)) >= 0 ? "an " : "a ") + kind;
     }
 
     private static String name(BlockState state) {
@@ -213,28 +254,58 @@ public final class StationCompanionTask<V> extends AbstractCompanionTask<Station
         return finished ? r.value.get() : null;
     }
 
-    /** 合上这件活打开的界面(已经不是它了就不动),再放手。 */
-    @Override
-    protected void cleanup() {
-        if (opened != null && player.containerMenu == opened) {
-            player.closeContainer();
+    /**
+     * 合上这件活打开的界面(已经不是它了就不动)。合上是这件活里身体做的最后一件事:不存东西的界面这时把格子里剩的还给她,那是她背包的
+     * 变化,所以合之前之后各数一遍她背着的,多出来的写进 {@link #handedBack},跟着回执走。
+     */
+    private void shut() {
+        if (opened == null || player.containerMenu != opened) {
+            return;
         }
-        super.cleanup();
+        Map<Item, Integer> before = carried();
+        player.closeContainer();
+        List<String> back = new ArrayList<>();
+        carried().forEach((item, n) -> {
+            int more = n - before.getOrDefault(item, 0);
+            if (more > 0) {
+                back.add(more + " " + name(item));
+            }
+        });
+        if (!back.isEmpty()) {
+            handedBack = " — closing it gave back " + String.join(", ", back);
+        }
+    }
+
+    /** 她此刻背着的东西,按种类记件数,先见的在前。 */
+    private Map<Item, Integer> carried() {
+        Map<Item, Integer> kinds = new LinkedHashMap<>();
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            ItemStack stack = player.getInventory().getItem(i);
+            if (!stack.isEmpty()) {
+                kinds.merge(stack.getItem(), stack.getCount(), Integer::sum);
+            }
+        }
+        return kinds;
+    }
+
+    /** 回执拼好之前把界面合上:合上时退回来的东西要进回执(失败的那两处在说原因之前已经合了)。 */
+    @Override
+    protected void closeBooks() {
+        shut();
     }
 
     @Override
     protected String successMessage() {
-        List<String> lines = lines();
-        return where + ": " + (lines.isEmpty() ? "nothing to take" : String.join("; ", lines));
+        return where + ": " + (done.isEmpty() ? "nothing to take" : String.join("; ", done)) + handedBack;
     }
 
     @Override
     protected String timeoutMessage() {
-        return "timed out at " + (where == null ? r.kind : where) + soFar();
+        return "timed out at " + (where == null ? r.kind : where) + soFar() + handedBack;
     }
 
     @Override
     protected String cancelledMessage() {
-        return r.getToolName() + " interrupted" + soFar();
+        return r.getToolName() + " interrupted" + soFar() + handedBack;
     }
 }

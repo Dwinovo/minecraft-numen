@@ -358,7 +358,8 @@ public abstract class AbstractCompanionTask<R extends TaskRecord<V>, V>
 
     /**
      * 收场、拼回执之前结账:回执要报告的、需要在这一刻收口的记录(例如还在飘的掉落物记成"还在动")。默认什么都不做。只结账,不放手
-     * ——放手(导航、按键、手势)是 {@link #cleanup()} 的事,它在回执拼好之后才跑。
+     * ——放手(导航、按键、手势)是 {@link #cleanup()} 的事,它在回执拼好之后才跑。这件活打开的界面在这里合上:合上时原版退回她
+     * 背包的东西是回执要说的,等到放手就来不及说了。
      */
     protected void closeBooks() {}
 

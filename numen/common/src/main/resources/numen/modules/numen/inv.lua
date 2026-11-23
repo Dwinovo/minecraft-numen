@@ -1,39 +1,8 @@
--- Making, smelting and giving: the inv functions put together with walks, crafting windows and furnaces.
+-- Making, smelting and giving: the inv functions put together with walks, crafting tables and furnaces.
 local M = {}
 
 local function id(item)
   return item:find(":") and item or "minecraft:" .. item
-end
-
--- how many crafting-grid cells a window has: 4 for your own inventory, 9 for a crafting table, 0 for a chest
-local function grid_cells(w)
-  local n = 0
-  for _, s in ipairs(w.slots) do
-    if s.side == "grid" then
-      n = n + 1
-    end
-  end
-  return n
-end
-
--- runs work(), closes the window you opened whatever happened, and raises work's error as it is
-local function closing(work)
-  local ok, out = pcall(work)
-  numen.gui.close()
-  if not ok then
-    error(out, 0)
-  end
-  return out
-end
-
--- right-click a block open (numen.use.block walks up to it first); a block that opens no window raises failed
-local function open(at)
-  local w = numen.use.block(at)
-  if not w.slots then
-    local p = at.pos or at
-    raise("failed", string.format("the block at %d %d %d opened no window", p.x, p.y, p.z))
-  end
-  return w
 end
 
 -- a free cell beside you to put a block down on: air, with something solid under it
@@ -49,16 +18,11 @@ local function beside()
   raise("failed", "no free cell beside you to put a crafting table down on", "step onto open ground and try again")
 end
 
--- a crafting table window: the one open, the nearest table within 16 blocks walked to, or one you carry put down
--- beside you
-local function table_window()
-  local w = numen.gui.view()
-  if grid_cells(w) >= 9 then
-    return w
-  end
+-- the cell of a crafting table to craft at: the nearest within 16 blocks, or one you carry put down beside you
+local function table_cell()
   local found = numen.scan.blocks("minecraft:crafting_table", {radius = 16})
   if #found > 0 then
-    return open(found[1].nearest)
+    return found[1].nearest
   end
   if numen.inv.count("minecraft:crafting_table") == 0 then
     raise("not_found", "no crafting table within 16 blocks and none in your pack",
@@ -66,14 +30,14 @@ local function table_window()
   end
   local cell = beside()
   numen.build.place({{name = "minecraft:crafting_table", pos = cell}})
-  return open(cell)
+  return cell
 end
 
 ---Make count of item (default 1): pick a crafting recipe you have the materials for (numen.inv.recipes), and craft it
----with numen.inv.craft until there are enough. A 2x2 recipe crafts in your own grid; a 3x3 one in the crafting table
----open, else the nearest within 16 blocks (walked to), else one you carry put down beside you; a table it opened is
----closed again. Short of materials for every recipe raises no_material with the shortfall of the nearest one
----(err.data.missing); no crafting recipe at all raises not_found. A craft that fails raises its error as it is.
+---with numen.inv.craft until there are enough. A 2x2 recipe crafts in your own grid; a 3x3 one at the nearest crafting
+---table within 16 blocks (numen.inv.craft walks to it), else at one you carry put down beside you. Short of materials
+---for every recipe raises no_material with the shortfall of the nearest one (err.data.missing); no crafting recipe at
+---all raises not_found. A craft that fails raises its error as it is.
 ---@param item string
 ---@param count? integer
 ---@return integer made How many it made.
@@ -101,25 +65,12 @@ function M.make(item, count)
     end
     raise("not_found", "no crafting recipe makes " .. item, "numen.inv.recipes(\"" .. item .. "\") shows how it is made")
   end
-  local function craft()
-    local made = 0
-    while made < count do
-      made = made + numen.inv.craft(recipe.id, {count = count - made}).crafted
-    end
-    return made
+  local at = recipe.grid == 3 and table_cell() or nil
+  local made = 0
+  while made < count do
+    made = made + numen.inv.craft(recipe.id, {count = count - made, at = at}).crafted
   end
-  if recipe.grid == 3 then
-    local open_before = grid_cells(numen.gui.view()) >= 9
-    table_window()
-    if open_before then
-      return craft()
-    end
-    return closing(craft)
-  end
-  if grid_cells(numen.gui.view()) == 0 then
-    numen.gui.close()
-  end
-  return craft()
+  return made
 end
 
 ---Smelt count of item (all you carry by default) in a furnace, blast furnace or smoker: put the item in
@@ -266,11 +217,11 @@ end
 ---Instant. At most 40 recipes per source come back, omitted says how many more matched. A source that did not answer
 ---is in sources with the reason and the kind of information that is missing: ask your owner to join, or go on with
 ---what the other sources gave. Empty recipes with every source answered means the item is mined or traded, not made.
----To make it: crafting is numen.inv.make(item, N) (picks the recipe and the grid) or numen.inv.craft(id) in the open
----grid; smelting, blasting, smoking numen.inv.smelt(furnace, input, N); stonecutter: numen.use.block it,
----numen.gui.put the input, numen.gui.choose the recipe, take the output; smithing: numen.use.block it, numen.gui.move
----template + base + addition; a mod's machine: the catalysts (or the machine block of the category), numen.use.block
----it, then the numen.gui functions.
+---To make it: crafting is numen.inv.make(item, N) (picks the recipe and the grid) or numen.inv.craft(id), with
+---{at = cell} for a 3x3 recipe; smelting, blasting, smoking numen.inv.smelt(furnace, input, N); stonecutter:
+---numen.stonecutter.cut(stonecutter, input, item); smithing: numen.smithing.forge(smithing_table, template, base,
+---addition); a mod's machine: the catalysts (or the machine block of the category) are where it is made;
+---numen.container.put and numen.container.take move items into and out of a machine.
 ---@param item string
 ---@return RecipeResult
 function M.recipes(item)

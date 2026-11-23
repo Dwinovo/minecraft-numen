@@ -60,4 +60,31 @@ class RefusedArgumentsTest {
         assertTrue(run.message().contains("bad_argument"), run.message());
         assertTrue(run.message().contains("argument 'at': expected a Pos {x = …, y = …, z = …}"), run.message());
     }
+
+    /** 附魔台只有三项:第四项不用走到台子跟前就按参数错误退回,下一行是看这张台给这件东西哪几项。 */
+    @Test
+    void enchantingWithAFourthOptionIsRefusedBeforeWalking() {
+        JsonObject error = error(run("numen.enchant.apply({x = 1, y = 64, z = 2}, \"minecraft:diamond_sword\", 4)"));
+        assertEquals("bad_argument", error.get("kind").getAsString());
+        assertTrue(error.get("message").getAsString().contains("options 1 to 3"), error.toString());
+        assertEquals("numen.enchant.options({x = 1, y = 64, z = 2}, \"minecraft:diamond_sword\")",
+                error.get("hint").getAsString());
+    }
+
+    /** 合成器的格只有 0 到 8:第 9 格按参数错误退回。 */
+    @Test
+    void aCrafterSlotOutsideItsGridIsRefused() {
+        JsonObject error = error(run("numen.crafter.toggle({x = 1, y = 64, z = 2}, 9, false)"));
+        assertEquals("bad_argument", error.get("kind").getAsString());
+        assertTrue(error.get("message").getAsString().contains("slots are 0 to 8"), error.toString());
+    }
+
+    /** 信标没有"飞行"这个效果:按参数错误退回,说主效果有哪些。 */
+    @Test
+    void aBeaconEffectThatIsNoBeaconEffectIsRefusedWithTheOnesThereAre() {
+        JsonObject error = error(run("numen.beacon.set({x = 1, y = 64, z = 2}, \"minecraft:iron_ingot\", \"flight\")"));
+        assertEquals("bad_argument", error.get("kind").getAsString());
+        assertTrue(error.get("message").getAsString().contains("speed, haste, resistance, jump_boost, strength"),
+                error.toString());
+    }
 }

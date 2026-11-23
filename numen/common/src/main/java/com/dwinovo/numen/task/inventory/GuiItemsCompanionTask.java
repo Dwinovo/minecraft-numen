@@ -3,6 +3,7 @@ package com.dwinovo.numen.task.inventory;
 import com.dwinovo.numen.api.permission.GatedAct.Permit;
 import com.dwinovo.numen.api.permission.GatedAct.PermitState;
 import com.dwinovo.numen.FailureType;
+import com.dwinovo.numen.PlayerInv;
 import com.dwinovo.numen.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.tools.ContainerOps;
 import com.dwinovo.numen.api.entity.NumenPlayer;
@@ -84,10 +85,12 @@ public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsT
                 return TaskState.FAILED;
             }
         }
+        // 搬了几件看她背包里这一种变了多少,不看搬出来的那一格少了多少:取走一件就又出一件的格(切石机的成品格,按住 Shift
+        // 点它会一直切到料用完)那一格只少一叠,到她手里的是全部
         Item kind = from.getItem().getItem();
-        int before = onSource(menu);
+        int before = PlayerInv.count(player.getInventory(), kind);
         ops.step(move, player);
-        int step = before - onSource(menu);
+        int step = (PlayerInv.count(player.getInventory(), kind) - before) * (r.put ? -1 : 1);
         if (step <= 0) {
             stopped = "the other side is full or does not take " + itemName();
             return finish();
@@ -147,17 +150,6 @@ public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsT
 
     private boolean sourceSide(Slot slot) {
         return (slot.container == player.getInventory()) == r.put;
-    }
-
-    /** 搬出来的那一侧还有几件这种东西。 */
-    private int onSource(AbstractContainerMenu menu) {
-        int n = 0;
-        for (Slot slot : menu.slots) {
-            if (sourceSide(slot) && wanted(slot)) {
-                n += slot.getItem().getCount();
-            }
-        }
-        return n;
     }
 
     private String itemName() {
