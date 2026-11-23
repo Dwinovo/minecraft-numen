@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.witness;
 
+import com.dwinovo.numen.api.Focus;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 
 import java.util.List;

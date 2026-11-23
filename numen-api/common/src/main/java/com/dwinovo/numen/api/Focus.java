@@ -1,13 +1,14 @@
-package com.dwinovo.numen.api.witness;
+package com.dwinovo.numen.api;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 
 /**
- * 一次动作对着谁:哪一格方块、哪只实体。对着空气用手里的东西、在开着的界面里做事,两样都没有。
+ * 世界里的一样东西:哪一格方块、哪只实体。问题拿它说"对着谁":一次动作对着谁({@link Questions#WITNESS}),看的是谁
+ * ({@link Questions#DESCRIBE})。对着空气用手里的东西、在开着的界面里做事,两样都没有。
  *
- * @param block  瞄着的那一格;没有为 null
- * @param entity 对着的那只实体;没有为 null
+ * @param block  那一格;没有为 null
+ * @param entity 那只实体;没有为 null
  */
 public record Focus(BlockPos block, Entity entity) {
 

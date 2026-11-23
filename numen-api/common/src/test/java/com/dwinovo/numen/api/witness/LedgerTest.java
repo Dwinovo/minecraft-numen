@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.witness;
 
+import com.dwinovo.numen.api.Focus;
 import com.dwinovo.numen.api.Questions;
 import com.dwinovo.numen.api.agent.scope.Handle;
 import org.junit.jupiter.api.Test;

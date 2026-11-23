@@ -1,12 +1,12 @@
 package com.dwinovo.numen.witness;
 
+import com.dwinovo.numen.api.Focus;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.api.Questions;
 import com.dwinovo.numen.api.entity.Belongings;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.entity.StackLabel;
 import com.dwinovo.numen.api.sdk.EntityLabel;
-import com.dwinovo.numen.api.witness.Focus;
 import com.dwinovo.numen.api.witness.Witness;
 import com.dwinovo.numen.tools.menu.StackLine;
 import net.minecraft.core.BlockPos;

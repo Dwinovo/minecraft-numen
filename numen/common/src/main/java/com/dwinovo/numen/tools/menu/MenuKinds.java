@@ -7,7 +7,7 @@ import com.dwinovo.numen.api.permission.ConsentItem;
 import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.api.sdk.Pending;
 import com.dwinovo.numen.api.sdk.ServerCall;
-import com.dwinovo.numen.api.witness.Focus;
+import com.dwinovo.numen.api.Focus;
 import com.dwinovo.numen.api.witness.Ledger;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;

@@ -2,14 +2,15 @@ package com.dwinovo.numen.tools.perception;
 
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
+import com.dwinovo.numen.api.Focus;
 import com.dwinovo.numen.api.NumenApi;
+import com.dwinovo.numen.api.describe.Descriptions;
 import com.dwinovo.numen.scan.BlockScan;
 import com.dwinovo.numen.api.sdk.NearbyEntities;
 import com.dwinovo.numen.tools.ScanOps;
 import com.dwinovo.numen.tools.ToolParse;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.permission.Groups;
-import com.dwinovo.numen.api.platform.Services;
 import com.dwinovo.numen.api.sdk.BlockAt;
 import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.api.sdk.CellOrEntity;
@@ -52,8 +53,10 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * {@code numen.scan}:看她周围——脚下一圈的地形图、某几种方块在哪、附近有谁、一格方块是什么、一格方块里装着什么、看不看得见一处。
- * 六个函数都在服务端读世界,不动世界,不占身体,什么也不存;脚本拿到的是读到的值(方块、实体都带 Pos,原样能交给下一个函数)。
+ * {@code numen.scan}:看她周围——脚下一圈的地形图、某几种方块在哪、附近有谁、一格方块是什么、看不看得见一处。
+ * 五个函数都在服务端读世界,不动世界,不占身体,什么也不存;脚本拿到的是读到的值(方块、实体都带 Pos,原样能交给下一个函数)。
+ * 一格方块"是什么"分两半:方块本身的事这里读,别的(告示牌的字、里面存着什么、模组的机器在干什么)问登记着的回答者
+ * ({@link com.dwinovo.numen.api.Questions#DESCRIBE})。
  */
 public final class ScanApi {
 
@@ -223,8 +226,8 @@ public final class ScanApi {
     /** 哪一格。 */
     public record Cell(@Doc("The block's cell.") BlockPos cell) {}
 
-    /** 一格方块的详情。 */
-    @Doc("One block in full: what it is and what digging it takes.")
+    /** 一格方块的详情:前面是方块本身的事,{@code details} 是回答者们说的。 */
+    @Doc("One block in full: what it is, what digging it takes and what else is known about it.")
     public record BlockInfo(@Flatten BlockAt block,
                             @Doc("Its state, facing = \"north\" ...") Optional<Map<String, String>> properties,
                             boolean isAir,
@@ -237,14 +240,25 @@ public final class ScanApi {
                             Optional<Integer> estimatedMiningTicks,
                             double distance,
                             boolean inReach,
-                            @Doc("A sign's text, front and back.") Optional<com.dwinovo.numen.tools.Signs.Text> sign) {}
+                            @Doc("What else is known about it, one fact per line: a sign's text, what it holds (items, "
+                                    + "fluid, energy), what a mod's integration says about its own block and which "
+                                    + "functions work on it. Empty when nothing more is known.")
+                            List<String> details) {}
 
-    @Fn("One block: its id and state, hardness, whether your held tool is right, dig time, whether it is in reach.")
+    @Fn("One block: its id and state, hardness, whether your held tool is right, dig time, whether it is in reach, "
+            + "and what else is known about it (a sign's text, what it holds).")
     @Example("numen.scan.block({x = 120, y = 64, z = -35})")
-    @Note("Instant and read-only, from any distance: the block id and its state properties (an end_portal_frame's "
-            + "has_eye), hardness, whether the tool in hand is right, an estimated dig time, and whether it is within "
-            + "your reach. A sign also carries its text, both sides.")
-    @SeeAlso({"numen.scan.container", "numen.scan.blocks", "numen.scan.sight"})
+    @Example("for _, line in ipairs(numen.scan.block({x = 120, y = 64, z = -35}).details) do print(line) end")
+    @Note("Instant and read-only, from any distance; nothing is opened or moved. The block id and its state properties "
+            + "(an end_portal_frame's has_eye), hardness, whether the tool in hand is right, an estimated dig time, and "
+            + "whether it is within your reach.")
+    @Note("details holds the rest, one fact per line: a sign's text on both sides; what the block holds — items, fluid, "
+            + "energy — on chests, furnaces and most modded machines, tanks and batteries; and whatever a mod's "
+            + "integration tells about its own blocks. Storage-network terminals (AE2/RS) show only their local buffer, "
+            + "not the whole network.")
+    @Note("Read contents and fill levels here instead of opening the block; a block with a window and nothing listed "
+            + "here is opened with numen.use.block and read with numen.gui.view.")
+    @SeeAlso({"numen.scan.blocks", "numen.scan.sight"})
     @SuppressWarnings("deprecation")  // BlockBehaviour.isSolid() 带的是 Mojang 的"别覆写"标记,不是要淘汰
     public static BlockInfo block(ServerCall call, Cell args) {
         NumenPlayer self = call.her();
@@ -277,40 +291,12 @@ public final class ScanApi {
         return new BlockInfo(BlockAt.of(pos, state), properties, state.isAir(), state.isSolid(),
                 !state.getFluidState().isEmpty(), hardness, hardness < 0, needsTool, handIsRightTool, ticks,
                 Math.round(distance * 10.0) / 10.0, self.canInteractWithBlock(pos, 0.0),
-                self.level().getBlockEntity(pos) instanceof net.minecraft.world.level.block.entity.SignBlockEntity sign
-                        ? Optional.of(com.dwinovo.numen.tools.Signs.read(sign)) : Optional.empty());
+                Descriptions.of(self, Focus.on(pos)));
     }
 
     /** 一个方块状态属性写成的值("true"、"north")。 */
     private static <T extends Comparable<T>> String propValue(BlockState state, Property<T> p) {
         return p.getName(state.getValue(p));
-    }
-
-    // ---- container ----
-
-    /** 一格方块里装着什么。 */
-    public record Storage(BlockAt block,
-                          @Doc("What it holds, one line per slot, tank or battery; empty when it exposes no storage "
-                                  + "(not a machine, tank or battery, or it keeps its state elsewhere).")
-                          List<String> storage) {}
-
-    @Fn("What a block holds — items, fluid, energy — read without opening it.")
-    @Example("numen.scan.container({x = 120, y = 64, z = -35})")
-    @Note("Instant and read-only, from any distance; nothing is opened or moved.")
-    @Note("Works on chests, furnaces and most modded machines, tanks and batteries. Storage-network terminals (AE2/RS) "
-            + "show only their local buffer, not the whole network.")
-    @Note("Use it instead of opening a machine's GUI when you only need its contents or fill levels; a block with a "
-            + "GUI but no storage here is opened with numen.use.block and read with numen.gui.view.")
-    @SeeAlso("numen.scan.block")
-    public static Storage container(ServerCall call, Cell args) {
-        NumenPlayer self = call.her();
-        BlockPos pos = args.cell();
-        BlockState state = self.level().getBlockState(pos);
-        if (state.isAir()) {
-            throw new ApiError(ErrorKind.NOT_FOUND, "the block at " + pos.getX() + "," + pos.getY() + "," + pos.getZ()
-                    + " is air — nothing to read", null);
-        }
-        return new Storage(BlockAt.of(pos, state), Services.caps().read(self.level(), pos).lines());
     }
 
     // ---- sight ----

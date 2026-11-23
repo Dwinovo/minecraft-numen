@@ -9,7 +9,7 @@ import com.dwinovo.numen.api.task.TaskState;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.FailureType;
 import com.dwinovo.numen.act.Interaction;
-import com.dwinovo.numen.api.witness.Focus;
+import com.dwinovo.numen.api.Focus;
 import com.dwinovo.numen.api.witness.Ledger;
 import com.dwinovo.numen.task.base.InReachTask;
 import com.dwinovo.numen.task.base.Precondition;

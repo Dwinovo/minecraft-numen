@@ -169,6 +169,8 @@ public final class NumenContent {
             numen.rangedWeapon(com.dwinovo.numen.task.combat.VanillaRanged.CROSSBOW);
             // "这次动作前后变了什么"原版的那几样回答者,和模组的回答者走同一扇门、同一个问题
             com.dwinovo.numen.witness.VanillaWitnesses.install(numen);
+            // "这是什么"原版的那几样回答者(告示牌的字、方块里存着什么),同一扇门
+            com.dwinovo.numen.describe.VanillaDescribers.install(numen);
         });
     }
 

@@ -13,7 +13,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
-/** 读一块告示牌({@code numen.scan.block} 交回的 sign):正反两面各四行字,有没有涂蜡。 */
+/** 读一块告示牌({@code numen.scan.block} 的回答者与 {@code numen.use.sign} 读回来用的那份读法):正反两面各四行字,有没有涂蜡。 */
 @Tag("mc")
 class SignsTest {
 

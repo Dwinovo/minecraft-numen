@@ -20,7 +20,7 @@ import net.minecraft.world.level.block.Blocks;
 import static com.dwinovo.numen.gametest.GameTestKit.*;
 
 /**
- * 感知:{@code scan} 组({@code numen.scan.block}、{@code numen.scan.container}、{@code numen.scan.map}、{@code numen.scan.entities}、
+ * 感知:{@code scan} 组({@code numen.scan.block}、{@code numen.scan.map}、{@code numen.scan.entities}、
  * {@code numen.scan.blocks})、{@code status} 组({@code numen.status.self}、{@code numen.status.world}、{@code numen.status.owner}),以及
  * {@code numen.inv.recipes}。这些不动世界,测的是回执说的是不是眼前的真事;提升成快捷工具的
  * 动作,同一刻从工具与从 {@code command} 读到的一字不差(同源)。
@@ -69,7 +69,7 @@ public class PerceptionGameTests {
     public static void inspect_block_storage_lists_a_chest_once_with_all_its_sides(GameTestHelper helper) {
         BlockPos chest = chestWithDiamonds(helper, new BlockPos(5, 2, 3), 5);
         NumenPlayer companion = spawnAt(helper, "gametest_auditor", new BlockPos(3, 2, 3), false);
-        ToolRun storage = lua(companion, "numen.scan.container({x = " + chest.getX() + ", y = " + chest.getY() + ", z = " + chest.getZ() + "})");
+        ToolRun storage = lua(companion, "numen.scan.block(" + xyz(chest) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(storage.succeeded(), "reading the chest failed: " + storage.reply());
@@ -387,21 +387,58 @@ public class PerceptionGameTests {
         return rows.get(row + dz).charAt(col + 2 * dx);
     }
 
-    /** 读一块石头和一格空气的存储:石头交回一个空的存储表;空气直接失败,说那儿什么都没有。 */
+    /** 看一块石头和一格空气:没人认得更多,{@code details} 是空表;方块本身的事照常读得出来。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void inspect_block_storage_on_stone_and_on_air(GameTestHelper helper) {
         BlockPos stone = helper.absolutePos(new BlockPos(5, 2, 3));
         helper.getLevel().setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
         BlockPos air = helper.absolutePos(new BlockPos(5, 3, 3));
         NumenPlayer companion = spawnAt(helper, "gametest_prober", new BlockPos(3, 2, 3), false);
-        ToolRun onStone = lua(companion, "numen.scan.container({x = " + stone.getX() + ", y = " + stone.getY() + ", z = " + stone.getZ() + "})");
-        ToolRun onAir = lua(companion, "numen.scan.container({x = " + air.getX() + ", y = " + air.getY() + ", z = " + air.getZ() + "})");
+        ToolRun onStone = lua(companion, "numen.scan.block(" + xyz(stone) + ")");
+        ToolRun onAir = lua(companion, "numen.scan.block(" + xyz(air) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(onStone.succeeded() && List.of().equals(onStone.field("storage")),
-                    "stone was not reported as holding nothing: " + onStone.reply());
-            helper.assertTrue(!onAir.succeeded() && onAir.reply().contains("is air"),
-                    "air was not reported as nothing to read: " + onAir.reply());
+            helper.assertTrue(onStone.succeeded() && List.of().equals(onStone.field("details")),
+                    "stone was not reported with nothing more known: " + onStone.reply());
+            helper.assertTrue(onAir.succeeded() && Boolean.TRUE.equals(onAir.field("is_air"))
+                            && List.of().equals(onAir.field("details")),
+                    "air was not reported as air with nothing more known: " + onAir.reply());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /**
+     * "这是什么"问的是登记着的回答者(control 0021):一块写了字的告示牌,原版的回答者说出牌上的字,插件登记的回答者说的那一句接在后面;
+     * 旁边一个抛异常的回答者只丢它自己那一条,这次看照常读出来。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
+    public static void a_plugins_describer_adds_its_line_to_what_a_block_scan_says(GameTestHelper helper) {
+        BlockPos sign = helper.absolutePos(new BlockPos(5, 2, 3));
+        helper.getLevel().setBlockAndUpdate(sign, Blocks.OAK_SIGN.defaultBlockState());
+        var entity = (net.minecraft.world.level.block.entity.SignBlockEntity) helper.getLevel().getBlockEntity(sign);
+        entity.updateText(t -> t.setMessage(0, net.minecraft.network.chat.Component.literal("Keep")), true);
+        NumenPlayer companion = spawnAt(helper, "gametest_reader", new BlockPos(3, 2, 3), false);
+        // 回答者全服的同伴都问得到:只认这一条用例的那一格,不论成败都撤掉
+        com.dwinovo.numen.api.NumenPlugins.register("gt_describe", numen -> {
+            numen.answer(com.dwinovo.numen.api.Questions.DESCRIBE, (her, target) -> {
+                if (sign.equals(target.block())) {
+                    throw new IllegalStateException("a broken describer");
+                }
+                return List.of();
+            });
+            numen.answer(com.dwinovo.numen.api.Questions.DESCRIBE, (her, target) -> sign.equals(target.block())
+                    ? List.of("gt_describe knows this sign") : List.of());
+        });
+        com.dwinovo.numen.api.gametest.TestCleanup.whenFinished(helper,
+                () -> com.dwinovo.numen.api.NumenPlugins.roster().withdraw("gt_describe"));
+        ToolRun scan = lua(companion, "numen.scan.block(" + xyz(sign) + ")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(scan.succeeded() && "minecraft:oak_sign".equals(scan.field("name")),
+                    "the sign itself was not read: " + scan.reply());
+            helper.assertTrue(List.of("sign front: \"Keep\", \"\", \"\", \"\"", "sign back: \"\", \"\", \"\", \"\"",
+                            "gt_describe knows this sign").equals(scan.field("details")),
+                    "details does not carry the sign's text with the plugin's line after it: " + scan.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
