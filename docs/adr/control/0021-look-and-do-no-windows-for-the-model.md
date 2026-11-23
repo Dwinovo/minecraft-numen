@@ -1,6 +1,6 @@
 # 0021 她面前只有看和做:界面只当内部引擎,"这是什么"由回答者说
 
-- 状态:已接受,在落地(看已落地;做、拿掉界面未落地,见文末)
+- 状态:已接受,在落地(看、做已落地;拿掉界面未落地,见文末)
 - 日期:2026-11-23
 - 另见:[0020](0020-questions-answered-by-whoever-knows.md)(问问题的机制;本条取代它的决定 5)、0005(一条命令只做一件事)、
   0008(组合交给出厂 Lua 库)、body 0003(她缺的那半个客户端)、issue #167
@@ -158,3 +158,27 @@
 - `numen.inv.smelt` 仍是出厂 Lua 库,改成拼熔炉那三个函数:放料、放燃料,每两秒取一次,够数或 15 秒没有新产物就收。
 - 测试:GameTest `container_put_and_take_go_through_the_chest`、`furnace_fuel_and_input_land_in_their_own_slots`(原木当燃料进的是
   燃料格)、`container_put_on_a_block_with_no_window_is_refused_before_any_click`;慢批里的 `smelt_loads_waits_and_takes_the_output` 照旧过。
+
+第 2 步(做)落地了其余的原版特殊方块,和在工作台上合成:
+
+- 十二组函数,都在 `numen` 的 `tools.station`,一组一个类,建在同一件活上:`numen.enchant`(`options`、`apply`)、`numen.anvil`
+  (`combine`、`rename`)、`numen.stonecutter.cut`、`numen.loom.weave`、`numen.trade`(`offers`、`buy`,目标是实体)、
+  `numen.beacon.set`、`numen.lectern`(`read`、`page`、`take`)、`numen.crafter`(`put`、`toggle`)、`numen.brewing`(`bottles`、
+  `ingredient`、`fuel`、`take`)、`numen.smithing.forge`、`numen.grindstone`(`disenchant`、`repair`)、`numen.cartography`
+  (`extend`、`copy`、`lock`)。
+- 这件活的步骤多了一种:当场做完的一件事(`Deed`:发原版客户端会发的那个包、读回来,没让做就带着读到的事实收场),和搬东西的步骤
+  排在一起。不看界面就判得了的参数(选项编号、合成器的格号、信标效果的名字、页码、次数)在派活之前退回;切石机切不切得出看配方表,
+  也在走过去之前说。
+- 引擎跟着改了三处。搬了几件看她背包里那一种变了多少,不看搬出来的那一格少了多少(切石机的成品格取一件又出一件)。合上界面改在
+  回执拼好之前,合上时原版退回她背包的东西量出来写进回执:附魔台、铁砧这类不存东西的界面,没做成时放进去的就是这样回来的。界面
+  自己合上时正在搬的那一步让它收完(讲台的书取下来,原版就合上讲台)。
+- 交易一下一笔:`SelectTrade` 之后普通地点一下结果格,再把光标上的东西点进她的背包;按住 Shift 点结果格是能做几笔做几笔,所以
+  不用它。信标先看层数许不许、再放付款物品:信标的界面合上时会把没用掉的付款物品丢在地上。
+- `numen.inv.craft` 不再认"开着的那个合成格":不给 `at` 就在她自己的 2x2 里合,给了(一张工作台的格)就是这件活里的一步,配方
+  在不在、料够不够在走过去之前判。参数叫 `at` 不叫 `table`:`table` 是 Lua 自带的全局名,登记时不许用,附魔台、锻造台、制图台那
+  几个函数的第一个参数因此也写全名。`numen.inv.make` 找到或放下工作台后把那一格交给它,库里不再有 `numen.gui`。
+- `numen.gui.*` 与 `tools.menu` 没有动,留给第 3 步。信标按层数能选哪些效果只有一处(`tools.station.BeaconEffects`),新旧两边同用。
+  一处要在第 3 步收口:`numen.lectern.take` 是搬东西的一步(取别人讲台上的书先过权限层),书靠一个钮取下这件事仍由 `ContainerOps`
+  问 `MenuKinds.takeOut`,删 `tools.menu` 时要把它搬到搬东西的那一处。
+- 测试:GameTest `StationGameTests`(批 `numen_station`),每组一条从函数入口走完整一趟,附魔另有一条等级不够时如实说、东西都回来;
+  `RefusedArgumentsTest` 加了派活之前退回的三条。
