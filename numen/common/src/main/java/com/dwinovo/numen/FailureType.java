@@ -36,10 +36,6 @@ public enum FailureType {
     /** No free inventory slot to stow into (unequipped gear, picked-up loot). Kick to
      *  LLM: dropping or depositing something first is a strategic call. */
     NO_SPACE,
-    /** Nothing solid to place against at/around the target, or nothing vanilla lets the block stand on there (a
-     *  flower on stone, a torch on air): the block will not hold at that spot. In-ladder when another support face
-     *  exists; when the spot itself cannot hold the block, kick to LLM — only changing the plan or the ground helps. */
-    NO_SUPPORT,
     /** A living/building-blocking entity occupies the target cell — vanilla refuses every
      *  press until it moves. Kick to LLM: waiting, luring it away, or picking another cell
      *  is a strategic call; no stance change or dig fixes it. */
@@ -65,7 +61,7 @@ public enum FailureType {
     REFUSED,
     /** The block went in but did not stay, or the world would not take it: another mod cancelled the placement, the
      *  game refused the write, or something outside the job kept breaking the finished work. Not the permission
-     *  layer ({@link #REFUSED}), not a spot that cannot hold it ({@link #NO_SUPPORT}), not a body in the way
+     *  layer ({@link #REFUSED}), not a body in the way
      *  ({@link #ENTITY_BLOCKED}) — each of those has its own remedy. Kick to LLM: trying again the same way changes
      *  nothing; what keeps undoing it has to be found first. */
     NOT_KEPT,
@@ -101,7 +97,7 @@ public enum FailureType {
             case NO_MATERIAL -> ErrorKind.NO_MATERIAL;
             case INTERRUPTED -> ErrorKind.INTERRUPTED;
             case TIMED_OUT -> ErrorKind.TIMEOUT;
-            case NO_SPACE, NO_SUPPORT, ENTITY_BLOCKED, NOT_KEPT, WRONG_TOOL, UNSUPPORTED, INTERNAL, UNKNOWN ->
+            case NO_SPACE, ENTITY_BLOCKED, NOT_KEPT, WRONG_TOOL, UNSUPPORTED, INTERNAL, UNKNOWN ->
                     ErrorKind.FAILED;
         };
     }
