@@ -78,7 +78,7 @@ public final class PermissionApi {
                                   + "yourself; otherwise he sees it in his permission settings.") boolean told) {}
 
     @Fn("Set the tier of one verb: allow, ask or deny.")
-    @Example("numen.permission.set({verb = \"break\", tier = \"deny\"})")
+    @Example("numen.permission.set(\"break\", \"deny\")")
     @Note("Tightening (toward deny) takes effect at once and does not ask; your owner is told. Loosening is your owner's "
             + "call: this puts a card in front of him and waits, and the tier changes only if he allows.")
     @SeeAlso({"numen.permission.settings", "numen.permission.add"})
@@ -93,7 +93,7 @@ public final class PermissionApi {
                           @Doc("allow, ask or deny.") String tier) {}
 
     @Fn("Ask your owner to put a name on a verb's never-ask list: acts of that verb on that name no longer need asking.")
-    @Example("numen.permission.add({verb = \"break\", name = \"minecraft:wheat\"})")
+    @Example("numen.permission.add(\"break\", \"minecraft:wheat\")")
     @Note("Loosening is your owner's call: this puts a card in front of him and waits. Written only if he allows. "
             + "Anyone who knows the thing may still say no, and that always wins over the list.")
     @SeeAlso({"numen.permission.settings", "numen.permission.remove"})
@@ -104,7 +104,7 @@ public final class PermissionApi {
     }
 
     @Fn("Take a name off a verb's never-ask list: acts of that verb on that name are asked about again, from now on.")
-    @Example("numen.permission.remove({verb = \"break\", name = \"minecraft:chest\"})")
+    @Example("numen.permission.remove(\"break\", \"minecraft:chest\")")
     @Note("Takes effect at once and does not ask: tightening needs no consent. Your owner is told.")
     @SeeAlso({"numen.permission.settings", "numen.permission.add"})
     public static Pending<Changed> remove(ServerCall call, Entry args) {

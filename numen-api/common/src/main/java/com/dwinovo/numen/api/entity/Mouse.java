@@ -64,7 +64,8 @@ import net.minecraft.world.phys.Vec3;
  *
  * <h2>权限</h2>
  * 身体是同伴({@link NumenPlayer})时,每一下动手之前先过权限层,这是关卡长在身体上、谁驱动她都绕不开的地方:左键换到新的一格时问
- * "能不能拆这一格"、打实体时问"能不能打它",右键手上的东西会对世界做的事({@link ClickActions},谁认得那种物品谁来说)逐件问,再问"能不能用这一格或这只实体"。不许就不动手,交回
+ * "能不能拆这一格"、打实体时问"能不能打它",右键手上的东西会对世界做的事({@link ClickActions},谁认得那种物品谁来说)逐件问,再问"能不能用这一格或这只实体";
+ * 手真正去用手里那件东西的那一下(对着空气,或点的方块、实体没吃掉落到物品自用)问"能不能用手里的东西"。不许就不动手,交回
  * 裁决本身当理由;要问主人时鼠标停下,交回要问的那一条({@link Refusal.Asks}),由驱动者决定怎么问。不是同伴的普通假玩家照原版,
  * 不过权限层。服务端自己退回的挖掘如实报成被拒({@link Refusal#SERVER}),那是身体汇报,不是权限裁决。
  *
@@ -86,6 +87,16 @@ public class Mouse {
 
         /** 服务端退回的那一种。 */
         Refusal SERVER = new Server();
+
+        /** 这件事过权限层:放行为 null;不许是裁决本身;要问是连同要问的那一条。鼠标与直接写一格({@link BlockWriter})是同一套。 */
+        static Refusal of(Gate gate, ServerLevel level, Action action) {
+            Verdict verdict = gate.judgeLive(action, level);
+            return switch (verdict.tier()) {
+                case ALLOW -> null;
+                case DENY -> new Denied(verdict);
+                case ASK -> new Asks(verdict, gate.consentItem(action, verdict));
+            };
+        }
 
         /** 权限层的裁决;服务端退回的不是权限层的话,为 null。 */
         default Verdict verdict() {
@@ -481,6 +492,12 @@ public class Mouse {
                 break;
             }
             if ((itemFallthrough || (block == null && entity == null)) && !stack.isEmpty()) {
+                // 她的手真正去用手里这件东西的那一下:对着空气,或点的方块、实体没吃掉落到物品自用;只在这儿问
+                Refusal held = refusal(Action.useItem(stack.getItem()));
+                if (held != null) {
+                    return new Use.Refused(block != null ? block.getBlockPos()
+                            : entity != null ? entity.blockPosition() : body.blockPosition(), held);
+                }
                 InteractionResult onItem = useItem(level, stack, hand);
                 if (onItem.consumesAction()) {
                     answer = Use.Answer.TAKEN;
@@ -580,7 +597,18 @@ public class Mouse {
         if (hit instanceof EntityHitResult entity) {
             return List.of(left ? Action.attack(entity.getEntity()) : Action.useEntity(entity.getEntity()));
         }
-        return List.of();
+        if (left) {
+            return List.of();
+        }
+        // 对着空气右键:两只手里的东西自用,和 press 在手上问的是同一件事
+        List<Action> out = new ArrayList<>();
+        for (InteractionHand hand : InteractionHand.values()) {
+            ItemStack stack = body.getItemInHand(hand);
+            if (!stack.isEmpty()) {
+                out.add(Action.useItem(stack.getItem()));
+            }
+        }
+        return out;
     }
 
     /** 这几件事里第一件没放行的:不许、要问;都放行为 null。 */
@@ -599,12 +627,6 @@ public class Mouse {
         if (!(body instanceof NumenPlayer companion)) {
             return null;
         }
-        Gate gate = Permission.gateFor(companion);
-        Verdict verdict = gate.judgeLive(action, companion.serverLevel());
-        return switch (verdict.tier()) {
-            case ALLOW -> null;
-            case DENY -> new Refusal.Denied(verdict);
-            case ASK -> new Refusal.Asks(verdict, gate.consentItem(action, verdict));
-        };
+        return Refusal.of(Permission.gateFor(companion), companion.serverLevel(), action);
     }
 }

@@ -40,7 +40,7 @@ import java.util.UUID;
  * dimensions).
  *
  * <h2>身体</h2>
- * 她有一副键盘({@link Controls})、一个视角({@link Look})、一个鼠标({@link Mouse})、一个快捷栏({@link Hotbar})和客户端的那些包({@link ClientPackets}),导航、本能与各件活用的都是它们;她的手挖出来的东西当场进背包({@link Harvest});每刻在自己的实体刻里跑一次物理步进
+ * 她有一副键盘({@link Controls})、一个视角({@link Look})、一个鼠标({@link Mouse})、一只直接写一格的手({@link BlockWriter})、一个快捷栏({@link Hotbar})和客户端的那些包({@link ClientPackets}),导航、本能与各件活用的都是它们;她的手挖出来的东西当场进背包({@link Harvest});每刻在自己的实体刻里跑一次物理步进
  * ({@link Physics#step}),按着的键在那里落成输入。
  */
 public final class NumenPlayer extends ServerPlayer {
@@ -59,6 +59,7 @@ public final class NumenPlayer extends ServerPlayer {
     private final Look look = new Look(this);
     /** 她的鼠标:指名哪一格、哪只实体,左键挖、右键用,动手之前过权限层。 */
     private final Mouse mouse = new Mouse(this);
+    private final BlockWriter writer = new BlockWriter(this);
     /** 她的快捷栏:把东西拿到手上。 */
     private final Hotbar hotbar = new Hotbar(this);
     /** 她的客户端会发的那些包(界面里的钮、写字、交易、玩家指令……):由这里交给原版收包。 */
@@ -603,6 +604,11 @@ public final class NumenPlayer extends ServerPlayer {
     /** 她的鼠标:对指名的那一格、那只实体左键挖、右键用,够得着就点得中;每一下动手之前先过权限层。 */
     public Mouse mouse() {
         return mouse;
+    }
+
+    /** 她直接往一格里写方块状态的手(建造用),和鼠标并列,同样先过权限层。 */
+    public BlockWriter writer() {
+        return writer;
     }
 
     /** 她的手挖出来的东西当场进背包;要知道一趟活挖到了什么,在这里开一本账。 */

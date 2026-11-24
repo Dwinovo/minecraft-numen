@@ -1,13 +1,10 @@
 package com.dwinovo.numen.task.build;
 
+import com.dwinovo.numen.api.entity.BlockWriter;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.entity.Stacks;
 
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.List;
@@ -23,19 +20,22 @@ import java.util.Optional;
  *       火把没有依附就是空气),写进去之后问。</li>
  * </ul>
  *
- * <p>{@link #place} 把图纸的状态原样写进世界({@code setBlock} 带 {@code UPDATE_ALL},邻居由此收到更新),背包里那一叠的数据
- * 灌进方块实体(潜影盒里的东西、旗帜的花纹、头颅的主人、蜂箱里的蜂都跟着方块走),再给方块一次"我被放下了"
- * ({@code setPlacedBy}:门与床写另一半、命名牌与告示牌初始化)。然后这一格自己也收一次更新,两种都收:照着周围重算形状
- * (另一半已经立起来,所以门不会被算没),再收一次"邻居变了"的通知(红石灯靠它点亮)。写成了才扣料;{@code setBlock}
- * 返回假(世界没变,如超出建造高度)就是没放下,不扣。放下之后世界说了算:原版随后弹掉或改了样子的,收工对图纸时如实报。
+ * <p>{@link #place} 把图纸的状态原样交给她的手({@link NumenPlayer#writer}:写进世界、灌方块实体的数据、"我被放下了"、这一格自己收一次
+ * 更新,身体是同伴时先过权限层),写成了才扣料;世界没变(如超出建造高度)或手没让写(主人不许、要问)就是没放下,不扣。放下之后
+ * 世界说了算:原版随后弹掉或改了样子的,收工对图纸时如实报。
  *
  * <p><b>分工</b>——本类只管一格怎么落进世界;这一格该不该放、料够不够、放完怎么记账是 {@link BuildCompanionTask} 的事,
  * 演出是 {@link BuildShowmanship}。
  */
 final class BuildPlacer {
 
-    /** 一格落下了:为它花掉的每一叠(样子与件数,免耗材为空)——回执说"用了哪一叠"读的就是它。 */
-    record Placement(List<ItemStack> spent) {}
+    /**
+     * 一格交给手之后的结果。
+     *
+     * @param write 手交回的话:写了、世界没变、或被拒(带理由与要问的那一条)
+     * @param spent 为它花掉的每一叠(样子与件数,免耗材为空)——回执说"用了哪一叠"读的就是它;只有写了才有
+     */
+    record Placement(BlockWriter.Write write, List<ItemStack> spent) {}
 
     private final NumenPlayer player;
     private final BuildInventory inv;
@@ -57,38 +57,20 @@ final class BuildPlacer {
      * 还是这一叠。免耗材({@code cost} 为 0)时没有背包里的叠,用一件新的。
      *
      * @param cost 这一格要花几件;免耗材时由调用方给 0
-     * @return 花了哪几叠;没放下(世界没变、料刚好没了)为 null
+     * @return 手交回的话与花了哪几叠;料刚好没了为 null
      */
     Placement place(BuildTaskRecord.Target target, int cost) {
-        BlockPos pos = target.pos();
+        var pos = target.pos();
         BlockState desired = target.desiredState();
         Optional<Stacks.Pick> pick = cost > 0 ? inv.pick(target.item()) : Optional.empty();
         if (cost > 0 && pick.isEmpty()) {
             return null;   // 付得起的闸门刚过,到这儿没了只可能是同刻竞态:这格放下
         }
         ItemStack placing = pick.map(Stacks.Pick::sample).orElseGet(() -> new ItemStack(target.item()));
-        if (!player.level().setBlock(pos, desired, Block.UPDATE_ALL)) {
-            return null;
+        BlockWriter.Write write = player.writer().write(pos, desired, placing);
+        if (!(write instanceof BlockWriter.Write.Written)) {
+            return new Placement(write, List.of());
         }
-        BlockItem.updateCustomBlockEntityTag(player.level(), player, pos, placing);
-        BlockEntity entity = player.level().getBlockEntity(pos);
-        if (entity != null) {
-            entity.applyComponentsFromItemStack(placing);
-            entity.setChanged();
-        }
-        desired.getBlock().setPlacedBy(player.level(), pos, desired, player, placing);
-        hearFromNeighbours(pos);
-        return new Placement(pick.map(p -> inv.consume(p, cost)).orElse(List.of()));
-    }
-
-    /** 这一格自己也收一次更新:照着周围重算形状(算成空气就是没留住),还在的话再收一次"邻居变了"。 */
-    private void hearFromNeighbours(BlockPos pos) {
-        BlockState written = player.level().getBlockState(pos);
-        Block.updateOrDestroy(written, Block.updateFromNeighbourShapes(written, player.level(), pos), player.level(), pos,
-                Block.UPDATE_ALL);
-        BlockState now = player.level().getBlockState(pos);
-        if (now.is(written.getBlock())) {
-            player.level().neighborChanged(pos, now.getBlock(), pos);
-        }
+        return new Placement(write, pick.map(p -> inv.consume(p, cost)).orElse(List.of()));
     }
 }

@@ -82,7 +82,11 @@ final class BuildCellRules {
         return blocked(target, true);
     }
 
-    private boolean blocked(BuildTaskRecord.Target target, boolean askIsOpen) {
+    /**
+     * 这一格本档就不去动吗,不问任何人:没有物品能放出它、不放液体也排不掉、让路的档位不让顶掉。真动手时许不许由她的手去问权限层
+     * ({@link com.dwinovo.numen.api.entity.BlockWriter}),施工里动手前复查的只是这一处。
+     */
+    boolean cannotBePlaced(BuildTaskRecord.Target target) {
         if (target.noItem()) {
             return true;   // 没有物品能放出它:不去动,回执单列一组(权限层不必替一件放不出来的事裁决)
         }
@@ -90,9 +94,14 @@ final class BuildCellRules {
         if (leavesLiquid(target, current)) {
             return true;   // 不放液体、也排不掉:不去动,回执单列 liquid
         }
-        if (!target.mode().allows(current, target.desiredState())) {
+        return !target.mode().allows(current, target.desiredState());
+    }
+
+    private boolean blocked(BuildTaskRecord.Target target, boolean askIsOpen) {
+        if (cannotBePlaced(target)) {
             return true;
         }
+        BlockState current = peek(target.pos());
         if (target.matches(current)) {
             return false;
         }

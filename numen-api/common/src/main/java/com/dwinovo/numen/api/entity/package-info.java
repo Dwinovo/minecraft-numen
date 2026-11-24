@@ -1,9 +1,9 @@
 /**
  * <strong>Public API:</strong> {@link NumenPlayer} — the server-side companion
- * body a tool acts on (query its state, drive it, read its inventory) — and the four things a real
+ * body a tool acts on (query its state, drive it, read its inventory) — and the things a real
  * player has in hand that she, with no client, lacks: her keys ({@link NumenPlayer#controls}), her view
  * ({@link NumenPlayer#look}), her mouse ({@link NumenPlayer#mouse}: left-click dig and right-click use on the block or
- * entity the driver names, landing whenever it is within reach, every press through the permission layer) and her hotbar ({@link NumenPlayer#hotbar}). {@link InputDriver} is her
+ * entity the driver names, landing whenever it is within reach, every press through the permission layer), her writing hand ({@link NumenPlayer#writer}: puts a block state straight into a cell, through the permission layer) and her hotbar ({@link NumenPlayer#hotbar}). {@link InputDriver} is her
  * boat steering. Together they are how a tool pack moves and works the body without touching Numen API internals.
  *
  * <p>The vanilla formulas and geometry the body and a pathfinder share are public too: {@link DigTime} (how long a block takes

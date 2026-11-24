@@ -344,7 +344,16 @@ public final class Interaction {
     private Status useAir() {
         player.controls().stop();
         if (!started) {
-            if (!(player.mouse().useItem() instanceof Mouse.Use.Pressed pressed)) {
+            Mouse.Use used = player.mouse().useItem();
+            if (used instanceof Mouse.Use.Refused refused) {
+                Verdict verdict = refused.reason().verdict();
+                failReason = "cannot use what you hold: " + (verdict != null ? verdict.reason()
+                        : "the server would not let it happen");
+                failType = FailureType.REFUSED;
+                hardFail = true;
+                return Status.FAILED;
+            }
+            if (!(used instanceof Mouse.Use.Pressed pressed)) {
                 return Status.RUNNING;                 // 手上正挖着,下一刻再按
             }
             landed(pressed);

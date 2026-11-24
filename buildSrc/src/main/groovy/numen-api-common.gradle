@@ -171,6 +171,7 @@ tasks.register('apiJar', Jar) {
     include 'com/dwinovo/numen/api/entity/Look*.class'          // 视角、
     include 'com/dwinovo/numen/api/entity/Neck*.class'          // ...转头的颈部模型(控制器往前推演时复制它)、
     include 'com/dwinovo/numen/api/entity/Mouse*.class'         // 鼠标(指名哪一格、哪只实体,左键挖、右键用,动手之前过权限层)、
+    include 'com/dwinovo/numen/api/entity/BlockWriter*.class'   // 直接往一格里写方块状态的手(建造用),和鼠标并列,写之前过权限层、
     include 'com/dwinovo/numen/api/entity/ClickActions*.class'  // "这一下右键会对世界做什么"的回答者(Questions.CLICK):模组的放置类物品登记在这里,鼠标按之前照它问权限层、
     include 'com/dwinovo/numen/api/entity/Physics*.class'       // 每刻的物理步进、
     include 'com/dwinovo/numen/api/entity/Hotbar*.class'        // 换手(数字键/中键/F 键),

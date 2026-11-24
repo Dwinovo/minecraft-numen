@@ -8,6 +8,7 @@ import com.dwinovo.numen.nav.Feet;
 import com.dwinovo.numen.nav.Terrain;
 import com.dwinovo.numen.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.task.base.Precondition;
+import com.dwinovo.numen.api.entity.BlockWriter;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.task.TaskState;
 
@@ -320,7 +321,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         // 于是下面那句 clear 会把它挖掉。生存模式带方块实体掉落所以东西不至于消失,
         // 但"带方块实体的方块一律不动"这句承诺就破了——而那是我们自己写进工具描述、
         // 也是玩家唯一能依赖的保证。
-        if (rules.blockedByMode(target) || rules.hopeless(target)) {
+        if (rules.cannotBePlaced(target) || rules.hopeless(target)) {
             return null;
         }
         // 一格不一定只花一件(双层砖两件、雪层按层数),盘点与实扣共用同一个件数
@@ -344,9 +345,13 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
 
         if (occupied) {
-            // 创造:原版一下就碎——写成空气,邻居照原版反应(贴着它的火把掉下来),所以这一次通知邻居;要放方块的接着落位
-            if (!player.level().setBlock(pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),
-                    net.minecraft.world.level.block.Block.UPDATE_ALL)) {
+            // 创造:原版一下就碎——手把它写成空气,邻居照原版反应(贴着它的火把掉下来);要放方块的接着落位。
+            // 主人不许、要问的(开工前整批问过之后仍冒出来的),这一格不动,和施工前复查跳过的一样留在待建里
+            BlockWriter.Write cleared = player.writer().clear(pos);
+            if (cleared instanceof BlockWriter.Write.Refused) {
+                return null;
+            }
+            if (cleared instanceof BlockWriter.Write.Unchanged) {
                 return missed(pos, BuildOutstanding.Cause.REFUSED, null);
             }
             r.brokeOne();
@@ -361,10 +366,13 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             return null;
         }
 
-        // 落没落成由 BuildPlacer 看世界判:写不进去(超出建造高度)是世界没变,不记账。
+        // 落没落成由她的手(经 BuildPlacer)看世界判:写不进去(超出建造高度)是世界没变,不记账;主人不许、要问的这一格不动
         BuildPlacer.Placement placement = placer.place(target, cost);
-        if (placement == null) {
+        if (placement == null || placement.write() instanceof BlockWriter.Write.Unchanged) {
             return missed(pos, BuildOutstanding.Cause.REFUSED, null);
+        }
+        if (placement.write() instanceof BlockWriter.Write.Refused) {
+            return null;
         }
         BlockState now = player.level().getBlockState(pos);
         landed.add(pos);

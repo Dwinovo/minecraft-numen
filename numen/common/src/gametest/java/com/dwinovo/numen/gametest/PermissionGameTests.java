@@ -967,9 +967,9 @@ public class PermissionGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_scribe", new BlockPos(4, 2, 4), false);
         ServerPlayer owner = presentOwner(helper, companion, "gametest_scribe_owner");
-        var tighten = lua(companion, "return numen.permission.set({verb = \"break\", tier = \"ask\"})");
-        var again = lua(companion, "return numen.permission.set({verb = \"break\", tier = \"ask\"})");
-        var typo = lua(companion, "numen.permission.set({verb = \"brek\", tier = \"ask\"})");
+        var tighten = lua(companion, "return numen.permission.set(\"break\", \"ask\")");
+        var again = lua(companion, "return numen.permission.set(\"break\", \"ask\")");
+        var typo = lua(companion, "numen.permission.set(\"brek\", \"ask\")");
         ToolRun[] later = new ToolRun[4];
         int[] step = {0};
         helper.onEachTick(() -> {
@@ -977,7 +977,7 @@ public class PermissionGameTests {
             switch (step[0]) {
                 case 0 -> {
                     if (tighten.done() && again.done() && typo.done()) {
-                        later[0] = lua(companion, "return numen.permission.set({verb = \"drop\", tier = \"allow\"})");
+                        later[0] = lua(companion, "return numen.permission.set(\"drop\", \"allow\")");
                         step[0] = 1;
                     }
                 }
@@ -997,7 +997,7 @@ public class PermissionGameTests {
                 }
                 case 2 -> {
                     if (later[0].done()) {
-                        later[1] = lua(companion, "return numen.permission.set({verb = \"drop\", tier = \"allow\"})");
+                        later[1] = lua(companion, "return numen.permission.set(\"drop\", \"allow\")");
                         step[0] = 3;
                     }
                 }
@@ -1010,7 +1010,7 @@ public class PermissionGameTests {
                 }
                 case 4 -> {
                     if (later[1].done()) {
-                        later[2] = lua(companion, "return numen.permission.add({verb = \"break\", name = \"minecraft:wheat\"})");
+                        later[2] = lua(companion, "return numen.permission.add(\"break\", \"minecraft:wheat\")");
                         step[0] = 5;
                     }
                 }
@@ -1026,7 +1026,7 @@ public class PermissionGameTests {
                 }
                 case 6 -> {
                     if (later[2].done()) {
-                        later[3] = lua(companion, "return numen.permission.remove({verb = \"break\", name = \"minecraft:wheat\"})");
+                        later[3] = lua(companion, "return numen.permission.remove(\"break\", \"minecraft:wheat\")");
                         step[0] = 7;
                     }
                 }
@@ -1181,6 +1181,50 @@ public class PermissionGameTests {
             helper.assertTrue(!asked[0], "a refusal raised a consent card");
             helper.assertTrue(wolf.getHealth() == wolf.getMaxHealth(), "the wolf was hit");
             wolf.discard();
+            CompanionFactory.despawn(level.getServer(), companion);
+            leave(owner);
+        });
+    }
+
+    /**
+     * 主人把"用手里的东西"定成不许:她对着空气掷雪球,在手真正去用它之前被拦下——回执说是主人的这一档,雪球一颗没少、世界里没有雪球飞出去;
+     * 主人再定回许,同一下就掷出去了。不弹卡。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
+    public static void a_denied_use_item_tier_keeps_the_snowball_in_her_hand(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_thrower", new BlockPos(4, 2, 4), false);
+        ServerPlayer owner = presentOwner(helper, companion, "gametest_thrower_owner");
+        companion.getInventory().add(new ItemStack(Items.SNOWBALL, 4));
+        List<String> set = runAs(owner, "numen permission set gametest_thrower use_item deny");
+        helper.assertTrue(set.stream().anyMatch(m -> m.contains("use_item is now deny")), "the tier was not set: " + set);
+        ToolRun[] calls = new ToolRun[2];
+        int[] step = {0};
+        boolean[] asked = new boolean[1];
+        helper.runAfterDelay(5, () -> {
+            calls[0] = lua(companion, "numen.use.item({item = \"minecraft:snowball\"})");
+            step[0] = 1;
+        });
+        helper.onEachTick(() -> {
+            asked[0] |= desk(companion).pending() != null;
+            if (step[0] == 1 && calls[0].done()) {
+                helper.assertTrue(!calls[0].succeeded() && calls[0].outcome().contains("setting for use_item is deny"),
+                        "the throw was not refused by the tier: " + calls[0].outcome());
+                helper.assertTrue(companion.getInventory().countItem(Items.SNOWBALL) == 4
+                                && level.getEntitiesOfClass(net.minecraft.world.entity.projectile.Snowball.class,
+                                        new net.minecraft.world.phys.AABB(helper.absolutePos(BlockPos.ZERO)).inflate(32)).isEmpty(),
+                        "a snowball left her hand though the owner said no");
+                runAs(owner, "numen permission set gametest_thrower use_item allow");
+                calls[1] = lua(companion, "numen.use.item({item = \"minecraft:snowball\"})");
+                step[0] = 2;
+            }
+        });
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(step[0] == 2 && calls[1].done(), "the throws have not finished");
+            helper.assertTrue(calls[1].succeeded() && companion.getInventory().countItem(Items.SNOWBALL) == 3,
+                    "the throw did not go once the tier was allow again: " + calls[1].outcome());
+            helper.assertTrue(!asked[0], "a deny tier raised a consent card");
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
         });

@@ -141,7 +141,7 @@ public class PermissionPanelGameTests {
     public static void a_tightening_she_makes_is_pushed_to_the_owners_panel(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_scribbler", new BlockPos(4, 2, 5), false);
         ServerPlayer owner = clientOwner(helper, companion, "gametest_push_owner");
-        ToolRun tighten = lua(companion, "return numen.permission.set({verb = \"attack\", tier = \"ask\"})");
+        ToolRun tighten = lua(companion, "return numen.permission.set(\"attack\", \"ask\")");
         List<CustomPacketPayload> got = new ArrayList<>();
 
         succeedWhen(helper, () -> {
