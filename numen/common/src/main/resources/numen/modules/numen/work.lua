@@ -3,13 +3,13 @@ local M = {}
 
 ---Pick up the dropped items around you, nearest first, walking up to each with numen.move.walk(item.id): to where the pickup
 ---reaches the item itself (an entity), not into the cell its coordinates round to (an item resting on a ledge's edge rounds
----to the empty cell beside it). Given items (the drops
----numen.work.dig returned), it goes only after those of them still lying around. A fresh drop cannot be picked up for
+---to the empty cell beside it). Given items (Items of
+---numen.scan.entities), it goes only after those of them still lying around. A fresh drop cannot be picked up for
 ---a few ticks (its pickup_delay): standing by it, it walks up to it again until it is taken. An item with no way to it
 ---(numen.move.walk fails with no_path) is passed over and the rest are picked up; at the end the ones passed over raise
 ---no_path, with them in err.data.left. An item still there after walking onto it with no delay left (a full pack, or
 ---a spot you cannot stand in) raises failed; any other error of a walk stops here as it is.
----@param opts? table items = only these (anything with an id: the drops of numen.work.dig, Items of numen.scan.entities); radius = how far to look (default 8, or 64 with items).
+---@param opts? table items = only these (anything with an id: Items of numen.scan.entities); radius = how far to look (default 8, or 64 with items).
 ---@return integer picked How many items it walked onto that are gone now.
 function M.collect(opts)
   opts = opts or {}
@@ -76,10 +76,11 @@ function M.collect(opts)
 end
 
 ---Dig out one cluster: numen.work.dig walks up to what is out of reach and digs it (standing where the hand reaches the
----most of what is left), then pick up what that dug dropped and still lies around (numen.work.collect with its drops),
----and again until none of it is left. A round that digs nothing raises failed with what is left; any other failing step (a
----dig that can't get there or is refused, a pick-up with no way) raises its error as it is. It takes the cluster and no
----options; to dig a limited number of cells, use numen.work.dig with count.
+---most of what is left), what it digs out going straight into your inventory, and again until none of it is left. When
+---something it dug out did not fit in the inventory it stops and raises failed, with what stayed on the ground in
+---err.data.on_ground. A round that digs nothing raises failed with what is left; a dig that can't get there or is refused
+---raises its error as it is. It takes the cluster and no options; to dig a limited number of cells, use numen.work.dig
+---with count.
 ---@param cluster Cluster|Cells What to dig: a cluster numen.scan.blocks found, as it is (or Cells, or a list of Blocks).
 ---@return integer dug How many cells it dug.
 function M.mine(cluster)
@@ -87,7 +88,13 @@ function M.mine(cluster)
   while true do
     local r = numen.work.dig(cluster)
     dug = dug + r.dug
-    M.collect({items = r.drops})
+    if #r.on_ground > 0 then
+      local first = r.on_ground[1]
+      raise("failed", "dug " .. dug .. " cell(s); your inventory is full: " .. first.item .. " x" .. first.count
+          .. " and what else did not fit stayed on the ground",
+          "make room (numen.inv.drop, or numen.container.put into a chest), then numen.work.collect() picks them up",
+          {dug = dug, left = r.left, on_ground = r.on_ground})
+    end
     if r.left == 0 then
       return dug
     end

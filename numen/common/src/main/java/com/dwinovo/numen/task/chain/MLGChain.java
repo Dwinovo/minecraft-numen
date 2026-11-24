@@ -33,8 +33,8 @@ import net.minecraft.world.phys.Vec3;
  * 所以窗口卡死在 {@link #RECLAIM_TICKS} ——装桶、看向、点右键统共三五刻,到点无条件放手。
  *
  * <h2>够不够得着由桶自己说</h2>
- * 放水和收水都先按<b>原版 {@code BucketItem} 那条射线</b>问一次(寻路模块身体机制的
- * {@link Crosshair#itemRay}):从眼睛沿视线打 {@code blockInteractionRange}。够得着才点,
+ * 放水和收水都先按<b>原版 {@code BucketItem} 那条射线</b>问一次(身体的鼠标
+ * {@link com.dwinovo.numen.api.entity.Mouse#itemRayOn}):从眼睛沿视线打 {@code blockInteractionRange}。够得着才点,
  * 而且必须真的瞄在那一格上 —— 判据与真正执行的是同一条射线,不会出现"以为够得着、
  * 点下去什么也没发生"。
  *

@@ -8,7 +8,6 @@ import com.dwinovo.numen.pathing.Fixtures;
 import com.dwinovo.numen.pathing.TestWorld;
 import com.dwinovo.numen.pathing.Vanilla;
 import com.dwinovo.numen.pathing.api.NavRequest;
-import com.dwinovo.numen.pathing.plan.ActionCosts;
 import com.dwinovo.numen.pathing.plan.BodySnapshot;
 import com.dwinovo.numen.pathing.plan.Breath;
 import com.dwinovo.numen.pathing.plan.CostModel;
@@ -176,7 +175,7 @@ class SearchTest {
         TestWorld ground = new TestWorld().ground(Y - 1, STONE).loadedWithin(6);
         CostModel model = CostModel.of(natural(), Fixtures.carrying(0, new ItemStack(Items.IRON_PICKAXE)),
                 Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
-        SearchResult result = search(ground, model, START, Goals.dig(new BlockPos(0, Y - 27, 0), SURVIVAL, Goals.Clearing.ANY),
+        SearchResult result = search(ground, model, START, Goals.reach(new BlockPos(0, Y - 27, 0), SURVIVAL),
                 NavRequest.DEFAULT_BUDGET);
         assertTrue(result.arrived(), result.stop() + ",展开了 " + result.expanded());
         for (BlockPos node : result.route().nodes()) {
@@ -463,77 +462,13 @@ class SearchTest {
     void diggingABlockEndsWithinReachAndOutsideIt() {
         BlockPos chest = new BlockPos(10, Y, 0);
         TestWorld world = field().set(chest, Blocks.CHEST.defaultBlockState());
-        SearchResult result = search(world, defaults(), START, Goals.dig(chest, SURVIVAL, Goals.Clearing.ANY));
+        SearchResult result = search(world, defaults(), START, Goals.reach(chest, SURVIVAL));
         assertTrue(result.arrived());
         BlockPos end = result.route().end();
         Stance stance = result.route().endStance();
         assertTrue(Reach.reaches(SURVIVAL.eye(end.getX(), stance.feetY(), end.getZ()), chest, SURVIVAL.blockReach()));
         assertNotEquals(chest, end);
         assertTrue(end.getX() < chest.getX(), "够得着就停,不走到跟前");
-    }
-
-    /**
-     * 要挖的矿在一堵三格高的羊毛墙后面,墙向两边各伸出六格。站在墙前最近,手也够得着,但挖的一方清不掉羊毛:那里停下办不成,
-     * 搜索绕过墙头,停在看得见它、不隔着羊毛的地方。谁挖都行的同一个目标,停在墙前(隔一格遮挡比绕路便宜)。
-     */
-    @Test
-    void diggingWalksAroundWhatTheDiggerMayNotClear() {
-        BlockPos ore = new BlockPos(7, Y, 0);
-        TestWorld world = field().fill(4, Y, -6, 4, Y + 2, 6, Blocks.WHITE_WOOL.defaultBlockState())
-                .set(ore, Blocks.IRON_ORE.defaultBlockState());
-        Goals.Clearing sparesWool = (view, pos) -> !view.getBlockState(pos).is(Blocks.WHITE_WOOL);
-        Goal around = Goals.dig(ore, SURVIVAL, sparesWool);
-
-        SearchResult result = search(world, defaults(), START, around);
-        assertTrue(result.arrived(), result.stop().toString());
-        BlockPos end = result.route().end();
-        assertEquals(0, around.arrival(world, end.getX(), end.getY(), end.getZ(), result.route().endStance()), 1e-9,
-                "停在看得见它、不隔着羊毛的地方:" + end);
-
-        Goal anyone = Goals.dig(ore, SURVIVAL, Goals.Clearing.ANY);
-        SearchResult near = search(world, defaults(), START, anyone);
-        assertTrue(near.arrived());
-        assertTrue(near.route().end().getX() < 4, "谁挖都行时停在墙前:" + near.route().end());
-    }
-
-    /**
-     * 要挖的那一格嵌在三格厚的石墙里,离墙面一格;墙上从南边凿了一道缝通到它的南面。站在墙前正对着它的地方最近,但隔着一格石头;
-     * 往南挪一格就能从缝里直接看见它:同样够得着,挑挡得少的那一处——不挡的。
-     */
-    @Test
-    void diggingPrefersTheStandWithFewerBlockersInTheWay() {
-        BlockPos ore = new BlockPos(5, Y + 1, 0);
-        TestWorld world = field().fill(4, Y, -6, 6, Y + 2, 6, STONE).set(ore, Blocks.IRON_ORE.defaultBlockState())
-                .set(4, Y + 1, 1, Blocks.AIR.defaultBlockState()).set(5, Y + 1, 1, Blocks.AIR.defaultBlockState());
-        Goal dig = Goals.dig(ore, SURVIVAL, Goals.Clearing.ANY);
-        Stance standing = new Stance(Stance.Kind.GROUND, Y, Y - 1);
-        assertTrue(dig.contains(1, Y, 0, standing), "墙前正对着它的那一格够得着");
-        assertEquals(ActionCosts.SIGHT_BLOCKER_BLOCKS * com.dwinovo.numen.pathing.world.Kinematics.walkTicksPerBlock(SURVIVAL), dig.arrival(world, 1, Y, 0, standing), 1e-9, "隔着一格石头");
-        SearchResult result = search(world, defaults(), START, dig);
-        assertTrue(result.arrived());
-        BlockPos end = result.route().end();
-        assertEquals(0, dig.arrival(world, end.getX(), end.getY(), end.getZ(), result.route().endStance()), 1e-9,
-                "停在看得见它的地方:" + end);
-    }
-
-    /**
-     * 一张工作台紧贴在一堵墙后面,从起点隔着墙几何上够得着,却看不见;用它要绕到墙那边、它敞开的面前。
-     */
-    @Test
-    void usingABlockWalksAroundToAFaceItCanSee() {
-        BlockPos table = new BlockPos(3, Y, 0);
-        TestWorld world = field().fill(2, Y, -3, 2, Y + 2, 3, STONE).set(table, Blocks.CRAFTING_TABLE.defaultBlockState());
-        Stance standing = new Stance(Stance.Kind.GROUND, Y, Y - 1);
-        assertTrue(Goals.dig(table, SURVIVAL, Goals.Clearing.ANY).contains(0, Y, 0, standing), "起点几何上够得着");
-        Goals.Use use = Goals.use(world, SURVIVAL, table);
-        assertFalse(use.contains(0, Y, 0, standing), "隔着墙,不是站位");
-        SearchResult result = search(world, defaults(), START, use);
-        assertTrue(result.arrived());
-        BlockPos end = result.route().end();
-        assertTrue(end.getX() > 2, "绕到墙那边:" + end);
-        Vec3 eye = SURVIVAL.eye(end.getX(), result.route().endStance().feetY(), end.getZ());
-        assertNotNull(use.sight(end.getX(), end.getY(), end.getZ(), result.route().endStance())
-                .seen(world, eye, SURVIVAL.blockReach()), "从停下的地方看得见它");
     }
 
     @Test
@@ -656,7 +591,7 @@ class SearchTest {
     @Test
     void diggingABlockNeverFillsItOnTheWay() {
         TestWorld pit = field().fill(-1, Y, -1, 1, Y + 1, 1, STONE).fill(0, Y, 0, 0, Y + 1, 0, Blocks.AIR.defaultBlockState());
-        Goal reach = Goals.dig(START, SURVIVAL, Goals.Clearing.ANY);
+        Goal reach = Goals.reach(START, SURVIVAL);
         CostModel model = Fixtures.withCobble(natural());
         SearchResult loose = search(pit, model, START, unguarded(reach));
         assertTrue(loose.arrived() && fills(loose.route(), START), "不保护时最便宜的是把要够的那一格垫上");
@@ -703,12 +638,11 @@ class SearchTest {
                 "挪了一格,还在里面");
         assertFalse(Goal.keepsStop(world, before, Goals.within(Goals.at(new BlockPos(12, Y, 0)), 0, 2), stop, standing),
                 "挪远了");
-        // 停在这儿看那一格,换成一格要先挖开两格硬遮挡才看得见的:到达价涨了,不再算数;反过来变便宜了照样算
-        TestWorld blocked = field().fill(4, Y, 2, 6, Y + 1, 2, STONE).set(5, Y, -3, STONE).set(5, Y, 4, STONE);
-        Goal open = Goals.dig(new BlockPos(5, Y, -3), SURVIVAL, Goals.Clearing.ANY);
-        Goal behind = Goals.dig(new BlockPos(5, Y, 4), SURVIVAL, Goals.Clearing.ANY);
-        assertFalse(Goal.keepsStop(blocked, open, behind, stop, standing), "停在这儿变贵了");
-        assertTrue(Goal.keepsStop(blocked, behind, open, stop, standing), "停在这儿变便宜了");
+        // 停在这儿够得着的那一格,换成挖起来贵得多的另一格:到达价涨了,不再算数;反过来变便宜了照样算
+        Goal cheap = Goals.dig(List.of(new Goals.DigTarget(new BlockPos(5, Y, -3), 1)), SURVIVAL);
+        Goal dear = Goals.dig(List.of(new Goals.DigTarget(new BlockPos(5, Y, 4), 50)), SURVIVAL);
+        assertFalse(Goal.keepsStop(world, cheap, dear, stop, standing), "停在这儿变贵了");
+        assertTrue(Goal.keepsStop(world, dear, cheap, stop, standing), "停在这儿变便宜了");
     }
 
     // ==================== 旧路打折、生物危险 ====================
@@ -963,13 +897,13 @@ class SearchTest {
         assertTrue(result.route().edits().stream().noneMatch(Edit::alters), "该从口里绕过去,却改了:" + result.route().edits());
     }
 
-    /** 要用的那一块摆在三格高的石柱顶上,身上有圆石、许改地形:站在地上就看得见、点得到,不在旁边垫柱爬上去,一格不改。 */
+    /** 要用的那一块摆在三格高的石柱顶上,身上有圆石、许改地形:站在地上就够得着,不在旁边垫柱爬上去,一格不改。 */
     @Test
     void usingABlockOnAPillarTopIsDoneFromTheGroundWithoutPillaringBesideIt() {
         BlockPos table = new BlockPos(10, Y + 2, 5);
         TestWorld world = new TestWorld().floor(0, 0, 39, 39, Y - 1).fill(10, Y, 5, 10, Y + 1, 5, STONE)
                 .set(table, Blocks.CRAFTING_TABLE.defaultBlockState());
-        SearchResult result = search(world, Fixtures.withCobble(natural()), new BlockPos(4, Y, 5), Goals.use(world, SURVIVAL, table));
+        SearchResult result = search(world, Fixtures.withCobble(natural()), new BlockPos(4, Y, 5), Goals.reach(table, SURVIVAL));
         assertTrue(result.arrived(), result.stop().toString());
         assertEquals(Y, result.route().end().getY(), "站在地上:" + result.route().end());
         assertTrue(result.route().edits().isEmpty(), "垫了柱或挖了:" + result.route().edits());
@@ -986,7 +920,7 @@ class SearchTest {
         CostModel model = CostModel.of(natural(), Fixtures.carrying(0, new ItemStack(Items.IRON_PICKAXE)), Fixtures.ALLOW_ALL,
                 Fixtures.NO_MATERIALS, Threats.NONE);
         SearchResult result = search(world, model, new BlockPos(4, Y, 20),
-                Goals.dig(new BlockPos(16, Y + 1, 20), SURVIVAL, Goals.Clearing.ANY), NavRequest.DEFAULT_BUDGET);
+                Goals.reach(new BlockPos(16, Y + 1, 20), SURVIVAL), NavRequest.DEFAULT_BUDGET);
         assertTrue(result.arrived(), result.stop() + ",展开了 " + result.expanded());
         long digs = result.route().edits().stream().filter(e -> e instanceof Edit.Dig).count();
         assertTrue(digs > 0 && digs <= 8, "该从正面挖进去几格,却挖 " + digs + " 格:" + result.route().edits());

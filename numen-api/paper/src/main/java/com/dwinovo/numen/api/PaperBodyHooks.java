@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api;
 
 import com.dwinovo.numen.api.entity.Belongings;
+import com.dwinovo.numen.api.entity.Harvest;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.event.NumenEvents;
 import org.bukkit.event.player.PlayerAttemptPickupItemEvent;
@@ -10,10 +11,12 @@ import net.minecraft.world.entity.item.ItemEntity;
 import org.bukkit.craftbukkit.advancement.CraftAdvancement;
 import org.bukkit.craftbukkit.entity.CraftItem;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
+import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockDropItemEvent;
 import org.bukkit.event.player.PlayerAdvancementDoneEvent;
 
 import java.util.UUID;
@@ -22,12 +25,32 @@ import java.util.UUID;
  * 模组上靠 Mixin 挂在原版上的几处,Paper 上由事件给出——每一处对应一个 common 入口,入口的 javadoc 写着调用方要保证什么,
  * 这里逐条对着做:
  * <ul>
+ *   <li>她的手挖碎一格、这一挖的掉落物 → {@link Harvest#breakStarts}、{@link Harvest#added}、{@link Harvest#breakEnds};</li>
  *   <li>碰到放不下的掉落物 → {@link NumenPlayer#touchedItem};</li>
  *   <li>进度奖励 → {@link NumenEvents#advancementReward}。</li>
  * </ul>
- * 都在 MONITOR 优先级、跳过已取消的:别的插件对这件事做完决定以后,才轮到我们记。
+ * 只记不改的在 MONITOR 优先级、跳过已取消的:别的插件对这件事做完决定以后,才轮到我们记。会改事件结果的那一处(掉落物进她背包)
+ * 在 HIGHEST:排在改掉落的插件之后、只看结果的插件(MONITOR)之前。
  */
 final class PaperBodyHooks implements Listener {
+
+    /**
+     * 她的手挖碎了一格。事件在 {@code destroyBlock} 里触发,带着这一挖生成的全部掉落物(连带碎掉的火把、箱子里的东西——Paper 把
+     * 这一挖期间要进世界的物品实体都截下来交给它),事件之后它们才真进世界:这一段起止就包住事件里这些实体。整件进了她背包的
+     * 已被移除,从事件的表里拿掉,Paper 就不再把它放进世界;没捡完的照常掉在那儿。
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    void onDropped(BlockDropItemEvent event) {
+        Harvest.breakStarts(handle(event.getPlayer()));
+        try {
+            for (Item item : event.getItems()) {
+                Harvest.added(((CraftItem) item).getHandle());
+            }
+        } finally {
+            Harvest.breakEnds();
+        }
+        event.getItems().removeIf(Item::isDead);
+    }
 
     /**
      * 掉落物碰到了她。事件只在拾取冷却已过时才触发,而且在原版的归属检查之前——所以"没指名给别人"这条自己判

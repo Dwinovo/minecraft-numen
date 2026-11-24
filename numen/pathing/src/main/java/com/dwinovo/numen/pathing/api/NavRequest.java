@@ -13,7 +13,7 @@ import com.dwinovo.numen.pathing.spec.RouteSpec;
  *
  * @param budget  这一趟总共最多展开几个节点,用完还没到就收场;{@link #AUTO_BUDGET} 按起点到终点的估价定(远的路预算多)
  * @param route   先照这条走;没有为 null
- * @param through 路过:身体走进目标就算到了,不停稳、不复核视线,宿主接着开下一次导航,身体的冲劲不断
+ * @param through 路过:身体走进目标就算到了,不停稳,宿主接着开下一次导航,身体的冲劲不断
  * @param travel  走、创造飞行还是滑翔({@link Travel}):默认走
  * @param admission 飞的一趟受理时问过的结论({@link Navigator#admit});没问过为 null,开出去时问一次
  */

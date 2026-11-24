@@ -226,7 +226,7 @@ final class Answers {
                 var whole = world.whole();
                 List<Pair> regionPairs = region.getValue();
                 List<Solver.Job> jobs = regionPairs.stream()
-                        .map(pair -> new Solver.Job(whole, pair.spec().physicalModel(), pair.problem().from(), Spec.physicalGoal(pair.problem()))).toList();
+                        .map(pair -> new Solver.Job(whole, pair.spec().physicalModel(), pair.problem().from(), pair.problem().goal(Spec.STATS))).toList();
                 solver.solve(jobs, (i, outcome) -> {
                     Reference.Solved s = outcome.solved();
                     JsonObject o = new Answer(regionPairs.get(i).problem().id(), regionPairs.get(i).spec(), s.status(), s.cost(), s.dug(), s.placed(), s.expanded(),

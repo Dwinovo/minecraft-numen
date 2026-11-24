@@ -29,15 +29,15 @@ import java.util.List;
  * 什么你看不到,回答之间不讲先后,各人说的合在一起。抛了异常只丢你这一条、记进日志,那一下照别人说的问。
  *
  * <p>线程与世界:在服务端主线程上被叫,世界是这具身体所在的活世界({@code body.serverLevel()}),可以读方块实体。问的时机有两个,
- * 问的是同一圈:鼠标右键按下去之前({@link Mouse#use()}),和驱动者在受理一次点击前预问时({@link Mouse#intents});两只手各问一次,
- * 空手也问({@code stack} 是空的)。寻路规划不问这一圈:搜索线程给垫路定价时直接提出放置动作。准星落在实体上、落在空气里的右键不问。
+ * 问的是同一圈:鼠标右键一格方块按下去之前({@link Mouse#use(net.minecraft.core.BlockPos, net.minecraft.core.Direction, boolean)}),和驱动者在受理一次点击前预问时({@link Mouse#intents});两只手各问一次,
+ * 空手也问({@code stack} 是空的)。寻路规划不问这一圈:搜索线程给垫路定价时直接提出放置动作。右键实体、只用手里的东西不问。
  */
 @FunctionalInterface
 public interface ClickActions {
 
     /**
      * @param body  按键的那具身体
-     * @param hit   准星落着的方块与被点中的那一面
+     * @param hit   被点的那一格方块与被点中的那一面
      * @param stack 那只手里的一叠;空手是空的一叠
      * @return 这一下会做的事;不认得、不会动世界是空表或 null
      */

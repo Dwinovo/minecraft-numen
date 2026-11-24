@@ -1,7 +1,6 @@
 package com.dwinovo.numen.tools.work;
 
 import com.dwinovo.numen.api.NumenApi;
-import com.dwinovo.numen.act.Drops;
 import com.dwinovo.numen.task.dig.DigCompanionTask;
 import com.dwinovo.numen.task.fish.FishTaskRecord;
 import com.dwinovo.numen.tools.BlockActionOps;
@@ -33,7 +32,7 @@ public final class WorkApi {
 
     public static void install(NumenApi numen) {
         numen.api("work", "Gathering where you stand: digging blocks within reach, fishing. numen.work.collect "
-                + "(library) walks to the drops and picks them up.", WorkApi.class);
+                + "(library) walks to items lying on the ground and picks them up.", WorkApi.class);
     }
 
     /** 挖哪几格、至多几格。 */
@@ -49,24 +48,21 @@ public final class WorkApi {
             + "{name = \"minecraft:iron_ore\", pos = {x = 121, y = 12, z = -35}})")
     @Example("numen.work.dig({x = 120, y = 12, z = -35})")
     @Example("local r = numen.work.dig({{x = 120, y = 64, z = -35}, {x = 120, y = 65, z = -35}}, {count = 1})\n"
-            + "print(r.dug, r.left, r.out_of_reach)")
+            + "print(r.dug, r.left, r.out_of_reach, #r.got, #r.on_ground)")
     @Note("A cluster from `numen.scan.blocks` or a Block from `numen.scan.block` goes in as it is.")
     @Note("Digs what your hand reaches from where you stand; what is out of reach it walks to, standing where the hand "
             + "reaches the most of what is left, and digs on, until all of it is dug or it can't get to the rest. The "
             + "walk goes its own way like `numen.move.walk`, digging and building when going around costs more, and is "
-            + "told in the result. It never picks up: `local r = numen.work.dig({x = 120, y = 12, z = -35}); "
-            + "numen.work.collect({items = r.drops})`; `numen.work.mine(cluster)` does both.")
-    @Note("Before it returns it waits up to " + Drops.SETTLE_TICKS / 20 + " seconds for what this dig dropped to "
-            + "settle, and says where each went: landed (and where), picked up (and by whom), destroyed (lava, fire, "
-            + "a cactus …), fallen into the void, or still moving. Only what it dropped is followed, and only until it "
-            + "settles.")
+            + "told in the result.")
+    @Note("Reach is the only condition: a block your hand reaches is dug whatever stands between you and it, and what "
+            + "stands between is left alone.")
+    @Note("What you dig out goes straight into your inventory, the blocks the walk digs included; the result lists it "
+            + "(got). What does not fit stays on the ground where it dropped and is listed too (on_ground): make room, "
+            + "then `numen.work.collect()` picks it up.")
     @Note("Background work: before it starts it checks something can be dug, harvested with your tools and is allowed, "
             + "within reach or by walking up to it; when nothing is, it fails with kind denied, failed or out_of_reach "
             + "and says why — no task starts and whatever you were doing goes on. It returns when the job ends: how "
             + "many cells it dug and how many are still out of reach, the nearest of them as a pos.")
-    @Note("A block in the way of your hand is dug open too when the rules let you break it without asking. A block in "
-            + "the way that needs your owner's consent or that their rules forbid is not touched: the account names it, "
-            + "where it is and why.")
     @Note("Takes the best tool for each block; only digs what your tools actually harvest, and says so when nothing "
             + "qualifies. Asks your owner before breaking a named block their rules want asked about; a refusal stops "
             + "the job with the reason.")

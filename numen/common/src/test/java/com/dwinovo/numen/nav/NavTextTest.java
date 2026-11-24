@@ -150,7 +150,6 @@ class NavTextTest {
         assertEquals(FailureType.NO_MATERIAL, NavText.type(new Outcome.NoMaterials(3)));
         assertEquals(FailureType.REFUSED, NavText.type(new Outcome.Denied(A, "no")));
         assertEquals(FailureType.BOXED_IN, NavText.type(new Outcome.Stranded(A, planks())));
-        assertEquals(FailureType.OCCLUDED, NavText.type(new Outcome.NoLineOfSight(A)));
         Blockage stuck = new Blockage(A, planks(), MoveKind.ASCEND, Reason.TOO_HIGH, null);
         assertEquals(FailureType.BOXED_IN, NavText.type(new Outcome.Blocked(stuck)));
         assertEquals("stepping up at 120,64,-33 (oak_planks) kept failing: too high to step or jump up",
@@ -274,7 +273,6 @@ class NavTextTest {
         String stranded = NavText.failure(new Outcome.Stranded(A, planks()), null, A, C, spec, List.of());
         String blocked = NavText.failure(new Outcome.Blocked(new Blockage(B, planks(), MoveKind.WALK, Reason.NO_CLEARANCE,
                 null)), null, A, C, spec, List.of());
-        String sight = NavText.failure(new Outcome.NoLineOfSight(B), null, A, C, spec, List.of());
         assertTrue(none.contains("pick another destination"), none);
         assertTrue(budget.contains("not proof there is none") && budget.contains("a nearer place"), budget);
         assertTrue(unloaded.contains("not loaded") && unloaded.contains("walk toward it and try again"), unloaded);
@@ -289,8 +287,7 @@ class NavTextTest {
                 "交给脚本是 denied");
         assertTrue(stranded.contains("can't stand where I am") && stranded.contains("free me first"), stranded);
         assertTrue(blocked.contains("no room for my body there") && blocked.contains("try again"), blocked);
-        assertTrue(sight.contains("went out of sight") && sight.contains("numen.work.dig"), sight);
-        assertEquals(8, java.util.Set.of(none, budget, unloaded, alter, denied, stranded, blocked, sight).size());
+        assertEquals(7, java.util.Set.of(none, budget, unloaded, alter, denied, stranded, blocked).size());
     }
 
     @Test

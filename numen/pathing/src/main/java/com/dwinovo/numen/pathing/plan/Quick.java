@@ -123,14 +123,14 @@ public final class Quick {
         this.mayDig = model.spec().dig();
         this.fallingExcluded = model.excludes(Semantics.bit(Semantics.Kind.FALLING));
         this.standingBanned = !model.spec().bans().standingOn().isEmpty();
-        this.pace = Strides.pace(model, false, false, true, 1.0);
+        this.pace = Strides.pace(model, false, true, 1.0);
         this.jumpPenalty = model.spec().jumpPenalty();
         this.stepJump = Strides.jump(model, 1.0);
         this.levelJump = Strides.jump(model, 0.0);
         this.walkOff = Kinematics.walkOffEdgeTicks(body);
         Arrays.fill(landing, Double.NaN);
         this.fastest = Math.min(pace, model.waterStep());
-        this.working = Strides.pace(model, false, false, false, 1.0);
+        this.working = Strides.pace(model, false, false, 1.0);
         this.placeFloor = model.placeFloor();
         this.descendFloor = walkOff + Strides.landing(model, 0.0);
         this.fallFloor = walkOff + Strides.landing(model, 1.0);
@@ -394,7 +394,7 @@ public final class Quick {
 
     /**
      * 往节点相对 {@code (dx, dy, dz)} 那一格放这一趟的垫路料时,没有一个邻格的面可贴({@link Faces#against}:有轮廓、不会被顶替的邻格),
-     * 怎么瞄也放不下。放置的精确判断问的是同一个判据。
+     * 放不下。放置的精确判断问的是同一个判据。
      */
     boolean nothingToClick(int dx, int dy, int dz) {
         return !Faces.anyAgainst(reading, probe.set(x + dx, y + dy, z + dz), model.placing());

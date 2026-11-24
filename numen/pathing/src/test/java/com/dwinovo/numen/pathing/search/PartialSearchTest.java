@@ -178,8 +178,8 @@ class PartialSearchTest {
         TestWorld ground = new TestWorld().ground(Y - 1, stone).loadedWithin(6);
         CostModel model = CostModel.of(Fixtures.natural(), Fixtures.carrying(0, new ItemStack(Items.IRON_PICKAXE)),
                 Fixtures.ALLOW_ALL, Fixtures.NO_MATERIALS, Threats.NONE);
-        Goal goal = Goals.dig(new BlockPos(20, Y - 20, 5), Vanilla.SURVIVAL, Goals.Clearing.ANY);
-        SearchResult failed = AStar.run(new Search(ground, model, START, goal, 3000, Favoring.NONE), () -> false);
+        Goal goal = Goals.reach(new BlockPos(20, Y - 20, 5), Vanilla.SURVIVAL);
+        SearchResult failed = AStar.run(new Search(ground, model, START, goal, 500, Favoring.NONE), () -> false);
         assertEquals(SearchResult.Stop.BUDGET, failed.stop());
         for (it.unimi.dsi.fastutil.longs.Long2DoubleMap.Entry e : failed.raised().long2DoubleEntrySet()) {
             assertTrue(Double.isFinite(e.getDoubleValue()), "抬成了无穷:" + BlockPos.of(e.getLongKey()));

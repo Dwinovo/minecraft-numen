@@ -5,6 +5,7 @@ import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.FailureType;
 import com.dwinovo.numen.permission.Verdict;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
@@ -12,29 +13,29 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * The most-native interaction primitive for a fake-player body: look at a target, then press
- * one mouse button (left = ATTACK, right = USE) with a {@link Timing}. Every
+ * The most-native interaction primitive for a fake-player body: turn toward a named target, then press
+ * one mouse button (left = ATTACK, right = USE) on it with a {@link Timing}. Every
  * higher-level action is a thin layer on top: mining = ATTACK a block (hold),
  * {@code attack} = ATTACK an entity, eat/bow = hold USE in the air.
  *
  * <p>按键本身是她的鼠标({@link NumenPlayer#mouse})的事,这里只管"什么时候按、按几次、按多久"和被拒、目标没了怎么说:
  * <ul>
- *   <li>ATTACK + block  → {@link Mouse#dig} on the block the crosshair lands on (the vanilla dig loop behind the permission
+ *   <li>ATTACK + block  → {@link Mouse#dig} on the named block (the vanilla dig loop behind the permission
  *       layer; creative insta / survival timed), with whatever is held</li>
  *   <li>ATTACK + entity → {@code player.attack} (cooldown-scaled damage / sweep / knockback)</li>
- *   <li>USE + block / entity → {@link Mouse#use}: the one right click, on whatever the crosshair lands on</li>
+ *   <li>USE + block / entity → {@link Mouse#use}: the one right click, on the named block face or entity</li>
  *   <li>USE + air       → {@link Mouse#useItem} (+ a hold for food / bow)</li>
  * </ul>
  *
- * <p>右键按下去总是对准星落着的东西:调用方给的命中({@link #forHit})只是转过去看哪儿,这里不另打射线、不替准星选目标。
- * 准星语义的 USE 另有一步收尾:方块/实体没吃掉点击时落到物品自用(真客户端的完整右键顺序),身体约束物品时由任务层把它关掉。
+ * <p>按在哪一格、哪一面、哪只实体上由调用方指名({@link #forHit} 收的那一下):够得着就按得中,转头只是给看着她的人看的。
+ * USE 另有一步收尾:方块/实体没吃掉点击时落到物品自用(真客户端的完整右键顺序),身体约束物品时由任务层把它关掉。
  *
  * <h2>Timing</h2>
  * {@link Timing#once()} taps once; {@link Timing#repeat} taps N times spaced by an
  * interval (grind a mob); {@link Timing#hold()} holds the
  * button until the action self-completes (a block breaks, food finishes);
  * {@link Timing#hold(int)} holds up to N ticks then releases (draw + loose a bow).
- * 右键按住是每刻都按,两次按下的间隔(原版的 4 刻)由鼠标管。
+ * 右键按住是每刻都按一下。
  *
  * <p>Stateful + ticked (like {@link BlockDigger} / {@code PlayerNav}). The caller
  * walks the body within reach first; this only looks and presses.
@@ -87,13 +88,14 @@ public final class Interaction {
     private final NumenPlayer player;
     private final Button button;
     private final BlockPos block;     // non-null → block target
+    private final Direction face;     // USE + block: the face clicked
     private final Entity entity;      // non-null → entity target
     private final Timing timing;
 
-    /** 按之前朝哪一点看:方块目标是命中的那一点;实体会动,按的那一刻朝它身上最近的一点看,这里没有;朝空气按也没有。 */
+    /** 按之前朝哪一点转:方块目标是点在它身上的那一点;实体会动,按的那一刻朝它身上最近的一点转,这里没有;朝空气按也没有。 */
     private final Vec3 lookAt;
     /**
-     * 准星语义的 USE 才有的兜底:方块/实体没吃掉点击时,同一次按键落到物品自用({@code gameMode.useItem})——桶找水、船找
+     * 点一格、一只实体的 USE 才有的兜底:方块/实体没吃掉点击时,同一次按键落到物品自用({@code gameMode.useItem})——桶找水、船找
      * 水面、掷物出手都住在那条路上。false = 兜底关闭或被任务层否决(身体约束物品)。
      */
     private boolean itemFallthrough;
@@ -116,10 +118,11 @@ public final class Interaction {
     private String failReason = "interaction failed";
     private FailureType failType = FailureType.UNKNOWN;
 
-    private Interaction(NumenPlayer player, Button button, BlockPos block, Entity entity, Vec3 lookAt, Timing timing) {
+    private Interaction(NumenPlayer player, Button button, BlockHitResult block, Entity entity, Vec3 lookAt, Timing timing) {
         this.player = player;
         this.button = button;
-        this.block = block == null ? null : block.immutable();
+        this.block = block == null ? null : block.getBlockPos().immutable();
+        this.face = block == null ? null : block.getDirection();
         this.entity = entity;
         this.lookAt = lookAt;
         this.timing = timing;
@@ -128,12 +131,11 @@ public final class Interaction {
     // ---- factories (default timings; overloads take an explicit Timing) ----
 
     /**
-     * 左键按在准星落着的那一格上({@code hit}),按住直到它碎:手上是什么就用什么,不换工具、不挪步、不清别的格——一次纯按键。
+     * 左键按在 {@code hit} 指名的那一格上,按住直到它碎:手上是什么就用什么,不换工具、不挪步——一次纯按键。
      * 创造一下就碎,生存按手上的东西算时间,都是原版的手自己分。
      */
     public static Interaction attackBlock(NumenPlayer p, BlockHitResult hit, boolean hold) {
-        return new Interaction(p, Button.ATTACK, hit.getBlockPos(), null, hit.getLocation(),
-                hold ? Timing.hold() : Timing.once());
+        return new Interaction(p, Button.ATTACK, hit, null, hit.getLocation(), hold ? Timing.hold() : Timing.once());
     }
 
     /** Left-click an entity once (cooldown-gated native attack). */
@@ -145,9 +147,9 @@ public final class Interaction {
         return new Interaction(p, Button.ATTACK, null, target, target.getEyePosition(), timing);
     }
 
-    /** 右键准星落着的那一格:转过去看 {@code hit} 那一点再按一下。 */
+    /** 右键 {@code hit} 指名的那一格的那一面:朝那一点转过去再按一下。 */
     public static Interaction useBlock(NumenPlayer p, BlockHitResult hit) {
-        return new Interaction(p, Button.USE, hit.getBlockPos(), null, hit.getLocation(), Timing.once());
+        return new Interaction(p, Button.USE, hit, null, hit.getLocation(), Timing.once());
     }
 
     /** Right-click in the air with the held item, on the given {@link Timing}
@@ -160,7 +162,8 @@ public final class Interaction {
     private static final int CONTINUOUS = 1_000_000;
 
     /**
-     * Build the native action for a resolved crosshair {@code hit} + {@code button}, mapping
+     * Build the native action for a named target ({@code hit}: a block and its face from {@link Mouse#aim}, an entity, or
+     * a miss for "nothing in particular") + {@code button}, mapping
      * {@code holdTicks} to the cell's natural cadence — a 6-cell (button × target) dispatch:
      * <ul>
      *   <li>ATTACK·BLOCK → hit it (tap = one press, which breaks only what breaks at once; hold = till the block is
@@ -171,11 +174,10 @@ public final class Interaction {
      *   <li>USE·AIR → useItem (tap = throw; hold = charge/eat up to ticks, or self-complete);</li>
      *   <li>ATTACK·AIR → {@code null} (left-click air does nothing).</li>
      * </ul>
-     * {@code holdTicks}: 0 = tap, &gt;0 / -1 = hold. {@code hit} says where to look; what gets pressed is whatever the
-     * crosshair lands on once she looks there. The caller drives the returned object to completion and enforces the
-     * hold duration.
+     * {@code holdTicks}: 0 = tap, &gt;0 / -1 = hold. What gets pressed is what {@code hit} names. The caller drives the
+     * returned object to completion and enforces the hold duration.
      *
-     * @param itemFallthrough USE 的准星兜底开关(见 {@link #itemFallthrough}):方块/实体
+     * @param itemFallthrough USE 的兜底开关(见 {@link #itemFallthrough}):方块/实体
      *                        没吃掉点击就落到物品自用。任务层拿它挡身体约束物品——
      *                        手里是食物/末影珍珠时传 false,免得点了块石头把自己喂了。
      * @param sneak           按住潜行再点,见 {@link #crouched}
@@ -198,7 +200,7 @@ public final class Interaction {
                 if (button == Button.ATTACK) {
                     return attackBlock(p, bh, hold);
                 }
-                Interaction i = new Interaction(p, Button.USE, bh.getBlockPos(), null, bh.getLocation(),
+                Interaction i = new Interaction(p, Button.USE, bh, null, bh.getLocation(),
                         hold ? Timing.repeat(CONTINUOUS, 1) : Timing.once());
                 i.itemFallthrough = itemFallthrough;
                 return i;
@@ -225,7 +227,7 @@ public final class Interaction {
 
     /**
      * 右键实体时点在它身上的这一点(相对实体位置):按下去先发 {@code INTERACT_AT},和真客户端点盔甲架的哪一截一样,见
-     * {@link Mouse#use(boolean, Vec3)}。只对右键实体起作用。
+     * {@link Mouse#use(Entity, boolean, Vec3)}。只对右键实体起作用。
      */
     public Interaction pointing(Vec3 at) {
         this.at = at;
@@ -312,20 +314,15 @@ public final class Interaction {
     // ---- ATTACK + block: press, or hold the button on it ----
 
     /**
-     * 左键一格:每刻朝按下时的那一点看着,准星还落在那一格上就按;准星被挡开了(有东西走进来)就等着,不去按挡着的。点一下
-     * ({@link Timing#once})等手缓过来、真按下去一下就松手,按住的那一格碎了才松手。权限层在第一下之前把门(同一格接着按不再问,
-     * 门在鼠标里),被拒只转述、不换法子。
+     * 左键一格:每刻朝它转着、按在它上面。点一下({@link Timing#once})按下去一下就松手,按住的那一格碎了才松手;够不着了
+     * (身体被挪开)就等着。权限层在第一下之前把门(同一格接着按不再问,门在鼠标里),被拒只转述、不换法子。
      */
     private Status breakBlock() {
         if (player.level().getBlockState(block).isAir()) return Status.DONE;
         player.controls().stop();
         player.look().at(lookAt);
-        if (player.mouse().on(block) == null) {
-            return Status.RUNNING;
-        }
-        return switch (player.mouse().dig()) {
-            case Mouse.Strike.Swinging swinging -> timing.hold || !swinging.pressed() ? Status.RUNNING
-                    : Status.DONE;
+        return switch (player.mouse().dig(block)) {
+            case Mouse.Strike.Swinging swinging -> timing.hold ? Status.RUNNING : Status.DONE;
             case Mouse.Strike.Broke done -> {
                 broke = true;
                 yield Status.DONE;
@@ -348,7 +345,7 @@ public final class Interaction {
         player.controls().stop();
         if (!started) {
             if (!(player.mouse().useItem() instanceof Mouse.Use.Pressed pressed)) {
-                return Status.RUNNING;                 // 上一下右键的缓手还没过,下一刻再按
+                return Status.RUNNING;                 // 手上正挖着,下一刻再按
             }
             landed(pressed);
             started = true;
@@ -374,7 +371,7 @@ public final class Interaction {
             case USE -> fireUse();
         };
         if (hardFail) return Status.FAILED;
-        if (!fired) return Status.RUNNING;             // soft wait (attack cooldown / right-click delay not ready)
+        if (!fired) return Status.RUNNING;             // soft wait (attack cooldown not ready / out of reach)
         if (++fires >= timing.limit) return Status.DONE;
         cooldown = timing.interval;
         return Status.RUNNING;
@@ -405,7 +402,7 @@ public final class Interaction {
         };
     }
 
-    /** 右键方块或实体:转过去看着;方块按准星落着的那一格,实体按指名的那一只(够得着就按,不看准星)。 */
+    /** 右键方块或实体:朝它转过去,按在指名的那一格那一面、那一只上(够得着就按得中)。 */
     private boolean fireUse() {
         if (entity != null && !entity.isAlive()) {
             failReason = "the entity is gone";
@@ -420,7 +417,7 @@ public final class Interaction {
             player.look().at(lookAt);
         }
         return switch (entity != null ? player.mouse().use(entity, itemFallthrough, at)
-                : player.mouse().use(itemFallthrough, at)) {
+                : player.mouse().use(block, face, itemFallthrough)) {
             case Mouse.Use.Waiting waiting -> false;
             case Mouse.Use.Refused refused -> {
                 Verdict verdict = refused.reason().verdict();

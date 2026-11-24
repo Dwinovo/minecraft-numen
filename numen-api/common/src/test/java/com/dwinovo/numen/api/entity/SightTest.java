@@ -15,14 +15,9 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * 视线:从眼睛到一格方块某一面上的一点,碰没碰上它、碰上的是哪一面、路上隔着哪些硬遮挡与软遮挡;面敞不敞开;
- * "用"一面要面朝眼睛、在交互距离内、没有硬遮挡。
- */
+/** 视线:从眼睛到一格方块某一面上的一点,碰没碰上它、路上隔着哪些硬遮挡与软遮挡。 */
 class SightTest {
 
     private static final int Y = 64;
@@ -39,18 +34,18 @@ class SightTest {
         return new FakeWorld().floor(-4, -4, 8, 4, Y - 1).set(TARGET, Blocks.FURNACE.defaultBlockState());
     }
 
+    /** 目标朝西那一面上的瞄点:朝着眼睛的面里的那一个。 */
     private static Vec3 westFace(FakeWorld world) {
-        return Sight.aim(world, TARGET, Direction.WEST);
+        Vec3 onFace = Faces.point(world, TARGET, Direction.WEST);
+        return Sight.faces(world, EYE, TARGET).stream().filter(p -> Math.abs(p.x - onFace.x) < 0.1).findFirst().orElseThrow();
     }
 
     @Test
-    void anOpenLineHitsTheFaceItAimsAt() {
+    void anOpenLineReachesTheTarget() {
         FakeWorld world = withTarget();
         Sight.Trace trace = Sight.trace(world, EYE, westFace(world), TARGET);
         assertTrue(trace.reached());
-        assertEquals(Direction.WEST, trace.face());
-        assertTrue(trace.clear(Direction.WEST));
-        assertFalse(trace.clear(Direction.NORTH), "碰上的是西面,不是北面");
+        assertTrue(trace.clear());
     }
 
     @Test
@@ -59,12 +54,12 @@ class SightTest {
                 .set(2, Y, 0, Blocks.STONE.defaultBlockState());
         Sight.Trace trace = Sight.trace(world, EYE, westFace(world), TARGET);
         assertTrue(trace.reached(), "数到目标为止,硬遮挡之后照样碰上它");
-        assertFalse(trace.clearable(Direction.WEST));
+        assertFalse(trace.clear());
         assertFalse(trace.hard().isEmpty());
         assertTrue(trace.soft().isEmpty());
     }
 
-    /** 高草在视线上:软遮挡,清掉就看得见。 */
+    /** 高草在视线上:软遮挡。 */
     @Test
     void tallGrassInTheWayIsASoftBlocker() {
         FakeWorld world = withTarget()
@@ -72,8 +67,8 @@ class SightTest {
                 .set(3, Y + 1, 0, Blocks.TALL_GRASS.defaultBlockState()
                         .setValue(DoublePlantBlock.HALF, DoubleBlockHalf.UPPER));
         Sight.Trace grass = Sight.trace(world, EYE, westFace(world), TARGET);
-        assertTrue(grass.clearable(Direction.WEST));
-        assertFalse(grass.clear(Direction.WEST));
+        assertTrue(grass.reached());
+        assertFalse(grass.clear());
         assertFalse(grass.soft().isEmpty());
         assertTrue(grass.hard().isEmpty());
     }
@@ -88,39 +83,7 @@ class SightTest {
         assertFalse(Sight.soft(Blocks.STONE.defaultBlockState()));
     }
 
-    /** 面前一格是整块的硬方块,那一面封着;是空气、高草、下半砖,视线过得去。 */
-    @Test
-    void aFaceIsOpenUnlessAWholeHardBlockCoversIt() {
-        FakeWorld world = withTarget().set(TARGET.north(), Blocks.STONE.defaultBlockState())
-                .set(TARGET.south(), Blocks.SHORT_GRASS.defaultBlockState())
-                .set(TARGET.above(), Blocks.STONE_SLAB.defaultBlockState());
-        assertFalse(Sight.open(world, TARGET, Direction.NORTH));
-        assertFalse(Sight.open(world, TARGET, Direction.DOWN), "脚下是地板");
-        assertTrue(Sight.open(world, TARGET, Direction.SOUTH));
-        assertTrue(Sight.open(world, TARGET, Direction.UP));
-        assertTrue(Sight.open(world, TARGET, Direction.WEST));
-    }
-
-    /** 用一面:敞开、面朝着眼睛、在交互距离内、没有硬遮挡才交出视线。 */
-    @Test
-    void usingAFaceNeedsItToFaceTheEyeWithinReachUnblocked() {
-        FakeWorld world = withTarget();
-        assertNotNull(Sight.use(world, EYE, 4.5, TARGET, Direction.WEST));
-        assertNull(Sight.use(world, EYE, 4.5, TARGET, Direction.EAST), "东面背对着眼睛");
-        assertNull(Sight.use(world, EYE, 3.0, TARGET, Direction.WEST), "交互距离只有三格,够不着");
-        world.set(2, Y, 0, Blocks.STONE.defaultBlockState()).set(2, Y + 1, 0, Blocks.STONE.defaultBlockState());
-        assertNull(Sight.use(world, EYE, 4.5, TARGET, Direction.WEST), "中间隔着石头");
-    }
-
-    /** 面前贴着整块硬方块的面不能用,哪怕从一道细缝里斜着看得到它。 */
-    @Test
-    void aFaceCoveredByAWholeBlockIsNotUsed() {
-        FakeWorld world = withTarget().set(TARGET.above(), Blocks.GLASS.defaultBlockState());
-        Vec3 high = new Vec3(0.5, Y + 3.5, 0.5);
-        assertNull(Sight.use(world, high, 6, TARGET, Direction.UP));
-    }
-
-    /** 整块目标自己算碰没碰上、碰哪一面,与原版 {@code VoxelShape.clip} 对同一条射线一致(远近、从格里射出、贴着面都有)。 */
+    /** 整块目标自己算碰没碰上,与原版 {@code VoxelShape.clip} 对同一条射线一致(远近、从格里射出、贴着面都有)。 */
     @Test
     void aWholeBlockTargetIsHitWhereVanillaClipHitsIt() {
         FakeWorld world = new FakeWorld().set(TARGET, Blocks.STONE.defaultBlockState());
@@ -141,7 +104,6 @@ class SightTest {
             net.minecraft.world.phys.BlockHitResult vanilla = net.minecraft.world.phys.shapes.Shapes.block().clip(eye, through, TARGET);
             Sight.Trace trace = Sight.trace(world, eye, point, TARGET);
             assertEquals(vanilla != null, trace.reached(), eye + " -> " + point);
-            assertEquals(vanilla == null ? null : vanilla.getDirection(), trace.face(), eye + " -> " + point);
             hits += trace.reached() ? 1 : 0;
         }
         assertTrue(hits > 5000, "射线大多真射中目标,不是只比了没碰上:" + hits);

@@ -34,7 +34,6 @@ public class NumenGameTestSuite extends CompanionGameTestSuite {
     @Override
     public List<Class<?>> classes() {
         return List.of(
-                ArriveGameTests.class,
                 BodyReportGameTests.class,
                 BrainGameTests.class,
                 BuildGameTests.class,

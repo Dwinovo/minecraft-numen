@@ -2,7 +2,6 @@ package com.dwinovo.numen.gametest;
 
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.permission.Listing;
 import com.dwinovo.numen.api.task.TaskRecord;
 import java.util.ArrayList;
 import java.util.List;
@@ -991,98 +990,6 @@ public class PermissionGameTests {
             helper.assertTrue(level.getBlockState(helper.absolutePos(insideRel)).is(Blocks.PUMPKIN),
                     "the pumpkin of the owner in the barn was mined");
             helper.assertTrue(!asked[0], "a deny row raised a consent card");
-            CompanionFactory.despawn(level.getServer(), companion);
-            leave(owner);
-        });
-    }
-
-    /**
-     * 唯一的视线被不许挖的格挡死:南瓜六面都贴着白羊毛,主人写了 deny 行不许挖白羊毛。站位怎么挑都看不见它,当场回:南瓜的
-     * 每一面都贴着不许挖的方块,点名是哪几格、哪一行规则。羊毛与南瓜原样,不弹卡。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
-    public static void work_dig_names_the_denied_blocks_walling_in_its_target(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos pumpkin = helper.absolutePos(new BlockPos(8, 2, 5));
-        level.setBlockAndUpdate(pumpkin, Blocks.PUMPKIN.defaultBlockState());
-        List<BlockPos> wool = new ArrayList<>();
-        for (net.minecraft.core.Direction side : net.minecraft.core.Direction.values()) {
-            BlockPos cell = pumpkin.relative(side);
-            level.setBlockAndUpdate(cell, Blocks.WHITE_WOOL.defaultBlockState());
-            wool.add(cell);
-        }
-        NumenPlayer companion = spawnAt(helper, "gametest_walled_out", new BlockPos(2, 2, 5), false);
-        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        ServerPlayer owner = presentPlayer(helper, companion, "gametest_weaver");
-        storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.DENY,
-                com.dwinovo.numen.api.permission.Groups.parse("break(minecraft:white_wool)"));
-        Mining mine = mineScanned(helper, companion, 10, "minecraft:pumpkin", 1);
-        boolean[] asked = new boolean[1];
-        helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(mine.done(), "the dig has not finished");
-            String said = mine.outcome();
-            helper.assertTrue(mine.task() == null && !mine.succeeded(),
-                    "a dig whose only target is walled in was accepted: " + mine.reply());
-            helper.assertTrue(said.contains("every face of pumpkin at " + Listing.coords(pumpkin)
-                                    + " is covered by a block I may not break")
-                            && wool.stream().allMatch(cell -> said.contains("white_wool at " + Listing.coords(cell)))
-                            && said.contains("denied by rule break(minecraft:white_wool)"),
-                    "the reply does not name the denied blocks walling the pumpkin in and the row: " + said);
-            helper.assertTrue(level.getBlockState(pumpkin).is(Blocks.PUMPKIN), "the pumpkin was mined");
-            for (BlockPos cell : wool) {
-                helper.assertTrue(level.getBlockState(cell).is(Blocks.WHITE_WOOL),
-                        "the denied wool was broken at " + cell.toShortString());
-            }
-            helper.assertTrue(!asked[0], "a denied block raised a consent card");
-            CompanionFactory.despawn(level.getServer(), companion);
-            leave(owner);
-        });
-    }
-
-    /**
-     * 挡着的是要主人同意才能动的格:南瓜在她手边,六面都贴着主人的木板。{@code numen.work.dig} 只挖开天然地形,要问主人的
-     * 遮挡不挖、也不替她去问,当场回:南瓜的每一面都贴着她不能挖的方块,点名是哪几格、为什么(要主人同意)。木板与南瓜原样,
-     * 不弹卡,她一步没动。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
-    public static void work_dig_names_the_blocks_needing_consent_walling_in_its_target(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos pumpkin = helper.absolutePos(new BlockPos(8, 2, 5));
-        level.setBlockAndUpdate(pumpkin, Blocks.PUMPKIN.defaultBlockState());
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, "gametest_joiner");
-        List<BlockPos> planks = new ArrayList<>();
-        for (net.minecraft.core.Direction side : net.minecraft.core.Direction.values()) {
-            BlockPos cell = pumpkin.relative(side);
-            level.setBlockAndUpdate(cell, Blocks.OAK_PLANKS.defaultBlockState());
-            planks.add(cell);
-        }
-        claim(helper, owner.getUUID(), planks);
-        NumenPlayer companion = adopted(spawnAt(helper, "gametest_boxed_out", new BlockPos(5, 2, 5), false), owner);
-        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        BlockPos stand = companion.blockPosition();
-        ToolRun dig = lua(companion, "numen.work.dig(" + xyz(pumpkin) + ")");
-        boolean[] asked = new boolean[1];
-        helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(dig.done(), "work dig has not answered");
-            String said = dig.outcome();
-            helper.assertTrue(dig.task() == null && !dig.succeeded(),
-                    "a dig whose only target is walled in by blocks needing consent was accepted: " + said);
-            helper.assertTrue(said.contains("every face of pumpkin at " + Listing.coords(pumpkin)
-                                    + " is covered by a block I may not break")
-                            && planks.stream().allMatch(cell -> said.contains("oak_planks at " + Listing.coords(cell)))
-                            && said.contains("changing it needs the owner's consent"),
-                    "the reply does not name the blocks walling the pumpkin in and why: " + said);
-            helper.assertTrue(level.getBlockState(pumpkin).is(Blocks.PUMPKIN), "the pumpkin was dug");
-            for (BlockPos cell : planks) {
-                helper.assertTrue(level.getBlockState(cell).is(Blocks.OAK_PLANKS),
-                        "a plank needing consent was broken at " + cell.toShortString());
-            }
-            helper.assertTrue(!asked[0], "a block needing consent in the way raised a consent card");
-            helper.assertTrue(companion.blockPosition().equals(stand), "she moved");
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
         });

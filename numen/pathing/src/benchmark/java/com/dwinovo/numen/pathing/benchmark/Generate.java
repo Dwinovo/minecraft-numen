@@ -321,7 +321,7 @@ final class Generate {
                         for (Spec spec : Spec.values()) {
                             if (draft.applicable(spec)) {
                                 specs.add(spec);
-                                futures.add(solver.submit(new Solver.Job(whole, spec.physicalModel(), draft.from(), Spec.physicalGoal(draft)), index, stop::get));
+                                futures.add(solver.submit(new Solver.Job(whole, spec.physicalModel(), draft.from(), draft.goal(Spec.STATS)), index, stop::get));
                             }
                         }
                     }

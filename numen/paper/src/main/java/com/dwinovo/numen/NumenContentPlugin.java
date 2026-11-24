@@ -15,7 +15,7 @@ import java.nio.file.Path;
 /**
  * Numen 在 Paper 上的入口,对应 NeoForge 的 {@code NumenContentNeoForge} 与 Fabric 的 {@code NumenContentFabric}:
  * 把工具与任务登记进 Numen API,交出自带内容,再挂上工具要在服务端刻末做的事(分帧的方块搜索、寻路调试),
- * 以及模组上靠 Mixin 挂的那几处在 Paper 上的事件({@link PaperDropHooks}、{@link PaperBlockChanges})。
+ * 以及模组上靠 Mixin 挂的那一处在 Paper 上的事件({@link PaperBlockChanges})。
  * 内嵌联动是模组的东西,Paper 上不存在。Numen API 由另一个插件 {@code numen_api} 带起来。
  */
 public final class NumenContentPlugin extends JavaPlugin implements Listener {
@@ -28,7 +28,6 @@ public final class NumenContentPlugin extends JavaPlugin implements Listener {
         if (NumenContent.init()) {
             NumenContent.registerNetwork();
             getServer().getPluginManager().registerEvents(this, this);
-            getServer().getPluginManager().registerEvents(new PaperDropHooks(), this);
             getServer().getPluginManager().registerEvents(blockChanges, this);
         }
 

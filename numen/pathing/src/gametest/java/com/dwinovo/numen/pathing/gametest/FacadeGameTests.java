@@ -39,7 +39,7 @@ public class FacadeGameTests {
     }
 
     /**
-     * 两块基岩台子之间一道四格宽的沟,身上有圆石:探出台边潜行着搭桥,桥搭到第二块时叫停——潜行键当场松开(身体下一刻的物理
+     * 两块基岩台子之间一道四格宽的沟,身上有圆石:搭桥搭到第二块时(这一刻潜行键正按着)叫停——潜行键当场松开(身体下一刻的物理
      * 步进里站起来),叫停交出的实际账里正是已经放下的那几块,与世界一致。
      */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 285)
@@ -53,8 +53,8 @@ public class FacadeGameTests {
         Report[] handed = {null};
         t.go(body, Goals.at(t.at(17, 5, 20)), NATURAL).within(275)
                 .during(r -> {
-                    if (handed[0] == null && r.body.isShiftKeyDown()
-                            && r.navigation.report().ledger().entries().size() >= 2) {
+                    if (handed[0] == null && r.navigation.report().ledger().entries().size() >= 2) {
+                        r.body.controls().press(Controls.Key.SNEAK);
                         handed[0] = r.navigation.stop();
                     }
                 })

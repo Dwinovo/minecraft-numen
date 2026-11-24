@@ -1,11 +1,7 @@
 package com.dwinovo.numen.pathing.search;
 
 import java.util.ArrayList;
-import java.util.EnumSet;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 import com.dwinovo.numen.pathing.plan.ActionCosts;
 import com.dwinovo.numen.pathing.plan.Stance;
@@ -16,27 +12,24 @@ import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Kinematics;
 import com.dwinovo.numen.pathing.world.Clearance;
 import com.dwinovo.numen.api.entity.Reach;
-import com.dwinovo.numen.api.entity.Sight;
 
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 目标族:把"怎样算到了"的六种说法编成 {@link Goal}。每一种的定义与判定都写在这里,别处不另判;模块里没有别的宽限。
+ * 目标族:把"怎样算到了"的五种说法编成 {@link Goal}。每一种的定义与判定都写在这里,别处不另判;模块里没有别的宽限。
  *
  * <ol>
  *   <li><b>位置</b>({@link #at}、{@link #column}、{@link #level},同一种目标 {@link Position}):某一格、某一列、某一高度,
  *       坐标给几个算几个。"某一格"是脚所在的那一格,身体怎么待着都算:站着、挂在梯子或藤上、浮在水里。站到一块方块上面就是
  *       到它上面脚所在的那一格,那一格由 {@link #standingOn} 算;</li>
  *   <li><b>距离范围</b>({@link #within}):离一个位置的距离在 [最小, 最大] 之间,距离只按 {@link Position#distanceSqr} 量;</li>
- *   <li><b>用</b>({@link #use}):站在那一格方块某个敞开的面前,眼睛直线看得到那一面、点得到它;</li>
- *   <li><b>挖</b>({@link #dig}):手够得着那一格;挡着的可以挖开,同样够得着时挑挡得少的站位;</li>
- *   <li><b>够着</b>({@link #touch}):手够得着一个碰撞箱(要打的那只);</li>
+ *   <li><b>够着一格</b>({@link #reach}、{@link #dig}):手够得着那一格方块,去用它、挖它;中间隔着什么不问;</li>
+ *   <li><b>够着一个碰撞箱</b>({@link #touch}):手够得着它(要打、要点的那只);</li>
  *   <li><b>远离</b>({@link #awayFrom}):离一组生物都在各自的危险半径之外。</li>
  * </ol>
  * 组合方式:多个取其一({@link #anyOf});几个同时成立({@link #allOf})只给战斗走位
@@ -93,72 +86,14 @@ public final class Goals {
         return new Within(center, min, max);
     }
 
-    // ==================== 用 ====================
+    // ==================== 够着一格 ====================
 
     /**
-     * 用 {@code target} 这一格方块:在 {@code level} 上列出候选站位——只看敞开的面({@link Sight#open}),面前身体待得住
-     * ({@link Stance})、不占着它、那一面在交互距离内而且视线上没有硬遮挡({@link Sight#use})的节点。每个节点对每个敞开的面
-     * 打一条射线,节点只在够得着的那一小块里,射线数有界。搜索只需走到其中任何一个;到了之后执行层在活世界上用同一个视线函数
-     * 复核;隔着的软遮挡清不清归用它的那一方。
-     *
-     * <p>在调用方给的世界上一次列完,之后不再变:在世界所在的线程上给活世界,或者给一份快照。
-     *
-     * @throws IllegalArgumentException 那一格没有可点的轮廓(空气、流体),谈不上用它的哪一面
+     * 够着 {@code target} 这一格方块:站在这里手够得着它(第 0 层 {@link Reach}:眼睛到这一格的距离小于方块交互距离),而且身体不占着
+     * 它。去用它(右键)、去挖它是这同一种到达;中间隔着什么不问,那一格里有没有东西也不问。
      */
-    public static Use use(BlockGetter level, BodyStats body, BlockPos target) {
-        BlockPos at = target.immutable();
-        if (!Sight.clickable(level, at)) {
-            throw new IllegalArgumentException(at + " has no outline to click");
-        }
-        List<Direction> open = new ArrayList<>();
-        for (Direction side : Direction.values()) {
-            if (Sight.open(level, at, side)) {
-                open.add(side);
-            }
-        }
-        Map<Long, Set<Direction>> stands = new HashMap<>();
-        double reach = body.blockReach();
-        int span = (int) Math.ceil(reach) + 1;
-        int eye = (int) Math.ceil(body.eyeHeight());
-        AABB box = new AABB(at);
-        for (int x = at.getX() - span; x <= at.getX() + span && !open.isEmpty(); x++) {
-            for (int z = at.getZ() - span; z <= at.getZ() + span; z++) {
-                for (int y = at.getY() - span - eye; y <= at.getY() + span; y++) {
-                    // 脚在这一格里哪个高度都够不着的,不必再看站不站得住
-                    if (box.distanceToSqr(new Vec3(x + 0.5, y + 0.5 + body.eyeHeight(), z + 0.5))
-                            >= (reach + 1) * (reach + 1)) {
-                        continue;
-                    }
-                    Stance stance = Stance.at(level, body, x, y, z);
-                    if (stance == null || Clearance.occupies(body, x, stance.feetY(), z, at)) {
-                        continue;
-                    }
-                    Vec3 from = body.eye(x, stance.feetY(), z);
-                    EnumSet<Direction> seen = EnumSet.noneOf(Direction.class);
-                    for (Direction side : open) {
-                        if (Sight.use(level, from, reach, at, side) != null) {
-                            seen.add(side);
-                        }
-                    }
-                    if (!seen.isEmpty()) {
-                        stands.put(BlockPos.asLong(x, y, z), Set.copyOf(seen));
-                    }
-                }
-            }
-        }
-        return new Use(at, body, Map.copyOf(stands), List.copyOf(open));
-    }
-
-    // ==================== 挖 ====================
-
-    /**
-     * 挖 {@code target}:站在这里手够得着它(第 0 层 {@link Reach},与挖、放读同一个"够得着"),而且身体不占着它。挡着视线的
-     * 由挖的一方挖开,不要求到了就看得见;停在一处要先挖开几格硬遮挡才看得见它,就加几份 {@link ActionCosts#SIGHT_BLOCKER_BLOCKS} 格平走的耗时
-     * ——同样够得着时,搜索挑挡得少的站位。挡着视线的格由 {@code clearing} 这一方清:看得见它的面只算隔着的格都清得掉的那些({@link Sight#dig}),
-     * 一面都没有的站位停下也办不成,到达价无穷——搜索挑别的站位,挖的时候先清哪一格也按同一个判据。
-     */
-    public static Goal dig(BlockPos target, BodyStats body, Clearing clearing) {
-        return new Dig(target.immutable(), body, clearing);
+    public static Goal reach(BlockPos target, BodyStats body) {
+        return new Hand(target.immutable(), body);
     }
 
     /**
@@ -167,51 +102,24 @@ public final class Goals {
     public record DigTarget(BlockPos cell, double price) {}
 
     /**
-     * 挖 {@code targets} 里的任意一格:到了任何一格的挖目标({@link #dig(BlockPos, BodyStats, Clearing)},挡着的由
-     * {@code clearing} 这一方清)就算到。停下的价钱是够得着的那些格里"到达价 + 挖它的价钱"最低的一个,所以挖起来贵的格(要问
-     * 主人的)只在便宜的远出它那份价钱时才去。站位每少够着一格,到达价多收一格平走的耗时除以格数(全少了也不到多走一格),
-     * 所以走路的价钱差得出一格时仍按近的挑。这份只在到达价里,估价不含它:不相上下的站位之间不保证挑够得着多的那个。
+     * 挖 {@code targets} 里的任意一格:够着了任何一格({@link #reach})就算到。停下的价钱是够得着的那些格里挖它的价钱最低的一个,
+     * 所以挖起来贵的格(要问主人的)只在便宜的远出它那份价钱时才去。站位每少够着一格,到达价多收一格平走的耗时除以格数(全少了也不到
+     * 多走一格),所以走路的价钱差得出一格时仍按近的挑。这份只在到达价里,估价不含它:不相上下的站位之间不保证挑够得着多的那个。
      */
-    public static Goal dig(List<DigTarget> targets, BodyStats body, Clearing clearing) {
+    public static Goal dig(List<DigTarget> targets, BodyStats body) {
         if (targets.isEmpty()) {
             throw new IllegalArgumentException("digging any one of them needs at least one cell");
         }
-        List<Dig> members = new ArrayList<>(targets.size());
+        List<Hand> members = new ArrayList<>(targets.size());
         double[] prices = new double[targets.size()];
         for (int i = 0; i < targets.size(); i++) {
-            members.add(new Dig(targets.get(i).cell().immutable(), body, clearing));
+            members.add(new Hand(targets.get(i).cell().immutable(), body));
             prices[i] = targets.get(i).price();
         }
         return new DigAny(List.copyOf(members), prices);
     }
 
-    /**
-     * 挖一格的一方清得掉哪些挡着视线的格。给站位定价(搜索时读快照)与挖的时候清遮挡(读活世界)问的是同一个;实现按冻结的
-     * 数据回答,可以从任何线程调用。
-     */
-    @FunctionalInterface
-    public interface Clearing {
-
-        /** 挡着的格一律算清得掉:还不知道谁来挖的时候用。 */
-        Clearing ANY = (view, pos) -> true;
-
-        /** {@code view} 上的 {@code pos} 这一格挡着视线时,挖的一方清不清得掉它。 */
-        boolean clears(WorldView view, BlockPos pos);
-    }
-
-    // ==================== 放 ====================
-
-    /**
-     * 往 {@code target} 这一格里放方块:站在这里手够得着它(第 0 层 {@link Reach}),身体不占着它——自己占着的格放不进去——
-     * 而且手点得着:眼睛位置上有能点的面({@link com.dwinovo.numen.api.entity.Faces#handReachable},全仓"放得着"的唯一判据,
-     * 施工数格与手放问的是同一个;一个能点的面也没有的悬空格由放的一方直接写,不为它挑站位)。那一格是不是空的不问。
-     * 路上不往这一格里垫东西。
-     */
-    public static Goal place(BlockPos target, BodyStats body) {
-        return new Place(new Dig(target.immutable(), body, Clearing.ANY));
-    }
-
-    // ==================== 够着 ====================
+    // ==================== 够着一个碰撞箱 ====================
 
     /**
      * 够着 {@code box} 这个碰撞箱:站在这里眼睛到它的最近距离小于 {@code range}(第 0 层 {@link Reach},与近战出手读同一个
@@ -246,7 +154,7 @@ public final class Goals {
 
     /**
      * 几个目标同时成立,每一个都到了才算到。只给战斗走位:站在围着要打的那只的环上,同时离别的怪都够远。估价取各自估价里
-     * 最大的那个;到达价相加;要看的取第一个要求视线的;为了到得了都别动的格合在一起。
+     * 最大的那个;到达价相加;为了到得了都别动的格合在一起。
      */
     public static Goal allOf(List<Goal> goals) {
         if (goals.isEmpty()) {
@@ -293,7 +201,7 @@ public final class Goals {
     }
 
     /**
-     * 脚在一格里任何一个高度时,眼睛(在格的中心列)够得着 {@code box} 的那些格:挖一格、放一格、够着一个碰撞箱共用这一份几何,
+     * 脚在一格里任何一个高度时,眼睛(在格的中心列)够得着 {@code box} 的那些格:够着一格、够着一个碰撞箱共用这一份几何,
      * {@code reach} 是调用方按目标给的交互距离(方块或实体)。
      */
     private static LongSet cellsReaching(AABB box, double eye, double reach) {
@@ -344,7 +252,7 @@ public final class Goals {
     }
 
     /**
-     * 把 {@code more} 并进 {@code into}。逐个加:一次 {@code addAll} 会按两边个数之和扩表,几十个大半重叠的成员(挖放同一片里的几十格)
+     * 把 {@code more} 并进 {@code into}。逐个加:一次 {@code addAll} 会按两边个数之和扩表,几十个大半重叠的成员(挖同一片里的几十格)
      * 并起来的表比并出的格数大几十倍。
      */
     private static void union(LongOpenHashSet into, LongSet more) {
@@ -565,72 +473,7 @@ public final class Goals {
         }
     }
 
-    /**
-     * 用一格方块:{@link #use} 列出的候选站位。
-     *
-     * @param target 要用的那一格
-     * @param body   列站位时按的身体
-     * @param stands 候选站位(脚所在的节点,{@link BlockPos#asLong})到从那儿用得上的面
-     * @param open   敞开的面:面前一格让视线过得去;一面都没有就是四面封死
-     */
-    public record Use(BlockPos target, BodyStats body, Map<Long, Set<Direction>> stands, List<Direction> open)
-            implements Goal {
-
-        @Override
-        public Anchor anchor(Vec3 from) {
-            return new Anchor(target.getX() + 0.5, target.getZ() + 0.5);
-        }
-
-
-        /** 四面封死:没有一面敞开。 */
-        public boolean sealed() {
-            return open.isEmpty();
-        }
-
-        @Override
-        public boolean contains(int x, int y, int z, Stance stance) {
-            return stands.containsKey(BlockPos.asLong(x, y, z));
-        }
-
-        @Override
-        public LongSet endCells() {
-            return new LongOpenHashSet(stands.keySet());
-        }
-
-        @Override
-        public Heights heights() {
-            return Goal.heightsOf(endCells());
-        }
-
-        @Override
-        public double estimate(int x, int y, int z, Kinematics.Pace pace) {
-            return beyondReach(target, x, z, body.blockReach(), pace);
-        }
-
-        /** 别挖要用的那一格,也别往里放东西;敞开的面前那一格不放方块——放了就把自己要看的那一面堵上了。 */
-        @Override
-        public PositionCosts protection() {
-            PositionCosts.Builder b = PositionCosts.builder().forbid(PositionCosts.Use.DIG, target.asLong())
-                    .forbid(PositionCosts.Use.PLACE, target.asLong());
-            for (Direction side : open) {
-                b.forbid(PositionCosts.Use.PLACE, target.relative(side).asLong());
-            }
-            return b.build();
-        }
-
-        @Override
-        public Sighting sight(int x, int y, int z, Stance stance) {
-            Set<Direction> faces = stands.get(BlockPos.asLong(x, y, z));
-            return faces == null ? null : new Sighting(target, faces);
-        }
-
-        @Override
-        public String toString() {
-            return "use(" + xyz(target) + " stands " + stands.size() + ")";
-        }
-    }
-
-    private record Dig(BlockPos target, BodyStats body, Clearing clearing) implements Goal {
+    private record Hand(BlockPos target, BodyStats body) implements Goal {
 
         @Override
         public Anchor anchor(Vec3 from) {
@@ -651,10 +494,7 @@ public final class Goals {
             return beyondReach(target, x, z, body.blockReach(), pace);
         }
 
-        /**
-         * 脚在这一格里任何一个高度时眼睛够得着它的那些格,连它自己那一格在内。按整块包围盒量,比 {@link Reach#reaches}(收了
-         * {@link Reach#EDGE} 的边)只多不少。
-         */
+        /** 脚在这一格里任何一个高度时眼睛够得着它的那些格,连它自己那一格在内。 */
         @Override
         public LongSet endCells() {
             return cellsReaching(new AABB(target), body.eyeHeight(), body.blockReach());
@@ -666,22 +506,7 @@ public final class Goals {
             return heightsReaching(new AABB(target), body.eyeHeight(), body.blockReach());
         }
 
-        /**
-         * 从这里的眼睛看它朝着眼睛的各面({@link Sight#faces}),隔着的格都清得掉的那些面里取硬遮挡最少的那一面({@link Sight#dig}),
-         * 每一格加一份 {@link ActionCosts#SIGHT_BLOCKER_BLOCKS} 格平走的耗时;一面都没有是无穷。它没有轮廓(已经挖掉了)不加。
-         */
-        @Override
-        public double arrival(WorldView level, int x, int y, int z, Stance stance) {
-            if (!Sight.clickable(level, target)) {
-                return 0;
-            }
-            Vec3 eye = body.eye(x, stance.feetY(), z);
-            Sight.Trace line = Sight.dig(level, eye, target, Sight.faces(level, eye, target),
-                    pos -> clearing.clears(level, pos));
-            return line == null ? Double.POSITIVE_INFINITY : line.hard().size() * ActionCosts.SIGHT_BLOCKER_BLOCKS * Kinematics.walkTicksPerBlock(body);
-        }
-
-        /** 别挖要挖的那一格(那是挖的一方的事),也别往里放方块把它埋了。 */
+        /** 别挖要够的那一格(那是到了之后动手的一方的事),也别往里放方块把它埋了。 */
         @Override
         public PositionCosts protection() {
             return PositionCosts.builder().forbid(PositionCosts.Use.DIG, target.asLong())
@@ -690,12 +515,12 @@ public final class Goals {
 
         @Override
         public String toString() {
-            return "dig(" + xyz(target) + ")";
+            return "reach(" + xyz(target) + ")";
         }
     }
 
-    /** 挖几格里的任意一格,见 {@link #dig(List, BodyStats, Clearing)}。 */
-    private record DigAny(List<Dig> members, double[] prices) implements Goal {
+    /** 挖几格里的任意一格,见 {@link #dig(List, BodyStats)}。 */
+    private record DigAny(List<Hand> members, double[] prices) implements Goal {
 
         @Override
         public Anchor anchor(Vec3 from) {
@@ -704,7 +529,7 @@ public final class Goals {
 
         @Override
         public boolean contains(int x, int y, int z, Stance stance) {
-            for (Dig g : members) {
+            for (Hand g : members) {
                 if (g.contains(x, y, z, stance)) {
                     return true;
                 }
@@ -715,14 +540,14 @@ public final class Goals {
         @Override
         public double estimate(int x, int y, int z, Kinematics.Pace pace) {
             double min = Double.POSITIVE_INFINITY;
-            for (Dig g : members) {
+            for (Hand g : members) {
                 min = Math.min(min, g.estimate(x, y, z, pace));
             }
             return min;
         }
 
         /**
-         * 够得着的那些格里"到达价 + 挖它的价钱"最低的一个,加上每一格够不着的那份:一格平走的耗时除以格数。
+         * 够得着的那些格里挖它的价钱最低的一个,加上每一格够不着的那份:一格平走的耗时除以格数。
          * 一格都够不着是 0(不在目标里,搜索不会在这里停)。
          */
         @Override
@@ -730,9 +555,8 @@ public final class Goals {
             double min = Double.POSITIVE_INFINITY;
             int missed = 0;
             for (int i = 0; i < members.size(); i++) {
-                Dig g = members.get(i);
-                if (g.contains(x, y, z, stance)) {
-                    min = Math.min(min, g.arrival(level, x, y, z, stance) + prices[i]);
+                if (members.get(i).contains(x, y, z, stance)) {
+                    min = Math.min(min, prices[i]);
                 } else {
                     missed++;
                 }
@@ -746,7 +570,7 @@ public final class Goals {
         @Override
         public LongSet endCells() {
             LongSet cells = new LongOpenHashSet();
-            for (Dig g : members) {
+            for (Hand g : members) {
                 cells.addAll(g.endCells());
             }
             return cells;
@@ -757,7 +581,7 @@ public final class Goals {
         public Heights heights() {
             int lo = Integer.MAX_VALUE;
             int hi = Integer.MIN_VALUE;
-            for (Dig g : members) {
+            for (Hand g : members) {
                 Heights own = g.heights();
                 lo = Math.min(lo, own.lo());
                 hi = Math.max(hi, own.hi());
@@ -768,7 +592,7 @@ public final class Goals {
         @Override
         public PositionCosts protection() {
             PositionCosts all = PositionCosts.EMPTY;
-            for (Dig g : members) {
+            for (Hand g : members) {
                 all = all.plus(g.protection());
             }
             return all;
@@ -777,52 +601,6 @@ public final class Goals {
         @Override
         public String toString() {
             return "digAny" + listed(new ArrayList<>(members));
-        }
-    }
-
-    /** 放一格:到没到、估价、终点格与挖那一格同一套几何({@link Dig}),不禁止挖它;停在这里还要手点得着,点不着是办不成。 */
-    private record Place(Dig reach) implements Goal {
-
-        @Override
-        public Anchor anchor(Vec3 from) {
-            return reach.anchor(from);
-        }
-
-        @Override
-        public boolean contains(int x, int y, int z, Stance stance) {
-            return reach.contains(x, y, z, stance);
-        }
-
-        @Override
-        public double arrival(WorldView level, int x, int y, int z, Stance stance) {
-            Vec3 eye = reach.body().eye(x, stance.feetY(), z);
-            return com.dwinovo.numen.api.entity.Faces.handReachable(level, eye, reach.body().blockReach(), reach.target())
-                    ? 0 : Double.POSITIVE_INFINITY;
-        }
-
-        @Override
-        public double estimate(int x, int y, int z, Kinematics.Pace pace) {
-            return reach.estimate(x, y, z, pace);
-        }
-
-        @Override
-        public LongSet endCells() {
-            return reach.endCells();
-        }
-
-        @Override
-        public Heights heights() {
-            return reach.heights();
-        }
-
-        @Override
-        public PositionCosts protection() {
-            return PositionCosts.builder().forbid(PositionCosts.Use.PLACE, reach.target().asLong()).build();
-        }
-
-        @Override
-        public String toString() {
-            return "place(" + xyz(reach.target()) + ")";
         }
     }
 
@@ -843,7 +621,7 @@ public final class Goals {
             return beyondReach(box, x, z, range, pace);
         }
 
-        /** 脚在一格里任何高度时眼睛够得着它的格(交互距离是这个目标自己的 {@code range}):与 {@link Dig} 同一份几何。 */
+        /** 脚在一格里任何高度时眼睛够得着它的格(交互距离是这个目标自己的 {@code range}):与 {@link Hand} 同一份几何。 */
         @Override
         public LongSet endCells() {
             return cellsReaching(box, body.eyeHeight(), range);
@@ -940,25 +718,6 @@ public final class Goals {
                 min = Math.min(min, g.estimate(x, y, z, pace));
             }
             return min;
-        }
-
-        /** 停在这里满足的成员里有一个不要求视线,就不要求;否则要看第一个成员要看的。 */
-        @Override
-        public Sighting sight(int x, int y, int z, Stance stance) {
-            Sighting needed = null;
-            for (Goal g : members) {
-                if (!g.contains(x, y, z, stance)) {
-                    continue;
-                }
-                Sighting own = g.sight(x, y, z, stance);
-                if (own == null) {
-                    return null;
-                }
-                if (needed == null) {
-                    needed = own;
-                }
-            }
-            return needed;
         }
 
         /** 停在这里满足的那些成员里最便宜的到达价;一个都不满足是 0。 */
@@ -1060,17 +819,6 @@ public final class Goals {
                 sum += g.arrival(level, x, y, z, stance);
             }
             return sum;
-        }
-
-        @Override
-        public Sighting sight(int x, int y, int z, Stance stance) {
-            for (Goal g : members) {
-                Sighting own = g.sight(x, y, z, stance);
-                if (own != null) {
-                    return own;
-                }
-            }
-            return null;
         }
 
         /** 每一个都要到:任何一个成员的就是超集,取第一个有范围的。 */

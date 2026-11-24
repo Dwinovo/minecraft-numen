@@ -178,7 +178,10 @@ public class MatrixGameTests {
         variants.add(MatrixCatalog.NONE);
         List<MatrixScene> out = new ArrayList<>();
         for (Variant variant : variants) {
-            out.add(new MatrixScene(Base.RISE, Where.START, Level.CEILING, variant, 0));
+            if (!FALLING.contains(variant.name())) {
+                // 悬在半空会掉下来的方块,摆在头顶上方同样没有意义:规划看见它悬着,执行开始时它已经在往她身上掉
+                out.add(new MatrixScene(Base.RISE, Where.START, Level.CEILING, variant, 0));
+            }
             out.add(new MatrixScene(Base.RISE, Where.START, Level.FLOOR, variant, 0));
             out.add(new MatrixScene(Base.SINK, Where.START, Level.FLOOR, variant, 0));
         }

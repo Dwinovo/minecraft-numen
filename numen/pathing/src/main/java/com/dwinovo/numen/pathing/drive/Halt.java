@@ -22,9 +22,6 @@ public sealed interface Halt {
     /** 动手被拒:{@code reason} 是拒绝方({@link com.dwinovo.numen.api.entity.Mouse.Refusal})自己的理由,模块不解读。 */
     record Denied(BlockPos cell, Object reason) implements Halt {}
 
-    /** 到了,但目标要求看得见的那一格看不见。 */
-    record NoSight(BlockPos target) implements Halt {}
-
     /** 飞不下去了:收场时离目标还远,而此刻从这里飞不起来({@link Lack})。 */
     record Grounded(Lack lack) implements Halt {}
 

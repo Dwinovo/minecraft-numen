@@ -73,15 +73,6 @@ public final class ToolChoice {
         return DigTime.ticks(body.mining(), body.creative(), pick.tool(), eff, state, eyeInWater, grounded);
     }
 
-    /**
-     * 用挑中的那件挖掉 {@code state},手上一共要花几刻:挖到碎({@link #ticks}),加上碎了之后缓手的那几刻
-     * ({@link DigTime#cooldown};生存模式一下就碎的不缓)。规划给挖一格定价按它。
-     */
-    public double handTicks(BlockState state, boolean eyeInWater, boolean grounded) {
-        int ticks = ticks(state, eyeInWater, grounded);
-        return (double) ticks + DigTime.cooldown(body.creative(), ticks == 1);
-    }
-
     private Pick choose(BlockState state) {
         int bestSlot = Pick.BARE_HAND;
         ItemStack best = ItemStack.EMPTY;

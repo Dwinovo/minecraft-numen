@@ -15,7 +15,7 @@ import net.minecraft.world.level.block.state.BlockState;
  */
 public sealed interface Outcome {
 
-    /** 到了:身体停在目标里,目标要求看得见的那一格也看得见。 */
+    /** 到了:身体停在目标里。 */
     record Arrived() implements Outcome {}
 
     /**
@@ -80,9 +80,6 @@ public sealed interface Outcome {
 
     /** 执行受阻:哪一格、什么方块、哪种走法、为什么。 */
     record Blocked(Blockage blockage) implements Outcome {}
-
-    /** 到了,但要看的 {@code target} 这一格看不见。 */
-    record NoLineOfSight(BlockPos target) implements Outcome {}
 
     /** 飞的一趟没到:落了地,离目标还远,此刻从这里飞不起来——缺什么({@link Lack})。 */
     record Grounded(Lack lack) implements Outcome {}

@@ -140,7 +140,7 @@ final class PotActTask implements Task {
                 return pending;
             }
         }
-        // 动锅之前先看着它:这些动作直接走方块实体,没有准星射线替身体转头,不看的话她会背对着锅做
+        // 动锅之前先看着它:这些动作直接走方块实体,没有哪一下按键替身体转头,不看的话她会背对着锅做
         cook.look().at(Vec3.atCenterOf(r.pos));
         Cooker cooker = Cooker.at(level, r.pos);
         Cooker.Step step = r.act.on(cooker, cook, dish, portions);

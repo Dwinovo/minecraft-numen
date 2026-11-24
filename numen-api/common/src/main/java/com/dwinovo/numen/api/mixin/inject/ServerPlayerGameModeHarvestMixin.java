@@ -1,6 +1,6 @@
-package com.dwinovo.numen.mixin.inject;
+package com.dwinovo.numen.api.mixin.inject;
 
-import com.dwinovo.numen.act.Drops;
+import com.dwinovo.numen.api.entity.Harvest;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import net.minecraft.core.BlockPos;
@@ -11,12 +11,12 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 
 /**
- * 玩家的手挖掉一格的那一段:原版不论秒破、累着进度挖碎还是服务端延迟落地(在她自己的玩家刻里,不在挖掘任务的刻里),都经
- * {@code destroyBlock};这一段里生成的掉落物是这一挖的,由 {@link Drops} 认领。原版没有"谁的手挖掉了这一格、掉了什么"的事件,
- * NeoForge 的掉落事件 Fabric 没有,common 不按加载器分支,所以挂在两边共有的这一处。
+ * 玩家的手挖碎一格的那一段:原版不论秒破、累着进度挖碎还是服务端延迟落地(在她自己的玩家刻里,不在挖掘任务的刻里),都经
+ * {@code destroyBlock};这一段里生成的掉落物是这一挖的,结束时交给 {@link Harvest} 当场进她背包。原版没有"谁的手挖碎了这一格、
+ * 掉了什么"的事件,NeoForge 的掉落事件 Fabric 没有,common 不按加载器分支,所以挂在两边共有的这一处。
  */
 @Mixin(ServerPlayerGameMode.class)
-public abstract class ServerPlayerGameModeDropsMixin {
+public abstract class ServerPlayerGameModeHarvestMixin {
 
     @Shadow
     @Final
@@ -24,11 +24,11 @@ public abstract class ServerPlayerGameModeDropsMixin {
 
     @WrapMethod(method = "destroyBlock")
     private boolean numen$breaking(BlockPos pos, Operation<Boolean> original) {
-        Drops.breakStarts(player);
+        Harvest.breakStarts(player);
         try {
             return original.call(pos);
         } finally {
-            Drops.breakEnds();
+            Harvest.breakEnds();
         }
     }
 }

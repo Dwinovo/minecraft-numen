@@ -89,8 +89,8 @@
 | `shape.*` | 画格子,叫法与操作对齐 WorldEdit(设计稿 `docs/shape-worldedit.md`):选区 `cuboid`、`cyl`、`sphere`、`poly`、`convex` 与 `set`、`walls`、`faces`、`expand`…;`cyl`/`hcyl`、`sphere`/`hsphere`、`cone`、`pyramid`、`line`、`curve`、`generate` 画形状;`layer` 画字符网格;`copy`、`cut`、`fill`、`drain`、`snow`、`gravity`、`morph` 等读世界的操作(只读已加载区块,不写,交回 Cells);`feature`、`structure`、`forest`、`forestgen`、`flora`、`pumpkins` 让原版的生成器跑在记录用的世界上(真实世界一格不动),`feature`、`structure`、`forest` 交回 `{cells, lost}`(`lost` 是 Cells 装不下的实体与方块实体数据);交回 Cells |
 
 - **"挖"的到达**(`Arrival.dig`,`work.dig` 够不着时走过去用)= 手够得着目标区域里任意一格,不要求看得见。同样划算的站位里,优先一次能够到
-  最多目标格的(定价只在寻路模块 `Goals.dig` 一处)。"用"的到达(`Arrival.use`,`use.*` 用)= 看得见、点得到。`build.place` 没有到达:
-  她站在原地放(body 0011)。
+  最多目标格的(定价只在寻路模块 `Goals.dig` 一处)。"用"的到达(`Arrival.use`,`use.*` 用)= 手够得着那一格,同样不要求看得见(`Goals.reach`,
+  够得着就点得中,body 0011)。`build.place` 没有到达:她站在原地放(body 0011)。
 - `work.dig` 挖完回执说:挖了几格、还剩几格够不着(走不到的才有)。给的是扫描交回的
   Block 时,那一格还是那种方块才挖,挖掉的下一次自动不算。
 - **没有不可拆的行为,只有循环快慢之分**:秒级的决策循环(打哪只、按什么顺序、何时撤、打完捡东西)进脚本;每刻都要转
@@ -131,7 +131,7 @@
   附最像的那个名字。
 - **成功返回值,失败抛错误值。** 占身体的函数等它的 task_finished 再返回,task_finished 带着那件活的值。返回什么由函数的
   返回类型说(§十三):`inv.count` 是一个整数,`scan.blocks` 是团的列表,`work.dig` 是 `{dug, left, out_of_reach, nearest,
-  drops}`,`void` 的是 nil。身体做了什么的账只进回执,不进程序。失败抛的错误值 `pcall` 接得住,接住了就按 `err.kind` 分支。
+  got, on_ground}`,`void` 的是 nil。身体做了什么的账只进回执,不进程序。失败抛的错误值 `pcall` 接得住,接住了就按 `err.kind` 分支。
 - `print(...)` 写进回执的 stdout(至多 6000 字,超出的写明少了多少;表按 Lua 的写法印出来,大表缩略,见"回执")。
   `raise(kind, message, hint)` 以一个错误值失败,`error("why", 0)` 是程序自己的运行错(`runtime`)。
 - **名字的改写只有一条**:组名或动作名撞上 Lua 的保留字(`goto`、`end`……)或沙箱自带的全局名(`string`、`table`、
@@ -505,17 +505,15 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
 按 §十;路线、移动、垫路料、寻路、征询卡片、计划与描述按 §十一。两边都碰到的几处:
 
 - **一团与一串格进目标**:`numen.move.walk`、`away` 收扫描交回的 Cluster 与 `numen.shape` 画的 Cells。
-- **`numen.work.mine(cluster)`**:`numen.work.dig(cluster)` 自己走到够得着那一团最多格的地方挖,`numen.work.collect({items = r.drops})` 捡
-  这一挖还落在地上的,一轮一轮直到那一团不剩(`left == 0`);一轮一格也没挖到抛 `failed`。`numen.work.dig` 收一团就是收它的每一格。
+- **`numen.work.mine(cluster)`**:`numen.work.dig(cluster)` 自己走到够得着那一团最多格的地方挖,挖出来的东西当场进她背包,
+  一轮一轮直到那一团不剩(`left == 0`);一轮一格也没挖到抛 `failed`,有东西放不下留在了地上(`on_ground`)也抛 `failed`。`numen.work.dig` 收一团就是收它的每一格。
   GameTest 的挖矿辅助(`GameTestKit.mine`)与评测 `mine_iron` 的标准解是同一个流程拆成原子调用。
-- **挖的结果写明掉落物去了哪**(10-04):真机上她挖了岩浆上方的黑曜石,掉落物掉进岩浆烧掉,没有一句话告诉她。`numen.work.dig`
-  收工前等这一挖的掉落物落定,最多 40 刻(2 秒:从被挖那一格弹起再落到底下约 10 刻、在地上滑停约 7 刻,岩浆两刻、火与仙人掌五刻
-  毁掉一件,四十刻自由落体能掉二十来格;漂在水里的永远不着地,到上限就照此刻在哪说)。认领在生成那一刻:她的手挖掉一格
-  (`ServerPlayerGameMode.destroyBlock`)那一段里进世界的掉落物记进这一挖的账,连带碎掉的(火把、箱子里的东西)也算;去向只在
-  `numen/act/Drops` 一处判——落地(原版判"不在动"的那条线)、被谁捡起(`LivingEntity.take`)、被什么毁掉(`ItemEntity.hurt`)、
-  掉进虚空、被别的收走、到上限还在动;并堆跟着件数走。落定之后的事不归它。回执那一句(`Drops: 1 obsidian fell into lava and
-  burned up at {x = …}`)与数据 `drops`(一笔一项 `{item, count, fate, pos, by?, cause?, id?}`)出自同一份记录。
-  `numen.work.collect({items = …})` 只追给它的那几件(按 `id`),`numen.work.mine` 把挖的 `drops` 交给它,不再挖完另扫一遍。
+- **挖出来的东西当场进背包**(11-24,body 0011):她的手挖碎一格(`ServerPlayerGameMode.destroyBlock`)那一段里生成的掉落物——方块本身的、
+  连带碎掉的(火把、箱子里的东西)——结束时逐件走原版的拾取,放不下的留在原地;这是身体的事,只在 Numen API 的 `Harvest` 一处,
+  走路途中挖的、左键点一下碎的也一样。`numen.work.dig` 不等掉落物、不记去向:回执说这一趟进了背包的各几个
+  (`Into my inventory: 3 raw_iron`)、放不下留在哪(`Did not fit in my inventory and stayed on the ground: …`),数据是 `got`
+  (`{item, count}`)与 `on_ground`(`{item, count, pos}`),出自同一本账(`Harvest.Ledger`)。`numen.work.collect` 只捡本来就在地上的东西
+  (`items` 收 `numen.scan.entities` 交回的 Item)。
 - `numen.work.collect` 等模块里的走路一律是 `numen.move.walk`;`numen.inv.*` 开箱子的走路由 `use.block` 自己做;垫路料只有标签
   `#numen:throwaway` 一份。
 - **登记不合规矩当场抛出**:`NumenPlugins.register` 不再接住插件登记块里的异常记一行日志——那样一组会悄悄缺席(例子读不通、

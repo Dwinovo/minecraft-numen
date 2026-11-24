@@ -89,7 +89,6 @@ public final class Navigation {
             }
             case Halt.Blocked blocked -> status = NavStatus.failed(new Outcome.Blocked(blocked.blockage()));
             case Halt.Denied denied -> status = NavStatus.failed(new Outcome.Denied(denied.cell(), denied.reason()));
-            case Halt.NoSight sight -> status = NavStatus.failed(new Outcome.NoLineOfSight(sight.target()));
             case Halt.Grounded grounded -> status = NavStatus.failed(new Outcome.Grounded(grounded.lack()));
             case Halt.Stranded stranded -> status = NavStatus.failed(
                     new Outcome.Stranded(stranded.cell(), stranded.block()));
@@ -149,7 +148,6 @@ public final class Navigation {
             case Outcome.Blocked b -> "Blocked " + PathLog.blockage(b.blockage());
             case Outcome.Denied d -> "Denied " + PathLog.pos(d.cell()) + " " + d.reason();
             case Outcome.Stranded s -> "Stranded " + PathLog.pos(s.cell()) + " " + PathLog.block(s.block());
-            case Outcome.NoLineOfSight n -> "NoLineOfSight " + PathLog.pos(n.target());
             default -> outcome.toString();
         };
     }

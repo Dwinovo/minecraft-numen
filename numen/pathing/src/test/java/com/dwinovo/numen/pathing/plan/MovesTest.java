@@ -134,18 +134,6 @@ class MovesTest {
         Edit.Place place = assertInstanceOf(Edit.Place.class, m.edits().get(0));
         assertEquals(AT.east().below(), place.pos());
         assertEquals(Blocks.COBBLESTONE, place.block());
-        assertTrue(m.sneak(), "只剩脚下那块的侧面可贴,要潜行探出去放");
-    }
-
-    /**
-     * 站在脚手架上不能探出去搭桥:潜行时脚手架的顶板让开(原版碰撞上下文里"在下降"),人一蹲就穿下去。同样形状的石头可以。
-     */
-    @Test
-    void aGapIsNotBridgedLeaningOutOfScaffoldingBecauseSneakingDropsThroughIt() {
-        TestWorld scaffolding = new TestWorld().set(AT.below(), Blocks.SCAFFOLDING.defaultBlockState());
-        assertEquals(Reason.NO_FACE, fails(MoveKind.WALK, withCobble(natural()), scaffolding, AT, EAST).reason());
-        TestWorld stone = new TestWorld().set(AT.below(), Blocks.STONE.defaultBlockState());
-        assertTrue(holds(MoveKind.WALK, withCobble(natural()), stone, AT, EAST).sneak());
     }
 
     @Test

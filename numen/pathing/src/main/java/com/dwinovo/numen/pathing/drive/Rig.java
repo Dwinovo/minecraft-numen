@@ -22,6 +22,7 @@ import com.dwinovo.numen.pathing.plan.Threats;
 import com.dwinovo.numen.api.entity.Neck;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Items;
@@ -44,7 +45,7 @@ final class Rig implements Craft {
     final Look look;
     /** 身体的快捷栏。 */
     final Hotbar hotbar;
-    /** 身体的鼠标:准星、左键挖、右键用,动手之前过不过权限层它自己管。 */
+    /** 身体的鼠标:指名哪一格,左键挖、右键用,动手之前过不过权限层它自己管。 */
     final Mouse mouse;
     final Materials materials;
     final TerrainPolicy terrain;
@@ -75,21 +76,24 @@ final class Rig implements Craft {
         this.who = PathLog.who(entity);
     }
 
-    /** 左键这一下;用了多久(问许可、原版挖掘与它引起的方块更新)记进这一刻的账。 */
-    Mouse.Strike dig() {
+    /** 左键挖 {@code pos} 的这一下;用了多久(问许可、原版挖掘与它引起的方块更新)记进这一刻的账。 */
+    Mouse.Strike dig(BlockPos pos) {
         long t0 = System.nanoTime();
         try {
-            return mouse.dig();
+            return mouse.dig(pos);
         } finally {
             tally.acted(System.nanoTime() - t0);
         }
     }
 
-    /** 右键这一下;用了多久记进这一刻的账。 */
-    Mouse.Use use() {
+    /**
+     * 右键 {@code pos} 的 {@code face} 面({@code null}:朝着她的那一面)的这一下,这一格没吃掉就落到手里的东西自用(桶就在那条路上);
+     * 用了多久记进这一刻的账。
+     */
+    Mouse.Use use(BlockPos pos, Direction face) {
         long t0 = System.nanoTime();
         try {
-            return mouse.use();
+            return mouse.use(pos, face, true);
         } finally {
             tally.acted(System.nanoTime() - t0);
         }

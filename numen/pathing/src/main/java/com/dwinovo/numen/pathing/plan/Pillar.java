@@ -66,14 +66,14 @@ final class Pillar implements Move {
         if (!contact.admit(draft, model, support, false)) {
             return draft.failure();
         }
-        return new Premise.Holds(new Maneuver(MoveKind.PILLAR, heading, from, stance, to, landing, true, false, false, false,
+        return new Premise.Holds(new Maneuver(MoveKind.PILLAR, heading, from, stance, to, landing, true, false, false,
                 Strides.submerged(draft, body, from, stance, to, landing), 1, 0, 0, 0, draft.edits(), contact.cells(), contact.exposure(), support,
                 Strides.reversible(draft, body, from, stance, to, landing)));
     }
 
     /**
-     * 垫柱要站着、脚所在的格不泡在流体里;还要放一块:这一趟一块也放不了就不成立。头顶挡着的格精确判断会先去挖(挖之前要瞄,
-     * 瞄的射线读四周的格),所以放不了的只在四周读全了的节点上断定;其余答"可能",代价至少是起跳上一格、起跳的罚分与放一块。
+     * 垫柱要站着、脚所在的格不泡在流体里;还要放一块:这一趟一块也放不了就不成立。头顶挡着的格精确判断会先去挖,放要贴着邻格的面
+     * (读四周的格),所以放不了的只在四周读全了的节点上断定;其余答"可能",代价至少是起跳上一格、起跳的罚分与放一块。
      */
     @Override
     public int quick(Quick q, Heading heading) {

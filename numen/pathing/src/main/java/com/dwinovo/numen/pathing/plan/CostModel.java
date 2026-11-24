@@ -362,11 +362,11 @@ public final class CostModel {
     // ==================== 价钱 ====================
 
     /**
-     * 挖一格:用挑中的工具挖掉它手上要花的刻数(挖到碎,加碎了之后缓手的那几刻,{@link ToolChoice#handTicks}),加规格的挖掘罚分
+     * 挖一格:用挑中的工具挖到它碎要花的刻数({@link ToolChoice#ticks}),加规格的挖掘罚分
      * 与这一格的按位置加价;许可要问的乘规格的 {@link RouteSpec#consentMultiplier}。
      */
     public double digCost(Edit.Dig dig) {
-        double cost = tools.handTicks(dig.state(), dig.eyeInWater(), dig.grounded()) + spec.breakPenalty()
+        double cost = tools.ticks(dig.state(), dig.eyeInWater(), dig.grounded()) + spec.breakPenalty()
                 + extra(Use.DIG, dig.pos().asLong());
         return dig.permit() instanceof Permit.Ask ? cost * spec.consentMultiplier() : cost;
     }
@@ -376,7 +376,7 @@ public final class CostModel {
      * 挖不动的(硬度为负)是无穷大。搜索的估价拿它给"绕不开的挖掘"定下界({@code search.Burial}),快判断拿它给要挖的整块定乐观的价。
      */
     public double digFloor(BlockState state) {
-        return tooHard(state) ? Double.POSITIVE_INFINITY : tools.handTicks(state, false, true) + spec.breakPenalty();
+        return tooHard(state) ? Double.POSITIVE_INFINITY : tools.ticks(state, false, true) + spec.breakPenalty();
     }
 
     /** 手上最好的工具挖掉 {@code state} 要几刻,超过 {@link #MAX_DIG_TICKS}:挖不动(挖不碎的基岩也在内)。 */
@@ -415,14 +415,14 @@ public final class CostModel {
     }
 
     /**
-     * 一步里手上的活真要花的刻数:挖一格按挑中的工具挖到碎连同缓手({@link ToolChoice#handTicks}),倒水接坠落加上收水那一下;
+     * 一步里手上的活真要花的刻数:挖一格按挑中的工具挖到碎({@link ToolChoice#ticks}),倒水接坠落加上收水那一下;
      * 放一块、开关门不另计时。{@link #overhead} 里这些刻数连同罚分一起算进价钱,这里只要刻数(憋气按它算)。
      */
     public double workTicks(Maneuver m) {
         double ticks = 0;
         for (Edit edit : m.edits()) {
             ticks += switch (edit) {
-                case Edit.Dig dig -> tools.handTicks(dig.state(), dig.eyeInWater(), dig.grounded());
+                case Edit.Dig dig -> tools.ticks(dig.state(), dig.eyeInWater(), dig.grounded());
                 case Edit.Catch caught -> ActionCosts.SCOOP_WATER;
                 case Edit.Place place -> 0;
                 case Edit.Door door -> 0;

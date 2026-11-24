@@ -60,7 +60,7 @@ public abstract class InReachTask<R extends TaskRecord<V>, V> extends AbstractCo
             fail(walked.message(), lastFailure(), walked.hint());
             return TaskState.FAILED;
         }
-        // 走到了:下一刻再判够不够得着。走完了还在原地、还是够不着(目标挪了、挡着视线),再走也是原地,如实收场
+        // 走到了:下一刻再判够不够得着。走完了还在原地、还是够不着(目标挪了),再走也是原地,如实收场
         if (Feet.cell(player).equals(from) && !reached()) {
             fail("I walked to where " + approach().words() + " is and it is still out of my reach from here",
                     FailureType.OUT_OF_REACH);

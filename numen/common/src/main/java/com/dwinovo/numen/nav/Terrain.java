@@ -65,7 +65,7 @@ public final class Terrain {
         return Stance.at(world, body, cell) != null;
     }
 
-    /** 这一格有没有可点的轮廓(第 0 层 {@link Sight#clickable}):空气、流体没有。 */
+    /** 这一格有没有轮廓({@link Sight#clickable}):空气、流体没有,那里没有东西可点、可挖。 */
     public boolean clickable(BlockPos pos) {
         return Sight.clickable(world, pos);
     }
@@ -73,13 +73,6 @@ public final class Terrain {
     /** 此刻她站在 {@code block} 上时脚所在的节点({@link Goals#standingOn});站不上去为 null。 */
     public BlockPos standingOn(BlockPos block) {
         return Goals.standingOn(world, body, block);
-    }
-
-    /**
-     * 用 {@code target} 这一格:按此刻的世界列出她的候选站位({@link Goals#use})。要先确认它可点({@link #clickable})。
-     */
-    public Goals.Use use(BlockPos target) {
-        return Goals.use(world, body, target);
     }
 
     /** 落到 {@code cell} 那一列里她待得住的节点({@link Stance#settle});那一列都待不住就是它自己。 */

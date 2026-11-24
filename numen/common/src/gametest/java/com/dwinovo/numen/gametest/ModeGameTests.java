@@ -64,7 +64,7 @@ public class ModeGameTests {
     }
 
     /**
-     * 空手创造爬井:1×1 竖井,四面是十几格厚的基岩(横着挖出去比往上垫贵得多),
+     * 空手创造爬井:1×1 竖井,四面是基岩,主人写了 deny 行不许挖基岩(创造模式一下就挖得动它,不拦的话挖几格台阶出去比垫柱便宜),
      * 背包全空——出路是免耗材画像自动补脚手架泥土后原地垫柱。守两件事:
      * 规划器敢想放置路线(hasThrowaway 画像位)+ 执行层自动补料与垫柱动作,垫的是出厂清单上的第一种。
      */
@@ -83,6 +83,10 @@ public class ModeGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_climber", new BlockPos(7, 2, 7), true);
         // 这条量的是免耗材的垫柱,不是飞出去:创造模式的身体许飞,飞比垫柱便宜,所以关掉飞行的能力
         companion.getAbilities().mayfly = false;
+        net.minecraft.server.level.ServerPlayer owner = presentPlayer(helper, companion, "gametest_shaft_owner");
+        com.dwinovo.numen.api.permission.PermissionStore.of(level.getServer(), owner.getUUID()).add(
+                com.dwinovo.numen.permission.Verdict.Kind.DENY,
+                com.dwinovo.numen.api.permission.Groups.parse("break(minecraft:bedrock)"));
         BlockPos target = helper.absolutePos(new BlockPos(14, 2, 14));
         TaskRecord<?> record = lua(companion, "numen.move.walk(" + xyz(target) + ")").task();
         succeedWhen(helper, () -> {
@@ -93,6 +97,7 @@ public class ModeGameTests {
                     "the pillar is not the throwaway blocks she conjured: "
                             + level.getBlockState(helper.absolutePos(new BlockPos(7, 2, 7))));
             CompanionFactory.despawn(level.getServer(), companion);
+            leave(owner);
         });
     }
 
@@ -115,7 +120,7 @@ public class ModeGameTests {
                 companion.setGameMode(GameType.CREATIVE);
                 runs[0] = lua(companion, "local mode = numen.status.self().game_mode\n"
                         + "local r = numen.work.dig(" + xyz(first) + ")\n"
-                        + "return {mode = mode, dug = r.dug, drops = #r.drops}");
+                        + "return {mode = mode, dug = r.dug, drops = #r.got + #r.on_ground}");
             }
             helper.assertTrue(runs[0].done(), "the creative dig has not finished");
             com.google.gson.JsonObject creative = runs[0].data().getAsJsonObject("returned");

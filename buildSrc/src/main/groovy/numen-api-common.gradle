@@ -170,18 +170,19 @@ tasks.register('apiJar', Jar) {
     include 'com/dwinovo/numen/api/entity/Controls*.class'      // 她缺的那半个客户端:键盘、
     include 'com/dwinovo/numen/api/entity/Look*.class'          // 视角、
     include 'com/dwinovo/numen/api/entity/Neck*.class'          // ...转头的颈部模型(控制器往前推演时复制它)、
-    include 'com/dwinovo/numen/api/entity/Mouse*.class'         // 鼠标(准星、左键挖、右键用,动手之前过权限层)、
+    include 'com/dwinovo/numen/api/entity/Mouse*.class'         // 鼠标(指名哪一格、哪只实体,左键挖、右键用,动手之前过权限层)、
     include 'com/dwinovo/numen/api/entity/ClickActions*.class'  // "这一下右键会对世界做什么"的回答者(Questions.CLICK):模组的放置类物品登记在这里,鼠标按之前照它问权限层、
     include 'com/dwinovo/numen/api/entity/Physics*.class'       // 每刻的物理步进、
     include 'com/dwinovo/numen/api/entity/Hotbar*.class'        // 换手(数字键/中键/F 键),
     include 'com/dwinovo/numen/api/entity/ClientPackets*.class' // 客户端会发的那些包(界面里的钮、写字、交易、起床),
     include 'com/dwinovo/numen/api/entity/BodyAction*.class'    // 以及换手留下的记录——自己写寻路的插件按它们让她走
+    include 'com/dwinovo/numen/api/entity/Harvest*.class'       // 她的手挖出来的东西当场进背包:干活的人在这里开一本账
     include 'com/dwinovo/numen/api/entity/Stacks*.class'        // 背包里"哪一叠":把物品 id 落到具体一叠的唯一一处(换手、放、丢、穿都问它),
     include 'com/dwinovo/numen/api/entity/StackLabel*.class'    // 以及模型眼里区分同名几叠的那一句描述——清单、回执同一个写法
-    include 'com/dwinovo/numen/api/entity/DigTime*.class'       // 原版的挖掘时间与缓手,
+    include 'com/dwinovo/numen/api/entity/DigTime*.class'       // 原版的挖掘时间,
     include 'com/dwinovo/numen/api/entity/Reach*.class'         // 够得着、
     include 'com/dwinovo/numen/api/entity/Sight*.class'         // 看得见、
-    include 'com/dwinovo/numen/api/entity/Faces*.class'         // 点得中哪一面、
+    include 'com/dwinovo/numen/api/entity/Faces*.class'         // 点一格的哪一面、
     include 'com/dwinovo/numen/api/entity/Replaceable*.class'   // 放下去落在哪一格——身体与寻路规划共用的那一组原版事实
     include 'com/dwinovo/numen/api/entity/package-info.class'
     include 'com/dwinovo/numen/api/agent/skill/SkillRegistry*.class' // ship-skills-with-your-jar entry

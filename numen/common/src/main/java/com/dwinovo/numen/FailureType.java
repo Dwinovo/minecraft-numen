@@ -20,7 +20,7 @@ import com.dwinovo.numen.api.task.TaskState;
  * auto-acquires a prerequisite. The categories therefore split into two kinds:
  * <ul>
  *   <li><b>In-ladder</b> (a different way to reach the SAME bounded goal is worth
- *       trying): {@link #OCCLUDED}, {@link #BOXED_IN}, {@link #NO_PATH},
+ *       trying): {@link #BOXED_IN}, {@link #NO_PATH},
  *       {@link #OUT_OF_REACH}, {@link #HAZARD}.</li>
  *   <li><b>Kick-back-to-LLM</b> (the goal can't be met without a strategic
  *       decision the deterministic layer must not make): {@link #NO_MATERIAL},
@@ -44,8 +44,6 @@ public enum FailureType {
      *  press until it moves. Kick to LLM: waiting, luring it away, or picking another cell
      *  is a strategic call; no stance change or dig fixes it. */
     ENTITY_BLOCKED,
-    /** No line of sight to the face/block — the view is boxed in by a wall/occluder. In-ladder. */
-    OCCLUDED,
     /** The BODY itself can't move out / no path survived the replan budget. In-ladder. */
     BOXED_IN,
     /** A* returned nothing to the target. In-ladder: try a looser goal (near/adjacent). */
@@ -97,7 +95,7 @@ public enum FailureType {
     public ErrorKind kind() {
         return switch (this) {
             case NO_PATH, BOXED_IN, TERRAIN_BLOCKED, HAZARD -> ErrorKind.NO_PATH;
-            case OUT_OF_REACH, OCCLUDED -> ErrorKind.OUT_OF_REACH;
+            case OUT_OF_REACH -> ErrorKind.OUT_OF_REACH;
             case REFUSED -> ErrorKind.DENIED;
             case TARGET_LOST, MINED_OUT -> ErrorKind.NOT_FOUND;
             case NO_MATERIAL -> ErrorKind.NO_MATERIAL;

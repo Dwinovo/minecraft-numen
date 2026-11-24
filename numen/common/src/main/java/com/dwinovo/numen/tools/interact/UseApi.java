@@ -47,8 +47,8 @@ import java.util.Optional;
  * {@code numen.use}:像玩家那样点世界——右键一格、对着前方用手里的东西、右键一只实体、左键点一格或一只实体一下,上床、从坐着的
  * 东西上下来。点一下打开了界面就当场合上,她面前没有界面:往箱子里放、在工作方块上做事是各自那一组函数({@code tools.station})。
  *
- * <p>按键经 {@link ServerCall#sync},动手前各自把动作交给权限层;上床当场回。目标得在手够得着、看得见的地方才按,够不着先走到能按的
- * 地方({@code InReachTask} 的走过去,到达目标是动作自己那一处的)。对准一格和不对准任何东西是两件事,拆成 {@code block} 与
+ * <p>按键经 {@link ServerCall#sync},动手前各自把动作交给权限层;上床当场回。目标得在手够得着的地方才按,够不着先走到够得着的
+ * 地方({@code InReachTask} 的走过去)。点一格和不点任何东西是两件事,拆成 {@code block} 与
  * {@code item}。右键是"用"这一组的本义,左键一下是 {@code hit};把一格挖下来是 {@code numen.work.dig}。上床放在这一组:原版里睡觉就是
  * 用一张床。
  */
@@ -65,7 +65,7 @@ public final class UseApi {
     }
 
     /** 右键一格。 */
-    public record Block(@Doc("The cell to aim at.") BlockPos cell,
+    public record Block(@Doc("The cell to click.") BlockPos cell,
                         @Doc("How long to hold the button, in seconds (up to 60); the press ends early once the action "
                                 + "completes.") @Omitted("press once") Optional<Double> hold,
                         @Doc("An item from your inventory to take in hand first, e.g. minecraft:bone_meal.")
@@ -74,7 +74,7 @@ public final class UseApi {
                                 + "you off first (numen.use.dismount() does just that).")
                         @Omitted("press standing") Optional<Boolean> sneak) {}
 
-    @Fn("Aim at a block, fluid or air cell within reach and right-click it: the full native click.")
+    @Fn("Right-click a block, fluid or air cell within reach: the full native click on that cell.")
     @Example("numen.use.block({x = 120, y = 64, z = -35})")
     @Example("numen.use.block({x = 120, y = 63, z = -35}, {item = \"minecraft:bucket\"})")
     @Example("numen.use.block({x = 120, y = 64, z = -35}, {item = \"minecraft:oak_planks\", sneak = true})")
@@ -84,17 +84,17 @@ public final class UseApi {
     @Note("Storing, taking and working at a block have their own functions, which take the block as an argument: "
             + "numen.container for a chest or a barrel, numen.furnace, numen.anvil, numen.enchant and the other "
             + "groups named after a block. numen.scan.block reads what a block holds.")
-    @Note("If the aimed block doesn't take a right click, the held item acts on its own, exactly like a real "
-            + "right-click: aiming at water with a bucket scoops it, with a boat places it.")
-    @Note("With sneak = true and something in hand, a right click skips what the aimed block itself does: a block "
+    @Note("If the clicked block doesn't take a right click, the held item acts on its own, exactly like a real "
+            + "right-click: clicking water with a bucket scoops it, with a boat places it.")
+    @Note("With sneak = true and something in hand, a right click skips what the clicked block itself does: a block "
             + "goes onto a chest instead of opening it.")
-    @Note("Out of working reach (~4.5 blocks) of the aim point, it first walks to where one of its faces is in sight and in "
-            + "reach, then clicks; the walk digs and builds its own way like `numen.move.walk` and is told in the result. "
-            + "A walk that can't get there fails with its reason and nothing is clicked.")
-    @Note("It is a bare key press: whatever you hold is what is used, and the block the crosshair lands on is the one "
-            + "clicked — if something else is in the way (tall grass in front of a chest, a leaf), that is what gets "
-            + "clicked, and the result says so and names the next step. It never moves, never swaps tools, never "
-            + "clears the way.")
+    @Note("Out of working reach (~4.5 blocks) of the cell, it first walks to where your hand reaches it, then clicks; "
+            + "the walk digs and builds its own way like `numen.move.walk` and is told in the result. A walk that can't "
+            + "get there fails with its reason and nothing is clicked.")
+    @Note("It is a bare key press on the cell you name: reach is the only condition, whatever stands between you and "
+            + "it is left alone. The click lands on the face of the cell turned toward you; a held block goes into the "
+            + "cell itself when that is air, fluid or grass, else in front of that face. Whatever you hold is what is "
+            + "used; it never swaps tools.")
     @Note("Placing near your owner's things may ask your owner first; the call waits for the answer.")
     @Note("The result says whether the game accepted the click (accepted): the block or what you hold acted "
             + "on it. What the world looks like afterwards is not in the result: numen.scan.block reads the block, "
@@ -114,7 +114,8 @@ public final class UseApi {
 
     @Fn("Right-click at nothing in particular: the held item acts straight ahead, where you face.")
     @Example("numen.use.item({item = \"minecraft:snowball\"})")
-    @Note("To aim somewhere, `numen.use.block` at that cell instead; air cells work too.")
+    @Note("It clicks no block and no entity, even one right in front of you: `numen.use.block` clicks a cell (air "
+            + "cells work too), `numen.use.entity` an entity.")
     @Note("Food and drink go through `numen.inv.eat`, not here.")
     @Note("The result says whether the game accepted the click (accepted), not what it changed; look afterwards with "
             + "numen.scan and numen.inv.")
@@ -173,8 +174,8 @@ public final class UseApi {
     @Example("numen.use.hit(\"pig@3f9a1c\")")
     @Note("One press, never held: a block that takes several hits to break is only hit once — `numen.work.dig` breaks "
             + "blocks (best tool, the way cleared); `numen.fight.attack` fights.")
-    @Note("A target out of reach or out of sight is walked up to first, then hit; a walk that can't get there fails "
-            + "with its reason and nothing is hit.")
+    @Note("A target out of reach is walked up to first, then hit, whatever stands in between; a walk that can't get "
+            + "there fails with its reason and nothing is hit.")
     @Note("Hitting your owner's blocks, pets, named mobs or villagers asks your owner first; the call waits for the "
             + "answer.")
     @Note("The result says whether the block broke or the hit landed (accepted).")

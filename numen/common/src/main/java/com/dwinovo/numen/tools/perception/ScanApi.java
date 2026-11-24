@@ -118,8 +118,8 @@ public final class ScanApi {
     @Note("Read-only; it returns when the search is done. Name every variant you want.")
     @Note("A cluster is matching blocks that touch (diagonals count): every block of it nearest first (a Block: name "
             + "and pos), the nearest one, and how many. Hand a cluster on as it is: `numen.move.walk` "
-            + "goes beside it, `numen.work.dig` walks up to it and digs it, `numen.work.mine` digs and picks up until "
-            + "it is gone.")
+            + "goes beside it, `numen.work.dig` walks up to it and digs it, `numen.work.mine` digs it until it is gone, what "
+            + "it digs out going into your inventory.")
     @Note("Nothing is kept: to use what it found again, keep the result in the program, or scan again.")
     @Note("Only loaded terrain is read: anything further out is UNKNOWN, not empty; an empty result there is not proof "
             + "that none is there — walk that way and scan again. When it could not read all of the radius, the "
@@ -369,6 +369,7 @@ public final class ScanApi {
     @Example("numen.scan.sight(\"zombie@3f9a1c\")")
     @Note("Instant and read-only. A cell is seen when a line from your eyes reaches one of its faces turned to you (an "
             + "empty cell: its middle) with nothing in between; an entity, when you see its eyes.")
+    @Note("Sight is not needed to click or dig: numen.use and numen.work.dig only need the target within reach.")
     @SeeAlso({"numen.scan.block", "numen.scan.entities"})
     public static Sight sight(ServerCall call, Look args) {
         NumenPlayer her = call.her();
@@ -395,7 +396,7 @@ public final class ScanApi {
             for (Vec3 point : solid ? com.dwinovo.numen.api.entity.Sight.faces(level, eye, cell) : List.of(to)) {
                 com.dwinovo.numen.api.entity.Sight.Trace trace =
                         com.dwinovo.numen.api.entity.Sight.trace(level, eye, point, cell);
-                boolean clear = solid ? trace.clear(null) : trace.hard().isEmpty() && trace.soft().isEmpty();
+                boolean clear = solid ? trace.clear() : trace.hard().isEmpty() && trace.soft().isEmpty();
                 if (clear || seen == null || trace.hard().size() < seen.hard().size()) {
                     seen = trace;
                     visible = clear;

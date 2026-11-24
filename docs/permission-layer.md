@@ -246,7 +246,7 @@ deny place(hazard_item & near(other))
 | `work.dig` | 挖给它的每一格,动手前问;够不着先走过去,路上要改的格同上 |
 | `build.place` | 施工前把要清的与要放的整批裁决,一张卡;拒绝的格按"主人不让动"跳过并写进回执 |
 | `fight` | 开打前送目标,一张卡,等答复期间不打它;自卫换目标时新冒出来的再送 |
-| `use.block`、`use.entity`、`use.hit`、`use.item` | 按下去之前送准星落到的动作:右键落在方块上,先是手里的东西会做的事(问一圈 `ClickActions`),再是 `use_block` |
+| `use.block`、`use.entity`、`use.hit`、`use.item` | 按下去之前送指名的那一格、那只实体上的动作:右键一格方块,先是手里的东西会做的事(问一圈 `ClickActions`),再是 `use_block` |
 | 往容器里放、从容器里取(`container.put`、`container.take`、`furnace.take`、`lectern.take` 等) | 右键打开它的那一下送 `use_block`(或 `use_entity`);界面开了之后搬东西不再送任何动作 |
 | `inv.drop` | 每次送 `drop` |
 | `numen.mc.run` | 解析通了才送 `command(根名)`;服务器不让她用的当场失败,不送 |

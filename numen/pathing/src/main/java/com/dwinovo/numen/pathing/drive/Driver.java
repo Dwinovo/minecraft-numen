@@ -16,7 +16,6 @@ import com.dwinovo.numen.pathing.search.SearchClock;
 import com.dwinovo.numen.pathing.search.WorldSnapshot;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.BodyStats;
-import com.dwinovo.numen.api.entity.Sight;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
@@ -498,7 +497,7 @@ public final class Driver implements Segment {
         Stance endStance = course.endStance();
         step = null;
         boolean flying = Snapshots.flying(body);
-        if (passing && node != null && Arrival.passes(trip.goal(), rig.world(), rig.snapshot().stats(), node, flying)) {
+        if (passing && node != null && Arrival.arrived(trip.goal(), rig.world(), rig.snapshot().stats(), node, flying)) {
             PathLog.debug("{} passing {}, not stopping", rig.who, PathLog.pos(node));
             state = State.ARRIVED;
             return;
@@ -531,32 +530,24 @@ public final class Driver implements Segment {
             }
             return;
         }
-        switch (Arrival.judge(trip.goal(), rig.world(), rig.snapshot().stats(), node, flying, body.getEyePosition(), body.blockInteractionRange())) {
-            case Arrival.Verdict.Replan replan -> {
-                if (!node.equals(end)) {
-                    if (++unsettled <= SETTLE_TICKS) {
-                        // 停住了却不在终点那一格:刚落进水里还在往下沉、冲劲刚把身子带出终点那一格,给它一阵子自己回到终点
-                        return;
-                    }
-                    // 回不去:最后一步没把身体带到它的落点,记为不通再重搜(同一处终点一圈圈冲过头、重搜、再冲过头,永远收不了场)
-                    missedEnd(rig.who + " " + replan.why());
-                    return;
-                }
-                unsettled = 0;
-                replan(Journal.Replan.ARRIVAL, replan.why());
-            }
-            case Arrival.Verdict.Blind blind -> {
-                rig.keys.releaseAll();
-                halt(new Halt.NoSight(blind.target()));
-            }
-            case Arrival.Verdict.Arrived arrived -> {
-                rig.keys.releaseAll();
-                if (arrived.aim() != null) {
-                    rig.look.at(arrived.aim());
-                }
-                state = State.ARRIVED;
-            }
+        if (Arrival.arrived(trip.goal(), rig.world(), rig.snapshot().stats(), node, flying)) {
+            rig.keys.releaseAll();
+            state = State.ARRIVED;
+            return;
         }
+        // 停在这儿到不了:世界变了或终点不在目标里,按活世界重搜
+        String why = "stopped at the end " + PathLog.pos(node) + " but it is not inside the goal " + trip.goal();
+        if (!node.equals(end)) {
+            if (++unsettled <= SETTLE_TICKS) {
+                // 停住了却不在终点那一格:刚落进水里还在往下沉、冲劲刚把身子带出终点那一格,给它一阵子自己回到终点
+                return;
+            }
+            // 回不去:最后一步没把身体带到它的落点,记为不通再重搜(同一处终点一圈圈冲过头、重搜、再冲过头,永远收不了场)
+            missedEnd(rig.who + " " + why);
+            return;
+        }
+        unsettled = 0;
+        replan(Journal.Replan.ARRIVAL, why);
     }
 
     // ==================== 搜索 ====================

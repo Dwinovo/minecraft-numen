@@ -147,25 +147,6 @@ public final class GameTestKit {
     }
 
     /**
-     * 场地里新出现的掉落物不带原版给的随机初速,摆回它出生那一格的正中、竖直往下落(照主流:清零速度,由用例摆)。原版掉落物的初速与
-     * 出生点的偏移取自世界的随机数,挖开树冠时它可能斜着落到没挖的树叶顶上停住,她就捡不到;砍下的东西落回原木所在那一列,结论才不看骰子。
-     */
-    static void dropsFallStraight(GameTestHelper helper) {
-        java.util.Set<net.minecraft.world.entity.Entity> placed =
-                java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
-        helper.onEachTick(() -> {
-            for (var drop : helper.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
-                    helper.getBounds())) {
-                if (placed.add(drop)) {
-                    BlockPos cell = drop.blockPosition();
-                    drop.setPos(cell.getX() + 0.5, drop.getY(), cell.getZ() + 0.5);
-                    drop.setDeltaMovement(0, Math.min(0, drop.getDeltaMovement().y), 0);
-                }
-            }
-        });
-    }
-
-    /**
      * 一个服务器上此刻没有实体用着的短码(实体身份 {@code 种类@短码} 的后半):从 {@code 999999} 往下找第一个没人的。短码取自实体 UUID 的
      * 前六位,UUID 是随机的,"这里没有的实体"不能拿一个写死的码,先确认没有才用。
      */
@@ -432,8 +413,8 @@ public final class GameTestKit {
 
     /**
      * 当场就挖 {@code blocks}(一团,或一串 Block 或 Pos 的 Lua 写法),和库里的 {@code numen.work.mine} 同一个流程、拆成原子调用一轮轮
-     * 组合:挖——{@code numen.work.dig(blocks, {count = 还差几格})} 自己走到够得着最多格的地方挖,{@code numen.work.collect} 捡这一挖还落在
-     * 地上的掉落物(挖的结果里的 {@code drops});那一团还有没挖的格,就再来一轮。每一步是一段一行的程序,方块每次原样写进去;挖了几格读那件活的收尾数据,脚本里拿不到它。
+     * 组合:挖——{@code numen.work.dig(blocks, {count = 还差几格})} 自己走到够得着最多格的地方挖,挖出来的东西当场进她背包;那一团还有没挖的格,
+     * 就再来一轮。每一步是一段一行的程序,方块每次原样写进去;挖了几格读那件活的收尾数据,脚本里拿不到它。
      * 不另挂每刻的回调,每次问 {@link Mining#done} 时往下推一步。
      *
      * <p>哪一步(走、挖)失败,这次挖矿就以那一步的结论收场;挖够了、那一团不剩了,或一轮一格也没挖到,以最后一次挖的结论收场。
@@ -453,7 +434,7 @@ public final class GameTestKit {
         /** 一团最多走几轮:每轮至少挖掉一格,轮数到了还没挖完就以最后一次挖的结论收场。 */
         private static final int MAX_ROUNDS = 16;
 
-        private enum Step { BEFORE, DIG, COLLECT }
+        private enum Step { BEFORE, DIG }
 
         private final NumenPlayer companion;
         /** 挖的那些方块的 Lua 写法;先扫再挖的,扫的回执到了才有。 */
@@ -500,10 +481,8 @@ public final class GameTestKit {
                     lastDig = current;
                     dugThisRound = current.result(DigCompanionTask.Dug.class).dug();
                     dug += dugThisRound;
-                    run(Step.COLLECT, "numen.work.collect({items = " + dropIds(current) + "})");
+                    nextRound();
                 }
-                // 捡的库函数走到每一件跟前;捡不到的(走不到、包满)不算挖矿失败,接着下一轮
-                case COLLECT -> nextRound();
             }
         }
 
@@ -515,15 +494,6 @@ public final class GameTestKit {
             } else {
                 dig();
             }
-        }
-
-        /** 那一挖还在世界里的掉落物({@code drops} 里带 {@code id} 的),写成 Lua 的一张表:{@code {{id = "item@3f9a1c"}, {id = "item@a41b09"}}}。 */
-        private static String dropIds(ToolRun dig) {
-            List<String> ids = new ArrayList<>();
-            for (var drop : dig.result(DigCompanionTask.Dug.class).drops()) {
-                drop.id().ifPresent(id -> ids.add("{id = \"" + id + "\"}"));
-            }
-            return "{" + String.join(", ", ids) + "}";
         }
 
         private void run(Step next, String code) {

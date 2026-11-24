@@ -106,21 +106,20 @@ final class Strides {
     }
 
     /**
-     * 这一步每走一格要几刻:在水里按水里的步速;潜行按潜行;身体跑得动、这一步物理上跑得起来({@link Maneuver#runnable})就按疾跑——
+     * 这一步每走一格要几刻:在水里按水里的步速;身体跑得动、这一步物理上跑得起来({@link Maneuver#runnable})就按疾跑——
      * 每一步按它物理上能达到的最快步态定价,步态({@code Gait})只要能跑就跑,两者只在起步、收脚处有偏差;其余平走;再按脚下的步速系数放慢。
      */
     static double pace(CostModel model, Maneuver m) {
-        return pace(model, m.wading(), m.sneak(), m.runnable(), m.speedFactor());
+        return pace(model, m.wading(), m.runnable(), m.speedFactor());
     }
 
     /** 同上,这一步的事实已经拆开给出,用不着 {@link Maneuver}。 */
-    static double pace(CostModel model, boolean wading, boolean sneak, boolean runnable, double speedFactor) {
+    static double pace(CostModel model, boolean wading, boolean runnable, double speedFactor) {
         if (wading) {
             return model.waterStep();
         }
         BodyStats body = model.body().stats();
-        double pace = sneak ? Kinematics.sneakTicksPerBlock(body)
-                : model.maySprint() && runnable ? Kinematics.sprintTicksPerBlock(body) : Kinematics.walkTicksPerBlock(body);
+        double pace = model.maySprint() && runnable ? Kinematics.sprintTicksPerBlock(body) : Kinematics.walkTicksPerBlock(body);
         return pace / speedFactor;
     }
 

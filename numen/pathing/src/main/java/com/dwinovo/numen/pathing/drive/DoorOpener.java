@@ -1,9 +1,6 @@
 package com.dwinovo.numen.pathing.drive;
 
-import java.util.function.Function;
-
 import com.dwinovo.numen.api.entity.Mouse;
-import com.dwinovo.numen.pathing.drive.Blockage.Hitch;
 import com.dwinovo.numen.pathing.plan.Edit;
 
 import net.minecraft.core.BlockPos;
@@ -12,8 +9,8 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 开关门的子控制器:任何一种走法、任何一步要穿过门(木门、栅栏门、活板门),都由它开或关。转过去看门身上看得见的一点,
- * 准星落上了就右键一下——不按潜行,门才会响应——门翻过来就做完了。门的另一半由原版一起翻,变了的格都记进实际账。
+ * 开关门的子控制器:任何一种走法、任何一步要穿过门(木门、栅栏门、活板门),都由它开或关。朝门转一下,指名这一格右键一下
+ * ——不按潜行,门才会响应——门翻过来就做完了。门的另一半由原版一起翻,变了的格都记进实际账。
  */
 final class DoorOpener {
 
@@ -25,20 +22,12 @@ final class DoorOpener {
                 && now.getValue(BlockStateProperties.OPEN) != door.state().getValue(BlockStateProperties.OPEN);
     }
 
-    /** @param unseen 门看不见、准星还没落上时交给调用方计数 */
-    static Beat tick(Rig rig, Edit.Door door, Function<Hitch, Beat> unseen) {
+    static Beat tick(Rig rig, Edit.Door door) {
         BlockPos pos = door.pos();
-        Vec3 point = rig.look.point(pos);
-        if (point == null) {
-            return unseen.apply(Hitch.OCCLUDED);
-        }
-        rig.look.at(point);
-        if (rig.mouse.on(pos) == null) {
-            return unseen.apply(Hitch.OCCLUDED);
-        }
+        rig.look.at(Vec3.atCenterOf(pos));
         boolean sneaking = rig.entity.isShiftKeyDown();
         rig.entity.setShiftKeyDown(false);
-        Mouse.Use use = rig.use();
+        Mouse.Use use = rig.use(pos, null);
         rig.entity.setShiftKeyDown(sneaking);
         return switch (use) {
             case Mouse.Use.Pressed pressed when !pressed.changes().isEmpty() -> {

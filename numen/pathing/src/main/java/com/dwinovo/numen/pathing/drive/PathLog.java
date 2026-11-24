@@ -25,9 +25,6 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.EntityHitResult;
-import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -221,7 +218,7 @@ public final class PathLog {
     }
 
     /**
-     * 身体的手此刻的样子:按着的键、主手拿的、准星落着的东西、鼠标正在挖哪一格与进度、控制器正在做哪件改动
+     * 身体的手此刻的样子:按着的键、主手拿的、鼠标正在挖哪一格与进度、控制器正在做哪件改动
      * ({@code working},没有为 null)。"不在推进"时她手上在干什么,看这一段。
      */
     public static String hands(ServerPlayer body, Controls keys, Mouse mouse, Edit working) {
@@ -232,22 +229,13 @@ public final class PathLog {
             }
         }
         BlockPos digging = mouse.pressing();
-        return "keys " + (pressed.isEmpty() ? "-" : pressed) + " main hand " + stack(body.getMainHandItem()) + " crosshair " + crosshair(body, mouse.pick())
+        return "keys " + (pressed.isEmpty() ? "-" : pressed) + " main hand " + stack(body.getMainHandItem())
                 + " mouse " + (digging == null ? "not digging" : "digging " + pos(digging) + " progress " + num(mouse.progress()))
                 + " doing " + (working == null ? "-" : edit(working));
     }
 
     private static String stack(ItemStack stack) {
         return stack.isEmpty() ? "empty" : BuiltInRegistries.ITEM.getKey(stack.getItem()) + "×" + stack.getCount();
-    }
-
-    private static String crosshair(ServerPlayer body, HitResult hit) {
-        return switch (hit) {
-            case BlockHitResult block when block.getType() == HitResult.Type.BLOCK -> "block " + pos(block.getBlockPos()) + " "
-                    + block(body.serverLevel().getBlockState(block.getBlockPos())) + " face " + block.getDirection();
-            case EntityHitResult entity -> "entity " + BuiltInRegistries.ENTITY_TYPE.getKey(entity.getEntity().getType());
-            default -> "nothing";
-        };
     }
 
     /** 一件改动:做什么、哪一格、原来是什么。 */

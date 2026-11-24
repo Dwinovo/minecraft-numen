@@ -410,12 +410,12 @@ class QuickTest {
         Random random = new Random(7L);
         EntityDimensions slim = EntityDimensions.scalable(0.4F, 1.5F).withEyeHeight(1.3F);
         BodyStats[] bodies = {
-                new BodyStats(slim, 0.6, 0.42F, 0.08, 0.1, 0.3, 4.5, false, false),
-                new BodyStats(EntityDimensions.scalable(0.6F, 1.8F).withEyeHeight(1.62F), 1.0, 0.42F, 0.08, 0.1, 0.3, 4.5, false, false),
-                new BodyStats(EntityDimensions.scalable(0.6F, 1.8F).withEyeHeight(1.62F), 0.6, 0.6F, 0.08, 0.1, 0.3, 4.5, false, false),
-                new BodyStats(EntityDimensions.scalable(0.6F, 2.5F).withEyeHeight(2.2F), 0.6, 0.42F, 0.08, 0.1, 0.3, 4.5, false, false),
-                new BodyStats(EntityDimensions.scalable(0.6F, 1.8F).withEyeHeight(1.62F), 0.6, 0.42F, 0.08, 0.1, 0.3, 4.5, true, false),
-                new BodyStats(EntityDimensions.scalable(0.6F, 1.8F).withEyeHeight(1.62F), 0.6, 0.42F, 0.08, 0.1, 0.3, 4.5, false, true),
+                new BodyStats(slim, 0.6, 0.42F, 0.08, 0.1, 4.5, false, false),
+                new BodyStats(EntityDimensions.scalable(0.6F, 1.8F).withEyeHeight(1.62F), 1.0, 0.42F, 0.08, 0.1, 4.5, false, false),
+                new BodyStats(EntityDimensions.scalable(0.6F, 1.8F).withEyeHeight(1.62F), 0.6, 0.6F, 0.08, 0.1, 4.5, false, false),
+                new BodyStats(EntityDimensions.scalable(0.6F, 2.5F).withEyeHeight(2.2F), 0.6, 0.42F, 0.08, 0.1, 4.5, false, false),
+                new BodyStats(EntityDimensions.scalable(0.6F, 1.8F).withEyeHeight(1.62F), 0.6, 0.42F, 0.08, 0.1, 4.5, true, false),
+                new BodyStats(EntityDimensions.scalable(0.6F, 1.8F).withEyeHeight(1.62F), 0.6, 0.42F, 0.08, 0.1, 4.5, false, true),
         };
         Tally tally = new Tally();
         for (BodyStats stats : bodies) {

@@ -8,7 +8,7 @@ import net.minecraft.core.BlockPos;
 /**
  * 一趟路怎样算到了:去哪儿({@link Where})加到了的样子({@link How})。给模型的只有两种说法——{@link #to}(站进去,或离它不超过几格)和
  * {@link #away}(离它至少几格);{@link How#USE}、{@link How#DIG} 是动手的活够不着时替自己走过去用的
- * ({@link #use}、{@link #dig}),判据就是动作自己那一处的到达目标。形状不成立(只给高度却要离开它)在建的时候就报,
+ * ({@link #use}、{@link #dig}):都是站到手够得着那一格的地方,够得着就点得中、挖得动。形状不成立(只给高度却要离开它)在建的时候就报,
  * 那是参数写错了;和世界有关的(那一格站不进去、没东西可用)在编成目标时说({@link Destination}),那是这一趟走不通。
  *
  * @param range {@link How#NEAR}、{@link How#BESIDE} 是离它不超过几格,{@link How#AWAY} 是离它至少几格;别的是 0
@@ -25,9 +25,9 @@ public record Arrival(Where to, How how, int range) {
          * 没说距离,方块与实体站不进去,走到旁边:离它不超过 {@link #BESIDE} 格;掉在地上的东西是身体捡得到它的地方({@link ItemReach})。
          */
         BESIDE,
-        /** 站在看得见那一格方块某一面、点得到它的地方,去用它。 */
+        /** 站在手够得着那一格的地方,去用它(右键、左键点一下)。 */
         USE,
-        /** 站在手够得着那一格方块的地方(挡着的可以挖开),去挖它。 */
+        /** 站在手够得着那一格方块的地方,去挖它。 */
         DIG,
         /** 离它至少 {@code range} 格。 */
         AWAY;
@@ -73,12 +73,12 @@ public record Arrival(Where to, How how, int range) {
         return new Arrival(from, How.AWAY, checked(distance));
     }
 
-    /** 站到看得见、点得到 {@code cell} 这一格方块的地方。 */
+    /** 站到手够得着 {@code cell} 这一格的地方。 */
     public static Arrival use(BlockPos cell) {
         return new Arrival(new Where.Cell(cell, null), How.USE, 0);
     }
 
-    /** 站到手够得着 {@code cells} 里最多格方块的地方(挡着的可以挖开)。 */
+    /** 站到手够得着 {@code cells} 里最多格方块的地方。 */
     public static Arrival dig(List<BlockPos> cells) {
         return new Arrival(cells.size() == 1 ? new Where.Cell(cells.get(0), null) : Where.Cells.of(cells), How.DIG, 0);
     }

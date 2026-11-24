@@ -8,33 +8,30 @@ import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.MoveKind;
 import com.dwinovo.numen.pathing.plan.ToolChoice;
 import com.dwinovo.numen.api.entity.Faces;
+import com.dwinovo.numen.api.entity.Replaceable;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 做一件改动:挖掉一格、放下一块。身体站在哪由控制器管,这里只管手和眼:把该用的东西拿到手上,转过去看瞄点,准星落上了才
- * 按键,经 {@link Mouse} 动手,把它交回的结果记进实际账。开关门是 {@link DoorOpener}。
+ * 做一件改动:挖掉一格、放下一块。身体站在哪由控制器管,这里只管手:把该用的东西拿到手上,朝那一格转一下(给看着她的人看的),
+ * 指名那一格经 {@link Mouse} 动手——够得着就点得中——把它交回的结果记进实际账。开关门是 {@link DoorOpener}。
  *
- * <p>每刻调一次,直到 {@link #done} 答是。
+ * <p>每刻调一次,直到 {@link #done} 答是。够不着的这一下鼠标不按:身体还在挪就下一刻再来,一直够不着由这一步的期限收场。
  */
 final class Work {
 
-    /** 要挖、要放的那一格连续这么多刻看不见或点不中,就不再等。 */
-    private static final int BLIND_LIMIT = 40;
-
     private final Rig rig;
     private final MoveKind move;
-    /** 正在做的那一件;换了一件就重新拿工具、重新计看不见的刻数。 */
+    /** 正在做的那一件;换了一件就重新拿工具。 */
     private Edit current;
-    private int blind;
     /** 接坠落的那桶水已经倒下、已经收回。 */
     private boolean poured;
     private boolean scooped;
@@ -69,7 +66,6 @@ final class Work {
     Beat tick(Edit edit) {
         if (edit != current) {
             current = edit;
-            blind = 0;
             if (edit instanceof Edit.Dig dig) {
                 // 先把挑中的工具拿到手上:按此刻的身体挑,与规划定价是同一个选择
                 BlockState state = rig.world().getBlockState(dig.pos());
@@ -79,7 +75,7 @@ final class Work {
         return switch (edit) {
             case Edit.Dig dig -> dig(dig);
             case Edit.Place place -> place(place);
-            case Edit.Door door -> DoorOpener.tick(rig, door, hitch -> blind(door.pos(), hitch));
+            case Edit.Door door -> DoorOpener.tick(rig, door);
             case Edit.Catch caught -> poured ? scoop(caught) : pour(caught);
         };
     }
@@ -87,21 +83,11 @@ final class Work {
     // ==================== 挖 ====================
 
     private Beat dig(Edit.Dig edit) {
-        ServerPlayer body = rig.entity;
         BlockPos pos = edit.pos();
-        Vec3 point = rig.look.point(pos);
-        if (point == null) {
-            rig.mouse.release();
-            return blind(pos, Hitch.OCCLUDED);
-        }
-        rig.look.at(point);
-        if (rig.mouse.on(pos) == null) {
-            rig.mouse.release();
-            return blind(pos, Hitch.OCCLUDED);
-        }
-        return switch (rig.dig()) {
+        rig.look.at(Vec3.atCenterOf(pos));
+        return switch (rig.dig(pos)) {
             case Mouse.Strike.Swinging s -> Beat.WORKED;
-            case Mouse.Strike.Missed m -> blind(pos, Hitch.OCCLUDED);
+            case Mouse.Strike.Missed m -> Beat.IDLE;
             case Mouse.Strike.Broke broke -> {
                 rig.ledger.dug(broke.pos(), broke.before());
                 if (PathLog.debugging()) {
@@ -124,19 +110,16 @@ final class Work {
         if (!grip.ready()) {
             return new Beat.Blocked(new Blockage(pos, rig.world().getBlockState(pos), move, null, Hitch.NO_MATERIALS));
         }
-        Faces.Face face = rig.look.face(pos, edit.block());
-        if (face == null) {
-            return blind(pos, Hitch.NO_FACE);
+        // 贴着哪个邻格的哪一面放:规划的准入问的是同一个(有没有面可贴),放下去落在这一格才算
+        Faces.Face face = Faces.against(rig.world(), pos, edit.block());
+        if (face == null || !pos.equals(Replaceable.landing(rig.world(), face.clicked(), face.side(), edit.block()))) {
+            return new Beat.Blocked(new Blockage(pos, rig.world().getBlockState(pos), move, null, Hitch.NO_FACE));
         }
-        rig.look.at(face.point());
-        if (!(rig.mouse.pick() instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK
-                || !hit.getBlockPos().equals(face.clicked()) || hit.getDirection() != face.side()) {
-            return blind(pos, Hitch.NO_FACE);
-        }
+        rig.look.at(Faces.point(rig.world(), face.clicked(), face.side()));
         // 点中的方块若自己会响应右键(箱子、门),按着潜行才是往上贴方块:按下的那一刻按着潜行,与搭桥的玩家一样
         boolean sneaking = body.isShiftKeyDown();
         body.setShiftKeyDown(true);
-        Mouse.Use use = rig.use();
+        Mouse.Use use = rig.use(face.clicked(), face.side());
         body.setShiftKeyDown(sneaking);
         return switch (use) {
             case Mouse.Use.Pressed pressed when !pressed.changes().isEmpty() -> {
@@ -155,8 +138,8 @@ final class Work {
     // ==================== 接坠落的水 ====================
 
     /**
-     * 下落途中往落点倒一桶水:水桶拿在手上,低头点落点脚下那块的顶面,右键——原版水桶顺着视线把水倒在点中的那一面前面,
-     * 就是落点那一格。
+     * 下落途中往落点倒一桶水:水桶拿在手上,低头看着能贴的那一面(先落点脚下那块的顶面),右键——原版水桶在服务端顺着她的视线
+     * 把水倒在碰上的那一面前面,所以要等它自己那条线({@link Mouse#itemRayOn})真落在那一面上才按。
      */
     private Beat pour(Edit.Catch caught) {
         ServerPlayer body = rig.entity;
@@ -166,15 +149,16 @@ final class Work {
             return new Beat.Blocked(new Blockage(caught.pos(), rig.world().getBlockState(caught.pos()), move, null,
                     Hitch.NO_MATERIALS));
         }
-        Faces.Face face = rig.look.face(caught.pos(), Blocks.WATER);
+        Faces.Face face = Faces.against(rig.world(), caught.pos(), Blocks.WATER);
         if (face == null) {
             return Beat.IDLE;
         }
-        rig.look.at(face.point());
-        if (rig.mouse.itemRayOn(ClipContext.Fluid.NONE, face.clicked()) == null) {
+        rig.look.at(Faces.point(rig.world(), face.clicked(), face.side()));
+        BlockHitResult ray = rig.mouse.itemRayOn(ClipContext.Fluid.NONE, face.clicked());
+        if (ray == null || ray.getDirection() != face.side()) {
             return Beat.IDLE;
         }
-        return switch (rig.use()) {
+        return switch (rig.use(face.clicked(), face.side())) {
             case Mouse.Use.Pressed pressed when !pressed.changes().isEmpty() -> {
                 rig.ledger.used(pressed.changes());
                 poured = rig.world().getBlockState(caught.pos()).is(Blocks.WATER);
@@ -188,7 +172,7 @@ final class Work {
     }
 
     /**
-     * 落进水里之后把水收回桶里:空桶拿在手上,低头看着脚下这一格的水,右键——原版空桶顺着视线舀起碰到的第一格水源。
+     * 落进水里之后把水收回桶里:空桶拿在手上,低头看着脚下这一格的水,右键——原版空桶在服务端顺着她的视线舀起碰到的第一格水源。
      */
     private Beat scoop(Edit.Catch caught) {
         ServerPlayer body = rig.entity;
@@ -207,7 +191,8 @@ final class Work {
         if (rig.mouse.itemRayOn(ClipContext.Fluid.SOURCE_ONLY, pos) == null) {
             return Beat.IDLE;
         }
-        return switch (rig.use()) {
+        // 这一下点的是水底下那一块的顶面(水倒下去时贴的那一面),空桶沿视线舀的是它前面这一格水
+        return switch (rig.use(pos.below(), Direction.UP)) {
             case Mouse.Use.Pressed pressed when !pressed.changes().isEmpty() -> {
                 rig.ledger.used(pressed.changes());
                 scooped = !rig.world().getBlockState(pos).is(Blocks.WATER);
@@ -234,13 +219,5 @@ final class Work {
                     .append(" -> ").append(PathLog.block(c.after()));
         }
         return out.toString();
-    }
-
-    /** 看不见、点不中:等一阵(身体还在挪、转头还没到),这一件改动累计如此太久就交出原因。 */
-    private Beat blind(BlockPos pos, Hitch hitch) {
-        if (++blind < BLIND_LIMIT) {
-            return Beat.IDLE;
-        }
-        return new Beat.Blocked(new Blockage(pos, rig.world().getBlockState(pos), move, null, hitch));
     }
 }

@@ -50,21 +50,19 @@ class GoalEndsTest {
         Goals.Position column = Goals.column(C.getX(), C.getZ());
         Goals.Position level = Goals.level(C.getY());
         Goal within = Goals.within(at, 1, 3);
-        Goal digAt = Goals.dig(C.below(2), SURVIVAL, Goals.Clearing.ANY);
+        Goal reachAt = Goals.reach(C.below(2), SURVIVAL);
         Goal threat = Goals.awayFrom(List.of(new Threat(C.getX() + 8.5, C.getY(), C.getZ() + 0.5, 3)));
         return List.of(
                 // 有终点
                 new Row("at", at, true, true),
                 new Row("within(at)", within, true, true),
                 new Row("within(at,0..2)", Goals.within(at, 0, 2), true, true),
-                new Row("use", Goals.use(world, SURVIVAL, C), true, true),
-                new Row("dig", digAt, true, true),
+                new Row("reach", reachAt, true, true),
                 new Row("dig 几格", Goals.dig(List.of(new Goals.DigTarget(C.below(2), 0), new Goals.DigTarget(C.east(4), 1)),
-                        SURVIVAL, Goals.Clearing.ANY), true, true),
-                new Row("place", Goals.place(C.below(2), SURVIVAL), true, true),
+                        SURVIVAL), true, true),
                 new Row("touch", Goals.touch(mob, SURVIVAL, 3), true, true),
                 new Row("pickUp", new ItemReach(item), true, true),
-                new Row("anyOf(at, dig)", Goals.anyOf(List.of(at, digAt)), true, true),
+                new Row("anyOf(at, reach)", Goals.anyOf(List.of(at, reachAt)), true, true),
                 new Row("allOf(within, awayFrom)", Goals.allOf(List.of(within, threat)), true, true),
                 // 照设计没有固定终点
                 new Row("column", column, false, false),

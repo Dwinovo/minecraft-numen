@@ -12,7 +12,7 @@ import net.minecraft.core.BlockPos;
  * 平走:进东南西北相邻一列,落在同一个节点高度(脚高可以在这一格里上下,比如走上下半砖、走下地毯)。
  *
  * <p>前提:起步时站着或攀着(浮着平挪是 {@link Swim});落点那一格托得住脚——托不住时,那一格是水或能攀爬就走进去浮着或
- * 攀着,否则在它脚下搭一块桥(要改地形、要有料;站定点不中、探出边沿才点得中时潜行探出去放)。几何照第 0 层 {@link Stepping}
+ * 攀着,否则在它脚下搭一块桥(要改地形、要有料)。几何照第 0 层 {@link Stepping}
  * 判;过不去时,把身体走过去途中与落定后挡着它的格腾出来——门就开关、其余挖开——再判一次。
  */
 final class Walk implements Move {
@@ -38,9 +38,7 @@ final class Walk implements Move {
         BlockPos to = from.offset(heading.dx(), 0, heading.dz());
         double f0 = stance.feetY();
         boolean grounded = stance.grounded();
-        boolean sneak = false;
         boolean hanging = false;
-        BlockPos bridge = null;
 
         double f1 = Footing.height(draft, body, to.getX(), to.getY(), to.getZ());
         if (Double.isNaN(f1)) {
@@ -53,8 +51,7 @@ final class Walk implements Move {
                 if (!grounded) {
                     return Premise.fail(to, Reason.NO_FOOTING);
                 }
-                bridge = to.below();
-                if (!draft.place(bridge, from.getX(), f0, from.getZ())) {
+                if (!draft.place(to.below(), from.getX(), f0, from.getZ())) {
                     return draft.failure();
                 }
                 f1 = Footing.height(draft, body, to.getX(), to.getY(), to.getZ());
@@ -75,13 +72,6 @@ final class Walk implements Move {
                 return Premise.fail(to, f1 - f0 > body.stepHeight() ? Reason.TOO_HIGH : Reason.NO_CLEARANCE);
             }
         }
-        if (bridge != null) {
-            Draft.Bridging how = draft.bridging(bridge, from.getX(), f0, from.getZ(), heading);
-            if (how == null) {
-                return draft.failure();
-            }
-            sneak = how == Draft.Bridging.LEANING;
-        }
         Stance landing = Stance.at(draft, body, to);
         if (landing == null) {
             return Premise.fail(to, Reason.NO_CLEARANCE);
@@ -96,7 +86,7 @@ final class Walk implements Move {
             return draft.failure();
         }
         boolean wading = Strides.inWater(draft, to);
-        return new Premise.Holds(new Maneuver(MoveKind.WALK, heading, from, stance, to, landing, jump, false, sneak, wading,
+        return new Premise.Holds(new Maneuver(MoveKind.WALK, heading, from, stance, to, landing, jump, false, wading,
                 Strides.submerged(draft, body, from, stance, to, landing), Strides.speedFactor(draft, from, f0, to, f1), Math.max(0, f0 - f1), 0, 1, draft.edits(),
                 contact.cells(), contact.exposure(), support,
                 Strides.reversible(draft, body, from, stance, to, landing)));

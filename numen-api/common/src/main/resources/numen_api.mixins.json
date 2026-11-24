@@ -8,6 +8,8 @@
     "ItemEntityTouchMixin",
     "PlayerAdvancementsRewardMixin",
     "PlayerListRespawnMixin",
+    "ServerPlayerGameModeHarvestMixin",
+    "ServerLevelHarvestMixin",
     "MixinServerCommonPacketListener"
   ],
   "client": [

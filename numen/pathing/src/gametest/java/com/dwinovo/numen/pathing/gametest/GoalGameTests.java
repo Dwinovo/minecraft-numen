@@ -2,19 +2,13 @@ package com.dwinovo.numen.pathing.gametest;
 
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
-import java.util.List;
 
-import com.dwinovo.numen.pathing.api.Snapshots;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
-import com.dwinovo.numen.api.entity.Sight;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.inventory.FurnaceMenu;
 import net.minecraft.world.level.block.LadderBlock;
-import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestAssertException;
@@ -64,51 +58,6 @@ public class GoalGameTests {
             if (r.body.getDeltaMovement().horizontalDistance() >= 0.05) {
                 throw new GameTestAssertException("停在那一格却还在走:" + r.body.getDeltaMovement());
             }
-        });
-    }
-
-    /** 此刻从身体的眼睛用得上 {@code target} 的某一面(第 0 层 {@link Sight#use}),视线上什么也不隔着;交出那一次视线。 */
-    private static Sight.Trace sees(Trial.Run r, BlockPos target) {
-        for (Direction face : Direction.values()) {
-            Sight.Trace seen = Sight.use(r.body.level(), r.body.getEyePosition(), r.body.blockInteractionRange(), target,
-                    face);
-            if (seen != null && seen.clear(face)) {
-                return seen;
-            }
-        }
-        throw new GameTestAssertException("从停下的地方看不清它:" + r.body.position());
-    }
-
-    /**
-     * 狭窄矿道(一格宽两格高)里,熔炉嵌在南边那条矿道的北壁上,只有朝矿道的南面敞开;身体在北边那条平行矿道里,隔着一层石头,
-     * 几何上够得着它却看不见。用它:绕到南边矿道、站到正对开口的一侧,看得见,打得开。
-     */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 315)
-    public static void uses_a_furnace_in_a_narrow_tunnel_from_its_open_side(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(2, 1, 0, 18, 3, 7, Blocks.STONE);
-        t.fill(4, 1, 2, 16, 2, 2, Blocks.AIR);
-        t.fill(4, 1, 5, 16, 2, 5, Blocks.AIR);
-        t.fill(4, 1, 2, 4, 2, 5, Blocks.AIR);
-        t.set(10, 1, 4, Blocks.FURNACE);
-        BlockPos furnace = t.at(10, 1, 4);
-        TestBody body = t.body(10, 1, 2);
-        Goals.Use use = Goals.use(t.level, Snapshots.of(body).stats(), furnace);
-        if (!use.open().equals(List.of(Direction.SOUTH))) {
-            throw new GameTestAssertException("只该有南面敞开:" + use.open());
-        }
-        t.go(body, use, RouteSpec.defaults()).within(305).arrives().then(r -> {
-            if (feet(t, r).getZ() != 5) {
-                throw new GameTestAssertException("应当站在南边那条矿道里:" + t.rel(r.body.blockPosition()));
-            }
-            Sight.Trace seen = sees(r, furnace);
-            r.body.look().at(seen.point());
-            BlockHitResult hit = r.body.mouse().on(furnace);
-            if (hit == null || !r.body.gameMode.useItemOn(r.body, t.level, ItemStack.EMPTY, InteractionHand.MAIN_HAND,
-                    hit).consumesAction() || !(r.body.containerMenu instanceof FurnaceMenu)) {
-                throw new GameTestAssertException("打不开熔炉:" + hit + " " + r.body.containerMenu);
-            }
-            r.body.closeContainer();
         });
     }
 

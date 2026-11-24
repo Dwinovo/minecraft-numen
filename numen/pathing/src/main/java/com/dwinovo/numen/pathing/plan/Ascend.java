@@ -43,7 +43,7 @@ final class Ascend implements Move {
             if (!grounded) {
                 return Premise.fail(to, Reason.NO_FOOTING);
             }
-            if (!draft.placeInSight(to.below(), from.getX(), f0, from.getZ())) {
+            if (!draft.place(to.below(), from.getX(), f0, from.getZ())) {
                 return draft.failure();
             }
             f1 = Footing.height(draft, body, to.getX(), to.getY(), to.getZ());
@@ -83,7 +83,7 @@ final class Ascend implements Move {
         }
         // 攀着、浮着时身体是攀上去、游上去的,只有站着时要跨过高坎才起跳
         boolean jump = rises && grounded;
-        return new Premise.Holds(new Maneuver(MoveKind.ASCEND, heading, from, stance, to, landing, jump, false, false,
+        return new Premise.Holds(new Maneuver(MoveKind.ASCEND, heading, from, stance, to, landing, jump, false,
                 Strides.inWater(draft, to), Strides.submerged(draft, body, from, stance, to, landing), Strides.speedFactor(draft, from, f0, to, f1), 0, 0, 1, draft.edits(),
                 contact.cells(), contact.exposure(), support,
                 Strides.reversible(draft, body, from, stance, to, landing)));
@@ -129,7 +129,7 @@ final class Ascend implements Move {
         }
         double edits = 0;
         if (Quick.pass(step)) {
-            // 台阶垫在半空:四面上下都是空气就没有一面点得中
+            // 台阶垫在半空:四面上下都是空气就没有一面可贴
             if (!q.mayPlace() || q.nothingToClick(dx, 0, dz)) {
                 return Quick.REJECT;
             }
@@ -168,7 +168,7 @@ final class Ascend implements Move {
 
     /**
      * 标志字说不清时答"可能";落点那一格托不住脚时要垫一块台阶(精确判断头一条):攀着、浮着垫不了,没料、不许放、台阶那一格
-     * 四面上下都是空气(没有一面点得中)也垫不了,当场不成立。
+     * 四面上下都是空气(没有一面可贴)也垫不了,当场不成立。
      */
     private static int likely(Quick q, int dx, int dz, double floor) {
         if (q.loadedAround(dx, dz) && Double.isNaN(q.footing(dx, 1, dz))

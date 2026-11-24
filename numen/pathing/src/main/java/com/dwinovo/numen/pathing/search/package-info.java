@@ -3,7 +3,7 @@
  *
  * <ul>
  *   <li>{@link com.dwinovo.numen.pathing.search.Goal} 与 {@link com.dwinovo.numen.pathing.search.Goals} —— 唯一一族目标:
- *       七种到达(位置、距离范围、用、挖、放、够着、远离)各自的到没到、估价、到达价、目标格保护、到了要看得见的;换目标后在走的路还算不算数({@link com.dwinovo.numen.pathing.search.Goal#keepsStop});</li>
+ *       五种到达(位置、距离范围、够着一格、够着一个碰撞箱、远离)各自的到没到、估价、到达价、目标格保护;换目标后在走的路还算不算数({@link com.dwinovo.numen.pathing.search.Goal#keepsStop});</li>
  *   <li>{@link com.dwinovo.numen.pathing.search.AStar} —— 按展开节点数计预算,结论带停下的原因,改动预算在展开时生效;节点放在平行数组里
  *       ({@code Nodes},堆 {@code OpenSet} 存下标),走法先问快判断,断定不了才走精确的前提;</li>
  *   <li>{@link com.dwinovo.numen.pathing.search.Origin} —— 从身体的真实位置定出起点节点;</li>

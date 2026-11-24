@@ -55,7 +55,7 @@ final class BuildShowmanship {
      */
     void performWork(List<BlockPos> landed, List<BlockPos> written, BlockState sample) {
         Vec3 centre = center(landed);
-        player.look().at(centre);   // 视角按鼠标像素取整转向目标点,和寻路同一套转头
+        player.look().at(centre);   // 朝这一批的中心转过去,和寻路同一套转头
         // 挥手按动画节拍走,不按落位节拍。原版一轮挥臂约 6 刻,而落位可以每刻好几格
         // ——每批都触发就是手臂永远画不完一个来回,看起来是抽搐不是干活。
         boolean swung = --swingCooldown <= 0;

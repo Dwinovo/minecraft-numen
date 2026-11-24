@@ -327,7 +327,7 @@ class RecallOverlayTest {
                 List<String> parts = new ArrayList<>();
                 parts.add(m.kind() + " " + m.heading() + " " + m.from() + "->" + m.to());
                 parts.add(m.start() + " " + m.landing());
-                parts.add(m.jump() + " " + m.runUp() + " " + m.sneak() + " " + m.wading() + " " + m.submerged());
+                parts.add(m.jump() + " " + m.runUp() + " " + m.wading() + " " + m.submerged());
                 parts.add(m.speedFactor() + " " + m.drop() + " " + m.fallDamage() + " " + m.span());
                 parts.add(m.edits().toString());
                 parts.add(Arrays.toString(m.cells()) + " " + m.exposure() + " " + m.support() + " " + m.reversible());

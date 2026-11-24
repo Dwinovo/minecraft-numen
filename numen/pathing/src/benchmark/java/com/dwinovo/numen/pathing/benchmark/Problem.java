@@ -123,7 +123,7 @@ record Problem(String id, String region, Bucket bucket, double distance, BlockPo
         return switch (type) {
             case AT -> Goals.at(to);
             case NEAR -> Goals.within(Goals.at(to), 0, radius);
-            case DIG -> Goals.dig(to, body, Goals.Clearing.ANY);
+            case DIG -> Goals.reach(to, body);
         };
     }
 

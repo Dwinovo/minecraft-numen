@@ -24,16 +24,14 @@ public class InteractGameTests {
     }
 
     /**
-     * 桶对水右键:准星式右键的完整管线钉桩。准星射线不含流体(与原版一致),
-     * 水面永远点不中——桶的取水逻辑住在 Item.use 里、自带 SOURCE_ONLY 射线,
-     * 靠的是"方块没吃掉点击就落到物品自用"那步兜底。守住它:没有兜底时
-     * 对水右键永远空手,工具却报成功。
+     * 桶对水右键:右键的完整管线钉桩。点的是那一格水,水不接这一下——桶的取水逻辑住在 Item.use 里、自带 SOURCE_ONLY 射线,
+     * 靠的是"方块没吃掉点击就落到物品自用"那步兜底。守住它:没有兜底时对水右键永远空手,工具却报成功。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_bucket_scoops_aimed_water(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        // 沉进地板的一格水:四邻就是地板块,天然围住;地表水盆的沿会挡住
-        // 下探的视线(她的眼睛只比水面高一格半,射线在沿上就切进石头了)
+        // 沉进地板的一格水:四邻就是地板块,天然围住;地表水盆的沿会挡住桶自己沿视线打的那一条
+        // (她的眼睛只比水面高一格半,射线在沿上就切进石头了)
         BlockPos water = helper.absolutePos(new BlockPos(5, 1, 5));
         level.setBlockAndUpdate(water, Blocks.WATER.defaultBlockState());
 
@@ -68,9 +66,8 @@ public class InteractGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_sailor", new BlockPos(5, 2, 8), false);
         companion.getInventory().add(new ItemStack(Items.OAK_BOAT));
-        // 瞄远列而不是池心:视线在下降途中提前碰到水面,命中点比瞄点近一截;
-        // 瞄池心时船的碰撞箱(宽 1.375)会搭在石堤上被 noCollision 拒绝——
-        // 真玩家放船也是往远处的水面看,不盯着脚边的岸沿。
+        // 点远列而不是池心:船自己沿视线打的那一条在下降途中提前碰到水面,落点比点的那一格近一截;
+        // 点池心时船的碰撞箱(宽 1.375)会搭在石堤上被 noCollision 拒绝。
         BlockPos aim = helper.absolutePos(new BlockPos(9, 2, 8));
         ToolRun place = lua(companion, "numen.use.block(" + xyz(aim) + ", {item = \"minecraft:oak_boat\"})");
 
@@ -431,28 +428,38 @@ public class InteractGameTests {
     }
 
     /**
-     * 准星落在谁就按谁:创造模式的她和石头之间隔着一块泥土,{@code numen.use.hit} 对着石头按下去,落在泥土上——点掉的是泥土,
-     * 石头原样;回执照实说准星落在了泥土上,不是瞄的那一格。
+     * 够得着就点得中,中间隔着什么不问:一根拉杆在一堵两格高的石墙后面,她在墙这边,手够得着拉杆、却看不见它。
+     * {@code numen.use.block} 点名那根拉杆:拉杆扳过去了,墙上一格没少,她一步没动,回执说游戏接了这一下。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
-    public static void use_block_left_presses_what_the_crosshair_lands_on(GameTestHelper helper) {
+    public static void use_block_reaches_through_a_wall(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        BlockPos stone = helper.absolutePos(new BlockPos(6, 2, 12));
-        BlockPos dirt = helper.absolutePos(new BlockPos(5, 2, 12));
-        level.setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
-        level.setBlockAndUpdate(dirt, Blocks.DIRT.defaultBlockState());
-        NumenPlayer companion = spawnAt(helper, "gametest_crosshair", new BlockPos(3, 2, 12), true);
-        ToolRun press = lua(companion, "numen.use.hit(" + xyz(stone) + ")");
+        java.util.List<BlockPos> wall = new java.util.ArrayList<>();
+        for (int z = 11; z <= 13; z++) {
+            for (int y = 2; y <= 3; y++) {
+                BlockPos cell = helper.absolutePos(new BlockPos(6, y, z));
+                level.setBlockAndUpdate(cell, Blocks.STONE.defaultBlockState());
+                wall.add(cell);
+            }
+        }
+        BlockPos lever = helper.absolutePos(new BlockPos(7, 2, 12));
+        level.setBlockAndUpdate(lever, Blocks.LEVER.defaultBlockState().setValue(net.minecraft.world.level.block.LeverBlock.FACE,
+                net.minecraft.world.level.block.state.properties.AttachFace.FLOOR));
+        NumenPlayer companion = spawnAt(helper, "gametest_through_wall_click", new BlockPos(4, 2, 12), false);
+        BlockPos stand = companion.blockPosition();
+        ToolRun press = lua(companion, "numen.use.block(" + xyz(lever) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(press.done(), "use hit has not finished");
-            helper.assertTrue(press.succeeded() && level.getBlockState(dirt).isAir()
-                            && level.getBlockState(stone).is(Blocks.STONE),
-                    "the press did not land on the dirt in front: " + press.outcome());
-            helper.assertTrue(press.outcome().contains("dirt at " + dirt.getX() + "," + dirt.getY() + ","
-                            + dirt.getZ() + " — the crosshair landed there, not on " + stone.getX() + ","
-                            + stone.getY() + "," + stone.getZ()),
-                    "the reply does not say the crosshair landed elsewhere: " + press.outcome());
+            helper.assertTrue(press.done(), "use block has not finished");
+            helper.assertTrue(press.succeeded() && level.getBlockState(lever).is(Blocks.LEVER)
+                            && level.getBlockState(lever).getValue(net.minecraft.world.level.block.LeverBlock.POWERED),
+                    "the lever behind the wall was not pulled: " + press.outcome());
+            for (BlockPos cell : wall) {
+                helper.assertTrue(level.getBlockState(cell).is(Blocks.STONE), "the wall in between was changed at " + cell);
+            }
+            helper.assertTrue(companion.blockPosition().equals(stand), "she moved to click a block within her reach");
+            helper.assertTrue(press.result(com.dwinovo.numen.tools.Clicks.Clicked.class).accepted(),
+                    "the receipt does not say the lever took the click: " + press.outcome());
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }

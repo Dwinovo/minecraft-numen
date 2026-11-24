@@ -15,7 +15,7 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * 每刻朝目标转视角、按前进键(撞着东西就按跳),到了、或者连着一阵没有更近就交回结局。走不动时,挡在正前方的整块方块就挖开:
- * 转过去看着它、按住左键——和真人一样,用的是她的视角({@code look()})与鼠标({@code mouse()}),不另写一套挖法。
+ * 朝它转过去、指名这一格按住左键——用的是她的视角({@code look()})与鼠标({@code mouse()}),不另写一套挖法。
  *
  * <p>每一下挖之前过不过权限层是鼠标自己的事(同伴的鼠标动手前先问):不许就带着理由失败;要问主人的格这个样例也当作没让挖,
  * 要发起征询的寻路在这里接 {@code Mouse.Refusal.Asks}。
@@ -84,18 +84,11 @@ final class GoTask implements Task {
         return null;
     }
 
-    /** 站住,看着它看得见的那一点,按住左键;碎了就接着走。 */
+    /** 站住,朝它转过去,指名这一格按住左键(够得着就挖得动);碎了就接着走。 */
     private TaskState dig(NumenPlayer her, BlockPos cell) {
         her.controls().stop();
-        Vec3 point = her.look().point(cell);
-        if (point == null) {
-            return TaskState.RUNNING;   // 看不见它(被别的挡着):等,耐心一到就放弃
-        }
-        her.look().at(point);
-        if (her.mouse().on(cell) == null) {
-            return TaskState.RUNNING;
-        }
-        if (her.mouse().dig() instanceof Mouse.Strike.Refused refused) {
+        her.look().at(Vec3.atCenterOf(cell));
+        if (her.mouse().dig(cell) instanceof Mouse.Strike.Refused refused) {
             Verdict verdict = refused.reason().verdict();
             outcome = "not allowed to break " + cell.toShortString() + ": "
                     + (verdict != null ? verdict.reason() : "the server would not let it happen");

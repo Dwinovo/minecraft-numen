@@ -1,7 +1,6 @@
 package com.dwinovo.numen.pathing.search;
 
 import java.util.List;
-import java.util.Set;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -10,25 +9,20 @@ import com.dwinovo.numen.pathing.Fixtures;
 import com.dwinovo.numen.pathing.TestWorld;
 import com.dwinovo.numen.pathing.Vanilla;
 import com.dwinovo.numen.pathing.world.Kinematics;
-import com.dwinovo.numen.pathing.plan.ActionCosts;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Stance;
 import com.dwinovo.numen.pathing.plan.Threat;
 import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
-import com.dwinovo.numen.api.entity.Sight;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.phys.Vec3;
 
 import static com.dwinovo.numen.pathing.Fixtures.PACE;
 import static com.dwinovo.numen.pathing.Vanilla.SURVIVAL;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -193,7 +187,7 @@ class GoalsTest {
         assertThrows(IllegalArgumentException.class, () -> new Threat(0, 64, 0, -1));
     }
 
-    // ==================== 挖 ====================
+    // ==================== 够着一格 ====================
 
     /**
      * 挖的估价只量"还差多远才够得着":站在够得着的带里(站得住就算到了)估价为零;从带外朝目标走,每近一格估价都严格变小,
@@ -202,7 +196,7 @@ class GoalsTest {
     @Test
     void diggingABlockEstimatesZeroWithinReachAndLessTheCloserFromOutside() {
         BlockPos target = new BlockPos(10, 64, 0);
-        Goal reach = Goals.dig(target, SURVIVAL, Goals.Clearing.ANY);
+        Goal reach = Goals.reach(target, SURVIVAL);
         Stance standing = new Stance(Stance.Kind.GROUND, 64, 63);
         for (int x = 6; x <= 8; x++) {
             assertTrue(reach.contains(x, 64, 0, standing), "x=" + x + " 够得着");
@@ -221,14 +215,28 @@ class GoalsTest {
     /** 攀着的站位够得着也不算工位:导航收场松开键之后没人按着潜行,身子顺着梯子滑下去;站在地上同一处才算。 */
     @Test
     void aClimbingStanceIsNotAWorkingPosition() {
-        Goal dig = Goals.dig(new BlockPos(10, 64, 0), SURVIVAL, Goals.Clearing.ANY);
-        Goal place = Goals.place(new BlockPos(10, 64, 0), SURVIVAL);
+        Goal reach = Goals.reach(new BlockPos(10, 64, 0), SURVIVAL);
+        assertTrue(reach.contains(7, 64, 0, new Stance(Stance.Kind.GROUND, 64, 63)), "站在地上够得着");
+        assertFalse(reach.contains(7, 64, 0, new Stance(Stance.Kind.CLIMBING, 64, Integer.MIN_VALUE)), "攀着不算");
+    }
+
+    /**
+     * 够着一格只看距离:隔着一堵墙、够得着的地方照样算到,到达价不因隔着什么而涨。路上不挖要够的那一格、不往里放东西。
+     */
+    @Test
+    void reachingABlockDoesNotAskWhatStandsInBetween() {
+        BlockPos chest = new BlockPos(0, 64, 0);
+        TestWorld world = new TestWorld().floor(-8, -8, 8, 8, 63).set(chest, Blocks.CHEST.defaultBlockState())
+                .fill(2, 64, -3, 2, 67, 3, Blocks.STONE.defaultBlockState());
+        Goal reach = Goals.reach(chest, SURVIVAL);
         Stance standing = new Stance(Stance.Kind.GROUND, 64, 63);
-        Stance climbing = new Stance(Stance.Kind.CLIMBING, 64, Integer.MIN_VALUE);
-        for (Goal goal : List.of(dig, place)) {
-            assertTrue(goal.contains(7, 64, 0, standing), goal + " 站在地上够得着");
-            assertFalse(goal.contains(7, 64, 0, climbing), goal + " 攀着不算");
-        }
+        assertTrue(reach.contains(3, 64, 0, standing), "墙外那一格够得着");
+        assertEquals(0, reach.arrival(world, 3, 64, 0, standing));
+        assertFalse(reach.contains(7, 64, 0, standing), "七格外够不着");
+        assertFalse(reach.contains(0, 64, 0, standing), "身体占着它的那一格不算");
+        com.dwinovo.numen.pathing.spec.PositionCosts keep = reach.protection();
+        assertTrue(keep.forbids(com.dwinovo.numen.pathing.spec.PositionCosts.Use.DIG, chest.asLong()));
+        assertTrue(keep.forbids(com.dwinovo.numen.pathing.spec.PositionCosts.Use.PLACE, chest.asLong()));
     }
 
     /**
@@ -240,7 +248,7 @@ class GoalsTest {
         BlockPos a = new BlockPos(10, 64, 0);
         BlockPos b = new BlockPos(10, 64, 1);
         BlockPos far = new BlockPos(30, 64, 0);
-        Goal dig = Goals.dig(free(a, b, far), SURVIVAL, Goals.Clearing.ANY);
+        Goal dig = Goals.dig(free(a, b, far), SURVIVAL);
         Stance standing = new Stance(Stance.Kind.GROUND, 64, 63);
         TestWorld world = new TestWorld().ground(63, Blocks.STONE.defaultBlockState())
                 .set(a, Blocks.STONE.defaultBlockState()).set(b, Blocks.STONE.defaultBlockState())
@@ -249,11 +257,11 @@ class GoalsTest {
         assertFalse(dig.contains(0, 64, 0, standing), "一格都够不着的不在目标里");
         double both = dig.arrival(world, 8, 64, 0, standing);
         double one = dig.arrival(world, 6, 64, -3, standing);
-        assertTrue(Goals.dig(a, SURVIVAL, Goals.Clearing.ANY).contains(6, 64, -3, standing) && !Goals.dig(b, SURVIVAL, Goals.Clearing.ANY)
+        assertTrue(Goals.reach(a, SURVIVAL).contains(6, 64, -3, standing) && !Goals.reach(b, SURVIVAL)
                 .contains(6, 64, -3, standing), "这一处只够得着 a");
         assertTrue(both < one, "够得着两格的停下更便宜:" + both + " / " + one);
         assertTrue(one - both < Kinematics.walkTicksPerBlock(SURVIVAL), "差的不到多走一格:" + (one - both));
-        assertThrows(IllegalArgumentException.class, () -> Goals.dig(List.of(), SURVIVAL, Goals.Clearing.ANY));
+        assertThrows(IllegalArgumentException.class, () -> Goals.dig(List.of(), SURVIVAL));
     }
 
     /**
@@ -264,8 +272,7 @@ class GoalsTest {
     void diggingSeveralCellsCountsWhatEachCellCostsToDig() {
         BlockPos cheap = new BlockPos(10, 64, 0);
         BlockPos dear = new BlockPos(-10, 64, 0);
-        Goal dig = Goals.dig(List.of(new Goals.DigTarget(cheap, 1), new Goals.DigTarget(dear, 50)), SURVIVAL,
-                Goals.Clearing.ANY);
+        Goal dig = Goals.dig(List.of(new Goals.DigTarget(cheap, 1), new Goals.DigTarget(dear, 50)), SURVIVAL);
         Stance standing = new Stance(Stance.Kind.GROUND, 64, 63);
         TestWorld world = new TestWorld().ground(63, Blocks.STONE.defaultBlockState())
                 .set(cheap, Blocks.STONE.defaultBlockState()).set(dear, Blocks.STONE.defaultBlockState());
@@ -286,7 +293,7 @@ class GoalsTest {
     @Test
     void diggingABlockFarBelowIsPricedOnlyHorizontallyHere() {
         BlockPos target = new BlockPos(0, 44, 0);
-        Goal dig = Goals.dig(target, SURVIVAL, Goals.Clearing.ANY);
+        Goal dig = Goals.reach(target, SURVIVAL);
         assertEquals(0, dig.estimate(0, 64, 0, PACE), 1e-9);
         for (int x = 10; x < 16; x++) {
             assertEquals(PACE.sprint(), dig.estimate(x + 1, 64, 0, PACE) - dig.estimate(x, 64, 0, PACE), 1e-9,
@@ -300,7 +307,7 @@ class GoalsTest {
     @Test
     void diggingEndCellsHoldEveryNodeThatReachesIt() {
         BlockPos target = new BlockPos(3, 70, -2);
-        Goal dig = Goals.dig(target, SURVIVAL, Goals.Clearing.ANY);
+        Goal dig = Goals.reach(target, SURVIVAL);
         var ends = dig.endCells();
         int span = 10;
         for (int x = -span; x <= span; x++) {
@@ -323,13 +330,12 @@ class GoalsTest {
         }
     }
 
-    /** 挖、放、挖几格里的一格交出的高度范围,就是它们终点格里最低与最高的一层。 */
+    /** 够着一格、挖几格里的一格交出的高度范围,就是它们终点格里最低与最高的一层。 */
     @Test
     void theHeightsOfADigAreTheLowestAndHighestLevelOfItsEndCells() {
-        List<Goal> goals = List.of(Goals.dig(new BlockPos(3, 70, -2), SURVIVAL, Goals.Clearing.ANY),
-                Goals.place(new BlockPos(-5, 12, 9), SURVIVAL),
+        List<Goal> goals = List.of(Goals.reach(new BlockPos(3, 70, -2), SURVIVAL),
                 Goals.dig(List.of(new Goals.DigTarget(new BlockPos(0, 40, 0), 1), new Goals.DigTarget(new BlockPos(6, 47, 3), 2)),
-                        SURVIVAL, Goals.Clearing.ANY));
+                        SURVIVAL));
         for (Goal goal : goals) {
             int lo = Integer.MAX_VALUE;
             int hi = Integer.MIN_VALUE;
@@ -339,45 +345,6 @@ class GoalsTest {
             }
             assertEquals(new Goal.Heights(lo, hi), goal.heights(), goal.toString());
         }
-    }
-
-    /**
-     * 挖一格时,站位与它之间每隔着一格硬遮挡就加一份到达价;软遮挡(高草)不加。
-     */
-    @Test
-    void diggingChargesForEveryHardBlockerInTheWay() {
-        BlockPos target = new BlockPos(4, 64, 0);
-        Goal dig = Goals.dig(target, SURVIVAL, Goals.Clearing.ANY);
-        Stance standing = new Stance(Stance.Kind.GROUND, 64, 63);
-        com.dwinovo.numen.pathing.TestWorld open = new TestWorld().floor(-4, -4, 8, 4, 63)
-                .set(target, Blocks.IRON_ORE.defaultBlockState());
-        assertEquals(0, dig.arrival(open, 1, 64, 0, standing));
-        open.fill(3, 63, -4, 3, 70, 4, Blocks.STONE.defaultBlockState());
-        assertEquals(ActionCosts.SIGHT_BLOCKER_BLOCKS * Kinematics.walkTicksPerBlock(SURVIVAL), dig.arrival(open, 1, 64, 0, standing),
-                1e-9, "隔着一堵一格厚的墙");
-        open.fill(2, 63, -4, 2, 70, 4, Blocks.STONE.defaultBlockState());
-        assertEquals(2 * ActionCosts.SIGHT_BLOCKER_BLOCKS * Kinematics.walkTicksPerBlock(SURVIVAL), dig.arrival(open, 1, 64, 0, standing),
-                1e-9, "两堵");
-    }
-
-    /**
-     * 挖的一方清不掉的格挡在看得见它的每一面前面,停在那儿也办不成:到达价无穷。换成清得掉的格,照旧按硬遮挡定价;
-     * 不说谁来挖的目标,挡着的格一律算清得掉。
-     */
-    @Test
-    void diggingCannotStopWhereEveryFaceIsBehindWhatTheDiggerMayNotClear() {
-        BlockPos target = new BlockPos(4, 64, 0);
-        Goals.Clearing sparesStone = (view, pos) -> !view.getBlockState(pos).is(Blocks.STONE);
-        Goal dig = Goals.dig(target, SURVIVAL, sparesStone);
-        Stance standing = new Stance(Stance.Kind.GROUND, 64, 63);
-        TestWorld world = new TestWorld().floor(-4, -4, 8, 4, 63)
-                .set(target, Blocks.IRON_ORE.defaultBlockState())
-                .fill(3, 63, -4, 3, 70, 4, Blocks.STONE.defaultBlockState());
-        assertTrue(Double.isInfinite(dig.arrival(world, 1, 64, 0, standing)), "看得见的每一面都隔着清不掉的石头");
-        assertEquals(ActionCosts.SIGHT_BLOCKER_BLOCKS * Kinematics.walkTicksPerBlock(SURVIVAL), Goals.dig(target, SURVIVAL, Goals.Clearing.ANY).arrival(world, 1, 64, 0, standing), 1e-9,
-                "没说谁来挖:照旧按一格硬遮挡定价");
-        world.fill(3, 63, -4, 3, 70, 4, Blocks.DIRT.defaultBlockState());
-        assertEquals(ActionCosts.SIGHT_BLOCKER_BLOCKS * Kinematics.walkTicksPerBlock(SURVIVAL), dig.arrival(world, 1, 64, 0, standing), 1e-9, "隔着清得掉的泥土");
     }
 
     // ==================== 距离范围的半径 ====================
@@ -453,85 +420,5 @@ class GoalsTest {
         assertEquals(new BlockPos(2, 64, 0), Goals.standingOn(world, SURVIVAL, new BlockPos(2, 64, 0)));
         assertNull(Goals.standingOn(world, SURVIVAL, new BlockPos(1, 66, 0)), "空气上站不上");
         assertNull(Goals.standingOn(world, SURVIVAL, new BlockPos(3, 64, 0)), "头顶一格就压着石头");
-    }
-
-    // ==================== 用 ====================
-
-    /** 平地上一个熔炉:四个侧面与顶面敞开,底面贴着地板;站位都看得见它、都不占着它,离它都在交互距离内。 */
-    @Test
-    void usingABlockListsStandsThatSeeAnOpenFace() {
-        BlockPos furnace = new BlockPos(0, 64, 0);
-        TestWorld world = new TestWorld().floor(-8, -8, 8, 8, 63).set(furnace, Blocks.FURNACE.defaultBlockState());
-        Goals.Use use = Goals.use(world, SURVIVAL, furnace);
-        assertFalse(use.sealed());
-        assertFalse(use.open().contains(Direction.DOWN));
-        assertEquals(5, use.open().size());
-        assertFalse(use.stands().isEmpty());
-        Stance standing = new Stance(Stance.Kind.GROUND, 64, 63);
-        assertTrue(use.contains(1, 64, 0, standing), "紧挨着东面");
-        assertTrue(use.contains(0, 65, 0, new Stance(Stance.Kind.GROUND, 65, 64)), "站在它顶上,往下看得见顶面");
-        assertFalse(use.contains(7, 64, 0, standing), "七格外够不着");
-        for (long cell : use.stands().keySet()) {
-            BlockPos at = BlockPos.of(cell);
-            Stance there = Stance.at(world, SURVIVAL, at);
-            Vec3 eye = SURVIVAL.eye(at.getX(), there.feetY(), at.getZ());
-            for (Direction face : use.stands().get(cell)) {
-                assertNotNull(Sight.use(world, eye, SURVIVAL.blockReach(), furnace, face), at + " 看 " + face);
-            }
-        }
-    }
-
-    /** 隔着一堵墙、几何上够得着的地方不是站位:只在敞开的那一面前面。 */
-    @Test
-    void aStandBehindAWallIsNoStand() {
-        BlockPos chest = new BlockPos(0, 64, 0);
-        TestWorld world = new TestWorld().floor(-8, -8, 8, 8, 63).set(chest, Blocks.CHEST.defaultBlockState())
-                .set(0, 64, -1, Blocks.STONE.defaultBlockState()).set(0, 64, 1, Blocks.STONE.defaultBlockState())
-                .set(1, 64, 0, Blocks.STONE.defaultBlockState()).set(0, 65, 0, Blocks.GLASS.defaultBlockState())
-                .fill(2, 64, -3, 2, 67, 3, Blocks.STONE.defaultBlockState());
-        Goals.Use use = Goals.use(world, SURVIVAL, chest);
-        assertEquals(List.of(Direction.WEST), use.open());
-        assertTrue(Goals.dig(chest, SURVIVAL, Goals.Clearing.ANY).contains(3, 64, 0, new Stance(Stance.Kind.GROUND, 64, 63)),
-                "墙外那一格几何上够得着");
-        assertFalse(use.contains(3, 64, 0, new Stance(Stance.Kind.GROUND, 64, 63)), "却看不见,不是站位");
-        for (long cell : use.stands().keySet()) {
-            assertTrue(BlockPos.of(cell).getX() < 0, "站位都在西面:" + BlockPos.of(cell));
-            assertEquals(Set.of(Direction.WEST), use.stands().get(cell));
-        }
-        // 嵌在墙里要用的那一格,路上不挖它、不往里放,敞开的那一面前面也不放方块
-        com.dwinovo.numen.pathing.spec.PositionCosts keep = use.protection();
-        assertTrue(keep.forbids(com.dwinovo.numen.pathing.spec.PositionCosts.Use.DIG, chest.asLong()));
-        assertTrue(keep.forbids(com.dwinovo.numen.pathing.spec.PositionCosts.Use.PLACE, chest.asLong()));
-        assertTrue(keep.forbids(com.dwinovo.numen.pathing.spec.PositionCosts.Use.PLACE, chest.west().asLong()));
-    }
-
-    /** 四面封死:没有一面敞开,也就没有站位。 */
-    @Test
-    void aBlockWalledInOnEverySideIsSealed() {
-        BlockPos furnace = new BlockPos(0, 64, 0);
-        TestWorld world = new TestWorld().fill(-1, 63, -1, 1, 65, 1, Blocks.STONE.defaultBlockState())
-                .set(furnace, Blocks.FURNACE.defaultBlockState());
-        Goals.Use use = Goals.use(world, SURVIVAL, furnace);
-        assertTrue(use.sealed());
-        assertTrue(use.stands().isEmpty());
-    }
-
-    /** 敞开的面前隔着高草:高草是软遮挡,那一面照样敞开,站位照样列出——用之前先清掉。 */
-    @Test
-    void softBlockersDoNotCloseAFace() {
-        BlockPos chest = new BlockPos(0, 64, 0);
-        TestWorld world = new TestWorld().floor(-8, -8, 8, 8, 63).set(chest, Blocks.CHEST.defaultBlockState())
-                .set(0, 64, -1, Blocks.STONE.defaultBlockState()).set(0, 64, 1, Blocks.STONE.defaultBlockState())
-                .set(1, 64, 0, Blocks.STONE.defaultBlockState()).set(0, 65, 0, Blocks.GLASS.defaultBlockState())
-                .set(-1, 64, 0, Blocks.SHORT_GRASS.defaultBlockState());
-        Goals.Use use = Goals.use(world, SURVIVAL, chest);
-        assertEquals(List.of(Direction.WEST), use.open());
-        assertFalse(use.stands().isEmpty());
-    }
-
-    @Test
-    void usingAirIsRefused() {
-        TestWorld world = new TestWorld().floor(-2, -2, 2, 2, 63);
-        assertThrows(IllegalArgumentException.class, () -> Goals.use(world, SURVIVAL, new BlockPos(0, 64, 0)));
     }
 }

@@ -62,15 +62,15 @@ class RecoveryLadderTest {
         CountingStrategy rung0 = new CountingStrategy();
         CountingStrategy rung1 = new CountingStrategy();
         RecoveryLadder ladder = RecoveryLadder.of(
-                new Rung(rung0, Set.of(FailureType.OCCLUDED), 3),   // up to 3 tries
-                new Rung(rung1, Set.of(FailureType.OCCLUDED), 1));
+                new Rung(rung0, Set.of(FailureType.BOXED_IN), 3),   // up to 3 tries
+                new Rung(rung1, Set.of(FailureType.BOXED_IN), 1));
 
         Task t1 = ladder.current();
         assertEquals(0, ladder.currentRung());
         assertEquals(1, ladder.currentAttempt());
 
         // Attempt 1 failed (handled) → retry same rung, rebuilt.
-        assertTrue(ladder.advance(FailureType.OCCLUDED));
+        assertTrue(ladder.advance(FailureType.BOXED_IN));
         assertEquals(0, ladder.currentRung());
         assertEquals(2, ladder.currentAttempt());
         Task t2 = ladder.current();
@@ -78,14 +78,14 @@ class RecoveryLadderTest {
         assertEquals(2, rung0.builds.get());
 
         // Attempt 2 failed → retry (attempt 3, the max).
-        assertTrue(ladder.advance(FailureType.OCCLUDED));
+        assertTrue(ladder.advance(FailureType.BOXED_IN));
         assertEquals(0, ladder.currentRung());
         assertEquals(3, ladder.currentAttempt());
         ladder.current();
         assertEquals(3, rung0.builds.get());
 
         // Attempt 3 failed → rung0 exhausted its attempts → advance to rung1.
-        assertTrue(ladder.advance(FailureType.OCCLUDED));
+        assertTrue(ladder.advance(FailureType.BOXED_IN));
         assertEquals(1, ladder.currentRung());
         assertEquals(1, ladder.currentAttempt());
         ladder.current();
@@ -114,10 +114,10 @@ class RecoveryLadderTest {
         RecoveryLadder ladder = RecoveryLadder.of(
                 new Rung(new CountingStrategy(), Set.of(FailureType.NO_PATH), 1),
                 new Rung(new CountingStrategy(), Set.of(FailureType.HAZARD), 1),      // skipped
-                new Rung(new CountingStrategy(), Set.of(FailureType.OCCLUDED), 1));   // this one handles it
+                new Rung(new CountingStrategy(), Set.of(FailureType.BOXED_IN), 1));   // this one handles it
 
         ladder.current();
-        assertTrue(ladder.advance(FailureType.OCCLUDED));
+        assertTrue(ladder.advance(FailureType.BOXED_IN));
         assertEquals(2, ladder.currentRung());   // jumped straight past the HAZARD-only rung
     }
 

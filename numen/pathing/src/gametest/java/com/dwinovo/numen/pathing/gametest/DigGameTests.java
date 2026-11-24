@@ -75,41 +75,6 @@ public class DigGameTests {
         }
     }
 
-    /**
-     * 三格高的泥土墙横贯场地,手上木锹,许挖许放:挖开身体高的两格穿过去。上一格碎了之后手要缓几刻(原版客户端的
-     * {@code destroyDelay})才开挖下一格,缓的正是规划给挖一格定价时加上的那几刻({@link DigTime#cooldown});每一格只开挖一次,
-     * 挖掉的正是墙上那两格。
-     */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 357)
-    public static void waits_out_the_vanilla_cooldown_between_two_digs(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        wall(t, 8, 3, Blocks.DIRT);
-        TestBody body = t.body(4, 1, 5);
-        body.getInventory().setItem(0, new ItemStack(Items.WOODEN_SHOVEL));
-        DigWatch watch = new DigWatch(body);
-        watch.install();
-        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(347).arrives().then(r -> {
-            List<DigWatch.Dig> broken = new ArrayList<>(watch.broken());
-            broken.sort(java.util.Comparator.comparingLong(d -> d.startedAt));
-            if (broken.size() < 2) {
-                throw new GameTestAssertException("应当连着挖两格:" + broken);
-            }
-            int cooldown = DigTime.cooldown(false, false);
-            for (int i = 1; i < broken.size(); i++) {
-                long idle = broken.get(i).startedAt - broken.get(i - 1).brokeAt;
-                if (idle <= cooldown) {
-                    throw new GameTestAssertException("上一格碎了 " + idle + " 刻就开挖下一格,没缓够 " + cooldown + " 刻:" + broken);
-                }
-            }
-            vanillaTimed(watch, body);
-            watch.eachStartedOnce();
-            // 挖掉的正是墙上身体高的那两格泥土
-            if (dug(r).size() != 2 || dug(r).stream().anyMatch(d -> d.pos().getX() - t.origin.getX() != 8 || !d.before().is(Blocks.DIRT))) {
-                throw new GameTestAssertException("应当挖开墙上身体高的两格:" + dug(r));
-            }
-        });
-    }
-
     // ==================== 挖掘的物理约束 ====================
 
     /**
@@ -369,7 +334,7 @@ public class DigGameTests {
                 .then(Scenes::unaltered);
     }
 
-    /** 创造模式交互距离五格(原版在玩家的刻里把创造模式的加成挂到属性上):去够一块方块,停在四格半之外、五格之内就够着、看见了。 */
+    /** 创造模式交互距离五格(原版在玩家的刻里把创造模式的加成挂到属性上):去够一块方块,停在四格半之外、五格之内就够着了。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 237)
     public static void reaches_five_blocks_in_creative(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
@@ -377,42 +342,12 @@ public class DigGameTests {
         TestBody body = t.body(2, 1, 5);
         body.setGameMode(GameType.CREATIVE);
         BlockPos target = t.at(10, 1, 5);
-        t.later(2, () -> t.go(body, Goals.dig(target, Snapshots.of(body).stats(), Goals.Clearing.ANY), RouteSpec.defaults())
+        t.later(2, () -> t.go(body, Goals.reach(target, Snapshots.of(body).stats()), RouteSpec.defaults())
                 .within(227).arrives().then(r -> {
                     double distance = Math.sqrt(new AABB(target).distanceToSqr(r.body.getEyePosition()));
                     if (distance <= 4.5 || distance >= 5) {
                         throw new GameTestAssertException("应当停在四格半到五格之间:" + distance);
                     }
                 }));
-    }
-
-    /**
-     * 要挖的矿在她斜前方隔着奇数格(身体中心到矿中心的直线中点正落在格子的角上),那条线擦着一块挡路的石头的棱而过。转头取整到
-     * 鼠标像素,视线与那条直线差不到半个像素,差的这一点点就决定擦没擦进石头里:先前朝着哪儿(取整落在哪个偏差上)都不该让准星
-     * 落不到要挖的那一格上。
-     */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 100)
-    public static void aims_where_the_turned_view_really_lands(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.set(8, 2, 6, Blocks.STONE);
-        t.set(9, 1, 7, Blocks.COPPER_ORE);
-        BlockPos ore = t.at(9, 1, 7);
-        TestBody body = t.body(6, 1, 6);
-        for (int yaw = 0; yaw < 12; yaw++) {
-            for (int pitch = 0; pitch < 12; pitch++) {
-                float before = yaw * 0.0125F;
-                body.setYRot(before);
-                body.setXRot(pitch * 0.0125F);
-                Vec3 point = body.look().point(ore);
-                if (point == null) {
-                    throw new GameTestAssertException("朝着 " + before + " 度时找不到瞄点");
-                }
-                body.look().at(point);
-                if (body.mouse().on(ore) == null) {
-                    throw new GameTestAssertException("朝着 " + before + " 度转过去,准星没落在要挖的那一格:" + body.mouse().pick());
-                }
-            }
-        }
-        helper.succeed();
     }
 }

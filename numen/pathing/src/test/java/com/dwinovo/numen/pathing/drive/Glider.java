@@ -34,7 +34,7 @@ import net.minecraft.world.phys.Vec3;
 final class Glider implements Craft {
 
     /** 滑翔姿势的身体:宽 0.6、高 0.6(原版 {@code FALL_FLYING} 姿势)。 */
-    private static final BodyStats GLIDING = new BodyStats(EntityDimensions.scalable(0.6F, 0.6F).withEyeHeight(0.4F), 0.6, 0.42, 0.08, 0.1, 0.3, 4.5,
+    private static final BodyStats GLIDING = new BodyStats(EntityDimensions.scalable(0.6F, 0.6F).withEyeHeight(0.4F), 0.6, 0.42, 0.08, 0.1, 4.5,
             false, false);
     /** 鞘翅的耐久上限。 */
     private static final int ELYTRA_DURABILITY = 432;

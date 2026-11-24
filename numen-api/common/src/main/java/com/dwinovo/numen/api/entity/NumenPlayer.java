@@ -40,7 +40,7 @@ import java.util.UUID;
  * dimensions).
  *
  * <h2>身体</h2>
- * 她有一副键盘({@link Controls})、一个视角({@link Look})、一个鼠标({@link Mouse})、一个快捷栏({@link Hotbar})和客户端的那些包({@link ClientPackets}),导航、本能与各件活用的都是它们;每刻在自己的实体刻里跑一次物理步进
+ * 她有一副键盘({@link Controls})、一个视角({@link Look})、一个鼠标({@link Mouse})、一个快捷栏({@link Hotbar})和客户端的那些包({@link ClientPackets}),导航、本能与各件活用的都是它们;她的手挖出来的东西当场进背包({@link Harvest});每刻在自己的实体刻里跑一次物理步进
  * ({@link Physics#step}),按着的键在那里落成输入。
  */
 public final class NumenPlayer extends ServerPlayer {
@@ -57,12 +57,14 @@ public final class NumenPlayer extends ServerPlayer {
     private final Controls controls = new Controls();
     /** 她的视角:往哪儿看、怎么转过去。 */
     private final Look look = new Look(this);
-    /** 她的鼠标:准星、左键挖、右键用,动手之前过权限层。 */
+    /** 她的鼠标:指名哪一格、哪只实体,左键挖、右键用,动手之前过权限层。 */
     private final Mouse mouse = new Mouse(this);
     /** 她的快捷栏:把东西拿到手上。 */
     private final Hotbar hotbar = new Hotbar(this);
     /** 她的客户端会发的那些包(界面里的钮、写字、交易、玩家指令……):由这里交给原版收包。 */
     private final ClientPackets packets = new ClientPackets(this);
+    /** 她的手挖出来的东西当场进背包。 */
+    private final Harvest harvest = new Harvest(this);
 
     /**
      * 死因,在 {@link #die} 里趁早抄下来。
@@ -167,7 +169,7 @@ public final class NumenPlayer extends ServerPlayer {
     public record LeftBehind(ItemStack stack, BlockPos pos) {}
 
     /**
-     * 一件掉落物碰到了她,原版正要往背包里放(由 {@code ItemEntityTouchMixin} 交来)。放不放得下照原版背包找格子的两步:有一格还能
+     * 一件掉落物碰到了她(或她的手刚把它挖出来,{@link Harvest}),原版正要往背包里放(由 {@code ItemEntityTouchMixin} 交来)。放不放得下照原版背包找格子的两步:有一格还能
      * 叠上它({@code getSlotWithRemainingSpace}),或者有空格({@code getFreeSlot});创造模式什么都收。放不下的记下来,由
      * {@link #pollInventoryFull} 交出去。"满了"只在这里判:挖、捡、合成这些活不各自判。
      *
@@ -593,14 +595,19 @@ public final class NumenPlayer extends ServerPlayer {
         return controls;
     }
 
-    /** 她的视角:看向一点、转到一个朝向、看一格方块上看得见的那一点。 */
+    /** 她的视角:看向一点、转到一个朝向。 */
     public Look look() {
         return look;
     }
 
-    /** 她的鼠标:对准星落着的东西左键挖、右键用;每一下动手之前先过权限层。 */
+    /** 她的鼠标:对指名的那一格、那只实体左键挖、右键用,够得着就点得中;每一下动手之前先过权限层。 */
     public Mouse mouse() {
         return mouse;
+    }
+
+    /** 她的手挖出来的东西当场进背包;要知道一趟活挖到了什么,在这里开一本账。 */
+    public Harvest harvest() {
+        return harvest;
     }
 
     /** 她的快捷栏:切格、换手、把要用的东西拿到手上。 */

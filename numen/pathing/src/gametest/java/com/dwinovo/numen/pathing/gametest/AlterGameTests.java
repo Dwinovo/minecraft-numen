@@ -120,26 +120,6 @@ public class AlterGameTests {
     }
 
     /**
-     * 站着的那一格里长着一株草(没有碰撞、有轮廓):准星从眼睛往下看先碰上它,要挖的脚下那一格点不中。向下挖之前先把这株草打掉,
-     * 再挖下面的泥土,一路落到底。
-     */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 450)
-    public static void digs_down_through_the_grass_underfoot(GameTestHelper helper) {
-        Trial t = new Trial(helper).floor();
-        t.fill(2, 1, 2, 10, 4, 10, Blocks.DIRT);
-        t.set(5, 5, 5, Blocks.SHORT_GRASS);
-        TestBody body = t.body(5, 5, 5);
-        t.go(body, Goals.at(t.at(5, 1, 5)), NATURAL).within(440).arrives().then(r -> {
-            if (dug(r).size() < 5 || !dug(r).get(0).pos().equals(t.at(5, 5, 5))) {
-                throw new GameTestAssertException("应当先打掉脚下那株草再往下挖四格:" + dug(r));
-            }
-            if (r.report.journal().blockages() > 0) {
-                throw new GameTestAssertException("被脚下的草挡着走不通:" + r.report.journal().replans());
-            }
-        });
-    }
-
-    /**
      * 两座高台隔着一道深坑(深到跳不下去),身上只有圆石,快捷栏塞满、主手拿着圆石:先在坑上垫一块走过去,紧接着在对面往下挖三格,
      * 落进藏在泥土里的空腔。没有空手可换,就握着圆石挖泥土;往下挖的头一格不为此卡住。
      */
@@ -212,9 +192,9 @@ public class AlterGameTests {
         List<String> violations = new ArrayList<>();
         body.mouse(new Mouse(body) {
             @Override
-            public Strike dig() {
+            public Strike dig(BlockPos target) {
                 Set<BlockPos> supports = Supports.of(body);
-                Strike strike = super.dig();
+                Strike strike = super.dig(target);
                 if (strike instanceof Strike.Broke broke && supports.equals(Set.of(broke.pos()))) {
                     violations.add(t.rel(broke.pos()));
                 }

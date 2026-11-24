@@ -38,7 +38,7 @@ public enum FailureTag {
 
     /**
      * 这几种结局是"照这次的规格想不出路来":搜遍了没有、预算用完、憋不住气、没料可垫、要改的格数超了规格。
-     * 执行期受阻({@code Blocked}、{@code Grounded}、{@code NoLineOfSight})与待不住({@code Stranded})不在里面——
+     * 执行期受阻({@code Blocked}、{@code Grounded})与待不住({@code Stranded})不在里面——
      * 那几种判不出是规划还是恢复,留给人工。
      */
     private static final Set<String> CANNOT_PLAN = Set.of("NoRoute", "OutOfBudget", "Breathless", "NoMaterials",

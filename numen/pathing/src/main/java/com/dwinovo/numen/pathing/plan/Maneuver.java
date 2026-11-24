@@ -16,7 +16,6 @@ import net.minecraft.core.BlockPos;
  * @param landing     身体在 {@code to} 上怎么待着
  * @param jump        要起跳
  * @param runUp       要助跑:不跑起来跳不过去(跑酷落到第 4 列,或落点比起跳时高),只有跑酷有
- * @param sneak       要潜行(搭桥时站定点不中任何一个面,身子探出边沿才点得中)
  * @param wading      落到的节点泡在水里
  * @param submerged   这一步眼睛换不了气:起步或落定时眼睛泡在水里({@link Strides#submerged}),整步按憋着气算
  * @param speedFactor 脚下方块的步速系数(起步与落点两处的平均,灵魂沙、蜂蜜块慢)
@@ -33,7 +32,7 @@ import net.minecraft.core.BlockPos;
  *                    没搜到这一段的终点时,往边界推进的一截只能停在最后一个回得了头的节点上({@code HandOver})
  */
 public record Maneuver(MoveKind kind, Heading heading, BlockPos from, Stance start, BlockPos to, Stance landing, boolean jump, boolean runUp,
-                       boolean sneak, boolean wading, boolean submerged, double speedFactor, double drop, int fallDamage, int span, List<Edit> edits,
+                       boolean wading, boolean submerged, double speedFactor, double drop, int fallDamage, int span, List<Edit> edits,
                        long[] cells, int exposure, BlockPos support, boolean reversible) {
 
     public Maneuver {
@@ -41,11 +40,11 @@ public record Maneuver(MoveKind kind, Heading heading, BlockPos from, Stance sta
     }
 
     /**
-     * 物理上跑得起来:站着起步、不潜行、不泡水、这一步不先在原地改地形(站着做完改动再起步,一步里加不到跑速)。能不能真跑还要看
+     * 物理上跑得起来:站着起步、不泡水、这一步不先在原地改地形(站着做完改动再起步,一步里加不到跑速)。能不能真跑还要看
      * 身体饿不饿,跑不跑、跑到哪一步收脚由步态定({@code Gait}),价钱按能跑算({@code Strides#pace})——两处读的是这一个事实。
      */
     public boolean runnable() {
-        return start.grounded() && !sneak && !wading && edits.isEmpty();
+        return start.grounded() && !wading && edits.isEmpty();
     }
 
     /** 这一步改地形的格数(挖加放,开关门不算)。 */

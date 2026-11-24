@@ -276,7 +276,7 @@ public class TaskControlGameTests {
                     companion.look().at(Vec3.atCenterOf(stone));
                     companion.controls().press(com.dwinovo.numen.api.entity.Controls.Key.FORWARD);
                     companion.controls().press(com.dwinovo.numen.api.entity.Controls.Key.SNEAK);
-                    companion.mouse().dig();
+                    companion.mouse().dig(stone);
                     helper.assertTrue(companion.mouse().digging(), "the left button did not go down on the stone");
                     hold.set(lua(companion, "gt.gt_sync.hold(3)"));
                 })

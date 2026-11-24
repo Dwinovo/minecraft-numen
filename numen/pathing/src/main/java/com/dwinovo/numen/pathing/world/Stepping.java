@@ -64,7 +64,7 @@ public final class Stepping {
         checkDirection(dx, dz);
         double jump = Kinematics.jumpHeight(body, Semantics.jumpFactor(level, x, fromFeetY, z));
         Obstacles obstacles = gather(level, body, x, z, dx, dz, Math.min(fromFeetY, toFeetY),
-                Math.max(fromFeetY, toFeetY) + jump + body.height(), fromFeetY, false);
+                Math.max(fromFeetY, toFeetY) + jump + body.height(), fromFeetY);
         return between(obstacles, body, jump, x, fromFeetY, z, dx, dz, toFeetY);
     }
 
@@ -127,38 +127,16 @@ public final class Stepping {
         return Step.WALK;
     }
 
-    /** 潜行探出边沿一步一步往外挪,原版({@code Player.maybeBackOffFromEdge})每次减 0.05;留一步的余量,执行有把握到的位置。 */
-    private static final double LEAN_STEP = 0.05;
-    /** 探多远也不会超过这个:再往外身体早已没有地托着。 */
-    private static final int LEAN_STEPS = 20;
-
-    /**
-     * 站立的身体脚在 {@code (x, feetY, z)},朝 {@code (dx, dz)} 方向潜行探出边沿,身体中心从列中心起最远能挪出多远(格),执行有把握
-     * 到达的:原版潜行时只要身体的碰撞盒往外挪一点之后,脚下迈步高度以内还碰得到东西,就挪得动;碰撞盒底下托着它的那个碰撞形状
-     * 多宽,就能探多远(整块探到边沿外 0.3 格,栅栏只有中间一条)。按 {@link #LEAN_STEP} 一步一步试,再退一步留余量。
-     * 脚下没有东西托着时是 0。探出去是按着潜行的:脚手架的顶板这时让开({@link Boxes#shape}),站在脚手架上探不出去。
-     */
-    public static double leanOut(BlockGetter level, BodyStats body, int x, double feetY, int z, int dx, int dz) {
-        checkDirection(dx, dz);
-        Obstacles obstacles = gather(level, body, x, z, dx, dz, feetY - body.stepHeight(), feetY + body.height(), feetY, true);
-        double half = body.width() / 2;
-        double out = 0;
-        for (int i = 1; i <= LEAN_STEPS; i++) {
-            double c = i * LEAN_STEP;
-            double top = obstacles.support(x + 0.5 + dx * c, z + 0.5 + dz * c, half, feetY);
-            if (top < feetY - body.stepHeight() - Footing.EPSILON) {
-                break;
-            }
-            out = c;
-        }
-        return Math.max(0, out - LEAN_STEP);
-    }
-
     /**
      * 落点那一列里,沿前进方向至少要有这么多余量({@link #slideRoom}),规划才把它当成从上面落进去、斜着走进去的落点:
      * 余量比它还小的(炼药锅里只比身体宽 0.15)只取直着走进去的那一种。
      */
     public static final double MIN_LANDING_ROOM = 0.1;
+
+    /** 量滑出去多远时一步一步往外试的步长;结果退一步留余量。 */
+    private static final double LEAN_STEP = 0.05;
+    /** 试多远也不会超过这个:再往外身体早已没有地托着。 */
+    private static final int LEAN_STEPS = 20;
 
     /**
      * 站着的身体脚在 {@code (x, feetY, z)},朝 {@code (dx, dz)} 方向借着冲劲滑出去,身体中心从列中心起最远能滑出多远(格):每滑一小步,
@@ -167,7 +145,7 @@ public final class Stepping {
      */
     public static double slideRoom(BlockGetter level, BodyStats body, int x, double feetY, int z, int dx, int dz) {
         checkDirection(dx, dz);
-        Obstacles obstacles = gather(level, body, x, z, dx, dz, feetY - body.stepHeight(), feetY + body.height(), feetY, false);
+        Obstacles obstacles = gather(level, body, x, z, dx, dz, feetY - body.stepHeight(), feetY + body.height(), feetY);
         double half = body.width() / 2;
         double out = 0;
         for (int i = 1; i <= LEAN_STEPS; i++) {
@@ -221,7 +199,7 @@ public final class Stepping {
         checkDirection(dx, dz);
         double jump = Kinematics.jumpHeight(body, Semantics.jumpFactor(level, x, fromFeetY, z));
         Obstacles obstacles = gather(level, body, x, z, dx, dz, Math.min(fromFeetY, lowestFeetY),
-                fromFeetY + jump + body.height(), fromFeetY, false);
+                fromFeetY + jump + body.height(), fromFeetY);
         return walkOff(obstacles, body, jump, x, fromFeetY, z, dx, dz);
     }
 
@@ -288,7 +266,7 @@ public final class Stepping {
      * 整块位图;碰到别的形状就把已经看过的整块换成碰撞箱,接着逐个收。
      */
     static Obstacles gather(BlockGetter level, BodyStats body, int x, int z, int dx, int dz,
-                            double low, double high, double feetY, boolean sneaking) {
+                            double low, double high, double feetY) {
         int y0 = Footing.cellOf(low) - 1;
         int y1 = Mth.floor(high) + 1;
         int x0 = Math.min(x, x + dx);
@@ -301,7 +279,7 @@ public final class Stepping {
         for (int cx = x0; cx < x0 + nx; cx++) {
             for (int cz = z0; cz < z0 + nz; cz++) {
                 for (int cy = y0; cy <= y1; cy++) {
-                    Boxes.Shape shape = Boxes.shape(level, body, cx, cy, cz, level.getBlockState(pos.set(cx, cy, cz)), feetY, sneaking);
+                    Boxes.Shape shape = Boxes.shape(level, body, cx, cy, cz, level.getBlockState(pos.set(cx, cy, cz)), feetY);
                     if (shape.fill() == Boxes.Fill.EMPTY) {
                         continue;
                     }

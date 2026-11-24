@@ -240,7 +240,7 @@ public final class AStar {
             Stance stance = nodes.stance[current];
             // 身体此刻面对的世界:快照,加上走到这个节点的最近几步做过的改动
             WorldView here = faced(done);
-            // 到达价无穷的节点停下也办不成:不算到,照常往外展开
+            // 不在目标里的节点不算到(记成无穷),照常往外展开
             double stopping = goal.contains(cx, cy, cz, stance)
                     ? goal.arrival(here, cx, cy, cz, stance) : Double.POSITIVE_INFINITY;
             if (Double.isFinite(stopping)) {

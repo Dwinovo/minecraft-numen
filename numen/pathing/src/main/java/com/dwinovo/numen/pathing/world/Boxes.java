@@ -76,15 +76,6 @@ final class Boxes {
 
     /** 同 {@link #at},连同它是全空、整块还是别的形状。 */
     static Shape shape(BlockGetter level, BodyStats body, int x, int y, int z, BlockState state, double feetY) {
-        return shape(level, body, x, y, z, state, feetY, false);
-    }
-
-    /**
-     * 同上,{@code sneaking} 为真是身体按着潜行:原版的碰撞上下文里"在下降",脚手架的顶板因此让开——潜行探出边沿时站在脚手架上,
-     * 脚下的托举没了。
-     */
-    static Shape shape(BlockGetter level, BodyStats body, int x, int y, int z, BlockState state, double feetY,
-                       boolean sneaking) {
         if (state.isAir()) {
             return EMPTY;
         }
@@ -99,7 +90,7 @@ final class Boxes {
         if (known != DYNAMIC) {
             return known;
         }
-        return classify(split(state.getCollisionShape(level, new BlockPos(x, y, z), bodyAt(feetY, sneaking))));
+        return classify(split(state.getCollisionShape(level, new BlockPos(x, y, z), bodyAt(feetY))));
     }
 
     /** 碰撞箱不随世界或身体变、而且一点碰撞也没有的状态(空气在内)。 */
@@ -149,10 +140,10 @@ final class Boxes {
     }
 
     /**
-     * 设想中脚在 {@code feetY} 的身体:{@code sneaking} 说它蹲没蹲,手里没拿东西、不能站在流体上,与原版给玩家的碰撞上下文同一套判"在上面"
+     * 设想中脚在 {@code feetY} 的身体:没蹲着,手里没拿东西、不能站在流体上,与原版给玩家的碰撞上下文同一套判"在上面"
      * 的算法。没有实体可给,细雪因此按"不是穿皮靴的实体"回答——身体陷进去。
      */
-    private static CollisionContext bodyAt(double feetY, boolean sneaking) {
-        return new EntityCollisionContext(sneaking, feetY, ItemStack.EMPTY, fluid -> false, null) {};
+    private static CollisionContext bodyAt(double feetY) {
+        return new EntityCollisionContext(false, feetY, ItemStack.EMPTY, fluid -> false, null) {};
     }
 }

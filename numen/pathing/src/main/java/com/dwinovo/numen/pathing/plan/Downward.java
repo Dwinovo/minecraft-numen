@@ -57,7 +57,7 @@ final class Downward implements Move {
         if (!contact.admit(draft, model, support, drop > 0.5)) {
             return draft.failure();
         }
-        return new Premise.Holds(new Maneuver(MoveKind.DOWNWARD, heading, from, stance, below, landing, false, false, false,
+        return new Premise.Holds(new Maneuver(MoveKind.DOWNWARD, heading, from, stance, below, landing, false, false,
                 wading, Strides.submerged(draft, body, from, stance, below, landing), 1, drop, damage, 0, draft.edits(), contact.cells(), contact.exposure(), support,
                 Strides.reversible(draft, body, from, stance, below, landing)));
     }

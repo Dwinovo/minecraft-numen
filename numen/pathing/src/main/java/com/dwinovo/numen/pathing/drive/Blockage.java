@@ -27,9 +27,7 @@ public record Blockage(BlockPos cell, BlockState block, MoveKind move, Reason re
     public enum Hitch {
         /** 这一步超过了期限({@link Watchdog})。 */
         STUCK,
-        /** 要挖、要开的那一格看不见(准星碰不上它)。 */
-        OCCLUDED,
-        /** 要放的那一格没有一个点得中的面。 */
+        /** 要放的那一格没有一个邻格的面可贴。 */
         NO_FACE,
         /** 手上拿不到要放的料。 */
         NO_MATERIALS,

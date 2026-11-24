@@ -60,7 +60,6 @@ public final class NavText {
             case Outcome.NeedsChanges needs -> FailureType.TERRAIN_BLOCKED;
             case Outcome.NoMaterials none -> FailureType.NO_MATERIAL;
             case Outcome.Denied denied -> FailureType.REFUSED;
-            case Outcome.NoLineOfSight sight -> FailureType.OCCLUDED;
             case Outcome.Breathless breathless -> FailureType.HAZARD;
             case Outcome.Grounded grounded -> type(grounded.lack());
         };
@@ -110,9 +109,6 @@ public final class NavText {
                     + com.dwinovo.numen.api.sdk.LuaCodecs.literal(stranded.cell()) + ")`) or wait until I land";
             case Outcome.Blocked blocked -> "gave up: " + blockage(blocked.blockage())
                     + "; try again, and pick another destination if it keeps failing";
-            case Outcome.NoLineOfSight sight -> "arrived, but " + Listing.coords(sight.target())
-                    + " went out of sight after the walk was planned (something now stands in between): dig what is in"
-                    + " the way with `numen.work.dig`, or use it from another side";
             case Outcome.Grounded grounded -> "stopped gliding " + where + ": " + lack(grounded.lack());
             case Outcome.Breathless b -> "found no path to target (" + where + "; the way there swims under water"
                     + " from " + Listing.coords(b.from()) + " to " + Listing.coords(b.to()) + " with no air on the way,"
@@ -276,8 +272,7 @@ public final class NavText {
     private static String hitch(Blockage.Hitch hitch) {
         return switch (hitch) {
             case STUCK -> "the step took far longer than it should, I was stuck";
-            case OCCLUDED -> "I could not see the block I had to work on";
-            case NO_FACE -> "I could not point at a face to place against";
+            case NO_FACE -> "there was no block beside that cell to place against";
             case NO_MATERIALS -> "I could not get the block into my hand";
             case DIVERTED -> "the ground changed and the step would land somewhere else";
             case FELL_BACK -> "I kept ending up back where the step before it started";

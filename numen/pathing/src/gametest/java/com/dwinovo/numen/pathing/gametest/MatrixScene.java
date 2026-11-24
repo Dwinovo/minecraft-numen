@@ -238,7 +238,7 @@ record MatrixScene(Base base, Where where, Level level, Variant variant, int rot
         List<BlockPos> placed = new ArrayList<>();
         for (Col col : columns()) {
             Terrain t = base.terrain(col.dx(), col.dz());
-            if (t == null || t.solid() < 0 && t.water() < 0) {
+            if (t == null || t.solid() < 0 && t.water() < 0 || !fits(col)) {
                 continue;
             }
             if (base == Base.COLUMN) {
@@ -293,6 +293,19 @@ record MatrixScene(Base base, Where where, Level level, Variant variant, int rot
             }
         }
         return out;
+    }
+
+    /**
+     * 这一列摆得下这种样子:每个零件都落在这块地形里。伸出地形的那一半(场地最远一列上的床,另一半在场地外)落在并行的邻格里,
+     * 是往别人的场景里写方块,那一列不摆。
+     */
+    private boolean fits(Col col) {
+        for (Part part : variant.parts()) {
+            if (base.terrain(col.dx() + part.dx(), col.dz() + part.dz()) == null) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void put(ServerLevel world, BlockPos origin, Col col, int y, List<BlockPos> placed) {

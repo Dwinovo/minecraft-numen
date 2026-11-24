@@ -93,8 +93,8 @@ class BurialTest {
     void theEstimateWithBurialNeverExceedsWhatTheRouteStillCosts() {
         TestWorld world = slab().fill(4, Y, -4, 12, Y + 5, 4, STONE);
         CostModel model = natural();
-        for (Goal goal : List.of(Goals.dig(new BlockPos(0, Y - 11, 0), Vanilla.SURVIVAL, Goals.Clearing.ANY),
-                Goals.dig(new BlockPos(9, Y + 1, 0), Vanilla.SURVIVAL, Goals.Clearing.ANY))) {
+        for (Goal goal : List.of(Goals.reach(new BlockPos(0, Y - 11, 0), Vanilla.SURVIVAL),
+                Goals.reach(new BlockPos(9, Y + 1, 0), Vanilla.SURVIVAL))) {
             SearchResult result = Fixtures.search(world, model, START, goal);
             assertTrue(result.arrived(), goal + " " + result.stop());
             Route route = result.route();

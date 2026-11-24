@@ -8,11 +8,7 @@
     "BlockItemAccessor",
     "ItemEntityAccessor",
     "CraftingMenuAccessor",
-    "ServerLevelBlockChangeMixin",
-    "ServerPlayerGameModeDropsMixin",
-    "ServerLevelDropsMixin",
-    "ItemEntityDropsMixin",
-    "LivingEntityTakeMixin"
+    "ServerLevelBlockChangeMixin"
   ],
   "client": [],
   "server": [],

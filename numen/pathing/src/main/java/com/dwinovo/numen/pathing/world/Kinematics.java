@@ -102,11 +102,6 @@ public final class Kinematics {
         return 1 / sprintSpeed(body);
     }
 
-    /** 平地潜行一格要几刻:移动输入乘身体的潜行倍数({@link BodyStats#sneakingSpeed})。 */
-    public static double sneakTicksPerBlock(BodyStats body) {
-        return 1 / (steadyStride(body.movementSpeed(), DEFAULT_FRICTION) * body.sneakingSpeed());
-    }
-
     /**
      * 水里走或游一格要几刻,照原版水里的移动({@code LivingEntity.travel}):摩擦 0.8 与加速度 0.02,
      * 水下移动效率 {@code efficiency}(属性值,夹在 0 到 1)把两者向陆上的值插过去,1 时与陆上平走一样快。

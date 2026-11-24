@@ -125,7 +125,7 @@ public final class Flight {
     /** 空中的一步:不改地形、不起跳、不泡水,落点之外没有别的事实。 */
     static Maneuver maneuver(MoveKind kind, Heading heading, BlockPos from, Stance start, BlockPos to, Stance landing, BodyStats body,
                              Draft draft, Contact contact, BlockPos support) {
-        return new Maneuver(kind, heading, from, start, to, landing, false, false, false, false,
+        return new Maneuver(kind, heading, from, start, to, landing, false, false, false,
                 Strides.submerged(draft, body, from, start, to, landing), 1, 0, 0, heading.horizontal() ? 1 : 0, draft.edits(),
                 contact.cells(), contact.exposure(), support, true);
     }

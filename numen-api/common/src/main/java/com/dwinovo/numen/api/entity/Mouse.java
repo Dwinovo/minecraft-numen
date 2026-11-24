@@ -17,50 +17,50 @@ import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 一具服务端假玩家的鼠标,原版机制只此一份(同伴的是 {@link NumenPlayer#mouse})。和真人一样,鼠标只对准星落着的东西起作用:
- * 先用 {@link Look} 转过去,再按;要点哪一格、哪只实体由准星({@link #pick})说了算,不收调用方给的命中结果。
+ * 一具服务端假玩家的鼠标,原版机制只此一份(同伴的是 {@link NumenPlayer#mouse})。她是服务端的身体,守的是服务端的规矩:点哪一格、
+ * 哪只实体由驱动者指名,够得着就点得中,不看准星落在哪、中间隔着什么——和按协议发包的客户端一样。
  *
- * <h2>准星</h2>
- * 照原版客户端每刻算准星的那一次拾取({@code GameRenderer.pick}):沿视线先找方块轮廓(不看流体),再找挡在它前面、能被点中的
- * 实体,各按自己的交互距离截断。准星被实体挡住时,挖掘停下、放置不按,与真玩家一样。
+ * <h2>够得着</h2>
+ * 只有一个出处:{@link #reaches(BlockPos)} 与 {@link #reaches(Entity)},就是原版服务端收包时查的那一条(方块是
+ * {@code ServerPlayerGameMode.handleBlockBreakAction} 与 {@code ServerGamePacketListenerImpl.handleUseItemOn},实体是
+ * {@code handleInteract}:眼睛到那一格、那只碰撞箱的距离在交互距离加一格之内)。够不着的这一下不按。
  *
  * <h2>左键:挖</h2>
- * 照原版客户端的挖掘循环({@code MultiPlayerGameMode} 的 {@code startDestroyBlock}、{@code continueDestroyBlock}、
- * {@code stopDestroyBlock})。送到服务端的,是真客户端的包到了服务端之后走的同一个入口——挖掘经 {@code handlePlayerAction}。
- * 第一下送 START:秒破的方块与创造模式当场碎;其余每刻累加原版的 {@code getDestroyProgress},到 1 送 STOP,服务端按它自己的钟
- * 确认后挖掉。碎掉之后手要缓几刻才挖下一格,照原版客户端的 {@code destroyDelay}({@link DigTime#cooldown}:累着进度挖碎的与创造
- * 模式缓 5 刻,秒破的不缓)。手上的东西换了就从头挖;原地变了的(修补附魔吸经验改了耐久)还是同一件,不重开——原版客户端记的是
- * 手上那一叠本身。换了一格挖,或松开({@link #release})进度清零。
+ * 送到服务端的,是真客户端的包到了服务端之后走的同一个入口——挖掘经 {@code handlePlayerAction}。第一下送 START:秒破的方块与创造
+ * 模式当场碎;其余每刻累加原版的 {@code getDestroyProgress},到 1 送 STOP,服务端按它自己的钟确认后挖掉。挖要花多久是服务端算的;
+ * 碎掉之后下一刻就能挖下一格。手上的东西换了就从头挖;原地变了的(修补附魔吸经验改了耐久)还是同一件,不重开。换了一格挖,或松开
+ * ({@link #release})进度清零。
  *
- * <p>送了 STOP 之后只看眼前这一格,不问服务端的记账,照原版客户端:STOP 时客户端先把这一格预测成空气,服务端确认这个序号时
- * ({@code BlockStatePredictionHandler.endPredictionsUpTo})把它改回服务端那头的样子——服务端进度不够、挂成延迟破坏时,方块就弹了回来。
- * 键还按着,客户端缓过 {@code destroyDelay} 就对同一格({@code destroyBlockPos} 没清)从 0 接着累进度,不再送 START,累满再送一次 STOP;
- * 服务端按从第一次 START 起走过的刻数判第二次 STOP。所以这里:方块没了(不管是哪一头挖掉的)就是挖掉了;方块还在就缓手、
- * 同一格从 0 再挖一轮;第二轮挖满、第二次 STOP 之后方块还在,才以 {@link Refusal#SERVER} 收场——真玩家看到方块第二次弹回来就明白
- * 挖不掉了。不数刻:服务端的钟走得快慢不一(Paper 按墙钟补刻)。
+ * <p>送了 STOP 之后只看眼前这一格,不问服务端的记账:服务端进度不够、挂成延迟破坏时方块还在,键还按着,同一格从 0 接着累进度,不再送
+ * START,累满再送一次 STOP;服务端按从第一次 START 起走过的刻数判第二次 STOP。所以这里:方块没了(不管是哪一头挖掉的)就是挖掉了;
+ * 方块还在就同一格从 0 再挖一轮;第二轮挖满、第二次 STOP 之后方块还在,才以 {@link Refusal#SERVER} 收场。不数刻:服务端的钟走得
+ * 快慢不一(Paper 按墙钟补刻)。
  *
  * <h2>右键:用</h2>
- * 照原版客户端的 {@code Minecraft.startUseItem}:两次右键至少隔 4 刻;正在挖时不按;每只手(主手先)先试准星落着的东西——方块
- * ({@code handleUseItemOn} 的同一套检查之后调 {@code useItemOn})或实体({@code interact}、{@code interactOn})——没吃掉再用手里
- * 的东西({@code useItem});准星什么也没落着就只剩手里的东西。点格子、点空气、点实体是同一个右键、同一种结果({@link Use.Pressed}):
- * 点中的那一格与它面前那一格(各连同上下一格,门的另一半在那里)哪几格变了,以及这一下有没有打开一个界面。吃喝、拉弓、举盾是同一个
- * 键按住:按下去({@link #use}、{@link #useItem})开始用,松开是 {@link #stopUse}。
+ * 正在挖时不按;每只手(主手先)先试指名的那一格方块({@code handleUseItemOn} 的同一套检查之后调 {@code useItemOn})或那只实体
+ * ({@code interact}、{@code interactOn})——没吃掉再用手里的东西({@code useItem})。点格子、点实体、只用手里的东西是同一个右键、
+ * 同一种结果({@link Use.Pressed}):点中的那一格与它面前那一格(各连同上下一格,门的另一半在那里)哪几格变了,以及这一下有没有打开
+ * 一个界面。吃喝、拉弓、举盾是同一个键按住:按下去({@link #use}、{@link #useItem})开始用,松开是 {@link #stopUse}。
+ *
+ * <p>右键一格要给一个面(放东西落在哪、点的是按钮的哪一侧由它定):驱动者指名了就用它;没指名用这一格朝着她眼睛的那一面
+ * ({@link Faces#toward},站在那儿的人会点的那一面)。这一下落成什么只在 {@link #aim} 一处定。
+ *
+ * <h2>物品自己的那条视线</h2>
+ * 桶倒水、舀水是物品在服务端自己沿她的视线打的一条线({@code Item.getPlayerPOVHitResult}),不是点哪一格:它落在哪问
+ * {@link #itemRayOn},要它落在哪一格先用 {@link Look} 转过去。
  *
  * <h2>权限</h2>
  * 身体是同伴({@link NumenPlayer})时,每一下动手之前先过权限层,这是关卡长在身体上、谁驱动她都绕不开的地方:左键换到新的一格时问
@@ -68,8 +68,7 @@ import net.minecraft.world.phys.Vec3;
  * 裁决本身当理由;要问主人时鼠标停下,交回要问的那一条({@link Refusal.Asks}),由驱动者决定怎么问。不是同伴的普通假玩家照原版,
  * 不过权限层。服务端自己退回的挖掘如实报成被拒({@link Refusal#SERVER}),那是身体汇报,不是权限裁决。
  *
- * <p>缓手按游戏刻计(世界的游戏时间),不随有没有按键、有没有被调用而冻住;调高刻速率也一样。只在世界所在的线程上调用。
- * 类不是 final:测试可以派生一个包在身体的鼠标外面看它做了什么。
+ * <p>只在世界所在的线程上调用。类不是 final:测试可以派生一个包在身体的鼠标外面看它做了什么。
  */
 public class Mouse {
 
@@ -101,11 +100,8 @@ public class Mouse {
     /** 左键按住这一刻的结果。 */
     public sealed interface Strike {
 
-        /**
-         * 还在挖,或上一格刚碎、手还没缓过来。{@code pressed}:这一刻真按下去了(送出了这一下);手还没缓过来、这一下没按时为
-         * false——只点一下的人要等到按下去的那一刻。
-         */
-        record Swinging(boolean pressed) implements Strike {}
+        /** 按下去了,还在挖。 */
+        record Swinging() implements Strike {}
 
         /** 碎了:{@code pos} 这一格原来是 {@code before}。 */
         record Broke(BlockPos pos, BlockState before) implements Strike {}
@@ -113,29 +109,27 @@ public class Mouse {
         /** 没让挖。 */
         record Refused(BlockPos pos, Refusal reason) implements Strike {}
 
-        /** 准星没落在任何一格方块上,没有可挖的;在挖的那一格已经放下。 */
+        /** 指名的那一格够不着({@link Mouse#reaches(BlockPos)}),这一下没按;在挖的那一格已经放下。 */
         record Missed() implements Strike {}
 
-        Strike SWINGING = new Swinging(true);
-        Strike RECOVERING = new Swinging(false);
+        Strike SWINGING = new Swinging();
         Strike MISSED = new Missed();
     }
 
     /** 右键这一下的结果。 */
     public sealed interface Use {
 
-        /** 手还没缓过来(原版两次右键至少隔 4 刻)、正在挖,或指名的实体够不着:这一下没按。 */
+        /** 正在挖,或指名的那一格、那只实体够不着:这一下没按。 */
         record Waiting() implements Use {}
 
         /**
          * 按了。
          *
-         * @param hit     这一下按在准星落着的什么上(方块、实体,或什么也没有)
          * @param answer  游戏对这一下交回的话
          * @param changes 点中的那一格与它面前那一格(各连同上下一格)里,变了的格
          * @param opened  这一下打开了一个界面(箱子、熔炉、交易、模组机器)
          */
-        record Pressed(HitResult hit, Answer answer, List<Change> changes, boolean opened) implements Use {
+        record Pressed(Answer answer, List<Change> changes, boolean opened) implements Use {
 
             public Pressed {
                 changes = List.copyOf(changes);
@@ -164,14 +158,9 @@ public class Mouse {
     /** 一格从 {@code before} 变成了 {@code after}。 */
     public record Change(BlockPos pos, BlockState before, BlockState after) {}
 
-    /** 原版客户端两次右键之间的刻数。 */
-    private static final int RIGHT_CLICK_DELAY = 4;
-
     private final ServerPlayer body;
     private final ClientPackets packets;
     private int sequence;
-    private long destroyReadyAt;
-    private long useReadyAt;
     /** 正在挖的那一格;没在挖为 null。 */
     private BlockPos destroying;
     /** 开挖时手上那一叠本身(不是副本)。 */
@@ -186,46 +175,38 @@ public class Mouse {
         this.packets = new ClientPackets(body);
     }
 
-    private long now() {
-        return body.level().getGameTime();
+    // ==================== 够得着、点哪一面 ====================
+
+    /**
+     * 她点得到这一格:原版服务端对挖掘与右键方块的包只查这一条({@code ServerPlayerGameMode.handleBlockBreakAction}、
+     * {@code ServerGamePacketListenerImpl.handleUseItemOn}:眼睛到这一格的距离在方块交互距离加一格之内),不查朝向、不查中间隔着什么。
+     */
+    public boolean reaches(BlockPos pos) {
+        return body.canInteractWithBlock(pos, 1.0);
     }
 
-    // ==================== 准星 ====================
-
-    /** 准星落着的东西:方块、实体,或什么也没有({@link HitResult.Type#MISS})。 */
-    public HitResult pick() {
-        double blockRange = body.blockInteractionRange();
-        double entityRange = body.entityInteractionRange();
-        double range = Math.max(blockRange, entityRange);
-        double rangeSqr = Mth.square(range);
-        Vec3 eye = body.getEyePosition();
-        HitResult block = body.pick(range, 1.0F, false);
-        double blockSqr = block.getLocation().distanceToSqr(eye);
-        if (block.getType() != HitResult.Type.MISS) {
-            rangeSqr = blockSqr;
-            range = Math.sqrt(blockSqr);
-        }
-        Vec3 view = body.getViewVector(1.0F);
-        Vec3 end = eye.add(view.x * range, view.y * range, view.z * range);
-        AABB swept = body.getBoundingBox().expandTowards(view.scale(range)).inflate(1.0, 1.0, 1.0);
-        EntityHitResult entity = ProjectileUtil.getEntityHitResult(body, eye, end, swept,
-                e -> !e.isSpectator() && e.isPickable(), rangeSqr);
-        return entity != null && entity.getLocation().distanceToSqr(eye) < blockSqr
-                ? within(entity, eye, entityRange)
-                : within(block, eye, blockRange);
+    /**
+     * 她点得到这只实体:原版服务端对玩家的交互包只查这一条({@code ServerGamePacketListenerImpl.handleInteract}:眼睛到它碰撞箱的
+     * 距离在交互距离加一格之内),不查准星、不查中间隔着什么。点哪一只由驱动者指名,和按协议发交互包的客户端一样。
+     */
+    public boolean reaches(Entity target) {
+        return target.isAlive() && body.canInteractWithEntity(target.getBoundingBox(), 1.0);
     }
 
-    /** 准星正落在 {@code pos} 这一格上时交出那一下;否则为 null。 */
-    public BlockHitResult on(BlockPos pos) {
-        return pick() instanceof BlockHitResult hit && hit.getType() == HitResult.Type.BLOCK
-                && hit.getBlockPos().equals(pos) ? hit : null;
+    /**
+     * 点 {@code pos} 这一格时落成的那一下:点它的 {@code face} 面({@code null} 是这一格朝着她眼睛的那一面,{@link Faces#toward}),
+     * 落在那一面上的 {@link Faces#point}。左键、右键按下去的,和驱动者按之前拿去预问权限({@link #intents})的,是这同一下。
+     */
+    public BlockHitResult aim(BlockPos pos, Direction face) {
+        Direction side = face != null ? face : Faces.toward(body.level(), body.getEyePosition(), pos);
+        return new BlockHitResult(Faces.point(body.level(), pos, side), side, pos.immutable(), false);
     }
 
     /**
      * 手里的东西在空中右键时自己沿视线打的那一条,照原版 {@code Item.getPlayerPOVHitResult}(桶倒水、舀水就用它):从眼睛沿视线
-     * 打方块交互距离,按方块轮廓,液体按 {@code fluid} 的规矩算不算;不看实体。和准星那一次拾取不是同一条:桶瞄的是它自己这条。
+     * 打方块交互距离,按方块轮廓,液体按 {@code fluid} 的规矩算不算;不看实体。这是物品在服务端自己做的事,身体朝哪儿看它就打向哪儿。
      */
-    private BlockHitResult itemRay(ClipContext.Fluid fluid) {
+    public static BlockHitResult itemRay(ServerPlayer body, ClipContext.Fluid fluid) {
         Vec3 eye = body.getEyePosition();
         Vec3 end = eye.add(body.calculateViewVector(body.getXRot(), body.getYRot()).scale(body.blockInteractionRange()));
         return body.level().clip(new ClipContext(eye, end, ClipContext.Block.OUTLINE, fluid, body));
@@ -233,17 +214,8 @@ public class Mouse {
 
     /** 手里的东西沿视线自己打的那一条({@link #itemRay})正落在 {@code pos} 这一格上时交出那一下;否则为 null。桶要倒、要舀的是哪一格,问它。 */
     public BlockHitResult itemRayOn(ClipContext.Fluid fluid, BlockPos pos) {
-        BlockHitResult hit = itemRay(fluid);
+        BlockHitResult hit = itemRay(body, fluid);
         return hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(pos) ? hit : null;
-    }
-
-    private static HitResult within(HitResult hit, Vec3 eye, double range) {
-        Vec3 at = hit.getLocation();
-        if (at.closerThan(eye, range)) {
-            return hit;
-        }
-        Direction direction = Direction.getNearest(at.x - eye.x, at.y - eye.y, at.z - eye.z);
-        return BlockHitResult.miss(at, direction, BlockPos.containing(at));
     }
 
     // ==================== 左键 ====================
@@ -272,10 +244,10 @@ public class Mouse {
     }
 
     /**
-     * 按住左键,这一刻挖准星落着的那一格。换了一格就从头挖;挖到那一格碎掉为止要按住好几刻,中间松开({@link #release})进度清零,
-     * 与真玩家一样。准星没落在方块上就是没有可挖的({@link Strike.Missed})。
+     * 按住左键,这一刻挖 {@code target} 这一格。换了一格就从头挖;挖到那一格碎掉为止要按住好几刻,中间松开({@link #release})进度清零。
+     * 够不着({@link #reaches(BlockPos)})这一下不按({@link Strike.Missed})。
      */
-    public Strike dig() {
+    public Strike dig(BlockPos target) {
         ServerLevel level = body.serverLevel();
         if (stopped != null && level.getBlockState(stopped) != stoppedState) {
             // 送过 STOP 的那一格没了:挖掉了
@@ -284,11 +256,12 @@ public class Mouse {
             forget();
             return new Strike.Broke(pos, before);
         }
-        if (!(pick() instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) {
+        if (!reaches(target)) {
             release();
             return Strike.MISSED;
         }
-        BlockPos pos = hit.getBlockPos().immutable();
+        BlockHitResult hit = aim(target, null);
+        BlockPos pos = hit.getBlockPos();
         if (!pos.equals(pressing())) {
             Refusal refusal = firstRefusal(intents(hit, true));
             if (refusal != null) {
@@ -296,13 +269,9 @@ public class Mouse {
                 return new Strike.Refused(pos, refusal);
             }
         }
-        if (now() < destroyReadyAt) {
-            return Strike.RECOVERING;
-        }
         Direction face = hit.getDirection();
         BlockState state = level.getBlockState(pos);
         if (body.gameMode.isCreative()) {
-            cooldown(true, true);
             body.swing(InteractionHand.MAIN_HAND);
             send(ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, pos, face);
             return landed(level, pos, state);
@@ -321,7 +290,6 @@ public class Mouse {
             return Strike.SWINGING;
         }
         progress = 0;
-        cooldown(false, false);
         send(ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, pos, face);
         if (level.getBlockState(pos) != state) {
             forget();
@@ -332,7 +300,7 @@ public class Mouse {
             forget();
             return new Strike.Refused(pos, Refusal.SERVER);
         }
-        // 方块弹了回来:还按在这一格上,缓过手同一格从 0 再挖一轮
+        // 方块还在(服务端挂成了延迟破坏):还按在这一格上,同一格从 0 再挖一轮
         stopped = pos;
         stoppedState = state;
         return Strike.SWINGING;
@@ -346,12 +314,7 @@ public class Mouse {
         stoppedState = null;
     }
 
-    /** 碎掉一格之后缓手:缓的那几刻里不挖,下一刻才挖下一格。 */
-    private void cooldown(boolean creative, boolean instant) {
-        destroyReadyAt = now() + DigTime.cooldown(creative, instant) + 1;
-    }
-
-    /** 第一下:原版客户端换了目标就先放下旧的,再送 START;秒破的当场碎,否则开始累加进度。 */
+    /** 第一下:换了目标就先放下旧的,再送 START;秒破的当场碎,否则开始累加进度。 */
     private Strike start(ServerLevel level, BlockPos pos, Direction face, BlockState state) {
         release();
         body.swing(InteractionHand.MAIN_HAND);
@@ -374,8 +337,8 @@ public class Mouse {
     }
 
     /**
-     * 松开左键:正在挖的那一格放下,进度清零。没在挖时什么也不做。照原版客户端的 {@code stopDestroyBlock}:只在第一轮里(送 STOP 之前)
-     * 送 ABORT;送过 STOP 之后客户端已不在"破坏中",松手不再送。
+     * 松开左键:正在挖的那一格放下,进度清零。没在挖时什么也不做。只在第一轮里(送 STOP 之前)送 ABORT;送过 STOP 之后服务端那头
+     * 已不在"破坏中",松手不再送。
      */
     public void release() {
         if (destroying != null && stopped == null) {
@@ -390,7 +353,7 @@ public class Mouse {
         packets.playerAction(action, pos, face, ++sequence);
     }
 
-    /** 左键打一下准星落着的实体的结果。 */
+    /** 左键打一下指名的实体的结果。 */
     public sealed interface Blow {
 
         /** 打下去了。 */
@@ -399,23 +362,15 @@ public class Mouse {
         /** 没让打。 */
         record Refused(Entity target, Refusal reason) implements Blow {}
 
-        /** 准星没落在任何一只实体上(落在方块上、或什么也没有),没有可打的。 */
+        /** 指名的那一只够不着({@link Mouse#reaches(Entity)}),这一下没出手。 */
         record Missed() implements Blow {}
 
         Blow MISSED = new Missed();
     }
 
     /**
-     * 她点得到这只实体:原版服务端对玩家的交互包只查这一条({@code ServerGamePacketListenerImpl.handleInteract}:眼睛到它碰撞箱的
-     * 距离在交互距离加一格之内),不查准星、不查中间隔着什么。点哪一只由驱动者指名,和按协议发交互包的客户端一样。
-     */
-    public boolean reaches(Entity target) {
-        return target.isAlive() && body.canInteractWithEntity(target.getBoundingBox(), 1.0);
-    }
-
-    /**
      * 左键打 {@code target}:原版的一次攻击(伤害、冷却、横扫、击退都是原版的,冷却由原版的攻击计时器管,驱动者自己挑什么时候出手)。
-     * 够不着({@link #reaches})这一下不算出手。疾跑会让原版取消暴击判定,所以出手前停跑。身体是同伴时先过权限层。
+     * 够不着({@link #reaches(Entity)})这一下不算出手。疾跑会让原版取消暴击判定,所以出手前停跑。身体是同伴时先过权限层。
      */
     public Blow attack(Entity target) {
         if (!reaches(target)) {
@@ -434,48 +389,36 @@ public class Mouse {
 
     // ==================== 右键 ====================
 
-    /** 右键一下准星落着的东西,方块与实体没吃掉这一下就用手里的东西:原版客户端的完整右键。 */
-    public Use use() {
-        return use(true);
-    }
-
     /**
-     * 右键一下准星落着的东西。
+     * 右键 {@code pos} 这一格的 {@code face} 面({@code null}:朝着她眼睛的那一面,见 {@link #aim}):够得着
+     * ({@link #reaches(BlockPos)})就按在它上面,够不着这一下不按。
      *
-     * @param itemFallthrough 方块与实体没吃掉这一下时,同一次按键落到手里的东西自用(桶找水、船找水面、掷物出手都住在那条
-     *                        路上);驱动者拿它挡身体约束物品(手里是食物、末影珍珠时点了块石头别把她自己喂了)。准星什么也没
-     *                        落着时,手里的东西本来就是这一下的全部,不受它管
+     * @param itemFallthrough 这一格没吃掉这一下时,同一次按键落到手里的东西自用(桶找水、船找水面、掷物出手都住在那条路上);
+     *                        驱动者拿它挡身体约束物品(手里是食物、末影珍珠时点了块石头别把她自己喂了)
      */
-    public Use use(boolean itemFallthrough) {
-        return use(itemFallthrough, null);
-    }
-
-    /**
-     * 右键一下准星落着的东西,落在实体上时带一个点:真客户端右键实体先发 {@code INTERACT_AT}(实体上被点中的那一点,相对实体的位置;
-     * 盔甲架摆装备取装备读的是它),没被吃掉才发 {@code INTERACT}。{@code at} 为 null 就不发前一个,和 {@link #use(boolean)} 一样。
-     *
-     * @param at 相对实体位置的点;准星落着的不是实体时不起作用
-     */
-    public Use use(boolean itemFallthrough, Vec3 at) {
-        if (now() < useReadyAt || digging()) {
+    public Use use(BlockPos pos, Direction face, boolean itemFallthrough) {
+        if (digging() || !reaches(pos)) {
             return Use.WAITING;
         }
-        HitResult hit = pick();
+        BlockHitResult hit = aim(pos, face);
         for (Action action : intents(hit, false)) {
             Refusal refusal = refusal(action);
             if (refusal != null) {
-                return new Use.Refused(action.pos() != null ? action.pos() : BlockPos.containing(hit.getLocation()), refusal);
+                return new Use.Refused(action.pos() != null ? action.pos() : hit.getBlockPos(), refusal);
             }
         }
-        return press(hit, itemFallthrough, at);
+        return press(hit, itemFallthrough, null);
     }
 
     /**
-     * 右键 {@code target} 这只实体,不看准星:够得着({@link #reaches})就按在它身上,够不着这一下不按。{@code at} 同
-     * {@link #use(boolean, Vec3)}。
+     * 右键 {@code target} 这只实体:够得着({@link #reaches(Entity)})就按在它身上,够不着这一下不按。
+     *
+     * @param itemFallthrough 同 {@link #use(BlockPos, Direction, boolean)}
+     * @param at              相对实体位置的点:真客户端右键实体先发 {@code INTERACT_AT}(实体上被点中的那一点;盔甲架摆装备取装备
+     *                        读的是它),没被吃掉才发 {@code INTERACT}。{@code null} 就不发前一个
      */
     public Use use(Entity target, boolean itemFallthrough, Vec3 at) {
-        if (now() < useReadyAt || digging() || !reaches(target)) {
+        if (digging() || !reaches(target)) {
             return Use.WAITING;
         }
         EntityHitResult hit = new EntityHitResult(target);
@@ -489,10 +432,10 @@ public class Mouse {
     }
 
     /**
-     * 只用手里的东西,不看准星落着什么(吃、喝、拉弓、掷出去、桶找水):主手先试,不成再用副手,和原版右键点向空气同一个顺序。
+     * 只用手里的东西,不点哪一格、哪只实体(吃、喝、拉弓、掷出去):主手先试,不成再用副手,和原版右键点向空气同一个顺序。
      */
     public Use useItem() {
-        if (now() < useReadyAt || digging()) {
+        if (digging()) {
             return Use.WAITING;
         }
         return press(BlockHitResult.miss(body.getEyePosition(), Direction.UP, body.blockPosition()), true, null);
@@ -512,7 +455,6 @@ public class Mouse {
     }
 
     private Use press(HitResult hit, boolean itemFallthrough, Vec3 at) {
-        useReadyAt = now() + RIGHT_CLICK_DELAY;
         ServerLevel level = body.serverLevel();
         AbstractContainerMenu menuBefore = body.containerMenu;
         BlockHitResult block = hit instanceof BlockHitResult b && hit.getType() == HitResult.Type.BLOCK ? b : null;
@@ -557,20 +499,15 @@ public class Mouse {
             }
         });
         boolean opened = body.containerMenu != menuBefore && body.containerMenu != body.inventoryMenu;
-        return new Use.Pressed(hit, answer, changes, opened);
+        return new Use.Pressed(answer, changes, opened);
     }
 
     /**
-     * 原版 {@code handleUseItemOn} 在调 {@code useItemOn} 之前的检查:够得着(交互距离加 1 格宽限)、点中的位置落在那一格上、
-     * 不在建筑高度之上、世界许这具身体动它。
+     * 原版 {@code handleUseItemOn} 在调 {@code useItemOn} 之前的检查:不在建筑高度之上、世界许这具身体动它。够不够得着在按之前
+     * 问过({@link #reaches(BlockPos)}),点的位置是 {@link #aim} 取在那一面上的。
      */
     private InteractionResult useItemOn(ServerLevel level, ItemStack stack, InteractionHand hand, BlockHitResult hit) {
         BlockPos pos = hit.getBlockPos();
-        Vec3 offset = hit.getLocation().subtract(Vec3.atCenterOf(pos));
-        if (!body.canInteractWithBlock(pos, 1.0) || Math.abs(offset.x) >= 1.0000001
-                || Math.abs(offset.y) >= 1.0000001 || Math.abs(offset.z) >= 1.0000001) {
-            return InteractionResult.PASS;
-        }
         body.resetLastActionTime();
         if (pos.getY() >= level.getMaxBuildHeight() || !level.mayInteract(body, pos)) {
             return InteractionResult.PASS;
@@ -623,8 +560,8 @@ public class Mouse {
     /**
      * 这一下按在 {@code hit} 上会做的事,权限层按它们裁决——鼠标在动手那一刻问的,驱动者在受理前预问的(任务要问主人、要先站定)是
      * 同一张单,权限的判据只此一处:
-     * 左键是挖那一格方块或打那只实体;右键落在方块上,两只手里的东西各问一圈"这一下会做什么"({@link ClickActions#of},今天
-     * 说出来的都是放置),再用那一格方块;右键落在实体上是用那只实体。准星什么也没落着,没有要问的。
+     * 左键是挖那一格方块或打那只实体;右键按在方块上({@link #aim} 落成的那一下),两只手里的东西各问一圈"这一下会做什么"
+     * ({@link ClickActions#of},今天说出来的都是放置),再用那一格方块;右键按在实体上是用那只实体。没按在什么上,没有要问的。
      */
     public List<Action> intents(HitResult hit, boolean left) {
         if (hit instanceof BlockHitResult block && hit.getType() == HitResult.Type.BLOCK) {

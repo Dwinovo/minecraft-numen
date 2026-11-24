@@ -13,7 +13,6 @@ import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Materials;
 import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.pathing.plan.TerrainPolicy;
-import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.plan.Threats;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.BodyStats;
@@ -81,11 +80,6 @@ enum Spec {
     /** 这一格是不是路线规格排除的种类(岩浆、火、粉雪、流水、机关、易碎):出题挑起终点与中立地形的"禁入"类别按的是同一个判据。 */
     static boolean excludes(BlockGetter level, BlockPos pos) {
         return RouteSpec.defaults().excludes(level, pos);
-    }
-
-    /** 标准答案里一道题的目标:题的目标去掉挖一格时的遮挡偏好({@link Physical})。 */
-    static Goal physicalGoal(Problem problem) {
-        return Physical.of(problem.goal(STATS));
     }
 
     static Materials materials() {

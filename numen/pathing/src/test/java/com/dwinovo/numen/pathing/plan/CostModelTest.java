@@ -146,8 +146,8 @@ class CostModelTest {
     }
 
     /**
-     * 挖一格的价钱由三份合成:这具身体用挑中的工具挖到碎的刻数(与 {@link DigTime} 按同一份身体快照算的一致,眼睛泡没泡在
-     * 水里、脚着没着地照样算进去),碎了之后缓手的 5 刻(原版的 {@code destroyDelay}),加上规格的挖掘罚分。
+     * 挖一格的价钱由两份合成:这具身体用挑中的工具挖到碎的刻数(与 {@link DigTime} 按同一份身体快照算的一致,眼睛泡没泡在
+     * 水里、脚着没着地照样算进去),加上规格的挖掘罚分。
      */
     @Test
     void diggingCostsTheDigTimeWithTheChosenToolPlusTheBreakPenalty() {
@@ -157,7 +157,7 @@ class CostModelTest {
         for (boolean eyeInWater : new boolean[] {false, true}) {
             for (boolean grounded : new boolean[] {true, false}) {
                 double ticks = DigTime.ticks(body.mining(), body.creative(), new ItemStack(Items.WOODEN_PICKAXE), STONE, eyeInWater, grounded);
-                assertEquals(ticks + 5 + 7.5, model.digCost(new Edit.Dig(FREE, STONE, Permit.ALLOW, eyeInWater, grounded)), 1e-9,
+                assertEquals(ticks + 7.5, model.digCost(new Edit.Dig(FREE, STONE, Permit.ALLOW, eyeInWater, grounded)), 1e-9,
                         "水里 " + eyeInWater + ",着地 " + grounded);
             }
         }

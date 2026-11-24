@@ -12,8 +12,6 @@ import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
 
 /**
  * 看着身体的鼠标挖:每一格从哪一刻开挖(左键按下去、原版开始累加进度)、哪一刻碎、开挖时手上是什么、眼睛在不在水里、脚着不着地、
@@ -116,18 +114,15 @@ final class DigWatch {
     void install() {
         body.mouse(new Mouse(body) {
             @Override
-            public Strike dig() {
-                if (!(pick() instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) {
-                    return super.dig();
-                }
-                BlockPos pos = hit.getBlockPos().immutable();
+            public Strike dig(BlockPos target) {
+                BlockPos pos = target.immutable();
                 BlockState state = body.level().getBlockState(pos);
                 float progress = state.getDestroyProgress(body, body.level(), pos);
                 ItemStack hand = body.getMainHandItem();
                 ItemStack tool = hand.copy();
                 boolean eyeInWater = body.isEyeInFluid(FluidTags.WATER);
                 boolean grounded = body.onGround();
-                Strike strike = super.dig();
+                Strike strike = super.dig(target);
                 long now = body.level().getGameTime();
                 Dig ongoing = pos.equals(current) ? digs.get(pos) : null;
                 if (ongoing != null) {

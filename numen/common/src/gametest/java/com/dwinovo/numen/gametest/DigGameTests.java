@@ -18,16 +18,15 @@ import net.minecraft.world.phys.Vec3;
 import static com.dwinovo.numen.gametest.GameTestKit.*;
 
 /**
- * 挖掘:{@code numen.work.dig} 挖点名的格(扫描来的一团、框出来的坑、一格坐标):手够得着的先挖,够不着的走到够得着剩下最多格的地方再挖,
- * 挡着的天然地形一并挖开,不捡;{@code numen.work.collect} 只捡。挖一块区域的整件事是这两条原子命令一轮轮组合({@link GameTestKit#mine}):
- * 树冠上的原木与埋矿。
+ * 挖掘:{@code numen.work.dig} 挖点名的格(扫描来的一团、框出来的坑、一格坐标):手够得着的先挖(中间隔着什么不问),够不着的走到
+ * 够得着剩下最多格的地方再挖;挖出来的东西当场进她背包,放不下的留在原地。挖一块区域的整件事是这条原子命令一轮轮组合
+ * ({@link GameTestKit#mine}):树冠上的原木与埋矿。
  */
 public class DigGameTests {
 
     /**
      * 树冠上的原木站在地上挖:两根金合欢原木悬在她脚上五格、六格,四周一圈树叶,她身上只有一把斧头,
-     * 没有垫脚的方块。爬上去贴着它们是做不到的;站在底下仰头,眼睛离它们 3.38 格、4.38 格,在交互距离里——
-     * 斜着看过去挡着的树叶先挖开,再挖原木。原木正下方留空,掉落物落回地面。
+     * 没有垫脚的方块。爬上去贴着它们是做不到的;站在底下,眼睛离它们在交互距离里——够得着就挖,原木进了她背包。
      */
     @GameTest(template = "floor16", timeoutTicks = 207, batch = ON_FOOT)
     public static void dig_canopy_logs_from_the_ground(GameTestHelper helper) {
@@ -50,7 +49,6 @@ public class DigGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_canopy", new BlockPos(4, 2, 8), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        dropsFallStraight(helper);
         Mining mine = mineScanned(helper, companion, 9, "minecraft:acacia_log", 2);
 
         succeedWhen(helper, () -> {
@@ -259,8 +257,7 @@ public class DigGameTests {
      * 要 12 就是 12。够挖 20 块的金块,只要 12 个。金块摆成两排、当中留出走道,她站在走道当中:她够得着每一块,也够得着每一件
      * 掉落物,不必挖穿目标才能走过去。
      *
-     * <p>进度的口径是<b>背包里的物品</b>,而背包是个滞后指标(原版拾取延迟 10 tick)。"还敲不敲"要算上已经敲掉、还没进包的,
-     * 而"完了没"仍然只看到手——这条量的就是这两件事分开了没有(#69)。
+     * <p>要几格数的是挖掉的格:挖掉 12 块、背包里正好 12 块,地上一块不剩(#69)。
      */
     @GameTest(template = "floor16", timeoutTicks = 600, batch = ON_FOOT)
     public static void dig_stops_at_the_requested_count(GameTestHelper helper) {
@@ -309,9 +306,8 @@ public class DigGameTests {
     // ==================== 挖点名的格 ====================
 
     /**
-     * 挖一格:点名它的坐标。一捆干草块在她手边,{@code numen.work.dig(pos)} 当场挖掉;收场说挖了 1 格、掉下来的那一捆落在了哪一格
-     * ——那段账与交回的 {@code drops} 说的是同一件:落地、在被挖那一格(或滑到隔壁一格)、还躺在那儿的那一件的编号。她一步没动。
-     * 只挖点名的那一格:旁边另一捆没点名的干草原样立着。
+     * 挖一格:点名它的坐标。一捆干草块在她手边,{@code numen.work.dig(pos)} 当场挖掉;收场说挖了 1 格、那一捆进了她背包
+     * ——那段账与交回的 {@code got} 说的是同一件。她一步没动。只挖点名的那一格:旁边另一捆没点名的干草原样立着。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = ON_FOOT)
     public static void dig_one_cell_by_its_coordinates(GameTestHelper helper) {
@@ -328,17 +324,13 @@ public class DigGameTests {
             helper.assertTrue(dig.done(), "work dig has not finished");
             helper.assertTrue(dig.succeeded() && dig.outcome().startsWith("dug 1 cell(s) of hay_block"),
                     "the cell was not dug: " + dig.outcome());
-            var drop = onlyDrop(dig);
-            BlockPos landed = drop.pos();
-            helper.assertTrue(drop.fate() == com.dwinovo.numen.act.Drops.Fate.LANDED && drop.count() == 1
-                            && landed.getY() == hay.getY() && Math.abs(landed.getX() - hay.getX()) <= 1
-                            && Math.abs(landed.getZ() - hay.getZ()) <= 1,
-                    "the drop did not land by the dug cell: " + drop);
-            helper.assertTrue(dig.outcome().contains("Drops: 1 hay_block landed at " + xyz(landed) + "."),
-                    "the reply does not say where the drop landed: " + dig.outcome());
-            helper.assertTrue(drop.id().isPresent() && new com.dwinovo.numen.api.sdk.EntityRef(drop.id().get()).in(level)
-                            instanceof net.minecraft.world.entity.item.ItemEntity item && item.getItem().is(Items.HAY_BLOCK),
-                    "the id given is not the hay lying there: " + drop);
+            var result = dig.result(com.dwinovo.numen.task.dig.DigCompanionTask.Dug.class);
+            helper.assertTrue(result.got().equals(List.of(new com.dwinovo.numen.task.dig.DigCompanionTask.Got(
+                            "minecraft:hay_block", 1))) && result.onGround().isEmpty()
+                            && companion.getInventory().countItem(Items.HAY_BLOCK) == 1,
+                    "the hay did not go into her inventory: " + result);
+            helper.assertTrue(dig.outcome().contains("Into my inventory: 1 hay_block."),
+                    "the reply does not say what she got: " + dig.outcome());
             helper.assertTrue(level.getBlockState(hay).isAir(), "the hay is still there");
             helper.assertTrue(level.getBlockState(spare).is(Blocks.HAY_BLOCK), "the hay that was not named was dug");
             helper.assertTrue(companion.blockPosition().equals(stand), "she moved to dig a cell within her reach");
@@ -347,44 +339,9 @@ public class DigGameTests {
     }
 
     /**
-     * 挖岩浆上方的方块:黑曜石压在一池岩浆上,她站在池边够得着的地方挖。黑曜石掉下来落进岩浆烧掉了——挖的结果说清楚:回执那一句
-     * 说它掉进岩浆烧掉了,数据里那一笔是 destroyed、毁它的是 minecraft:lava,没有一件落在地上。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 600, batch = ON_FOOT)
-    public static void digging_above_lava_says_the_drop_burned(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        // 三乘三的一池岩浆嵌在地面里,底下垫石头;正中上面压一块黑曜石
-        for (int x = 8; x <= 10; x++) {
-            for (int z = 4; z <= 6; z++) {
-                level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, 0, z)), Blocks.STONE.defaultBlockState());
-                level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, 1, z)), Blocks.LAVA.defaultBlockState());
-            }
-        }
-        BlockPos obsidian = helper.absolutePos(new BlockPos(9, 2, 5));
-        level.setBlockAndUpdate(obsidian, Blocks.OBSIDIAN.defaultBlockState());
-        NumenPlayer companion = spawnAt(helper, "gametest_over_lava", new BlockPos(5, 2, 5), false);
-        companion.getInventory().add(new ItemStack(Items.DIAMOND_PICKAXE));
-        ToolRun dig = lua(companion, "numen.work.dig(" + xyz(obsidian) + ")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(dig.done(), "work dig has not finished");
-            helper.assertTrue(dig.succeeded() && dig.outcome().startsWith("dug 1 cell(s) of obsidian"),
-                    "the obsidian was not dug: " + dig.outcome());
-            var drop = onlyDrop(dig);
-            helper.assertTrue(drop.fate() == com.dwinovo.numen.act.Drops.Fate.DESTROYED
-                            && drop.cause().equals(java.util.Optional.of("minecraft:lava"))
-                            && drop.item().equals("minecraft:obsidian") && drop.id().isEmpty(),
-                    "the drop is not told as burned in the lava: " + drop);
-            helper.assertTrue(dig.outcome().contains("Drops: 1 obsidian fell into lava and burned up at "),
-                    "the reply does not say the drop burned in the lava: " + dig.outcome());
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
-    /**
      * 服务端把挖到一半的一格挂成延迟破坏:她这头在一个游戏刻里连按,累满 1 就送 STOP,服务端那头才过了零刻、进度远不够,
-     * 黑曜石还在。她照原版客户端,方块还在、键还按着就缓过手同一格再挖一轮,方块没了就是挖掉了:中途不报"没让挖",最后报挖掉了,
-     * 掉落物对得上。(场景的前提——第一次 STOP 之后服务端确实挂着延迟破坏——由用例读服务端的记账确认,鼠标不读。)
+     * 黑曜石还在。方块还在、键还按着就同一格再挖一轮,方块没了就是挖掉了:中途不报"没让挖",最后报挖掉了,
+     * 挖出来的黑曜石在她背包里。(场景的前提——第一次 STOP 之后服务端确实挂着延迟破坏——由用例读服务端的记账确认,鼠标不读。)
      */
     @GameTest(template = "floor16", timeoutTicks = 561, batch = ON_FOOT)
     public static void the_mouse_waits_for_the_delayed_destroy_the_server_still_holds(GameTestHelper helper) {
@@ -402,14 +359,14 @@ public class DigGameTests {
                 .thenExecute(() -> {
                     // 一个刻里连按到她这头送出 STOP 为止
                     for (int presses = 0; presses < 2000 && !mouse.stopSent(); presses++) {
-                        mouse.dig();
+                        mouse.dig(obsidian);
                     }
                     helper.assertTrue(level.getBlockState(obsidian).is(Blocks.OBSIDIAN) && mouse.stopSent()
                                     && (boolean) DELAYED_DESTROY.get(companion.gameMode),
                             "the server did not hold the block as a delayed destroy: " + level.getBlockState(obsidian));
                 })
                 .thenWaitUntil(() -> {
-                    var strike = mouse.dig();
+                    var strike = mouse.dig(obsidian);
                     if (strike instanceof com.dwinovo.numen.api.entity.Mouse.Strike.Refused && refused[0] == null) {
                         refused[0] = strike;
                     }
@@ -417,18 +374,15 @@ public class DigGameTests {
                     helper.assertTrue(strike instanceof com.dwinovo.numen.api.entity.Mouse.Strike.Broke,
                             "the obsidian has not broken yet: " + strike);
                     helper.assertTrue(level.getBlockState(obsidian).isAir(), "the block is still there");
-                    boolean dropped = !level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
-                            new net.minecraft.world.phys.AABB(obsidian).inflate(4),
-                            item -> item.getItem().is(Items.OBSIDIAN)).isEmpty()
-                            || companion.getInventory().countItem(Items.OBSIDIAN) > 0;
-                    helper.assertTrue(dropped, "the obsidian drop is nowhere");
+                    helper.assertTrue(companion.getInventory().countItem(Items.OBSIDIAN) == 1,
+                            "the obsidian she dug out is not in her inventory");
                     CompanionFactory.despawn(level.getServer(), companion);
                 })
                 .thenSucceed();
     }
 
     /**
-     * 服务端把这一格挂成延迟破坏、自己在两次调用之间把它挖掉:挖掉了就是挖掉了,回执报挖到一格、掉落物对得上。
+     * 服务端把这一格挂成延迟破坏、自己在两次调用之间把它挖掉:挖掉了就是挖掉了,回执报挖到一格、挖出来的东西对得上。
      * 做法:她带着急迫效果挖黑曜石,这一头的进度累得快;累到九成时去掉效果,于是送 STOP 那一刻服务端按没有效果的速度算,进度不够,
      * 挂成延迟破坏。服务端随后在自己的刻里挖掉它——那一刻方块不再"要挖",任务不能把它当"不用挖了"丢掉而报"一格没挖"。
      */
@@ -450,19 +404,83 @@ public class DigGameTests {
             helper.assertTrue(dig.done(), "work dig has not finished");
             helper.assertTrue(dig.succeeded() && dig.outcome().startsWith("dug 1 cell(s) of obsidian"),
                     "the obsidian the server broke was not counted: " + dig.outcome());
-            var drop = onlyDrop(dig);
-            helper.assertTrue(drop.item().equals("minecraft:obsidian"), "the drop does not match: " + drop);
+            var got = dig.result(com.dwinovo.numen.task.dig.DigCompanionTask.Dug.class).got();
+            helper.assertTrue(got.equals(List.of(new com.dwinovo.numen.task.dig.DigCompanionTask.Got("minecraft:obsidian", 1))),
+                    "what she got does not match: " + got);
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
 
-    /** 这一挖的结果里只有一笔掉落物去向,交回它。 */
-    private static com.dwinovo.numen.act.Drops.Drop onlyDrop(ToolRun dig) {
-        var drops = dig.result(com.dwinovo.numen.task.dig.DigCompanionTask.Dug.class).drops();
-        if (drops.size() != 1) {
-            throw new net.minecraft.gametest.framework.GameTestAssertException("expected one drop: " + drops);
+    /**
+     * 够得着就挖得动,中间隔着什么不问:铁矿在一堵两格高的石墙后面,她在墙这边,手够得着矿、却看不见它。{@code numen.work.dig} 点名
+     * 那块矿:矿挖掉了,墙上一格没少,她一步没动,挖出来的粗铁当场进了她背包——回执与交回的 {@code got} 说的是同一件。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = ON_FOOT)
+    public static void dig_reaches_through_a_wall_and_the_drop_goes_into_her_inventory(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        List<BlockPos> wall = new java.util.ArrayList<>();
+        for (int z = 11; z <= 13; z++) {
+            for (int y = 2; y <= 3; y++) {
+                BlockPos cell = helper.absolutePos(new BlockPos(6, y, z));
+                level.setBlockAndUpdate(cell, Blocks.STONE.defaultBlockState());
+                wall.add(cell);
+            }
         }
-        return drops.get(0);
+        BlockPos ore = helper.absolutePos(new BlockPos(7, 2, 12));
+        level.setBlockAndUpdate(ore, Blocks.IRON_ORE.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_through_wall", new BlockPos(4, 2, 12), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
+        BlockPos stand = companion.blockPosition();
+        ToolRun dig = lua(companion, "numen.work.dig(" + xyz(ore) + ")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(dig.done(), "work dig has not finished");
+            helper.assertTrue(dig.succeeded() && level.getBlockState(ore).isAir(), "the ore was not dug: " + dig.outcome());
+            for (BlockPos cell : wall) {
+                helper.assertTrue(level.getBlockState(cell).is(Blocks.STONE), "the wall in between was dug at " + cell);
+            }
+            helper.assertTrue(companion.blockPosition().equals(stand), "she moved to dig a block within her reach");
+            var result = dig.result(com.dwinovo.numen.task.dig.DigCompanionTask.Dug.class);
+            helper.assertTrue(companion.getInventory().countItem(Items.RAW_IRON) == 1
+                            && result.got().equals(List.of(new com.dwinovo.numen.task.dig.DigCompanionTask.Got(
+                                    "minecraft:raw_iron", 1))) && result.onGround().isEmpty()
+                            && dig.outcome().contains("Into my inventory: 1 raw_iron."),
+                    "the raw iron is not in her inventory, or the result does not say so: " + dig.outcome() + " | " + result);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 背包满了:36 格都是叠满的石头,她挖手边一捆干草——放不下,那一捆留在被挖的那一格,背包里一捆也没有;回执如实说没放进去、
+     * 留在了哪,交回的 {@code on_ground} 是同一件。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = ON_FOOT)
+    public static void dig_with_a_full_inventory_leaves_the_drop_where_it_fell_and_says_so(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos hay = helper.absolutePos(new BlockPos(9, 2, 13));
+        level.setBlockAndUpdate(hay, Blocks.HAY_BLOCK.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_full_pack", new BlockPos(6, 2, 13), false);
+        for (int slot = 0; slot < 36; slot++) {
+            companion.getInventory().setItem(slot, new ItemStack(Items.STONE, 64));
+        }
+        ToolRun dig = lua(companion, "numen.work.dig(" + xyz(hay) + ")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(dig.done(), "work dig has not finished");
+            helper.assertTrue(dig.succeeded() && level.getBlockState(hay).isAir(), "the hay was not dug: " + dig.outcome());
+            var result = dig.result(com.dwinovo.numen.task.dig.DigCompanionTask.Dug.class);
+            helper.assertTrue(companion.getInventory().countItem(Items.HAY_BLOCK) == 0 && result.got().isEmpty()
+                            && result.onGround().equals(List.of(new com.dwinovo.numen.task.dig.DigCompanionTask.Stayed(
+                                    "minecraft:hay_block", 1, hay))),
+                    "the hay that did not fit is not told as left on the ground: " + result);
+            helper.assertTrue(dig.outcome().contains("Did not fit in my inventory and stayed on the ground: 1 hay_block at "
+                            + com.dwinovo.numen.api.sdk.LuaCodecs.literal(hay)),
+                    "the reply does not say the hay stayed on the ground: " + dig.outcome());
+            helper.assertTrue(!level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+                            new net.minecraft.world.phys.AABB(hay).inflate(1.5), item -> item.getItem().is(Items.HAY_BLOCK))
+                            .isEmpty(), "the hay is not lying where it was dug");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
     }
 
     /**
