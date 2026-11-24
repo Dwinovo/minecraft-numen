@@ -29,11 +29,12 @@ class ConsentChatTest {
 
     private static ConsentRequestPayload.Line line(String name, int count) {
         return new ConsentRequestPayload.Line(Verb.BREAK, null, Component.literal(name), count,
-                Component.literal("placed by a player"), false);
+                Component.literal("placed by a player"));
     }
 
     private static ConsentRequestPayload request(long id, ConsentRequestPayload.Line... lines) {
-        return new ConsentRequestPayload(UUID.randomUUID(), id, List.of(lines), List.of("allow break(oak_log)"),
+        return new ConsentRequestPayload(UUID.randomUUID(), id, List.of(lines),
+                List.of(new ConsentRequestPayload.Remember(Verb.BREAK, Component.literal("oak log"))),
                 List.of(), List.of(), 0L, null, "");
     }
 

@@ -1,59 +1,48 @@
 package com.dwinovo.numen.api.permission;
 
-import com.dwinovo.numen.permission.Mode;
-import com.dwinovo.numen.permission.Rule;
-import com.dwinovo.numen.permission.Verdict;
+import com.dwinovo.numen.permission.Edit;
+import com.dwinovo.numen.permission.Preset;
+import com.dwinovo.numen.permission.Settings;
+import com.dwinovo.numen.permission.Tier;
+import com.dwinovo.numen.permission.Verb;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
-import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
 /**
- * 库协议里的"权限"一种({@code Libraries.PERMISSION}):主人自己的规则与他名下每只同伴的模式。读的是 {@link RuleBook}
- * ——命令列规则读的同一份——写的是 {@link PermissionStore} 那几个公开方法,命令改规则调的也是它们;这里不判规则对不对,
- * 解析与教学式的错误归 {@link Groups#parse}。
+ * 库协议里的"权限"一种({@code Libraries.PERMISSION}):主人名下每只同伴的八个档位与每种动作的"不用问"名单。读的是
+ * {@link PermissionStore} 里的 {@link Settings},写调的也是它的公开方法(命令改设置调的是同一批);这里不判动作对不对,
+ * 档位、动作与预设的词认不出就办不成。
  *
- * <p>谁能读写:调用者只摸得到自己那一份。{@link Ground} 是按发请求的玩家取的,别人的规则、别人的同伴不在它里面;
- * 管理员也一样——硬规则与未知算别人的开关是服主的服务器设置,这里只报开没开。
+ * <p>谁能读写:调用者只摸得到自己那一份。{@link Ground} 是按发请求的玩家取的,别人的同伴不在它里面;管理员也一样。
  *
  * <h2>整表</h2>
  * JSON 数组,每行一个对象,{@code row} 说是哪种:
  * <ul>
- *   <li>{@code "settings"}:{@code hardRules}(服主开着硬规则吗);</li>
- *   <li>{@code "mode"}:{@code companion}(UUID)、{@code name}、{@code mode}({@code ask}/{@code bypass}/{@code observe});</li>
- *   <li>{@code "rule"}:{@code layer}({@code hard}/{@code owner}/{@code factory})、{@code table}({@code deny}/{@code ask}/
- *       {@code allow})、{@code rule}(规范原文,带 {@code @同伴名} 的话在末尾)、{@code source}({@code owner}/{@code her},
- *       只有主人层)、{@code note}(她写的理由,可空)、{@code count}、{@code last}(最近命中的墙钟毫秒,没命中过为 0)。
- *       每层里按 deny、ask、allow 排开,主人层同一张表里按写的先后。</li>
+ *   <li>{@code "tier"}:{@code companion}(UUID)、{@code name}(同伴的名字)、{@code verb}、{@code tier}
+ *       ({@code allow}/{@code ask}/{@code deny});每只同伴八行,按动作的次序;</li>
+ *   <li>{@code "listed"}:{@code companion}、{@code name}、{@code verb}、{@code entry}(名单里的一个名字);
+ *       每只同伴每种动作的名单按记下的先后。</li>
  * </ul>
  *
  * <h2>操作</h2>
- * {@link #PUT} 加一行({@code table}、{@code rule}),{@link #DELETE} 删一行({@code table}、{@code rule} 原文,
- * 不按序号:她在两次读之间加了一行,序号就错位),{@link #RESET} 清空主人层,{@link #MODE} 设一只同伴的模式
- * ({@code companion}、{@code mode})。规则写错了,结局带着 {@link Rule.Mistake},界面按它的码翻成主人的语言。
+ * {@link #TIER} 设一个档位({@code companion}、{@code verb}、{@code tier}),{@link #PRESET} 套一个预设
+ * ({@code companion}、{@code preset}),{@link #DELETE} 从名单里删一项({@code companion}、{@code verb}、{@code entry})。
  */
 public final class PermissionLibrary {
 
-    public static final String PUT = "put";
+    public static final String TIER = "tier";
+    public static final String PRESET = "preset";
     public static final String DELETE = "delete";
-    public static final String RESET = "reset";
-    public static final String MODE = "mode";
 
-    /** 每一层里表排开的次序:先拒绝,再询问,再允许——越上面越是"说了不行"。界面按这个次序分组。 */
-    private static final List<Verdict.Kind> TABLE_ORDER = List.of(Verdict.Kind.DENY, Verdict.Kind.ASK, Verdict.Kind.ALLOW);
-
-    /** 这位主人那一头:他的存档、服主的开关、他名下的同伴。 */
+    /** 这位主人那一头:他的存档、他名下的同伴。 */
     public interface Ground {
 
         PermissionStore store();
-
-        /** 服主开着硬规则吗({@link PermissionConfig#hardRules})。 */
-        boolean hardRules();
 
         /** 主人名下的同伴,UUID 到名字,按名册顺序。 */
         Map<UUID, String> companions();
@@ -63,14 +52,13 @@ public final class PermissionLibrary {
      * 一次写的结局。
      *
      * @param problem 办不成的原因;办成为 null
-     * @param mistake 办不成是因为规则写错了:错在哪;不是这个原因为 null
      */
-    public record Outcome(String problem, Rule.Mistake mistake) {
+    public record Outcome(String problem) {
 
-        static final Outcome DONE = new Outcome(null, null);
+        static final Outcome DONE = new Outcome(null);
 
         static Outcome problem(String problem) {
-            return new Outcome(problem, null);
+            return new Outcome(problem);
         }
     }
 
@@ -79,128 +67,71 @@ public final class PermissionLibrary {
     /** 这位主人此刻的整表。 */
     public static JsonArray view(Ground ground) {
         JsonArray out = new JsonArray();
-        JsonObject settings = new JsonObject();
-        settings.addProperty("row", "settings");
-        settings.addProperty("hardRules", ground.hardRules());
-        out.add(settings);
         ground.companions().forEach((uuid, name) -> {
-            JsonObject row = new JsonObject();
-            row.addProperty("row", "mode");
-            row.addProperty("companion", uuid.toString());
-            row.addProperty("name", name);
-            row.addProperty("mode", word(ground.store().modeOf(uuid)));
-            out.add(row);
+            Settings settings = ground.store().settingsOf(uuid);
+            for (Verb verb : Verb.values()) {
+                JsonObject row = row("tier", uuid, name, verb);
+                row.addProperty("tier", settings.tier(verb).word());
+                out.add(row);
+            }
+            for (Settings.Entry entry : settings.entries()) {
+                JsonObject row = row("listed", uuid, name, entry.verb());
+                row.addProperty("entry", entry.name());
+                out.add(row);
+            }
         });
-        RuleBook book = RuleBook.of(ground.store(), ground.hardRules());
-        book.hard().forEach(line -> out.add(ruleRow("hard", line)));
-        for (Verdict.Kind table : TABLE_ORDER) {
-            book.owner().get(table).forEach(line -> out.add(ruleRow("owner", line)));
-        }
-        for (Verdict.Kind table : TABLE_ORDER) {
-            book.factory().get(table).forEach(line -> out.add(ruleRow("factory", line)));
-        }
         return out;
     }
 
-    private static JsonObject ruleRow(String layer, RuleBook.Line line) {
+    private static JsonObject row(String kind, UUID companion, String name, Verb verb) {
         JsonObject row = new JsonObject();
-        row.addProperty("row", "rule");
-        row.addProperty("layer", layer);
-        row.addProperty("table", word(line.table()));
-        row.addProperty("rule", line.rule().toString());
-        if (line.source() != null) {
-            row.addProperty("source", line.source().getSerializedName());
-            row.addProperty("note", line.note());
-        }
-        row.addProperty("count", line.hit().count());
-        row.addProperty("last", line.hit().lastMillis());
+        row.addProperty("row", kind);
+        row.addProperty("companion", companion.toString());
+        row.addProperty("name", name);
+        row.addProperty("verb", verb.word());
         return row;
     }
 
-    /** 一次写。{@code list} 不经这里:整表只读。 */
+    /** 一次写。整表只读,不经这里。 */
     public static Outcome write(Ground ground, String op, JsonObject body) {
+        UUID companion = uuid(text(body, "companion"));
+        if (companion == null || !ground.companions().containsKey(companion)) {
+            return Outcome.problem("not one of your companions");
+        }
         PermissionStore store = ground.store();
         switch (op) {
-            case PUT:
-                return edit(body, (table, rule) -> {
-                    store.add(table, rule);   // 已有一模一样的一行就是已经如愿,不算办不成
-                    return Outcome.DONE;
-                });
-            case DELETE:
-                return edit(body, (table, rule) -> {
-                    int at = store.indexOf(table, rule);
-                    if (at < 0) {
-                        return Outcome.problem("no such row in " + word(table));
-                    }
-                    store.remove(table, at);
-                    return Outcome.DONE;
-                });
-            case RESET:
-                store.reset();
+            case TIER: {
+                Verb verb = Verb.byWord(text(body, "verb"));
+                Tier tier = Tier.byWord(text(body, "tier"));
+                if (verb == null || tier == null) {
+                    return Outcome.problem("a tier is allow, ask or deny, for one of the eight verbs");
+                }
+                store.edit(companion, new Edit.SetTier(verb, tier));
                 return Outcome.DONE;
-            case MODE: {
-                UUID companion = uuid(text(body, "companion"));
-                if (companion == null || !ground.companions().containsKey(companion)) {
-                    return Outcome.problem("not one of your companions");
+            }
+            case PRESET: {
+                Preset preset = Preset.byWord(text(body, "preset"));
+                if (preset == null) {
+                    return Outcome.problem("a preset is observe, bypass or factory");
                 }
-                Mode mode = mode(text(body, "mode"));
-                if (mode == null) {
-                    return Outcome.problem("a mode is ask, bypass or observe");
+                store.preset(companion, preset);
+                return Outcome.DONE;
+            }
+            case DELETE: {
+                Verb verb = Verb.byWord(text(body, "verb"));
+                String entry = text(body, "entry");
+                if (verb == null || entry == null) {
+                    return Outcome.problem("name a verb and an entry on its list");
                 }
-                store.setMode(companion, mode);
+                if (!store.settingsOf(companion).listed(verb, entry)) {
+                    return Outcome.problem("no such entry on the list of " + verb.word());
+                }
+                store.edit(companion, new Edit.Remove(verb, entry));
                 return Outcome.DONE;
             }
             default:
                 return Outcome.problem("unknown operation");
         }
-    }
-
-    /** 对一张表里的一行规则做一件事。 */
-    private interface Edit {
-        Outcome apply(Verdict.Kind table, Rule rule);
-    }
-
-    /** 请求里点名的表与规则取出来(规则经 {@link Groups#parse},写错了结局带着教学式的错误),交给 {@code edit}。 */
-    private static Outcome edit(JsonObject body, Edit edit) {
-        Verdict.Kind table = table(body);
-        if (table == null) {
-            return Outcome.problem("a rule goes in deny, ask or allow");
-        }
-        Rule rule;
-        try {
-            rule = Groups.parse(text(body, "rule"));
-        } catch (Rule.Mistake mistake) {
-            return new Outcome(mistake.getMessage(), mistake);
-        }
-        return edit.apply(table, rule);
-    }
-
-    private static String word(Verdict.Kind table) {
-        return table.name().toLowerCase(Locale.ROOT);
-    }
-
-    private static String word(Mode mode) {
-        return mode.name().toLowerCase(Locale.ROOT);
-    }
-
-    private static Verdict.Kind table(JsonObject body) {
-        String word = text(body, "table");
-        for (Verdict.Kind table : Verdict.Kind.values()) {
-            if (word(table).equals(word)) {
-                return table;
-            }
-        }
-        return null;
-    }
-
-    /** {@link Mode#byName} 把不认识的当 ask,面板发来的名字写错了应当办不成,不是悄悄改成 ask。 */
-    private static Mode mode(String word) {
-        for (Mode mode : Mode.values()) {
-            if (word(mode).equals(word)) {
-                return mode;
-            }
-        }
-        return null;
     }
 
     private static UUID uuid(String text) {

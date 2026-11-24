@@ -350,7 +350,8 @@ public class DigGameTests {
         level.setBlockAndUpdate(obsidian, Blocks.OBSIDIAN.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_delayed", new BlockPos(6, 2, 8), false);
         companion.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(Items.DIAMOND_PICKAXE));
-        com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
+        com.dwinovo.numen.api.permission.PermissionStore.of(companion.getServer(), companion.getOwnerUuid())
+                .preset(companion.getUUID(), com.dwinovo.numen.permission.Preset.BYPASS);
         var mouse = companion.mouse();
         com.dwinovo.numen.api.entity.Mouse.Strike[] refused = {null};
 

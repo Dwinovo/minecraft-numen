@@ -691,86 +691,65 @@ public final class ServerLibraries {
 
     // ---- 权限 ----
 
-    /**
-     * 规则页的一行规则。{@code layer}:{@code hard}(服主的)、{@code owner}(主人自己的,可改)、{@code factory}(随模组发的);
-     * {@code table}:{@code deny}、{@code ask}、{@code allow};{@code byHer} 与 {@code note} 只有主人层有意义。
-     */
-    public record PermissionRule(String layer, String table, String rule, boolean byHer, String note, int count,
-                                 long lastMillis) {
+    /** 一只同伴一种动作此刻的档位:{@code verb} 是动作词,{@code tier} 是 {@code allow}、{@code ask}、{@code deny}。 */
+    public record PermissionTier(java.util.UUID companion, String name, String verb, String tier) {}
 
-        public boolean editable() {
-            return "owner".equals(layer);
+    /** 一只同伴一种动作的"不用问"名单里的一项。 */
+    public record PermissionListed(java.util.UUID companion, String name, String verb, String entry) {}
+
+    /** 权限页读到的整份:名下每只同伴每种动作的档位(按动作的次序),和各动作名单里的项。 */
+    public record Permission(List<PermissionTier> tiers, List<PermissionListed> listed) {
+
+        public static final Permission EMPTY = new Permission(List.of(), List.of());
+
+        /** 有档位的同伴,按名册顺序。 */
+        public List<java.util.UUID> companions() {
+            return tiers.stream().map(PermissionTier::companion).distinct().toList();
         }
-    }
-
-    /** 一只同伴的模式:{@code ask}、{@code bypass}、{@code observe}。 */
-    public record CompanionMode(java.util.UUID companion, String name, String mode) {}
-
-    /** 规则写错了:错在哪(码与现场的原话),界面按码翻成主人的语言。 */
-    public record RuleMistake(String code, List<String> args) {}
-
-    /**
-     * 权限页读到的整份:服主开没开硬规则、名下每只同伴的模式、三层规则(硬规则、主人层、出厂层,每层内部是服务端排好的
-     * deny、ask、allow 次序)。{@code mistake} 只有刚被拒的那次写的答复里有。
-     */
-    public record Permission(boolean hardRules, List<CompanionMode> modes, List<PermissionRule> rules, RuleMistake mistake) {
-
-        public static final Permission EMPTY = new Permission(true, List.of(), List.of(), null);
     }
 
     public static Permission permission() {
-        boolean hardRules = true;
-        List<CompanionMode> modes = new ArrayList<>();
-        List<PermissionRule> rules = new ArrayList<>();
-        RuleMistake mistake = null;
+        List<PermissionTier> tiers = new ArrayList<>();
+        List<PermissionListed> listed = new ArrayList<>();
         for (JsonElement e : entries(Libraries.PERMISSION)) {
             JsonObject o = e.getAsJsonObject();
-            if (o.has("mistake")) {
-                JsonObject m = o.getAsJsonObject("mistake");
-                List<String> args = new ArrayList<>();
-                m.getAsJsonArray("args").forEach(a -> args.add(a.getAsString()));
-                mistake = new RuleMistake(text(m, "code"), List.copyOf(args));
-                continue;
-            }
+            java.util.UUID companion = java.util.UUID.fromString(text(o, "companion"));
             switch (text(o, "row")) {
-                case "settings" -> hardRules = flag(o, "hardRules");
-                case "mode" -> modes.add(new CompanionMode(java.util.UUID.fromString(text(o, "companion")),
-                        text(o, "name"), text(o, "mode")));
-                case "rule" -> rules.add(new PermissionRule(text(o, "layer"), text(o, "table"), text(o, "rule"),
-                        "her".equals(text(o, "source")), text(o, "note") == null ? "" : text(o, "note"),
-                        o.get("count").getAsInt(), o.get("last").getAsLong()));
+                case "tier" -> tiers.add(new PermissionTier(companion, text(o, "name"), text(o, "verb"), text(o, "tier")));
+                case "listed" -> listed.add(new PermissionListed(companion, text(o, "name"), text(o, "verb"),
+                        text(o, "entry")));
                 default -> { }
             }
         }
-        return new Permission(hardRules, List.copyOf(modes), List.copyOf(rules), mistake);
+        return new Permission(List.copyOf(tiers), List.copyOf(listed));
     }
 
-    /** 加一行规则:{@code table} 是 deny、ask 或 allow。办成与否由服务端答复,交给 {@code onReply}。 */
-    public static void addRule(String table, String rule, java.util.function.Consumer<RemoteLibrary.Reply> onReply) {
-        RemoteCompanions.library().request(Libraries.PERMISSION, Libraries.PUT, ruleBody(table, rule), onReply);
+    /** 设一只同伴一种动作的档位。 */
+    public static void setTier(java.util.UUID companion, String verb, String tier) {
+        JsonObject body = body(companion);
+        body.addProperty("verb", verb);
+        body.addProperty("tier", tier);
+        RemoteCompanions.library().request(Libraries.PERMISSION, Libraries.TIER, body);
     }
 
-    /** 删主人层的一行(按规则原文认,不按序号:她可能在两次读之间加过行)。 */
-    public static void deleteRule(String table, String rule) {
-        RemoteCompanions.library().request(Libraries.PERMISSION, Libraries.DELETE, ruleBody(table, rule));
+    /** 给一只同伴套一个预设:{@code observe}、{@code bypass}、{@code factory}。 */
+    public static void applyPreset(java.util.UUID companion, String preset) {
+        JsonObject body = body(companion);
+        body.addProperty("preset", preset);
+        RemoteCompanions.library().request(Libraries.PERMISSION, Libraries.PRESET, body);
     }
 
-    /** 清空主人层的规则。 */
-    public static void clearRules() {
-        RemoteCompanions.library().request(Libraries.PERMISSION, Libraries.RESET, new JsonObject());
+    /** 从一只同伴一种动作的名单里删一项。 */
+    public static void deleteListed(java.util.UUID companion, String verb, String entry) {
+        JsonObject body = body(companion);
+        body.addProperty("verb", verb);
+        body.addProperty("entry", entry);
+        RemoteCompanions.library().request(Libraries.PERMISSION, Libraries.DELETE, body);
     }
 
-    public static void setMode(java.util.UUID companion, String mode) {
+    private static JsonObject body(java.util.UUID companion) {
         JsonObject body = new JsonObject();
         body.addProperty("companion", companion.toString());
-        body.addProperty("mode", mode);
-        RemoteCompanions.library().request(Libraries.PERMISSION, Libraries.MODE, body);
-    }
-
-    private static JsonObject ruleBody(String table, String rule) {
-        JsonObject body = new JsonObject();
-        body.addProperty("table", table);
-        body.addProperty("rule", rule);
         return body;
     }
 }

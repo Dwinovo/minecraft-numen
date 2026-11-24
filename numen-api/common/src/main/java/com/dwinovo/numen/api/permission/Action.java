@@ -4,7 +4,10 @@ import com.dwinovo.numen.permission.Verb;
 import com.mojang.brigadier.tree.CommandNode;
 import com.mojang.brigadier.tree.RootCommandNode;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -68,6 +71,11 @@ public record Action(Verb kind, BlockPos pos, BlockState state, Entity entity, I
         return new Action(Verb.DROP, null, null, null, item, null);
     }
 
+    /** 用手里的东西:对着空气右键,或右键方块、实体没被吃掉、落到物品自用的那一下。 */
+    public static Action useItem(Item item) {
+        return new Action(Verb.USE_ITEM, null, null, null, item, null);
+    }
+
     /**
      * 以她的身份执行一条游戏指令。根名在服务器的指令树上认:与她打的那个根同指一个节点的根(重定向到它的,
      * 或它重定向去的)都算它的别名,见 {@link CommandLine}。
@@ -99,6 +107,30 @@ public record Action(Verb kind, BlockPos pos, BlockState state, Entity entity, I
     }
 
     /**
+     * 主人"不用问"的名单里记这件事的名字,由动作定:挖、右键方块记那种方块的 id;放、扔、用手里的东西记那样物品的 id;
+     * 打、右键实体——玩家或有主人的({@link Owners#of})记这一只(uuid),否则记这一种(实体类型 id);指令记她打的那个根名。
+     * 没有对象(规划期还不知道用哪种耗材)为空串。
+     */
+    public String key() {
+        return switch (kind) {
+            case BREAK, USE_BLOCK -> state == null ? "" : BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
+            case PLACE, DROP, USE_ITEM -> item == null ? "" : BuiltInRegistries.ITEM.getKey(item).toString();
+            case ATTACK, USE_ENTITY -> entity instanceof ServerPlayer || !Owners.of(entity).isEmpty()
+                    ? entity.getUUID().toString() : EntityType.getKey(entity.getType()).toString();
+            case COMMAND -> command.root();
+        };
+    }
+
+    /** 名单里记哪些名字就算这件事在名单里:{@link #key},指令连同它在指令树上的别名。 */
+    public Set<String> names() {
+        if (command != null) {
+            return command.names();
+        }
+        String key = key();
+        return key.isEmpty() ? Set.of() : Set.of(key);
+    }
+
+    /**
      * 回执里点名用:{@code break oak_log at 1,2,3}、{@code attack zombie}、{@code command /give @s diamond}。
      */
     public String describe() {
@@ -106,10 +138,10 @@ public record Action(Verb kind, BlockPos pos, BlockState state, Entity entity, I
         if (command != null) {
             sb.append(" /").append(command.line());
         } else if (state != null) {
-            sb.append(' ').append(net.minecraft.core.registries.BuiltInRegistries.BLOCK
+            sb.append(' ').append(BuiltInRegistries.BLOCK
                     .getKey(state.getBlock()).getPath());
         } else if (item != null) {
-            sb.append(' ').append(net.minecraft.core.registries.BuiltInRegistries.ITEM
+            sb.append(' ').append(BuiltInRegistries.ITEM
                     .getKey(item).getPath());
         }
         if (entity != null) {

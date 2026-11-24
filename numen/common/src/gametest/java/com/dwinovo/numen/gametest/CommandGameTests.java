@@ -13,8 +13,6 @@ import com.dwinovo.numen.api.permission.ConsentDesk;
 import com.dwinovo.numen.api.permission.ConsentItem;
 import com.dwinovo.numen.api.permission.ConsentRequest;
 import com.dwinovo.numen.api.permission.PermissionStore;
-import com.dwinovo.numen.permission.Rule;
-import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Example;
 import com.dwinovo.numen.api.sdk.Fn;
@@ -59,7 +57,7 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
  * <ul>
  *   <li>{@code numen.mc.run} 先按她的来源解析(写不通当场失败、附用法),再过权限层({@code command(根名)}),再以她的身份执行,
  *       交回指令说的每一句。能用哪些是服务器按她的权限等级定的(测试里直接把她记进 OP 表,等级 2);主人的允许与拒绝规则直接生效,
- *       没有规则说到的问主人,点了头的那一句随值写进程序的回执;出厂规则放行只读与只说话的指令。</li>
+ *       主人的名单里没有的问主人,点了头的那一句随值写进程序的回执;名单里放行只读与只说话的指令。</li>
  *   <li>{@code /numen} 只有管理同伴的指令,只给玩家——她经 {@code numen.mc.run} 敲不到。</li>
  *   <li>包装模组管理指令的函数经 {@link ServerCall#onHer} 借服务器的权威、只作用于她(夹具组 {@code gt_twin})。</li>
  *   <li>{@code /numen drive <同伴> <程序>} 和她自己写的程序同一个入口,那张回执回到 drive 的发令人。</li>
@@ -412,7 +410,7 @@ public class CommandGameTests {
     public static void command_level_follows_the_owners_profile_even_when_offline(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_proxy", new BlockPos(4, 2, 4), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_proxy_owner");
-        storeOf(owner).add(Verdict.Kind.ALLOW, com.dwinovo.numen.api.permission.Groups.parse("command(give)"));
+        storeOf(owner).edit(companion.getUUID(), new com.dwinovo.numen.permission.Edit.Add(Verb.COMMAND, "give"));
         companion.getServer().getPlayerList().getOps().add(new ServerOpListEntry(companion.getGameProfile(), 4, false));
         ToolRun borrowed = lua(companion, "numen.mc.run(\"give @s minecraft:diamond\")");
         String help = said(lua(companion, "numen.mc.run(\"help\")"));
@@ -436,15 +434,15 @@ public class CommandGameTests {
     }
 
     /**
-     * 有 OP、主人允许 give:不问、当场执行,背包里多了钻石,交回的是服务器的原话;执行一行指令不是身体上的活,不进任务槽。
+     * 有 OP、give 在主人"不用问"的名单里:不问、当场执行,背包里多了钻石,交回的是服务器的原话;执行一行指令不是身体上的活,不进任务槽。
      * 参数写错的当场失败,附上这条的用法。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
-    public static void command_give_with_op_and_an_allow_rule_runs_and_echoes(GameTestHelper helper) {
+    public static void command_give_with_op_and_a_listed_name_runs_and_echoes(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_op", new BlockPos(4, 2, 4), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_admin");
         grantOp(owner);
-        storeOf(owner).add(Verdict.Kind.ALLOW, com.dwinovo.numen.api.permission.Groups.parse("command(give)"));
+        storeOf(owner).edit(companion.getUUID(), new com.dwinovo.numen.permission.Edit.Add(Verb.COMMAND, "give"));
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= ConsentDesk.of(companion).pending() != null);
         ToolRun give = lua(companion, "numen.mc.run(\"give @s minecraft:diamond 2\")");
@@ -467,7 +465,7 @@ public class CommandGameTests {
     }
 
     /**
-     * 没有任何一行规则说到 setblock:动手前问主人,卡上是整行指令;挂着的这些刻世界不变;主人允许后才放下石头,
+     * "执行命令"出厂是问,setblock 不在名单里:动手前问主人,卡上是整行指令;挂着的这些刻世界不变;主人允许后才放下石头,
      * 交回服务器的回显,主人允许了什么写进程序的回执。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
@@ -489,8 +487,9 @@ public class CommandGameTests {
                 helper.assertTrue(item.kind() == Verb.COMMAND
                                 && item.name().getString().equals("/" + line) && item.icon() == null,
                         "the card does not show the command: " + item);
-                helper.assertTrue("command(setblock)".equals(item.remember().toString()),
-                        "remembering would not store the root: " + item.remember());
+                helper.assertTrue(new com.dwinovo.numen.permission.Settings.Entry(Verb.COMMAND, "setblock")
+                                .equals(item.remembering()),
+                        "remembering would not store the root: " + item.remembering());
                 helper.assertTrue(level.getBlockState(helper.absolutePos(target)).isAir(),
                         "the block was set before the owner answered");
                 helper.assertTrue(!run.done(), "the call settled without an answer");
@@ -509,15 +508,16 @@ public class CommandGameTests {
         });
     }
 
-    /** 主人写了拒绝 setblock 的规则:当场如实失败、理由是那一行,不弹卡,世界不变。 */
+    /** 主人把"执行命令"定成不许:当场如实失败、理由是主人的这一档,不弹卡,世界不变。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
-    public static void command_setblock_denied_by_a_rule_fails_with_the_rule(GameTestHelper helper) {
+    public static void command_setblock_denied_by_the_tier_fails_with_the_reason(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos target = new BlockPos(8, 3, 8);
         NumenPlayer companion = spawnAt(helper, "gametest_mc_forbidden", new BlockPos(4, 2, 4), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_strict");
         grantOp(owner);
-        storeOf(owner).add(Verdict.Kind.DENY, com.dwinovo.numen.api.permission.Groups.parse("command(setblock)"));
+        storeOf(owner).edit(companion.getUUID(), new com.dwinovo.numen.permission.Edit.SetTier(Verb.COMMAND,
+                com.dwinovo.numen.permission.Tier.DENY));
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= ConsentDesk.of(companion).pending() != null);
         ToolRun run = lua(companion, "numen.mc.run(\"" + setblock(helper, target) + "\")");
@@ -525,8 +525,8 @@ public class CommandGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(run.done(), "setblock has not settled");
             helper.assertTrue(!run.succeeded() && "denied".equals(run.kind())
-                            && run.outcome().contains("denied by rule command(setblock)"),
-                    "the refusal does not quote the rule: " + run.outcome());
+                            && run.outcome().contains("setting for command is deny"),
+                    "the refusal does not quote the owner's setting: " + run.outcome());
             helper.assertTrue(!asked[0], "a denied command raised a consent card");
             helper.assertTrue(level.getBlockState(helper.absolutePos(target)).isAir(), "a denied setblock ran");
             cleanUp(helper, companion, owner);

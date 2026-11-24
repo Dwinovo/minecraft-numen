@@ -4,9 +4,9 @@ import com.dwinovo.numen.api.describe.Describer;
 import com.dwinovo.numen.api.entity.ClickActions;
 import com.dwinovo.numen.api.permission.BlockOwner;
 import com.dwinovo.numen.api.permission.EntityOwner;
-import com.dwinovo.numen.api.permission.Groups;
 import com.dwinovo.numen.api.permission.Owners;
-import com.dwinovo.numen.api.permission.RuleWord;
+import com.dwinovo.numen.api.permission.Answerer;
+import com.dwinovo.numen.api.permission.Ownership;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
@@ -44,11 +44,15 @@ public final class Questions {
     public static final Question<ClickActions> CLICK = Question.of("click");
 
     /**
-     * 规则里能写的词:回答者的名字就是那个词({@code contents}、{@code hostile}),回答者说这个词在一个动作的对象上成不成立。
-     * 主人的规则、出厂的规则写的词,除了 Numen API 自带的那几个({@link Groups}:归属、{@code near}、{@code structure}、
-     * {@code block_entity}、{@code named}),都是这里登记的;没人登记的词写进规则是解析错误。自带的名字登记不了。见 {@link RuleWord}。
+     * 这个动作、这个对象,许不许:每个回答者说它懂的那部分——不许、要问、许、不表态——权限层把一圈回答合成一个结果
+     * (不许 > 主人的名单 > 要问 > 许 > 主人给这种动作定的档)。回答者只说自己懂的,互相不知道对方。内置的回答者只有"归属"
+     * ({@link Ownership}):别人的不许,主人的要问。见 {@link Answerer}。
      */
-    public static final Question<RuleWord> RULE_WORD = Question.of("rule_word", Groups.names());
+    public static final Question<Answerer> PERMIT = Question.of("permit");
+
+    static {
+        PERMIT.register(Ownership.NAME, new Ownership());
+    }
 
     /**
      * 这只实体是谁的:每个回答者说它认得的那一类(原版的驯服记录、你的模组自己记的主人),是某个人的就交回那个人。没人回答就是没主人的。

@@ -9,7 +9,7 @@ import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.permission.ConsentItem;
 import com.dwinovo.numen.api.permission.Gate;
 import com.dwinovo.numen.api.permission.Permission;
-import com.dwinovo.numen.permission.Verdict;
+import com.dwinovo.numen.api.permission.Verdict;
 
 import net.minecraft.advancements.CriteriaTriggers;
 import net.minecraft.core.BlockPos;
@@ -601,10 +601,10 @@ public class Mouse {
         }
         Gate gate = Permission.gateFor(companion);
         Verdict verdict = gate.judgeLive(action, companion.serverLevel());
-        return switch (verdict.kind()) {
+        return switch (verdict.tier()) {
             case ALLOW -> null;
             case DENY -> new Refusal.Denied(verdict);
-            case ASK -> new Refusal.Asks(verdict, gate.consentItemLive(action, verdict, companion.serverLevel()));
+            case ASK -> new Refusal.Asks(verdict, gate.consentItem(action, verdict));
         };
     }
 }

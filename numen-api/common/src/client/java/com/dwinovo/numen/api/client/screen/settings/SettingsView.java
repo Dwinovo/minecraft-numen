@@ -346,10 +346,8 @@ public final class SettingsView {
     private boolean pastingAuth;
     private McpAuthFormPanel mcpAuthForm;
 
-    // ---- 权限分区:PermissionPanel(模式 + 规则列表),加规则走表单卡 RuleFormPanel ----
-    private boolean addingRule;
+    // ---- 权限分区:PermissionPanel(每只同伴的档位 + 不用问的名单) ----
     private PermissionPanel permissionPanel;
-    private RuleFormPanel ruleForm;
     private McpFormPanel.Draft mcpDraft = new McpFormPanel.Draft();
 
     /** 分区名:与 Section 声明顺序严格对应。 */
@@ -466,7 +464,7 @@ public final class SettingsView {
 
     /** 任一新建/编辑表单在场(表单模态)——屏幕据此屏蔽背景交互。 */
     public boolean formActive() {
-        return addingProvider || addingVoice || addingPersona || addingMcp || pastingAuth || addingRule;
+        return addingProvider || addingVoice || addingPersona || addingMcp || pastingAuth;
     }
 
     /** 在场的那张表单里有下拉或选择框开着。人设、MCP 表单没有弹层。 */
@@ -486,7 +484,6 @@ public final class SettingsView {
         addingPersona = false; personaEditId = null;
         addingMcp = false;
         pastingAuth = false;
-        addingRule = false;
         host.rebuild();
         return true;
     }
@@ -649,7 +646,6 @@ public final class SettingsView {
         addingMcp = false;
         mcpEditId = null;
         pastingAuth = false;
-        addingRule = false;
         addingPersona = false;
         personaEditId = null;
         addingProvider = false;
@@ -701,7 +697,6 @@ public final class SettingsView {
             case PERMISSION -> {
                 // 规则列表始终在场(表单模态时作背景);清空的确认卡是面板自己的浮层。
                 permissionPanel().build(secX(), secY0(), secW(), secH(), left(), top(), panelW(), panelH());
-                if (addingRule) buildRuleForm();
             }
         }
     }
@@ -933,33 +928,9 @@ public final class SettingsView {
 
     private PermissionPanel permissionPanel() {
         if (permissionPanel == null) {
-            permissionPanel = new PermissionPanel(() -> {
-                ruleForm().open();
-                addingRule = true;
-                host.rebuild();
-            });
+            permissionPanel = new PermissionPanel();
         }
         return permissionPanel;
-    }
-
-    /** 表单卡里的加规则表单;卡壳照旧 formModal。 */
-    private void buildRuleForm() {
-        ruleForm().build(fx(), fy0(), fw(), fBottom() - fy0());
-    }
-
-    private RuleFormPanel ruleForm() {
-        if (ruleForm == null) {
-            ruleForm = new RuleFormPanel(
-                    () -> {
-                        addingRule = false;
-                        host.rebuild();
-                    },
-                    () -> {
-                        addingRule = false;
-                        host.rebuild();
-                    });
-        }
-        return ruleForm;
     }
 
     private LibraryListPanel<ServerLibraries.McpClientRow> mcpListPanel;
@@ -1390,7 +1361,6 @@ public final class SettingsView {
             case PERMISSION -> {
                 permissionPanel().render(new com.dwinovo.numen.api.client.ui.mc.McDrawSurface(g, font()),
                         HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
-                if (addingRule) formCard(Component.translatable(ModLanguageData.Keys.PERMISSION_ADD), ruleForm()::render);
             }
         }
     }
@@ -1578,10 +1548,7 @@ public final class SettingsView {
         if (section == Section.THEME && themePanel().mouseClicked(mouseX, mouseY, 0)) {
             return true;
         }
-        if (section == Section.PERMISSION && addingRule && ruleForm().mouseClicked(mouseX, mouseY, 0)) {
-            return true;
-        }
-        if (section == Section.PERMISSION && !addingRule && permissionPanel().mouseClicked(mouseX, mouseY, 0)) {
+        if (section == Section.PERMISSION && permissionPanel().mouseClicked(mouseX, mouseY, 0)) {
             return true;
         }
         return false;
@@ -1687,7 +1654,7 @@ public final class SettingsView {
         if (section == Section.THEME && themePanel().mouseScrolled(mx, my, sy)) {
             return true;
         }
-        if (section == Section.PERMISSION && !addingRule && permissionPanel().mouseScrolled(mx, my, sy)) {
+        if (section == Section.PERMISSION && permissionPanel().mouseScrolled(mx, my, sy)) {
             return true;
         }
         return false;
@@ -1730,7 +1697,6 @@ public final class SettingsView {
         if (section == Section.STT) return sttPanel().keyPressed(keyCode, modifiers);
         if (section == Section.BRAIN) return brainPanel().keyPressed(keyCode, modifiers);
         if (section == Section.PERMISSION) {
-            if (addingRule) return ruleForm().keyPressed(keyCode, modifiers);
             return permissionPanel().keyPressed(keyCode, modifiers);
         }
         if (section == Section.MCP) {
@@ -1747,7 +1713,6 @@ public final class SettingsView {
         if (section == Section.PERSONA && addingPersona) return personaForm().charTyped(ch);
         if (section == Section.STT) return sttPanel().charTyped(ch);
         if (section == Section.BRAIN) return brainPanel().charTyped(ch);
-        if (section == Section.PERMISSION && addingRule) return ruleForm().charTyped(ch);
         if (section == Section.MCP && addingMcp) return mcpForm().charTyped(ch);
         if (section == Section.MCP && pastingAuth) return mcpAuthForm().charTyped(ch);
         return false;

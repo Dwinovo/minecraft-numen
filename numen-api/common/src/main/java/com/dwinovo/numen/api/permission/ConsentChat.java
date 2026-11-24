@@ -43,8 +43,20 @@ public final class ConsentChat {
         return text.append("\n")
                 .append(button(Keys.CONSENT_ALLOW, ChatFormatting.GREEN, "allow", request.id(), null)).append(" ")
                 .append(button(Keys.CONSENT_ALLOW_REMEMBER, ChatFormatting.AQUA, "remember", request.id(),
-                        Component.literal(String.join("\n", request.remember()))))
+                        remembered(request)))
                 .append(" ").append(button(Keys.CONSENT_DENY, ChatFormatting.RED, "deny", request.id(), null));
+    }
+
+    /** "以后都允许"会记下什么,一项一行:{@code 挖 橡木原木}。没有可记的是空。 */
+    private static Component remembered(ConsentRequestPayload request) {
+        MutableComponent out = Component.empty();
+        for (ConsentRequestPayload.Remember one : request.remember()) {
+            if (!out.getSiblings().isEmpty()) {
+                out.append("\n");
+            }
+            out.append(Component.translatable(Keys.CONSENT_VERB_PREFIX + one.kind().word())).append(" ").append(one.what());
+        }
+        return out;
     }
 
     /** 一条请求没等到他答复就撤了,为什么。{@code by} 是答复了的另一位主人的名字,只有那一种原因的文案用得上。 */
@@ -58,9 +70,9 @@ public final class ConsentChat {
                 .append(line.count() > 1 ? "×" + line.count() : "");
     }
 
-    /** 为什么要问;撤不回的整条是警示色。 */
+    /** 为什么要问。 */
     private static Component cause(ConsentRequestPayload.Line line) {
-        return line.cause().copy().withStyle(line.irreversible() ? ChatFormatting.RED : ChatFormatting.GRAY);
+        return line.cause().copy().withStyle(ChatFormatting.GRAY);
     }
 
     /** 一个按钮:点下去敲 {@code /numen consent <答复> <请求号>};悬停时没有特别要说的就露出那条命令。 */

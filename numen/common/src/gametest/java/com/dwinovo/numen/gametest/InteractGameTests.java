@@ -161,7 +161,8 @@ public class InteractGameTests {
         cow.setNoAi(true);
         helper.getLevel().addFreshEntity(cow);
         NumenPlayer companion = spawnAt(helper, "gametest_swinger", new BlockPos(6, 2, 8), false);
-        com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.OBSERVE);
+        com.dwinovo.numen.api.permission.PermissionStore.of(companion.getServer(), companion.getOwnerUuid())
+                .preset(companion.getUUID(), com.dwinovo.numen.permission.Preset.OBSERVE);
 
         steps(helper)
                 .thenExecute(() -> companion.look().at(cow.getEyePosition()))
@@ -170,7 +171,8 @@ public class InteractGameTests {
                     helper.assertTrue(blow instanceof com.dwinovo.numen.api.entity.Mouse.Blow.Refused
                                     && cow.getHealth() == cow.getMaxHealth(),
                             "the mouse hit the cow in observe mode: " + blow);
-                    com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
+                    com.dwinovo.numen.api.permission.PermissionStore.of(companion.getServer(), companion.getOwnerUuid())
+                .preset(companion.getUUID(), com.dwinovo.numen.permission.Preset.BYPASS);
                 })
                 .thenExecute(() -> {
                     var blow = companion.mouse().attack(cow);
@@ -302,7 +304,7 @@ public class InteractGameTests {
         });
     }
 
-    /** 右键别人驯服的狼:别人的东西是硬规则 use_entity(other) 拒绝的,不问谁,狼没坐下。 */
+    /** 右键别人驯服的狼:回答"归属"的说是别人的,不许,不问谁,狼没坐下。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void use_entity_on_someone_elses_wolf_is_forbidden_outright(GameTestHelper helper) {
         var wolf = wolfAt(helper, new BlockPos(10, 2, 2));
@@ -313,8 +315,8 @@ public class InteractGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(pet.done(), "use entity has not finished");
-            helper.assertTrue(!pet.succeeded() && pet.outcome().contains("hard rule use_entity(other)"),
-                    "the refusal does not come from the hard rule: " + pet.outcome());
+            helper.assertTrue(!pet.succeeded() && pet.outcome().contains("belongs to someone else"),
+                    "the refusal does not say whose it is: " + pet.outcome());
             helper.assertTrue(!wolf.isOrderedToSit(), "someone else's wolf was told to sit");
             wolf.discard();
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);

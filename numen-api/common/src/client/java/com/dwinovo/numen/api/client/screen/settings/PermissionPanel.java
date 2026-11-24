@@ -6,73 +6,71 @@ import com.dwinovo.numen.api.client.agent.ServerLibraries;
 import com.dwinovo.numen.api.client.ui.IDrawSurface;
 import com.dwinovo.numen.api.client.ui.NumenStyle;
 import com.dwinovo.numen.api.client.ui.NumenTheme;
-import com.dwinovo.numen.api.client.ui.TextClip;
-import com.dwinovo.numen.api.client.ui.widget.ConfirmDialog;
+import com.dwinovo.numen.api.client.ui.widget.Button;
 import com.dwinovo.numen.api.client.ui.widget.Label;
 import com.dwinovo.numen.api.client.ui.widget.ScrollBox;
 import com.dwinovo.numen.api.client.ui.widget.UiRoot;
 import com.dwinovo.numen.api.data.ModLanguageData;
-import com.dwinovo.numen.api.permission.RuleBook;
+import com.dwinovo.numen.permission.Preset;
+import com.dwinovo.numen.permission.Tier;
+import com.dwinovo.numen.permission.Verb;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
 /**
- * 权限分区——主人管自己名下的规则与模式,照 Claude Code 的 {@code /permissions} 对话框:规则按"拒绝、询问、允许"分组列出,
- * 每行标来源,能加能删。读的是服务端的同一份({@link ServerLibraries#permission},命令 {@code /numen permission rules list}
- * 读的也是它),写的都是请求,办不办由服务端判。
+ * 权限分区——主人管自己名下每只同伴的权限设置:八种动作各一个档位(分段钮,点哪个设哪个),和每种动作"不用问"的名单。
+ * 读的是服务端的同一份({@link ServerLibraries#permission},命令 {@code /numen permission show} 读的也是它),写的都是请求,
+ * 办不办由服务端判。
  *
- * <p>上面一块:服主的硬规则开没开(开关是服主的服务器设置,这里只报告),和主人名下每只同伴的模式(分段钮,点哪个设哪个);
- * 下面是规则列表({@link LibraryListPanel}):硬规则(服主管)、主人层的拒绝/询问/允许(能删,右键一行)、出厂层,
- * 后两者只读。每行规则原文,下面一行小字是来源(主人写的、她加的及她说的理由)和命中账(几次、最近多久以前)。
- * 标题行"＋"加一行(表单卡,{@link RuleFormPanel}),"清空"清掉主人层所有的行(过确认卡)。
+ * <p>上面一块:每只同伴一节——一行名字加三个预设钮(只看、全放行、恢复出厂),下面八行各是一个动作的名字和它的档位分段钮;
+ * 下面是名单列表({@link LibraryListPanel}):按动作分节,每项一行,下面一行小字是哪只同伴的,右键能删。
  */
 public final class PermissionPanel {
 
-    /** 同伴模式的三格,次序同分段钮;说法是服务端存的名字。 */
-    private static final List<String> MODES = List.of("ask", "bypass", "observe");
-    /** 模式行最多露几行,再多滚动:同伴很多时不把规则列表挤没。 */
-    private static final int MAX_MODE_ROWS = 4;
-    /** 状态行、模式行与规则列表之间的空。 */
+    private static final List<Tier> TIERS = Arrays.asList(Tier.values());
+    private static final List<Preset> PRESETS = Arrays.asList(Preset.values());
+    /** 档位块最多露几行,再多滚动:同伴很多时不把名单挤没。 */
+    private static final int MAX_TIER_ROWS = 10;
+    /** 档位块与名单之间的空。 */
     private static final int GAP = 4;
 
-    /** 上块里的控件:模式分段钮、模式行的名字,以及清空的确认卡。 */
+    /** 上块里的控件:预设钮、档位分段钮、同伴名与动作名。 */
     private final UiRoot top = new UiRoot();
-    private final ScrollBox modeScroll = new ScrollBox();
-    private final ConfirmDialog clearConfirm = new ConfirmDialog();
-    private final LibraryListPanel<ServerLibraries.PermissionRule> rules;
+    private final ScrollBox tierScroll = new ScrollBox();
+    private final LibraryListPanel<ServerLibraries.PermissionListed> listed;
 
-    private int x, y, w, h, dimX, dimY, dimW, dimH;
-    /** 状态行、模式块、列表各自的顶边(build 时定)。 */
-    private int modesTop, modesViewH, listTop;
-    /** 搭模式块时的同伴名册:变了(她被召唤、遣散)才重搭,模式本身变了只是分段钮滑一下。 */
+    private int x, y, w, h;
+    private int dimX, dimY, dimW, dimH;
+    private int tiersTop, tiersViewH, listTop;
+    /** 搭档位块时的同伴名册:变了(她被召唤、遣散)才重搭,档位本身变了只是分段钮滑一下。 */
     private List<UUID> builtFor = List.of();
 
     /** 服务端那张表读成的样子,表的版本不变就一直用它。 */
     private ServerLibraries.Permission snapshot = ServerLibraries.Permission.EMPTY;
     private long snapshotVersion = -1;
 
-    /** @param onAdd 标题行"＋":宿主打开加规则的表单卡 */
-    public PermissionPanel(Runnable onAdd) {
+    public PermissionPanel() {
         Minecraft mc = Minecraft.getInstance();
         top.setClipboard(() -> mc.keyboardHandler.getClipboard(), s -> mc.keyboardHandler.setClipboard(s));
-        rules = new LibraryListPanel<ServerLibraries.PermissionRule>(
-                () -> permission().rules(),
+        listed = new LibraryListPanel<ServerLibraries.PermissionListed>(
+                () -> permission().listed(),
                 PermissionPanel::row,
-                r -> I18n.get(ModLanguageData.Keys.PERMISSION_DELETE_CONFIRM, r.rule()),
-                r -> ServerLibraries.deleteRule(r.table(), r.rule()),
+                r -> I18n.get(ModLanguageData.Keys.PERMISSION_DELETE_CONFIRM, r.entry()),
+                r -> ServerLibraries.deleteListed(r.companion(), r.verb(), r.entry()),
                 null)
-                .withSections(PermissionPanel::group, () -> sections(onAdd))
-                .withTitleAction(I18n.get(ModLanguageData.Keys.PERMISSION_CLEAR), this::askClear)
+                .withSections(ServerLibraries.PermissionListed::verb, PermissionPanel::sections)
                 .following(Libraries.PERMISSION);
     }
 
     /** 右键一行弹删除菜单:交给宿主统一的右键通道。 */
     LibraryListPanel<?> list() {
-        return rules;
+        return listed;
     }
 
     private ServerLibraries.Permission permission() {
@@ -95,109 +93,99 @@ public final class PermissionPanel {
         this.dimH = dimH;
         top.clear();
         ServerLibraries.Permission now = permission();
-        builtFor = now.modes().stream().map(ServerLibraries.CompanionMode::companion).toList();
+        builtFor = now.companions();
 
         var font = Minecraft.getInstance().font;
-        modesTop = y + SettingsRows.ROW_H;
-        int rows = now.modes().size();
-        modesViewH = Math.max(1, Math.min(rows, MAX_MODE_ROWS)) * SettingsRows.ROW_H;
-        List<String> modeNames = List.of(I18n.get(ModLanguageData.Keys.PERMISSION_MODE_PREFIX + "ask"),
-                I18n.get(ModLanguageData.Keys.PERMISSION_MODE_PREFIX + "bypass"),
-                I18n.get(ModLanguageData.Keys.PERMISSION_MODE_PREFIX + "observe"));
-        int segW = Segmented.widthFor(modeNames, font::width);
-        int ry = modesTop;
-        for (ServerLibraries.CompanionMode mode : now.modes()) {
-            SettingsRows.label(top, mode.name(), x, ry, w - segW - 8);
-            Segmented seg = top.add(new Segmented(modeNames, () -> modeIndex(mode.companion()),
-                    pick -> ServerLibraries.setMode(mode.companion(), MODES.get(pick))));
-            seg.setBounds(x + w - segW - 2, SettingsRows.controlY(ry, NumenStyle.CONTROL_H), segW, NumenStyle.CONTROL_H);
-            ry += SettingsRows.ROW_H;
+        List<String> tierNames = TIERS.stream().map(t -> I18n.get(ModLanguageData.Keys.PERMISSION_TIER_PREFIX + t.word())).toList();
+        int segW = Segmented.widthFor(tierNames, font::width);
+        tiersTop = y;
+        int ry = tiersTop;
+        for (UUID companion : builtFor) {
+            String name = now.tiers().stream().filter(t -> t.companion().equals(companion)).findFirst()
+                    .map(ServerLibraries.PermissionTier::name).orElse("?");
+            ry = presetRow(companion, name, ry);
+            for (Verb verb : Verb.values()) {
+                SettingsRows.label(top, I18n.get(ModLanguageData.Keys.PERMISSION_VERB_PREFIX + verb.word()), x + 6, ry,
+                        w - segW - 14);
+                Segmented seg = top.add(new Segmented(tierNames, () -> tierIndex(companion, verb),
+                        pick -> ServerLibraries.setTier(companion, verb.word(), TIERS.get(pick).word())));
+                seg.setBounds(x + w - segW - 2, SettingsRows.controlY(ry, NumenStyle.CONTROL_H), segW, NumenStyle.CONTROL_H);
+                ry += SettingsRows.ROW_H;
+            }
         }
+        int rows = (ry - tiersTop) / SettingsRows.ROW_H;
         if (rows == 0) {
             Label none = top.add(new Label(I18n.get(ModLanguageData.Keys.PERMISSION_NO_COMPANIONS), Label.Role.SECONDARY));
             none.setBounds(x, SettingsRows.controlY(ry, 9), w, 9);
+            rows = 1;
         }
-        modeScroll.measure(top, x - NumenStyle.PAD, modesTop, w + NumenStyle.PAD * 2, modesViewH,
-                Math.max(1, rows) * SettingsRows.ROW_H);
+        tiersViewH = Math.min(rows, MAX_TIER_ROWS) * SettingsRows.ROW_H;
+        tierScroll.measure(top, x - NumenStyle.PAD, tiersTop, w + NumenStyle.PAD * 2, tiersViewH,
+                rows * SettingsRows.ROW_H);
 
-        listTop = modesTop + modesViewH + GAP;
-        rules.build(x, listTop, w, y + h - listTop, dimX, dimY, dimW, dimH);
+        listTop = tiersTop + tiersViewH + GAP;
+        listed.build(x, listTop, w, y + h - listTop, dimX, dimY, dimW, dimH);
     }
 
-    /** 这只同伴服务端此刻存的模式是三格里的第几格。 */
-    private int modeIndex(UUID companion) {
-        for (ServerLibraries.CompanionMode mode : permission().modes()) {
-            if (mode.companion().equals(companion)) {
-                return Math.max(0, MODES.indexOf(mode.mode()));
+    /** 一只同伴那一节的抬头:名字,和靠右排开的三个预设钮。返回下一行的顶。 */
+    private int presetRow(UUID companion, String name, int ry) {
+        var font = Minecraft.getInstance().font;
+        int right = x + w - 2;
+        for (int i = PRESETS.size() - 1; i >= 0; i--) {
+            Preset preset = PRESETS.get(i);
+            String label = I18n.get(ModLanguageData.Keys.PERMISSION_PRESET_PREFIX + preset.word());
+            int bw = font.width(label) + 16;
+            Button button = top.add(new Button(label, Button.Style.GHOST,
+                    () -> ServerLibraries.applyPreset(companion, preset.word())));
+            button.setBounds(right - bw, SettingsRows.controlY(ry, NumenStyle.CONTROL_H), bw, NumenStyle.CONTROL_H);
+            right -= bw + 4;
+        }
+        SettingsRows.label(top, name, x, ry, Math.max(20, right - x));
+        return ry + SettingsRows.ROW_H;
+    }
+
+    /** 这只同伴服务端此刻存的这种动作的档位是三格里的第几格。 */
+    private int tierIndex(UUID companion, Verb verb) {
+        for (ServerLibraries.PermissionTier t : permission().tiers()) {
+            if (t.companion().equals(companion) && t.verb().equals(verb.word())) {
+                Tier tier = Tier.byWord(t.tier());
+                return tier == null ? 0 : TIERS.indexOf(tier);
             }
         }
         return 0;
     }
 
-    private void askClear() {
-        clearConfirm.open(top, dimX, dimY, dimW, dimH, I18n.get(ModLanguageData.Keys.PERMISSION_CLEAR_CONFIRM),
-                I18n.get(ModLanguageData.Keys.GUI_SETTINGS_CANCEL), I18n.get(ModLanguageData.Keys.PERMISSION_CLEAR),
-                ServerLibraries::clearRules);
-    }
+    // ---- 名单的行与分组 ----
 
-    // ---- 列表的行与分组 ----
-
-    /** 一条规则所在的节:层加表(硬规则、你的拒绝/询问/允许、出厂的询问/允许)。 */
-    private static String group(ServerLibraries.PermissionRule r) {
-        return r.layer() + "." + r.table();
-    }
-
-    private static final List<String> GROUPS = List.of(
-            "hard.deny", "owner.deny", "owner.ask", "owner.allow", "factory.ask", "factory.allow");
-
-    /** 六节按这个顺序排;有条目才显示,只有挂着新建行的"允许"一节空着也在,"加一条规则"挂在"允许"一节末尾。 */
-    private static List<LibraryListPanel.Section> sections(Runnable onAdd) {
+    /** 八节按动作的次序排;有条目才显示。 */
+    private static List<LibraryListPanel.Section> sections() {
         List<LibraryListPanel.Section> out = new ArrayList<>();
-        for (String id : GROUPS) {
-            LibraryListPanel.Add add = id.equals("owner.allow")
-                    ? new LibraryListPanel.Add(I18n.get(ModLanguageData.Keys.PERMISSION_ADD), onAdd) : null;
-            out.add(new LibraryListPanel.Section(id, I18n.get(ModLanguageData.Keys.PERMISSION_GROUP_PREFIX + id),
-                    null, null, add, add != null));
+        for (Verb verb : Verb.values()) {
+            out.add(new LibraryListPanel.Section(verb.word(),
+                    I18n.get(ModLanguageData.Keys.PERMISSION_VERB_PREFIX + verb.word()), null, null, null, false));
         }
         return out;
     }
 
-    /** 一行:规则原文,下面一行小字是来源和命中账。主人层的能删(不是只读行);硬规则与出厂层只读。 */
-    private static LibraryListPanel.Row row(ServerLibraries.PermissionRule r) {
-        List<String> notes = new ArrayList<>();
-        if (r.editable()) {
-            notes.add(r.byHer()
-                    ? r.note().isEmpty() ? I18n.get(ModLanguageData.Keys.COMMAND_RULES_HER)
-                            : I18n.get(ModLanguageData.Keys.COMMAND_RULES_HER_WHY, r.note())
-                    : I18n.get(ModLanguageData.Keys.PERMISSION_SOURCE_OWNER));
-        }
-        notes.add(r.count() == 0 ? I18n.get(ModLanguageData.Keys.COMMAND_RULES_NEVER)
-                : I18n.get(ModLanguageData.Keys.COMMAND_RULES_HITS, r.count(),
-                        I18n.get(ModLanguageData.Keys.COMMAND_RULES_AGO,
-                                RuleBook.ago(r.lastMillis(), System.currentTimeMillis()))));
-        return new LibraryListPanel.Row(r.rule(), String.join(" · ", notes), false, null, !r.editable(), false);
+    /** 一行:名单里的名字,下面一行小字是哪只同伴的。能删(右键)。 */
+    private static LibraryListPanel.Row row(ServerLibraries.PermissionListed r) {
+        return new LibraryListPanel.Row(r.entry(), r.name(), false, null, false, false);
     }
 
     // ---- 宿主转发面 ----
 
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
-        ServerLibraries.Permission now = permission();
-        if (!builtFor.equals(now.modes().stream().map(ServerLibraries.CompanionMode::companion).toList())) {
-            build(x, y, w, h, dimX, dimY, dimW, dimH);   // 名册变了,模式块重搭
+        if (!builtFor.equals(permission().companions())) {
+            build(x, y, w, h, dimX, dimY, dimW, dimH);   // 名册变了,档位块重搭
         }
-        // 硬规则开没开:服主的服务器设置,这里只报告
-        s.drawText(TextClip.fit(s, I18n.get(now.hardRules() ? ModLanguageData.Keys.PERMISSION_HARD_ON
-                        : ModLanguageData.Keys.PERMISSION_HARD_OFF), w), x, SettingsRows.controlY(y, s.lineHeight()),
-                now.hardRules() ? c.textMuted() : c.warning(), false);
-
         boolean modal = top.hasOverlay();
-        modeScroll.beginClip(s);
+        tierScroll.beginClip(s);
         top.renderContent(s, c, modal ? -10000 : mouseX, modal ? -10000 : mouseY, nowMs);
-        modeScroll.endClip(s);
-        modeScroll.renderThumb(s, c);
+        tierScroll.endClip(s);
+        tierScroll.renderThumb(s, c);
         s.fillRect(x, listTop - GAP / 2, w, 1, c.divider());
 
-        rules.render(s, c, modal ? -10000 : mouseX, modal ? -10000 : mouseY, nowMs);
+        listed.render(s, c, modal ? -10000 : mouseX, modal ? -10000 : mouseY, nowMs);
         top.renderOverlayLayer(s, c, mouseX, mouseY, nowMs);
     }
 
@@ -205,23 +193,23 @@ public final class PermissionPanel {
         if (top.hasOverlay()) {
             return top.mouseClicked(mx, my, button);
         }
-        if (rules.mouseClicked(mx, my, button)) {
+        if (listed.mouseClicked(mx, my, button)) {
             return true;
         }
-        return button == 0 && modeScroll.inside(my) && top.mouseClicked(mx, my, button);
+        return button == 0 && tierScroll.inside(my) && top.mouseClicked(mx, my, button);
     }
 
     public boolean mouseScrolled(double mx, double my, double delta) {
         if (top.hasOverlay()) {
             return true;
         }
-        if (my >= modesTop && my < modesTop + modesViewH) {
-            return modeScroll.scrolled(my, delta);
+        if (my >= tiersTop && my < tiersTop + tiersViewH) {
+            return tierScroll.scrolled(my, delta);
         }
-        return rules.mouseScrolled(mx, my, delta);
+        return listed.mouseScrolled(mx, my, delta);
     }
 
     public boolean keyPressed(int keyCode, int modifiers) {
-        return top.keyPressed(keyCode, modifiers) || rules.keyPressed(keyCode, modifiers);
+        return top.keyPressed(keyCode, modifiers) || listed.keyPressed(keyCode, modifiers);
     }
 }

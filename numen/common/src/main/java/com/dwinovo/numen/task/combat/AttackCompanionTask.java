@@ -27,7 +27,8 @@ import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.permission.Permission;
-import com.dwinovo.numen.permission.Verdict;
+import com.dwinovo.numen.api.permission.Verdict;
+import com.dwinovo.numen.permission.Tier;
 import com.dwinovo.numen.api.task.Preparation;
 import com.dwinovo.numen.api.task.TaskState;
 
@@ -133,7 +134,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 continue;   // 找不到的照旧交给任务记成丢失
             }
             Verdict verdict = gate.judgeLive(Action.attack(e), player.serverLevel());
-            if (verdict.kind() != Verdict.Kind.DENY) {
+            if (verdict.tier() != Tier.DENY) {
                 return Preparation.READY;
             }
             denied.add(refusal(id, verdict.reason()));

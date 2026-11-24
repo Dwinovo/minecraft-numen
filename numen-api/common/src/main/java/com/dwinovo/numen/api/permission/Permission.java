@@ -1,22 +1,18 @@
 package com.dwinovo.numen.api.permission;
 
-import com.dwinovo.numen.permission.Mode;
-import com.dwinovo.numen.permission.Policy;
-import com.dwinovo.numen.permission.RuleSet;
-import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.permission.Settings;
 
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
 /**
- * 权限层的唯一入口。全仓凡会改世界的地方——挖掘落点、放置落点、攻击落点、成本模型、
- * 选目标——只问这里;能不能挖/放/打没有第二个出处。
+ * 权限层的唯一入口。全仓凡会改世界的地方——她的鼠标、直接写一格、扔东西、执行命令、成本模型、选目标——只问这里;
+ * 能不能挖/放/打没有第二个出处。
  *
  * <p>两种问法:{@link #judge(NumenPlayer, Action)} 在主线程对活世界问一个动作;
  * {@link #gateFor} 在主线程取一份快照,交给搜索线程逐格问(见 {@link Gate#judge})。
@@ -27,22 +23,19 @@ public final class Permission {
     private Permission() {}
 
     /**
-     * 主线程:取这只同伴此刻的裁决快照——模式、主人层与出厂层规则、她身边的结构件范围与方块归属、主人答应下来的任务期授权。
+     * 主线程:取这只同伴此刻的裁决快照——主人给她定的设置、她身边的方块归属、主人答应下来的任务期授权。
      * 快照不可变,任何线程可读。
      */
     public static Gate gateFor(NumenPlayer companion) {
         ServerLevel level = (ServerLevel) companion.level();
-        PermissionConfig config = PermissionConfig.of(companion.getServer());
         UUID owner = companion.getOwnerUuid();
         Actor actor = new Actor(companion.getUUID(), companion.getName().getString(), owner, siblingsOf(companion));
-        PermissionStore store = owner == null ? null : PermissionStore.of(companion.getServer(), owner);
-        Policy policy = Layers.policy(modeOf(companion), config.hardRules() ? FactoryRules.hard() : List.of(),
-                store == null ? RuleSet.EMPTY : store.rules(), FactoryRules.layer());
-        return new Gate(actor, policy,
-                Structures.capture(level, companion.blockPosition(), Structures.CAPTURE_RADIUS_CHUNKS),
-                Owners.around(level, companion.blockPosition(), Structures.CAPTURE_RADIUS_CHUNKS),
-                ConsentDesk.of(companion).granted(), store == null ? Hits.NONE : store::hit);
+        return new Gate(actor, settingsOf(companion), Owners.around(level, companion.blockPosition(), OWNER_RADIUS_CHUNKS),
+                ConsentDesk.of(companion).granted());
     }
+
+    /** 取方块归属抄多大一片:她身边这么多个区块。 */
+    public static final int OWNER_RADIUS_CHUNKS = 10;
 
     /** 主人名下此刻在游戏里的别的同伴;还没有主人是空集。 */
     private static Set<UUID> siblingsOf(NumenPlayer companion) {
@@ -63,21 +56,12 @@ public final class Permission {
         return gateFor(companion).judgeLive(action, (ServerLevel) companion.level());
     }
 
-    /** 这只同伴的模式;还没有主人时按 {@link Mode#ASK}。 */
-    public static Mode modeOf(NumenPlayer companion) {
+    /** 主人给这只同伴定的设置;还没有主人时是出厂的。 */
+    public static Settings settingsOf(NumenPlayer companion) {
         UUID owner = companion.getOwnerUuid();
         if (owner == null) {
-            return Mode.ASK;
+            return Settings.FACTORY;
         }
-        return PermissionStore.of(companion.getServer(), owner).modeOf(companion.getUUID());
-    }
-
-    /** 主人给这只同伴设模式(面板与命令的落点);还没有主人时不存。 */
-    public static void setMode(NumenPlayer companion, Mode mode) {
-        UUID owner = companion.getOwnerUuid();
-        if (owner == null) {
-            return;
-        }
-        PermissionStore.of(companion.getServer(), owner).setMode(companion.getUUID(), mode);
+        return PermissionStore.of(companion.getServer(), owner).settingsOf(companion.getUUID());
     }
 }

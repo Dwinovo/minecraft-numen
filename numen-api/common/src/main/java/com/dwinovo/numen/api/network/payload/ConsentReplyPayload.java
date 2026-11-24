@@ -16,7 +16,7 @@ import net.minecraft.server.level.ServerPlayer;
 import java.util.UUID;
 
 /**
- * Client → Server:主人在答复框上选的那一项;拒绝可以带一句附言。
+ * Client → Server:主人在答复框上选的那一项;允许与拒绝都可以带一句附言。
  *
  * <h2>信任模型</h2>
  * 目标必须是同伴(跨维度查找),发送者必须是它的主人({@code OwnedBody})。
@@ -24,8 +24,8 @@ import java.util.UUID;
  *
  * @param companion 哪只同伴
  * @param id        答的是哪一条请求
- * @param decision  允许 / 允许并记住 / 拒绝
- * @param note      附言,只有拒绝带;空串 = 没说
+ * @param decision  允许 / 以后都允许 / 拒绝
+ * @param note      附言;空串 = 没说
  */
 public record ConsentReplyPayload(UUID companion, long id, ConsentAnswer.Decision decision, String note)
         implements CustomPacketPayload {
@@ -54,11 +54,6 @@ public record ConsentReplyPayload(UUID companion, long id, ConsentAnswer.Decisio
         NumenPlayer companion = NumenPlayer.findByUuid(player.level().getServer(), p.companion());
         if (companion == null) {
             Constants.LOG.debug("[numen-net] consent_reply for unknown companion {}", p.companion());
-            return;
-        }
-        if (p.decision() != ConsentAnswer.Decision.DENY && !p.note().isBlank()) {
-            Constants.LOG.warn("[numen-net] ✗ consent_reply rejected from {}: a note only goes with a deny",
-                    player.getName().getString());
             return;
         }
         switch (ConsentDesk.reply(player, companion, p.id(), p.decision(), p.note())) {

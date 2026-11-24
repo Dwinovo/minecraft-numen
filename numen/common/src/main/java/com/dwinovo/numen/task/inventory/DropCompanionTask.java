@@ -50,7 +50,7 @@ public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTask
     }
 
     /**
-     * 丢之前交给权限层(出厂规则每次都问):放行就丢、当刻收场;要问就等主人点头,这次调用悬着;
+     * 丢之前交给权限层(出厂是问):放行就丢、当刻收场;要问就等主人点头,这次调用悬着;
      * 不许就带着理由收场。
      */
     private TaskState tryDrop() {

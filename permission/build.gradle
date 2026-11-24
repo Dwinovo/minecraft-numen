@@ -1,7 +1,7 @@
-// numen-permission:权限层的规则核心,纯 JVM——零 Minecraft 依赖、零 Numen 依赖。
-// 只管"一条规则怎么写、怎么读、怎么判":规则语法(解析与打印)、对象条件的语法树(& | ! 括号)、判决与判定顺序、
-// 模式、层与硬规则、"允许并记住"从一次命中推出一行 allow、对象组的登记口(Vocabulary)。
-// 游戏里的一下动作怎么翻成"动词 + 对象"(Act)、原版的对象组怎么判、征询与存档,都在 Numen API 的
+// numen-permission:权限层的纯逻辑核心,纯 JVM——零 Minecraft 依赖、零 Numen 依赖。
+// 只管八种动作、四种回答、档位、一只同伴的设置(八个档位加每种动作一张不用问的名单)、
+// 一圈回答者的话怎么合成一个结果(Merge)、一次改动是调松还是调严(Edit)。
+// 游戏里的一下动作怎么翻成动作与名字、谁来回答、征询与存档,都在 Numen API 的
 // com.dwinovo.numen.api.permission 里;将来走服务端插件,这里原样带走,只重写那一层适配。
 // 现住户:com.dwinovo.numen.permission。
 plugins {

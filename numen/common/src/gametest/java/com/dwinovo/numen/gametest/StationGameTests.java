@@ -186,7 +186,8 @@ public class StationGameTests {
         helper.getLevel().addFreshEntity(villager);
         NumenPlayer companion = spawnAt(helper, "gametest_buyer", new BlockPos(6, 2, 8), false);
         // 这条测的是交易本身;右键别人的村民要不要问主人另有用例,这里让主人选"全放行"
-        com.dwinovo.numen.api.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
+        com.dwinovo.numen.api.permission.PermissionStore.of(companion.getServer(), companion.getOwnerUuid())
+                .preset(companion.getUUID(), com.dwinovo.numen.permission.Preset.BYPASS);
         companion.getInventory().add(new ItemStack(Items.EMERALD, 7));
         ToolRun run = lua(companion, "local v = " + ref(villager) + "\nlocal o = numen.trade.offers(v)\n"
                 + "local b = numen.trade.buy(v, 1, 2)\n"

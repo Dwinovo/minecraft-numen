@@ -202,11 +202,6 @@ class LibrariesTest {
                     }
 
                     @Override
-                    public boolean hardRules() {
-                        return true;
-                    }
-
-                    @Override
                     public Map<UUID, String> companions() {
                         return companionsOf.getOrDefault(owner, Map.of());
                     }
@@ -474,40 +469,32 @@ class LibrariesTest {
     // ---- 权限 ----
 
     @Test
-    @Tag("mc")
-    void everyPlayerReadsAndWritesOnlyHisOwnRulesNotEvenAnAdminSeesAnothers(@TempDir Path dir) {
-        org.junit.jupiter.api.Assumptions.assumeTrue(com.dwinovo.numen.api.FakeWorld.boot(), "Minecraft 引导不可用");
+    void everyPlayerReadsAndWritesOnlyHisOwnCompanionsSettingsNotEvenAnAdminSeesAnothers(@TempDir Path dir) {
         Libraries libraries = libraries(dir);
+        companionsOf.put(PLAYER, Map.of(HER, "小焰"));
 
-        Libraries.Result added = libraries.handle(PLAYER, false, Libraries.PERMISSION, Libraries.PUT,
-                body("table", "deny", "rule", "break(owner & #c:chests)"));
+        Libraries.Result set = libraries.handle(PLAYER, false, Libraries.PERMISSION, Libraries.TIER,
+                body("companion", HER.toString(), "verb", "break", "tier", "deny"));
 
-        assertNull(added.problem());
-        assertTrue(added.entries().contains("break(owner & #c:chests)"), "他自己读到刚加的");
-        assertFalse(libraries.view(OTHER, false, Libraries.PERMISSION).contains("#c:chests"), "别人读不到");
-        assertFalse(libraries.view(ADMIN, true, Libraries.PERMISSION).contains("#c:chests"), "管理员也读不到");
-        assertNull(libraries.handle(OTHER, false, Libraries.PERMISSION, Libraries.RESET, new JsonObject()).problem());
-        assertTrue(libraries.view(PLAYER, false, Libraries.PERMISSION).contains("#c:chests"), "别人清空动不了他的");
-        assertNotNull(libraries.handle(OTHER, false, Libraries.PERMISSION, Libraries.DELETE,
-                body("table", "deny", "rule", "break(owner & #c:chests)")).problem(), "别人删不到他的行");
-        assertTrue(libraries.view(PLAYER, false, Libraries.PERMISSION).contains("#c:chests"));
+        assertNull(set.problem());
+        assertTrue(set.entries().contains("\"deny\""), "他自己读到刚设的");
+        assertFalse(libraries.view(OTHER, false, Libraries.PERMISSION).contains("小焰"), "别人读不到");
+        assertFalse(libraries.view(ADMIN, true, Libraries.PERMISSION).contains("小焰"), "管理员也读不到");
+        assertNotNull(libraries.handle(OTHER, false, Libraries.PERMISSION, Libraries.PRESET,
+                body("companion", HER.toString(), "preset", "bypass")).problem(), "别人套不了他的同伴的预设");
+        assertTrue(libraries.view(PLAYER, false, Libraries.PERMISSION).contains("\"deny\""));
     }
 
     @Test
-    @Tag("mc")
-    void aMistakenRuleIsRefusedWithTheCodeThatTheClientTranslates(@TempDir Path dir) {
-        org.junit.jupiter.api.Assumptions.assumeTrue(com.dwinovo.numen.api.FakeWorld.boot(), "Minecraft 引导不可用");
+    void anUnknownVerbOrTierIsRefusedAndNothingChanges(@TempDir Path dir) {
         Libraries libraries = libraries(dir);
+        companionsOf.put(PLAYER, Map.of(HER, "小焰"));
 
-        Libraries.Result refused = libraries.handle(PLAYER, false, Libraries.PERMISSION, Libraries.PUT,
-                body("table", "deny", "rule", "dig(owner)"));
-
-        assertNotNull(refused.problem());
-        JsonArray rows = array(refused.entries());
-        JsonObject mistake = rows.get(rows.size() - 1).getAsJsonObject().getAsJsonObject("mistake");
-        assertEquals("verb", mistake.get("code").getAsString());
-        assertEquals("dig", mistake.getAsJsonArray("args").get(0).getAsString(), "原话也带着,界面填进译文");
-        assertFalse(libraries.view(PLAYER, false, Libraries.PERMISSION).contains("dig("), "写错的没进表");
+        assertNotNull(libraries.handle(PLAYER, false, Libraries.PERMISSION, Libraries.TIER,
+                body("companion", HER.toString(), "verb", "dig", "tier", "deny")).problem());
+        assertNotNull(libraries.handle(PLAYER, false, Libraries.PERMISSION, Libraries.TIER,
+                body("companion", HER.toString(), "verb", "break", "tier", "maybe")).problem());
+        assertFalse(libraries.view(PLAYER, false, Libraries.PERMISSION).contains("\"deny\""));
     }
 
     // ---- 服务器配置、偏好、外接大脑 ----

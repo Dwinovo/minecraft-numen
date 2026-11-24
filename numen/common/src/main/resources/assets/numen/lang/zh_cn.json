@@ -27,9 +27,5 @@
   "numen.activity.click_ahead_left": "朝前打",
   "numen.activity.click_ahead_right": "朝前使用",
   "numen.activity.click_entity_left": "打 %s",
-  "numen.activity.click_entity_right": "对 %s 使用",
-  "numen.rule_word.contents": "装着东西",
-  "numen.rule_word.villager": "村民",
-  "numen.rule_word.hostile": "敌对",
-  "numen.rule_word.hazard_item": "危险"
+  "numen.activity.click_entity_right": "对 %s 使用"
 }

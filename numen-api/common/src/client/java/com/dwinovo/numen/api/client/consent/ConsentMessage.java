@@ -17,6 +17,7 @@ import net.minecraft.client.resources.language.I18n;
 import net.minecraft.locale.Language;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -65,7 +66,7 @@ public final class ConsentMessage {
 
     /**
      * 正文有几行:一件事是问话加为什么;几件事是一句总问加每件一行(最多 {@link #MAX_ROWS},其余计数);
-     * 选"以后都允许"会记下规则的({@link ConsentRequestPayload#remember})末尾再加一行,写清记下的范围。
+     * 选"以后都允许"会记下名单项的({@link ConsentRequestPayload#remember})末尾再加一行,写清记下的范围。
      */
     private static int rows(ConsentCards.Card card) {
         int n = card.request().lines().size();
@@ -73,9 +74,12 @@ public final class ConsentMessage {
         return asked + (scope(card).isEmpty() ? 0 : 1);
     }
 
-    /** "以后都允许"会记下的规则那一行字;不会记下任何规则(撤不回的事)为空。内容就是服务端 {@code rememberedRows} 算的那一份。 */
+    /** "以后都允许"会记下的那一行字;没有可记的为空。内容就是服务端 {@code ConsentItem#remembered} 算的那一份。 */
     private static String scope(ConsentCards.Card card) {
-        List<String> rows = card.request().remember();
+        List<String> rows = new ArrayList<>();
+        for (ConsentRequestPayload.Remember one : card.request().remember()) {
+            rows.add(I18n.get(ModLanguageData.Keys.CONSENT_VERB_PREFIX + one.kind().word()) + " " + one.what().getString());
+        }
         return rows.isEmpty() ? "" : I18n.get(ModLanguageData.Keys.CONSENT_REMEMBER_SCOPE, String.join("; ", rows));
     }
 
@@ -189,11 +193,11 @@ public final class ConsentMessage {
     }
 
     private static int main(UiTheme th, ConsentRequestPayload.Line line) {
-        return line.irreversible() ? th.fail() : th.text();
+        return th.text();
     }
 
     private static int soft(UiTheme th, ConsentRequestPayload.Line line) {
-        return line.irreversible() ? th.fail() : th.textDim();
+        return th.textDim();
     }
 
     /** 问话里那件事前面的一截:一件事的问话把动词、图标、数量嵌在这句中间({@code %s} 那里)。 */
@@ -244,38 +248,41 @@ public final class ConsentMessage {
         return (float) Math.min(1.0, (double) ticksLeft(card) / ConsentDesk.TIMEOUT_TICKS);
     }
 
-    /** 这条的强调色:有撤不回的事是警示色。 */
-    public static int tone(ConsentCards.Card card) {
-        UiTheme th = UiTheme.current();
-        return card.irreversible() ? th.fail() : th.accent();
+    /** 这条的强调色。 */
+    public static int tone() {
+        return UiTheme.current().accent();
     }
 
     // ---- 内联键盘 ----
 
-    /** 两行两个:允许、以后都允许;拒绝、说一句再拒绝。格子里是键号,也就是 {@link ConsentCards.Card#label} 的次序。 */
-    private static final int[][] ROWS = {{0, 1}, {2, 3}};
+    /**
+     * 三行:允许、允许并说一句;以后都允许(单独一行,按钮上写着记的是什么);拒绝、拒绝并说一句。格子里是键号,
+     * 也就是 {@link ConsentCards.Card#label} 的次序;键盘把它们按这个行序排成矩形,{@link #keys} 的次序是行内、行间依次。
+     */
+    private static final int[][] ROWS = {{0, ConsentCards.ALLOW_NOTE}, {ConsentCards.ALLOW_REMEMBER},
+            {2, ConsentCards.DENY_NOTE}};
 
-    private static int[][] labelWidths(Font font) {
+    private static int[][] labelWidths(Font font, ConsentCards.Card card) {
         int[][] widths = new int[ROWS.length][];
         for (int r = 0; r < ROWS.length; r++) {
             widths[r] = new int[ROWS[r].length];
-            for (int i = 0; i < ROWS[r].length; i++) widths[r][i] = font.width(ConsentCards.Card.label(ROWS[r][i]));
+            for (int i = 0; i < ROWS[r].length; i++) widths[r][i] = font.width(card.label(ROWS[r][i]));
         }
         return widths;
     }
 
-    /** 各键的矩形,按键号排(排法按行给,{@link #ROWS} 行内、行间都是键号递增)。 */
-    private static List<InlineKeyboard.Key> keys(Font font, int w) {
-        return InlineKeyboard.layout(labelWidths(font), w, GAP, KEY_H);
+    /** 各键的矩形,按 {@link #ROWS} 的次序排。 */
+    private static List<InlineKeyboard.Key> keys(Font font, ConsentCards.Card card, int w) {
+        return InlineKeyboard.layout(labelWidths(font, card), w, GAP, KEY_H);
     }
 
     /** 键盘不截字要多宽:气泡被它撑宽(Telegram 的键盘与气泡同宽)。 */
-    public static int keyboardWidth(Font font) {
-        return InlineKeyboard.naturalWidth(labelWidths(font), KEY_PAD, GAP);
+    public static int keyboardWidth(Font font, ConsentCards.Card card) {
+        return InlineKeyboard.naturalWidth(labelWidths(font, card), KEY_PAD, GAP);
     }
 
-    public static int keyboardHeight(Font font, int w) {
-        return InlineKeyboard.height(keys(font, w));
+    public static int keyboardHeight(Font font, ConsentCards.Card card, int w) {
+        return InlineKeyboard.height(keys(font, card, w));
     }
 
     public static void drawKeyboard(GuiGraphics g, Font font, ConsentCards.Card card, int x, int y, int w,
@@ -288,24 +295,25 @@ public final class ConsentMessage {
         // 宿主此刻的透明度(对话流里新消息飞入时整块在淡入):字的颜色直接带上它,不动着色器——字是攒着一起画的,
         // 着色器在哪一刻生效说不准
         float base = RenderSystem.getShaderColor()[3];
-        List<InlineKeyboard.Key> keys = keys(font, w);
+        List<InlineKeyboard.Key> keys = keys(font, card, w);
         for (int i = 0; i < keys.size(); i++) {
+            int key = keyOf(i);
             InlineKeyboard.Key k = keys.get(i);
             int kx = x + k.x(), ky = y + k.y();
             boolean hot = card.waiting() && k.contains(mouseX - x, mouseY - y);
             // 点过的那个停在按下的样子:答完是选中的那个,写着那一句时是"说一句再拒绝"
-            boolean held = i == card.chosen() || (i == ConsentCards.NOTE && card.writing());
-            card.over[i] = fade(card.over[i], hot || held, dt);
+            boolean held = key == card.chosen() || key == card.writingKey();
+            card.over[key] = fade(card.over[key], hot || held, dt);
             // 答完:没选的键淡下去,选中的那个留着
-            float alpha = i == card.chosen() ? 1f : 1f - 0.55f * settled;
+            float alpha = key == card.chosen() ? 1f : 1f - 0.55f * settled;
             g.fill(kx, ky, kx + k.w(), ky + k.h(), withAlpha(th.serviceBg(), alpha));
-            if (card.over[i] > 0f) {
-                g.fill(kx, ky, kx + k.w(), ky + k.h(), withAlpha(th.botKbOver(), card.over[i] * alpha));
+            if (card.over[key] > 0f) {
+                g.fill(kx, ky, kx + k.w(), ky + k.h(), withAlpha(th.botKbOver(), card.over[key] * alpha));
             }
-            if (i == card.pressedKey) {
+            if (key == card.pressedKey) {
                 drawRipple(g, card, k, kx, ky, now, th);
             }
-            String label = Nb.clip(font, ConsentCards.Card.label(i), k.w() - KEY_PAD * 2);
+            String label = Nb.clip(font, card.label(key), k.w() - KEY_PAD * 2);
             int ty = ky + (k.h() - font.lineHeight) / 2 + 1;
             Nb.text(g, font, label, kx + (k.w() - font.width(label)) / 2, ty,
                     withAlpha(th.serviceFg(), base * alpha));
@@ -328,16 +336,16 @@ public final class ConsentMessage {
 
     /** 点在键盘上:按那个键;点在键盘里就算点中了这条消息,不往下传。 */
     public static boolean click(Font font, ConsentCards.Card card, int x, int y, int w, double mx, double my) {
-        List<InlineKeyboard.Key> keys = keys(font, w);
+        List<InlineKeyboard.Key> keys = keys(font, card, w);
         for (int i = 0; i < keys.size(); i++) {
             InlineKeyboard.Key k = keys.get(i);
             if (!k.contains(mx - x, my - y)) continue;
             if (card.waiting()) {
-                card.pressedKey = i;
+                card.pressedKey = keyOf(i);
                 card.pressedAt = System.currentTimeMillis();
                 card.pressX = (int) (mx - x) - k.x();
                 card.pressY = (int) (my - y) - k.y();
-                card.press(i);
+                card.press(keyOf(i));
             }
             return true;
         }
@@ -354,11 +362,14 @@ public final class ConsentMessage {
 
     /** 收起以后写什么:点了哪个键、拒绝时说的那句、在别处答的、没等到答复为什么撤了。 */
     public static String result(ConsentCards.Card card) {
-        if (card.chosen() == ConsentCards.NOTE) {
+        if (card.chosen() == ConsentCards.DENY_NOTE) {
             return I18n.get(ModLanguageData.Keys.CONSENT_DENIED_SAYING, card.note());
         }
+        if (card.chosen() == ConsentCards.ALLOW_NOTE) {
+            return I18n.get(ModLanguageData.Keys.CONSENT_ALLOWED_SAYING, card.note());
+        }
         if (card.chosen() >= 0) {
-            return I18n.get(ModLanguageData.Keys.CONSENT_CHOSE, ConsentCards.Card.label(card.chosen()));
+            return I18n.get(ModLanguageData.Keys.CONSENT_CHOSE, ConsentCards.Card.shortLabel(card.chosen()));
         }
         if (card.gone() == null) {
             return I18n.get(ModLanguageData.Keys.CONSENT_ANSWERED_ELSEWHERE);
@@ -368,6 +379,15 @@ public final class ConsentMessage {
     }
 
     // ---- 小工具 ----
+
+    /** 键盘里第 {@code i} 个矩形是哪个键:按 {@link #ROWS} 的次序。 */
+    private static int keyOf(int i) {
+        for (int[] row : ROWS) {
+            if (i < row.length) return row[i];
+            i -= row.length;
+        }
+        throw new IndexOutOfBoundsException(i);
+    }
 
     /** 淡入淡出一步:朝 0 或 1 线性走,{@link #FADE_RATE} 分之一秒走完。 */
     private static float fade(float v, boolean on, float dt) {

@@ -12,7 +12,6 @@ import com.google.gson.JsonObject;
  * <ul>
  *   <li>{@code dailyTokenLimit}:服主的 key 给每位玩家每天能用多少 token(0 = 不限,缺省)。玩家自己的 key 不受限。</li>
  *   <li>{@code maxCompanions}:每位玩家最多召唤几只同伴(0 = 不限,缺省)。召唤只要一个名字,这是唯一的上限。</li>
- *   <li>{@code hardRules}:硬规则(别人的东西碰不得)开不开,缺省开。单机就是你自己,想关就关。</li>
  * </ul>
  */
 public final class ServerSettings {
@@ -22,7 +21,6 @@ public final class ServerSettings {
     private final JsonDoc doc;
     private volatile long dailyTokenLimit;
     private volatile int maxCompanions;
-    private volatile boolean hardRules;
 
     public ServerSettings(Home server) {
         this.doc = new JsonDoc(server.file(FILE), JsonDoc.Format.of(1), server.io());
@@ -33,7 +31,6 @@ public final class ServerSettings {
     public synchronized void reload() {
         dailyTokenLimit = 0;
         maxCompanions = 0;
-        hardRules = true;
         try {
             JsonObject root = doc.read().orElse(null);
             if (root == null) {
@@ -45,9 +42,6 @@ public final class ServerSettings {
             }
             if (root.get("maxCompanions") instanceof com.google.gson.JsonPrimitive max && max.isNumber()) {
                 maxCompanions = Math.max(0, max.getAsInt());
-            }
-            if (root.get("hardRules") instanceof com.google.gson.JsonPrimitive hard && hard.isBoolean()) {
-                hardRules = hard.getAsBoolean();
             }
         } catch (RuntimeException unreadable) {
             Constants.LOG.warn("[numen-server] {} cannot be read, using default settings: {}", doc.file(), unreadable.toString());
@@ -70,16 +64,10 @@ public final class ServerSettings {
         doc.write(toJson());
     }
 
-    /** 硬规则生效。 */
-    public boolean hardRules() {
-        return hardRules;
-    }
-
     private JsonObject toJson() {
         JsonObject root = new JsonObject();
         root.addProperty("dailyTokenLimit", dailyTokenLimit);
         root.addProperty("maxCompanions", maxCompanions);
-        root.addProperty("hardRules", hardRules);
         return root;
     }
 }

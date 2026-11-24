@@ -3,7 +3,7 @@
  * do this to the world". Content packs send an {@link com.dwinovo.numen.api.permission.Action}
  * through {@link com.dwinovo.numen.api.permission.Permission} (live, main thread) or a
  * {@link com.dwinovo.numen.api.permission.Gate} snapshot (any thread) and read the
- * {@link com.dwinovo.numen.permission.Verdict}; nothing else in the repository decides
+ * {@link com.dwinovo.numen.api.permission.Verdict}; nothing else in the repository decides
  * whether a block may be broken, placed, or an entity attacked.
  *
  * <p>The rule syntax, the verdicts and the order they are decided in live in the plain-JVM module

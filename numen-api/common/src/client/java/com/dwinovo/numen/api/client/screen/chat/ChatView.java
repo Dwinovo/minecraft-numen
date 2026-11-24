@@ -758,7 +758,7 @@ public final class ChatView {
             case Divider ignored -> LINE_H + SERVICE_PAD_V * 2;
             case UnreadBar ignored -> LINE_H + SERVICE_PAD_V * 2;
             case Consent c -> (c.label() != null ? LABEL_H : 0) + consentBubbleH(c) + ConsentMessage.GAP
-                    + ConsentMessage.keyboardHeight(font, c.w()) + consentResultH(c.card());
+                    + ConsentMessage.keyboardHeight(font, c.card(), c.w()) + consentResultH(c.card());
         };
     }
 
@@ -796,7 +796,7 @@ public final class ChatView {
         int tw = font.width(consentMeta(card)) + 6;
         int last = ConsentMessage.lastRowWidth(font, card);
         int text = Math.max(ConsentMessage.listWidth(font, card), last + tw);
-        int w = Math.min(bubbleMaxW, Math.max(text + PAD_H * 2, ConsentMessage.keyboardWidth(font)));
+        int w = Math.min(bubbleMaxW, Math.max(text + PAD_H * 2, ConsentMessage.keyboardWidth(font, card)));
         return new Consent(card, label, w, false, last + tw <= w - PAD_H * 2);
     }
 
@@ -1453,7 +1453,7 @@ public final class ChatView {
         draw(g, Nb.colored(meta, IN_META).getVisualOrderText(), bx + c.w() - PAD_H - font.width(meta), metaY);
         if (card.waiting()) {
             g.fill(bx, bubTop + bh - 1, bx + Math.round(c.w() * ConsentMessage.timeLeft(card)), bubTop + bh,
-                    ConsentMessage.tone(card));
+                    ConsentMessage.tone());
         }
         int ky = consentKeysTop(c, y);
         ConsentMessage.drawKeyboard(g, font, card, bx, ky, c.w(), hoverX, hoverY);
@@ -1464,7 +1464,7 @@ public final class ChatView {
             String text = Nb.clip(font, ConsentMessage.result(card), w - SB_W - SERVICE_PAD_H * 2);
             g.setColor(1f, 1f, 1f, base * shown);
             drawService(g, List.of(Nb.colored(text, SERVICE_FG).getVisualOrderText()), x,
-                    ky + ConsentMessage.keyboardHeight(font, c.w()) + ConsentMessage.GAP, w);
+                    ky + ConsentMessage.keyboardHeight(font, c.card(), c.w()) + ConsentMessage.GAP, w);
             g.setColor(1f, 1f, 1f, base);
         }
     }

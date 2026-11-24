@@ -8,7 +8,9 @@ import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.network.payload.LibraryPayload;
 import com.dwinovo.numen.api.permission.PermissionStore;
-import com.dwinovo.numen.permission.Verdict;
+import com.dwinovo.numen.permission.Settings;
+import com.dwinovo.numen.permission.Tier;
+import com.dwinovo.numen.permission.Verb;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -29,7 +31,7 @@ import java.util.List;
 import static com.dwinovo.numen.gametest.GameTestKit.*;
 
 /**
- * 面板的权限页:主人经库协议读写他的规则与同伴的模式,改了之后她在游戏里真的照新的办;规则有变(她加了一行、命中账涨了)
+ * 面板的权限页:主人经库协议读写他每只同伴的档位与"不用问"的名单,改了之后她在游戏里真的照新的办;设置有变(她调严了一个档位)
  * 合并成一包推给在线的主人。从协议的入口({@code Replies.library})进,和客户端发来的请求走同一条路。
  */
 public class PermissionPanelGameTests {
@@ -39,7 +41,7 @@ public class PermissionPanelGameTests {
         settleWorld(level, Difficulty.PEACEFUL, NOON);
     }
 
-    /** 装着我们的客户端的主人认下这只同伴,同伴在名册上有一行(面板的模式列表读名册)。 */
+    /** 装着我们的客户端的主人认下这只同伴,同伴在名册上有一行(面板的同伴列表读名册)。 */
     private static ServerPlayer clientOwner(GameTestHelper helper, NumenPlayer companion, String name) {
         ServerPlayer owner = presentOwner(helper, companion, name);
         CompanionRegistry.get(owner.getServer()).put(companion.getUUID(), new CompanionRegistry.Entry(
@@ -66,11 +68,12 @@ public class PermissionPanelGameTests {
         return last;
     }
 
-    /** 一张表里这一行规则;没有为 null。 */
-    private static JsonObject ruleRow(LibraryPayload table, String layer, String rule) {
+    /** 一张表里这只同伴这种动作的档位行;没有为 null。 */
+    private static JsonObject tierRow(LibraryPayload table, NumenPlayer companion, String verb) {
         for (JsonElement e : JsonParser.parseString(table.entries()).getAsJsonArray()) {
             JsonObject o = e.getAsJsonObject();
-            if (o.has("rule") && layer.equals(o.get("layer").getAsString()) && rule.equals(o.get("rule").getAsString())) {
+            if ("tier".equals(o.get("row").getAsString()) && verb.equals(o.get("verb").getAsString())
+                    && companion.getUUID().toString().equals(o.get("companion").getAsString())) {
                 return o;
             }
         }
@@ -78,30 +81,32 @@ public class PermissionPanelGameTests {
     }
 
     /**
-     * 主人在面板上加一行 deny:服务端答复带着新表,她去挖那块石头被那一行拒了;删掉那一行(同样经协议),她就挖得动。
-     * 写错的规则被拒、带着教学式错误的码、没进表。
+     * 主人在面板上把"挖方块"定成不许:服务端答复带着新表,她去挖那块石头被主人的这一档拒了;再定回许(同样经协议),她就挖得动。
+     * 认不出的动作被拒、带着原因、没改任何档位。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission_panel")
-    public static void a_rule_added_in_the_panel_holds_in_the_world_until_it_is_deleted(GameTestHelper helper) {
+    public static void a_tier_set_in_the_panel_holds_in_the_world_until_it_is_set_back(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos stoneRel = new BlockPos(6, 2, 5);
         level.setBlockAndUpdate(helper.absolutePos(stoneRel), Blocks.STONE.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_panelist", new BlockPos(4, 2, 5), true);
         ServerPlayer owner = clientOwner(helper, companion, "gametest_panel_owner");
         PermissionStore store = PermissionStore.of(owner.getServer(), owner.getUUID());
-        String rule = "break(nature & minecraft:stone)";
+        String who = companion.getUUID().toString();
 
-        Replies.library(owner, Libraries.PERMISSION, "put", "{\"table\":\"deny\",\"rule\":\"brek(owner)\"}", 7);
+        Replies.library(owner, Libraries.PERMISSION, "tier",
+                "{\"companion\":\"" + who + "\",\"verb\":\"dig\",\"tier\":\"deny\"}", 7);
         LibraryPayload refused = lastTable(received(owner));
-        helper.assertTrue(refused != null && refused.request() == 7 && !refused.problem().isEmpty() && refused.entries().contains("\"code\":\"verb\"")
-                        && store.rows(Verdict.Kind.DENY).isEmpty(),
-                "a mistyped rule was not refused with its code: " + refused);
+        helper.assertTrue(refused != null && refused.request() == 7 && !refused.problem().isEmpty()
+                        && store.settingsOf(companion.getUUID()).equals(Settings.FACTORY),
+                "a mistyped verb was not refused: " + refused);
 
-        Replies.library(owner, Libraries.PERMISSION, "put", "{\"table\":\"deny\",\"rule\":\"" + rule + "\"}");
-        LibraryPayload added = lastTable(received(owner));
-        helper.assertTrue(added != null && added.problem().isEmpty() && ruleRow(added, "owner", rule) != null
-                        && "owner".equals(ruleRow(added, "owner", rule).get("source").getAsString()),
-                "the answer does not carry the new row: " + added);
+        Replies.library(owner, Libraries.PERMISSION, "tier",
+                "{\"companion\":\"" + who + "\",\"verb\":\"break\",\"tier\":\"deny\"}");
+        LibraryPayload set = lastTable(received(owner));
+        helper.assertTrue(set != null && set.problem().isEmpty() && tierRow(set, companion, "break") != null
+                        && "deny".equals(tierRow(set, companion, "break").get("tier").getAsString()),
+                "the answer does not carry the new tier: " + set);
 
         ToolRun[] calls = new ToolRun[2];
         int[] step = {0};
@@ -111,11 +116,13 @@ public class PermissionPanelGameTests {
         });
         helper.onEachTick(() -> {
             if (step[0] == 1 && calls[0].done()) {
-                helper.assertTrue(!calls[0].succeeded() && calls[0].outcome().contains("denied by rule " + rule)
+                helper.assertTrue(!calls[0].succeeded() && calls[0].outcome().contains("setting for break is deny")
                                 && level.getBlockState(helper.absolutePos(stoneRel)).is(Blocks.STONE),
-                        "the panel's deny row did not hold: " + calls[0].outcome());
-                Replies.library(owner, Libraries.PERMISSION, "delete", "{\"table\":\"deny\",\"rule\":\"" + rule + "\"}");
-                helper.assertTrue(store.rows(Verdict.Kind.DENY).isEmpty(), "the row was not deleted");
+                        "the panel's tier did not hold: " + calls[0].outcome());
+                Replies.library(owner, Libraries.PERMISSION, "tier",
+                        "{\"companion\":\"" + who + "\",\"verb\":\"break\",\"tier\":\"allow\"}");
+                helper.assertTrue(store.settingsOf(companion.getUUID()).tier(Verb.BREAK) == Tier.ALLOW,
+                        "the tier was not set back");
                 calls[1] = click(helper, companion, "left", stoneRel);
                 step[0] = 2;
             }
@@ -124,29 +131,27 @@ public class PermissionPanelGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(step[0] == 2 && calls[1].done(), "the clicks have not finished");
             helper.assertTrue(calls[1].succeeded() && level.getBlockState(helper.absolutePos(stoneRel)).isAir(),
-                    "the stone could not be dug after the row was deleted: " + calls[1].outcome());
+                    "the stone could not be dug after the tier was set back: " + calls[1].outcome());
             finish(owner, companion);
         });
     }
 
-    /** 她加了一行 deny:不等主人来要,在线的主人面板收到带新行的表,来源标成她、带着她说的理由。 */
+    /** 她把一个档位调严:不等主人来要,在线的主人面板收到带新档位的表。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission_panel")
-    public static void a_row_she_adds_is_pushed_to_the_owners_panel(GameTestHelper helper) {
+    public static void a_tightening_she_makes_is_pushed_to_the_owners_panel(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_scribbler", new BlockPos(4, 2, 5), false);
         ServerPlayer owner = clientOwner(helper, companion, "gametest_push_owner");
-        ToolRun deny = lua(companion, "return numen.permission.deny(\"break(owner & minecraft:chest)\", "
-                + "{why = \"leave the chests\"})");
+        ToolRun tighten = lua(companion, "return numen.permission.set({verb = \"attack\", tier = \"ask\"})");
         List<CustomPacketPayload> got = new ArrayList<>();
 
         succeedWhen(helper, () -> {
             got.addAll(received(owner));
-            helper.assertTrue(deny.done() && deny.succeeded(), "the deny has not been written: " + deny.outcome());
+            helper.assertTrue(tighten.done() && tighten.succeeded(), "the tightening has not been written: " + tighten.outcome());
             LibraryPayload pushed = lastTable(got);
             helper.assertTrue(pushed != null && pushed.request() == 0, "nothing was pushed to the owner's panel");
-            JsonObject row = ruleRow(pushed, "owner", "break(owner & minecraft:chest)");
-            helper.assertTrue(row != null && "her".equals(row.get("source").getAsString())
-                            && "leave the chests".equals(row.get("note").getAsString()),
-                    "the pushed table does not mark the row as hers with her reason: " + pushed.entries());
+            JsonObject row = tierRow(pushed, companion, "attack");
+            helper.assertTrue(row != null && "ask".equals(row.get("tier").getAsString()),
+                    "the pushed table does not carry the tier she set: " + pushed.entries());
             finish(owner, companion);
         });
     }

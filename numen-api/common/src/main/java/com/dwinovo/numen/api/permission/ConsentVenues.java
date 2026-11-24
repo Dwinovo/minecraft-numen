@@ -18,7 +18,7 @@ public final class ConsentVenues {
 
     /**
      * 给场所看的一条征询,通用形式:号、哪只同伴、要做的事。要做的事是清单的文字({@link ConsentItem#listingText}),
-     * {@code remembers} 是选"允许并记住"会写进主人 allow 表的规则行;答复是 allow、remember、deny 三种,拒绝可带一句话。
+     * {@code remembers} 是选"以后都允许"会记进主人名单的几项(动作加名字);答复是 allow、remember、deny 三种,允许与拒绝都可带一句话。
      */
     public record Offer(long id, UUID companion, String companionName, String doing, List<String> remembers) {
 

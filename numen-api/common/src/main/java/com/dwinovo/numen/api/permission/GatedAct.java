@@ -1,7 +1,6 @@
 package com.dwinovo.numen.api.permission;
 
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.permission.Verdict;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,7 +24,7 @@ public final class GatedAct {
 
     /**
      * @param state   放行 / 在等主人 / 不许
-     * @param refusal 不许时回执的理由(规则、模式、外部强制的自述,或主人的原话);其余为空串
+     * @param refusal 不许时回执的理由(回答者或档位的自述,或主人的原话);其余为空串
      */
     public record Permit(PermitState state, String refusal) {
         static final Permit ALLOWED = new Permit(PermitState.ALLOWED, "");
@@ -55,12 +54,12 @@ public final class GatedAct {
         List<Integer> askedAt = new ArrayList<>();
         for (Action action : actions) {
             Verdict verdict = gate.judgeLive(action, player.serverLevel());
-            switch (verdict.kind()) {
+            switch (verdict.tier()) {
                 case ALLOW -> permits.add(Permit.ALLOWED);
                 case DENY -> permits.add(Permit.refused(verdict.reason()));
                 case ASK -> {
                     askedAt.add(permits.size());
-                    asks.add(gate.consentItemLive(action, verdict, player.serverLevel()));
+                    asks.add(gate.consentItem(action, verdict));
                     permits.add(Permit.WAITING);
                 }
             }

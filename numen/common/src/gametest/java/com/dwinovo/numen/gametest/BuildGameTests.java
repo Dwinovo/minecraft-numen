@@ -712,7 +712,7 @@ public class BuildGameTests {
     }
 
     /**
-     * 把她放的一格 A 换成 B:生存模式下先 {@code numen.work.dig} 拆那块石头(没主人的方块,出厂规则放行)、再
+     * 把她放的一格 A 换成 B:生存模式下先 {@code numen.work.dig} 拆那块石头(没主人的方块,出厂设置放行)、再
      * {@code numen.build.place} 放玻璃({@code place(!hazard_item)}),主人在场,全程一张卡都不弹。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")

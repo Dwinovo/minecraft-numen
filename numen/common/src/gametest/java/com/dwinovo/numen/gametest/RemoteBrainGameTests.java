@@ -240,9 +240,8 @@ public class RemoteBrainGameTests {
     private static com.dwinovo.numen.api.permission.ConsentItem oakLog() {
         return new com.dwinovo.numen.api.permission.ConsentItem(com.dwinovo.numen.permission.Verb.BREAK,
                 new BlockPos(1, 64, 1), com.dwinovo.numen.api.permission.ConsentItem.NO_ENTITY, "oak_log", null,
-                net.minecraft.network.chat.Component.translatable("block.minecraft.oak_log"), "break(owner)",
-                "belongs to the owner", net.minecraft.network.chat.Component.literal("belongs to the owner"), false,
-                com.dwinovo.numen.api.permission.Groups.parse("break(minecraft:oak_log)"));
+                net.minecraft.network.chat.Component.translatable("block.minecraft.oak_log"), "minecraft:oak_log",
+                "belongs to the owner", net.minecraft.network.chat.Component.literal("belongs to the owner"));
     }
 
     /**

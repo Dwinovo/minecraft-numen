@@ -35,7 +35,7 @@ import java.util.UUID;
  * @param companion         哪只同伴
  * @param id                请求号;{@code 0} = 没有挂着的请求
  * @param lines             清单,一堆一行(撤不回的那几行带着标记)
- * @param remember          选"允许并记住"会写进主人 allow 表的规则行
+ * @param remember          选"以后都允许"会记进主人名单的几项
  * @param blocks            要描轮廓的格子({@code BlockPos#asLong})
  * @param entities          要描轮廓的实体 id
  * @param expiresAtGameTime 到这一刻按拒绝(倒计时)
@@ -43,7 +43,7 @@ import java.util.UUID;
  *                          撤回和挂着的请求为 null
  * @param withdrawnBy       另一位主人答复了({@link ConsentDesk.Withdrawal#ANSWERED})时他的名字,文案里要写;别的时候是空串
  */
-public record ConsentRequestPayload(UUID companion, long id, List<ConsentRequestPayload.Line> lines, List<String> remember,
+public record ConsentRequestPayload(UUID companion, long id, List<ConsentRequestPayload.Line> lines, List<ConsentRequestPayload.Remember> remember,
                                     List<Long> blocks, List<Integer> entities, long expiresAtGameTime,
                                     ConsentDesk.Withdrawal withdrawnBecause, String withdrawnBy)
         implements CustomPacketPayload {
@@ -52,9 +52,11 @@ public record ConsentRequestPayload(UUID companion, long id, List<ConsentRequest
      * 给主人看的一堆:答复框画成"挖 [原木图标]×6 · 你的"。
      *
      * @param icon         物品图标;没有(实体、没有物品形态的方块)为 null,这时画名字
-     * @param irreversible 撤不回:答复框把这一堆画成警示色
      */
-    public record Line(Verb kind, Item icon, Component name, int count, Component cause, boolean irreversible) {}
+    public record Line(Verb kind, Item icon, Component name, int count, Component cause) {}
+
+    /** "以后都允许"会记下的一项:哪种动作、记的是什么(方块、物品、那一只或那一种实体、指令名),给主人看的那一版。 */
+    public record Remember(Verb kind, Component what) {}
 
     private static final StreamCodec<RegistryFriendlyByteBuf, Item> ITEM = ByteBufCodecs.registry(Registries.ITEM);
 
@@ -83,11 +85,11 @@ public record ConsentRequestPayload(UUID companion, long id, List<ConsentRequest
         List<Line> lines = new ArrayList<>();
         for (ConsentItem.Group group : ConsentItem.listing(request.items())) {
             ConsentItem head = group.head();
-            lines.add(new Line(head.kind(), head.icon(), head.name(), group.count(), head.shownCause(),
-                    group.irreversible()));
+            lines.add(new Line(head.kind(), head.icon(), head.name(), group.count(), head.shownCause()));
         }
-        return new ConsentRequestPayload(request.companion(), request.id(), lines,
-                ConsentItem.rememberedRows(request.items()), blocks, entities, request.expiresAtGameTime(), null, "");
+        List<Remember> remember = ConsentItem.remembered(request.items()).stream()
+                .map(item -> new Remember(item.kind(), item.name())).toList();
+        return new ConsentRequestPayload(request.companion(), request.id(), lines, remember, blocks, entities, request.expiresAtGameTime(), null, "");
     }
 
     /** 这只同伴没有挂着的请求了;{@code why} 为什么撤,主人自己答复的为 null。 */
@@ -118,9 +120,12 @@ public record ConsentRequestPayload(UUID companion, long id, List<ConsentRequest
             ComponentSerialization.TRUSTED_STREAM_CODEC.encode(buf, line.name());
             buf.writeVarInt(line.count());
             ComponentSerialization.TRUSTED_STREAM_CODEC.encode(buf, line.cause());
-            buf.writeBoolean(line.irreversible());
         }
-        buf.writeCollection(p.remember, (b, row) -> Wire.TO_CLIENT.text().encode(b, row));
+        buf.writeVarInt(p.remember.size());
+        for (Remember one : p.remember) {
+            buf.writeEnum(one.kind());
+            ComponentSerialization.TRUSTED_STREAM_CODEC.encode(buf, one.what());
+        }
         buf.writeVarInt(p.blocks.size());
         for (long b : p.blocks) {
             buf.writeLong(b);
@@ -147,10 +152,13 @@ public record ConsentRequestPayload(UUID companion, long id, List<ConsentRequest
             Item icon = buf.readBoolean() ? ITEM.decode(buf) : null;
             Component name = ComponentSerialization.TRUSTED_STREAM_CODEC.decode(buf);
             int count = buf.readVarInt();
-            lines.add(new Line(kind, icon, name, count, ComponentSerialization.TRUSTED_STREAM_CODEC.decode(buf),
-                    buf.readBoolean()));
+            lines.add(new Line(kind, icon, name, count, ComponentSerialization.TRUSTED_STREAM_CODEC.decode(buf)));
         }
-        List<String> remember = buf.readList(b -> Wire.TO_CLIENT.text().decode(b));
+        n = buf.readVarInt();
+        List<Remember> remember = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) {
+            remember.add(new Remember(buf.readEnum(Verb.class), ComponentSerialization.TRUSTED_STREAM_CODEC.decode(buf)));
+        }
         n = buf.readVarInt();
         List<Long> blocks = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {

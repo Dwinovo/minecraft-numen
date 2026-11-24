@@ -183,10 +183,8 @@ public final class NumenContent {
             // "这是什么"原版的那几样回答者(方块:告示牌的字、里面存着什么、炉子的进度;实体:村民的职业、驯没驯服、穿的拿的),
             // 和模组的回答者走同一扇门、同样的问题
             com.dwinovo.numen.describe.VanillaDescribers.install(numen);
-            // 规则里原版的那几个词(容器里有东西、村民、敌对生物、危险物品),"这只实体是谁的"原版的那一个回答(驯服记录),和
-            // "这一下右键会对世界做什么"原版的那几种物品(方块物品、桶、打火石、火焰弹):权限层自己不认东西,出厂规则写的词、
-            // 实体的主人、鼠标按之前问的动作都从这里来
-            com.dwinovo.numen.rule.VanillaWords.install(numen);
+            // "这只实体是谁的"原版的那一个回答(驯服记录),和"这一下右键会对世界做什么"原版的那几种物品(方块物品、桶、打火石、
+            // 火焰弹):权限层自己不认东西,实体的主人、鼠标按之前问的动作都从这里来
             com.dwinovo.numen.rule.VanillaOwners.install(numen);
             com.dwinovo.numen.act.VanillaClicks.install(numen);
         });

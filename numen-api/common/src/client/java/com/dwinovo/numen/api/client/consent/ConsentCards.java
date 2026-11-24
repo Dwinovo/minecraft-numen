@@ -31,12 +31,21 @@ import java.util.UUID;
  */
 public final class ConsentCards {
 
-    /** 内联按钮里前三个各是一种答复。 */
+    /** 内联按钮,按键号排:前三个直接答,后两个是"说一句再答"——点了输入框上方出提示栏,主人写的那句随答复送出。 */
     private static final ConsentAnswer.Decision[] DECISIONS = {
-            ConsentAnswer.Decision.ALLOW_ONCE, ConsentAnswer.Decision.ALLOW_REMEMBER, ConsentAnswer.Decision.DENY};
-    /** 第四个按钮:说一句再拒绝——点了输入框上方出提示栏,主人写的那句随拒绝送出。 */
-    public static final int NOTE = DECISIONS.length;
-    public static final int BUTTONS = NOTE + 1;
+            ConsentAnswer.Decision.ALLOW_ONCE, ConsentAnswer.Decision.ALLOW_REMEMBER, ConsentAnswer.Decision.DENY,
+            ConsentAnswer.Decision.ALLOW_ONCE, ConsentAnswer.Decision.DENY};
+    public static final int ALLOW_REMEMBER = 1;
+    /** 允许并说一句。 */
+    public static final int ALLOW_NOTE = 3;
+    /** 拒绝并说一句。 */
+    public static final int DENY_NOTE = 4;
+    public static final int BUTTONS = DECISIONS.length;
+
+    /** 这个键是"说一句再答"。 */
+    public static boolean isNote(int key) {
+        return key == ALLOW_NOTE || key == DENY_NOTE;
+    }
 
     private static final Map<UUID, Card> PENDING = new LinkedHashMap<>();
     private static final Map<UUID, List<Card>> HISTORY = new HashMap<>();
@@ -49,9 +58,8 @@ public final class ConsentCards {
     public static final class Card {
         private final ConsentRequestPayload request;
         private final long arrivedAt;
-        private final boolean irreversible;
-        /** 点了"说一句再拒绝",输入框上方挂着提示栏。 */
-        private boolean writing;
+        /** 点了"说一句再答"的哪一个键,输入框上方挂着提示栏;没点是 -1。 */
+        private int writingKey = -1;
         /** 主人点的哪个键;{@code -1} = 还在等,或没等到主人答复就收了。 */
         private int chosen = -1;
         private String note = "";
@@ -73,7 +81,6 @@ public final class ConsentCards {
         private Card(ConsentRequestPayload request, long arrivedAt) {
             this.request = request;
             this.arrivedAt = arrivedAt;
-            this.irreversible = request.lines().stream().anyMatch(ConsentRequestPayload.Line::irreversible);
         }
 
         public ConsentRequestPayload request() {
@@ -89,10 +96,6 @@ public final class ConsentCards {
             return arrivedAt;
         }
 
-        public boolean irreversible() {
-            return irreversible;
-        }
-
         public boolean waiting() {
             return settledAt == 0;
         }
@@ -102,7 +105,12 @@ public final class ConsentCards {
         }
 
         public boolean writing() {
-            return writing;
+            return writingKey >= 0;
+        }
+
+        /** 正在写的那一句随哪个键送出({@link #ALLOW_NOTE} 或 {@link #DENY_NOTE});没在写是 -1。 */
+        public int writingKey() {
+            return writingKey;
         }
 
         public int chosen() {
@@ -122,20 +130,34 @@ public final class ConsentCards {
             return I18n.get(gone.key(), goneBy);
         }
 
-        /** 这个键写着什么。 */
-        public static String label(int key) {
-            return I18n.get(key == NOTE ? ModLanguageData.Keys.CONSENT_DENY_NOTE : switch (DECISIONS[key]) {
-                case ALLOW_ONCE -> ModLanguageData.Keys.CONSENT_ALLOW;
+        /** 这个键没有补充时写着什么:答完以后"你选了「…」"那一句用它。 */
+        public static String shortLabel(int key) {
+            return I18n.get(switch (key) {
+                case 0 -> ModLanguageData.Keys.CONSENT_ALLOW;
                 case ALLOW_REMEMBER -> ModLanguageData.Keys.CONSENT_ALLOW_REMEMBER;
-                case DENY -> ModLanguageData.Keys.CONSENT_DENY;
+                case 2 -> ModLanguageData.Keys.CONSENT_DENY;
+                case ALLOW_NOTE -> ModLanguageData.Keys.CONSENT_ALLOW_NOTE;
+                default -> ModLanguageData.Keys.CONSENT_DENY_NOTE;
             });
         }
 
-        /** 点了一个键:前三个直接答;第四个去写那一句。 */
+        /** 这个键此刻写着什么:"以后都允许"的键写明记下的是什么(第一项,多项再加个数),没有可记的就只写它的名字。 */
+        public String label(int key) {
+            List<ConsentRequestPayload.Remember> remember = request.remember();
+            if (key != ALLOW_REMEMBER || remember.isEmpty()) {
+                return shortLabel(key);
+            }
+            ConsentRequestPayload.Remember first = remember.get(0);
+            String what = I18n.get(ModLanguageData.Keys.CONSENT_VERB_PREFIX + first.kind().word()) + " "
+                    + first.what().getString() + (remember.size() > 1 ? " +" + (remember.size() - 1) : "");
+            return I18n.get(ModLanguageData.Keys.CONSENT_ALLOW_REMEMBER_WHAT, what);
+        }
+
+        /** 点了一个键:前三个直接答;后两个去写那一句。 */
         public void press(int key) {
             if (!waiting() || key < 0 || key >= BUTTONS) return;
-            if (key == NOTE) {
-                writing = true;
+            if (isNote(key)) {
+                writingKey = key;
             } else {
                 reply(this, key, "");
             }
@@ -143,17 +165,17 @@ public final class ConsentCards {
 
         /** 收起提示栏,不答。 */
         public void stopWriting() {
-            writing = false;
+            writingKey = -1;
         }
 
-        /** 提示栏挂着时主人发出去的那句:按拒绝连同这句送出。空的不算。 */
-        public void denyWith(String said) {
-            if (!waiting() || said == null || said.isBlank()) return;
-            reply(this, NOTE, said);
+        /** 提示栏挂着时主人发出去的那句:连同正在写的那个答复送出。空的不算。 */
+        public void say(String said) {
+            if (!waiting() || writingKey < 0 || said == null || said.isBlank()) return;
+            reply(this, writingKey, said);
         }
 
         private void settle() {
-            writing = false;
+            writingKey = -1;
             settledAt = System.currentTimeMillis();
         }
     }
@@ -225,7 +247,7 @@ public final class ConsentCards {
         if (said.length() > ConsentReplyPayload.MAX_NOTE_LENGTH) {
             said = said.substring(0, ConsentReplyPayload.MAX_NOTE_LENGTH);
         }
-        ConsentAnswer.Decision decision = key == NOTE ? ConsentAnswer.Decision.DENY : DECISIONS[key];
+        ConsentAnswer.Decision decision = DECISIONS[key];
         NumenNetwork.sendToServer(new ConsentReplyPayload(card.companion(), card.request.id(), decision, said));
         card.chosen = key;
         card.note = said;

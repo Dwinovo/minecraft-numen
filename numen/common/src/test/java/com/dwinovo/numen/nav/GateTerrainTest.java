@@ -9,14 +9,11 @@ import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.pathing.plan.TerrainPolicy.Change;
 import com.dwinovo.numen.api.permission.Actor;
 import com.dwinovo.numen.api.permission.ConsentItem;
-import com.dwinovo.numen.api.permission.FactoryRules;
 import com.dwinovo.numen.api.permission.Gate;
-import com.dwinovo.numen.api.permission.Layers;
-import com.dwinovo.numen.api.permission.Hits;
-import com.dwinovo.numen.permission.Mode;
 import com.dwinovo.numen.api.permission.Owners;
-import com.dwinovo.numen.api.permission.Structures;
-import com.dwinovo.numen.permission.RuleSet;
+import com.dwinovo.numen.permission.Settings;
+import com.dwinovo.numen.permission.Tier;
+import com.dwinovo.numen.permission.Verb;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.BlockGetter;
@@ -36,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 寻路问"这一格能不能动"时,同伴这一侧怎么答:权限层的裁决原样变成许可——放行;要问,凭据是写给主人的那一条征询;
- * 拒绝,理由是裁决本身。出厂规则下,没主人的方块放行,主人的、带方块实体的箱子要问,别人的拒绝。
+ * 拒绝,理由是裁决本身。出厂设置下,没主人的方块放行,主人的要问,别人的拒绝;主人把挖定成问,没主人的也要问。
  */
 @Tag("mc")
 class GateTerrainTest {
@@ -45,16 +42,19 @@ class GateTerrainTest {
     private static final UUID OWNER = UUID.randomUUID();
     private static final Actor HER = new Actor(UUID.randomUUID(), "Aria", OWNER);
 
-    /** 出厂规则写的词有 Numen 登记的那几个,所以装上 Numen 的全部登记再问。 */
+    /** 装上 Numen 的全部登记再问,和真的游戏里一样。 */
     @BeforeAll
     static void boot() {
         com.dwinovo.numen.NumenApiFixture.install();
     }
 
-    /** 出厂规则的裁决快照;{@code owners} 是哪一格是谁的,没写的格没人说。 */
+    /** 出厂设置的裁决快照;{@code owners} 是哪一格是谁的,没写的格没人说。 */
     private static Gate gate(Map<BlockPos, UUID> owners) {
-        return new Gate(HER, Layers.policy(Mode.ASK, FactoryRules.hard(), RuleSet.EMPTY, FactoryRules.layer()),
-                Structures.NONE, Owners.Blocks.of(List.of(owners::get)), List.of(), Hits.NONE);
+        return gate(Settings.FACTORY, owners);
+    }
+
+    private static Gate gate(Settings settings, Map<BlockPos, UUID> owners) {
+        return new Gate(HER, settings, Owners.Blocks.of(List.of(owners::get)), List.of());
     }
 
     private static Permit dig(Gate gate, BlockState state) {
@@ -69,11 +69,12 @@ class GateTerrainTest {
     }
 
     @Test
-    void aChestNeedsConsentAndTheCredentialSaysWhy() {
-        Permit permit = dig(gate(Map.of()), Blocks.CHEST.defaultBlockState());
+    void aTierOfAskMakesEvenNobodysBlockNeedConsentAndTheCredentialSaysWhy() {
+        Settings asking = Settings.FACTORY.withTier(Verb.BREAK, Tier.ASK);
+        Permit permit = dig(gate(asking, Map.of()), Blocks.CHEST.defaultBlockState());
         Permit.Ask ask = assertInstanceOf(Permit.Ask.class, permit);
         ConsentItem item = assertInstanceOf(ConsentItem.class, ask.credential());
-        assertTrue(item.cause().contains("has a block entity"), item.cause());
+        assertTrue(item.cause().contains("setting for break is ask"), item.cause());
     }
 
     @Test

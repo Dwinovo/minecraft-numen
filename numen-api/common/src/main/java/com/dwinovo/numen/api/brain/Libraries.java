@@ -22,7 +22,6 @@ import com.dwinovo.numen.mcp.client.McpConnections;
 import com.dwinovo.numen.mcp.client.auth.McpOAuth;
 import com.dwinovo.numen.api.mcp.server.McpMode;
 import com.dwinovo.numen.api.NumenPlugins;
-import com.dwinovo.numen.api.permission.PermissionConfig;
 import com.dwinovo.numen.api.permission.PermissionLibrary;
 import com.dwinovo.numen.api.permission.PermissionStore;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
@@ -74,7 +73,7 @@ import java.util.UUID;
  *       带 {@code companion}、{@code name} 问);</li>
  *   <li><b>主人的定时</b>({@link #SCHEDULES}):主人名下各只的定时(话、间隔);主人可以 {@link #PUT} 新增(不带 {@code id})或修改、
  *       {@link #DELETE} 删除,条数与间隔的限制在 {@link OwnerSchedules},状态以服务端为准;
- *   <li><b>权限</b>({@link #PERMISSION}):主人自己的规则与他名下每只同伴的模式,只有他读写他那一份(管理员也一样),
+ *   <li><b>权限</b>({@link #PERMISSION}):他名下每只同伴的八个档位与每种动作的"不用问"名单,只有他读写他那一份(管理员也一样),
  *       见 {@link PermissionLibrary};</li>
  *   <li><b>分享来的她的技能</b>({@link #COMPANION_SKILLS}):分享给这位玩家的各只同伴此刻用得了的技能——她创建者的那一份
  *       (她读的技能永远是创建者的),只有名字与描述,正文不下行;只读,要改得创建者在他自己的技能库里改;</li>
@@ -133,9 +132,9 @@ public final class Libraries {
     public static final String RESTORE = "restore";
     /** MCP 服务器专有:交回授权回调网址。 */
     public static final String AUTH = "auth";
-    /** 权限专有:清空主人层的规则;设一只同伴的模式。加一行、删一行用 {@link #PUT}、{@link #DELETE}。 */
-    public static final String RESET = PermissionLibrary.RESET;
-    public static final String MODE = PermissionLibrary.MODE;
+    /** 权限专有:设一只同伴的一个档位;套一个预设。从名单里删一项用 {@link #DELETE}。 */
+    public static final String TIER = PermissionLibrary.TIER;
+    public static final String PRESET = PermissionLibrary.PRESET;
     /** 连通性检测专有:试连一份草稿。 */
     public static final String RUN = "run";
     /** 皮肤专有:撤掉一张排着的签名(或不再显示一条失败)。 */
@@ -286,11 +285,6 @@ public final class Libraries {
                     @Override
                     public PermissionStore store() {
                         return PermissionStore.of(server, owner);
-                    }
-
-                    @Override
-                    public boolean hardRules() {
-                        return PermissionConfig.of(server).hardRules();
                     }
 
                     @Override
@@ -1008,26 +1002,13 @@ public final class Libraries {
         return false;
     }
 
-    /**
-     * 权限:每位玩家只摸得到自己那一份,不看是不是管理员。规则写错了,整表后面多一行 {@code {"mistake": {"code", "args"}}},
-     * 界面照码翻成主人的语言(和命令同一套 {@code numen.command.rule_mistake.<码>});原因的英文原话照常在 {@code problem} 里。
-     */
+    /** 权限:每位玩家只摸得到自己那一份,不看是不是管理员。办不成的原因(英文原话)在 {@code problem} 里。 */
     private Done permission(UUID owner, String op, JsonObject body) {
         if (LIST.equals(op)) {
             return Done.ok();
         }
-        PermissionLibrary.Outcome outcome = PermissionLibrary.write(sources.permission(owner), op, body);
-        if (outcome.mistake() == null) {
-            return Done.problem(outcome.problem());
-        }
-        JsonObject mistake = new JsonObject();
-        mistake.addProperty("code", outcome.mistake().code());
-        JsonArray args = new JsonArray();
-        outcome.mistake().args().forEach(args::add);
-        mistake.add("args", args);
-        JsonObject extra = new JsonObject();
-        extra.add("mistake", mistake);
-        return new Done(outcome.problem(), false, extra);
+        String problem = PermissionLibrary.write(sources.permission(owner), op, body).problem();
+        return problem == null ? Done.ok() : Done.problem(problem);
     }
 
     /** 外接大脑宿主的整份状态:配置、谁连着、起服失败的原因。令牌不在这里:它们是主人在游戏里用命令发的。 */

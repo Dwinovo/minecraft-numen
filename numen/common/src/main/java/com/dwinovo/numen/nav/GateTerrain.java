@@ -4,7 +4,7 @@ import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.pathing.plan.TerrainPolicy;
 import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.permission.Gate;
-import com.dwinovo.numen.permission.Verdict;
+import com.dwinovo.numen.api.permission.Verdict;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.Item;
@@ -26,9 +26,9 @@ record GateTerrain(Gate gate) implements TerrainPolicy {
     public Permit judge(Change change, BlockPos pos, BlockState state, BlockGetter view) {
         Action action = action(change, pos, state);
         Verdict verdict = gate.judge(action, view);
-        return switch (verdict.kind()) {
+        return switch (verdict.tier()) {
             case ALLOW -> Permit.ALLOW;
-            case ASK -> Permit.ask(gate.consentItem(action, verdict, view));
+            case ASK -> Permit.ask(gate.consentItem(action, verdict));
             case DENY -> Permit.deny(verdict);
         };
     }

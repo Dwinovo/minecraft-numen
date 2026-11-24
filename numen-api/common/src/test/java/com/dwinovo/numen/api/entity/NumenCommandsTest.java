@@ -101,37 +101,37 @@ class NumenCommandsTest {
     }
 
     @Test
-    void modeShowsOrSets() {
-        assertEquals("Aria", runs("numen permission mode Aria").get("name").getResult());
-        runs("numen permission mode Aria ask");
-        runs("numen permission mode Aria bypass");
-        runs("numen permission mode Aria observe");
-        assertTrue(fails("numen permission mode Aria chaos"));
+    void settingsAreShownSetAndPresetPerCompanion() {
+        assertEquals("Aria", runs("numen permission show Aria").get("name").getResult());
+        assertEquals("drop", runs("numen permission set Aria drop allow").get("verb").getResult());
+        runs("numen permission set Aria use_item deny");
+        assertEquals("observe", runs("numen permission preset Aria observe").get("preset").getResult());
+        runs("numen permission preset Aria bypass");
+        runs("numen permission preset Aria factory");
+        assertTrue(fails("numen permission set Aria drop"), "a tier is required");
+        assertTrue(fails("numen permission preset Aria"), "a preset is required");
     }
 
     @Test
-    void rulesListAddRemoveReset() {
-        runs("numen permission rules list");
-        assertEquals("break(placed & minecraft:cobblestone)",
-                runs("numen permission rules add allow break(placed & minecraft:cobblestone)").get("rule").getResult());
-        runs("numen permission rules add deny attack(villager)");
-        runs("numen permission rules add ask drop(*)");
-        assertEquals(2, runs("numen permission rules remove ask 2").get("row").getResult());
-        runs("numen permission rules reset");
-        assertTrue(fails("numen permission rules add maybe drop(*)"), "only deny, ask and allow are tables");
-        assertTrue(fails("numen permission rules remove ask 0"), "rows are numbered from 1");
+    void theNeverAskListTakesAVerbAndAnEntry() {
+        assertEquals("minecraft:stone",
+                runs("numen permission list add Aria break minecraft:stone").get("entry").getResult());
+        runs("numen permission list remove Aria break minecraft:stone");
+        assertEquals("setblock", runs("numen permission list add Aria command setblock").get("entry").getResult());
+        assertTrue(fails("numen permission list add Aria break"), "an entry is required");
+        assertTrue(fails("numen permission list clear Aria break x"), "only add and remove");
     }
 
     @Test
-    void consentTakesAnIdAndADenyTakesAnOptionalNote() {
+    void consentTakesAnIdAndAnOptionalNote() {
         Map<String, ParsedArgument<CommandSourceStack, ?>> bare = runs("numen consent allow 42");
         assertEquals(42L, bare.get("id").getResult());
         Map<String, ParsedArgument<CommandSourceStack, ?>> noted = runs("numen consent deny 7 那是我的柱子 别动");
         assertEquals("那是我的柱子 别动", noted.get("note").getResult());
+        assertEquals("小心点", runs("numen consent allow 7 小心点").get("note").getResult(), "允许也能附一句话");
         runs("numen consent remember 9");
         runs("numen consent deny 9");
-        assertTrue(fails("numen consent allow 42 小心点"), "a note only goes with a deny");
-        assertTrue(fails("numen consent remember 9 小心点"), "a note only goes with a deny");
+        assertEquals("小心点", runs("numen consent remember 9 小心点").get("note").getResult());
         assertTrue(fails("numen consent allow"), "a request id is required");
         assertTrue(fails("numen consent maybe 3"));
     }
@@ -147,7 +147,7 @@ class NumenCommandsTest {
     /** 管理同伴的指令只给玩家:她召唤不了同伴、改不了权限、答不了征询、drive 不了别人。 */
     @Test
     void thePlayersVerbsAreNotHers() {
-        for (String line : new String[]{"numen player summon Aria", "numen permission rules list",
+        for (String line : new String[]{"numen player summon Aria", "numen permission show Aria",
                 "numen consent allow 42", "numen settings", "numen drive Aria numen.task.status()"}) {
             runs(line, console);
             assertTrue(fails(line, her), "she can reach " + line);
@@ -173,7 +173,7 @@ class NumenCommandsTest {
         assertTrue(fails("numen gt_live"));
         assertTrue(dispatcher.getRoot().getChild(NumenCommands.ROOT).getChildren().stream()
                 .noneMatch(n -> n.getName().equals("gt_live")));
-        runs("numen permission rules list");
+        runs("numen permission show Aria");
     }
 
     /** 同名的一格挂两次:Brigadier 会悄悄并成一格,留下先来那一格的观众,所以当场抛出。 */

@@ -206,7 +206,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             for (com.dwinovo.numen.api.permission.Action action : rules.actionsFor(target)) {
                 var verdict = gate.judgeLive(action, player.serverLevel());
                 if (verdict.asks()) {
-                    items.add(gate.consentItemLive(action, verdict, player.serverLevel()));
+                    items.add(gate.consentItem(action, verdict));
                 }
             }
         }

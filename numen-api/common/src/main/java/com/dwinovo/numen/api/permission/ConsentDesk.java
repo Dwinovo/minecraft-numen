@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.permission;
 
-import com.dwinovo.numen.permission.Rule;
+import com.dwinovo.numen.permission.Settings;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.brain.OwnerPresence;
 import com.dwinovo.numen.api.entity.NumenPlayer;
@@ -30,7 +30,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * {@link #answer} 回来,先答的算数,其余各位那边撤回并写明是谁答了。发起者每刻读自己那张 {@link Ticket},模型不参与。
  *
  * <h2>附言</h2>
- * 附言只随拒绝:主人要她换个做法才会说,那句话就是拒绝的理由,随发起的任务收场送达。允许不带附言。
+ * 允许与拒绝都可以带一句话,原话交给模型:拒绝的附言就是拒绝的理由,随发起的任务收场送达;允许的附言写进回执里主人点头的那一句
+ * ({@link ConsentAnswer#allowance})。
  *
  * <h2>任务期授权</h2>
  * 主人允许的清单记在发起它的那一方名下(作用域:任务记录,或一次等着执行的指令),{@link #granted} 是全部在册授权的
@@ -38,8 +39,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * 清掉它名下的授权与没答复的请求——各任务不各存一份。
  *
  * <h2>记住</h2>
- * 主人选"允许并记住"时,除了记成本任务的授权,清单每一条的 {@link ConsentItem#remember} 写进创建者的
- * allow 表({@link PermissionStore#remember};规则本只有创建者的那一本,哪位主人点的都写进它),往后同类的事由主人层直接放行,不再问。
+ * 主人选"以后都允许"时,除了记成本任务的授权,清单每一条的名字({@link ConsentItem#key})记进创建者给这只同伴定的那种动作的名单
+ * ({@link PermissionStore#remember};设置只有创建者的那一本,哪位主人点的都写进它),往后同类的事名单直接放行,不再问。
  */
 public final class ConsentDesk {
 
@@ -95,7 +96,7 @@ public final class ConsentDesk {
         NOT_PENDING
     }
 
-    /** 登记处与外界的接线:时钟、主人在不在、把请求推给各位主人或撤回、把记住的规则写进创建者的表。 */
+    /** 登记处与外界的接线:时钟、主人在不在、把请求推给各位主人或撤回、把记住的名字写进创建者的名单。 */
     interface Line {
         /** 她的名字,写在给主人看的请求上。 */
         String name();
@@ -116,7 +117,7 @@ public final class ConsentDesk {
          */
         void answered(long id, UUID by);
 
-        void remember(List<Rule> allow);
+        void remember(List<Settings.Entry> entries);
     }
 
     private static final AtomicLong IDS = new AtomicLong();
@@ -221,19 +222,15 @@ public final class ConsentDesk {
     }
 
     /**
-     * 这只同伴的一位主人的答复(经 {@link #reply} 进来)。先答的算数:允许就把清单记进发起任务的授权,允许并
-     * 记住再把记住的规则写进创建者的 allow 表;拒绝的附言就是理由,没有附言时理由是 {@link #OWNER_SAID_NO}。
+     * 这只同伴的一位主人的答复(经 {@link #reply} 进来)。先答的算数:允许就把清单记进发起任务的授权,以后都允许
+     * 再把记住的名字写进创建者的名单;拒绝的附言就是理由,没有附言时理由是 {@link #OWNER_SAID_NO}。
      *
-     * @param note 附言;只有拒绝带
+     * @param note 附言,允许与拒绝都可以带;没有为空
      * @param by   答复的那一位主人
      * @return 答的是不是挂着的那一条(过期、被顶替、别的主人已经答过的号一律忽略)
-     * @throws IllegalArgumentException 允许的答复带了附言
      */
     public boolean answer(long requestId, ConsentAnswer.Decision decision, String note, UUID by) {
         String said = note == null ? "" : note.strip();
-        if (decision != ConsentAnswer.Decision.DENY && !said.isEmpty()) {
-            throw new IllegalArgumentException("a note only goes with a deny");
-        }
         if (pending == null || pending.request.id() != requestId) {
             return false;
         }
@@ -245,9 +242,9 @@ public final class ConsentDesk {
             grants.computeIfAbsent(ticket.scope, k -> new ArrayList<>()).addAll(ticket.request.items());
             rebuildGranted();
             if (decision == ConsentAnswer.Decision.ALLOW_REMEMBER) {
-                line.remember(ConsentItem.remembered(ticket.request.items()));
+                line.remember(ConsentItem.rememberedEntries(ticket.request.items()));
             }
-            answer = new ConsentAnswer(decision, "");
+            answer = new ConsentAnswer(decision, said);
         }
         settle(ticket, answer);
         line.answered(requestId, by);
@@ -404,8 +401,8 @@ public final class ConsentDesk {
         }
 
         @Override
-        public void remember(List<Rule> allow) {
-            PermissionStore.of(body.getServer(), body.getOwnerUuid()).remember(allow);
+        public void remember(List<Settings.Entry> entries) {
+            PermissionStore.of(body.getServer(), body.getOwnerUuid()).remember(body.getUUID(), entries);
         }
 
     }

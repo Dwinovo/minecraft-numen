@@ -174,7 +174,7 @@ public class CompanionChatScreen extends Screen {
     /** 征询那张卡的顶边:贴着输入卡上沿往上摞。 */
     private int consentTop(ConsentCards.Card card, int cardTop) {
         int innerW = INPUT_W + 16 - 8;
-        int h = 4 + ConsentMessage.listHeight(card) + ConsentMessage.GAP + ConsentMessage.keyboardHeight(this.font, innerW) + 4;
+        int h = 4 + ConsentMessage.listHeight(card) + ConsentMessage.GAP + ConsentMessage.keyboardHeight(this.font, card, innerW) + 4;
         return cardTop - 4 - h;
     }
 
@@ -230,11 +230,11 @@ public class CompanionChatScreen extends Screen {
         int w = INPUT_W + 16;
         int listH = ConsentMessage.listHeight(card);
         int innerW = w - 8;
-        int h = 4 + listH + ConsentMessage.GAP + ConsentMessage.keyboardHeight(this.font, innerW) + 4;
+        int h = 4 + listH + ConsentMessage.GAP + ConsentMessage.keyboardHeight(this.font, card, innerW) + 4;
         int top = consentTop(card, cardTop);
         com.dwinovo.numen.api.client.ui.NumenStyle.box(surface, cardX, top, w, h, th.band(), th.aiBorder());
         g.fill(cardX + 1, top + 1, cardX + 1 + Math.round((w - 2) * ConsentMessage.timeLeft(card)), top + 2,
-                ConsentMessage.tone(card));
+                ConsentMessage.tone());
         ConsentMessage.drawList(g, this.font, card, cardX + 4, top + 4, innerW);
         keysX = cardX + 4;
         keysY = top + 4 + listH + ConsentMessage.GAP;

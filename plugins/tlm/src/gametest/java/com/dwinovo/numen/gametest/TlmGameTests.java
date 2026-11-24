@@ -4,8 +4,9 @@ import com.dwinovo.numen.api.gametest.Bodies;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.permission.Mode;
-import com.dwinovo.numen.api.permission.Permission;
+import com.dwinovo.numen.permission.Edit;
+import com.dwinovo.numen.permission.Verb;
+import com.dwinovo.numen.api.permission.PermissionStore;
 import com.dwinovo.numen.plugins.tlm.MaidLook;
 import com.dwinovo.numen.plugins.tlm.Outfit;
 import com.github.tartaricacid.touhoulittlemaid.entity.ai.brain.MaidSchedule;
@@ -43,9 +44,8 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
  * <p>只在挂着车万女仆的那一次跑批里跑({@code :plugins:tlm:runGameTestServer},见插件的 build.gradle),套件 {@code numen_tlm}
  * (见 {@link TlmGameTestSuite});Numen 那一次跑批里没有这些用例,也没有车万女仆。
  *
- * <p>权限层照出厂规则:对她自己的女仆动手由 {@code use_entity(self_owned)} 放行,野生女仆由 {@code use_entity(!owned)}
- * 放行,都不问。只有别人的女仆那一条开 {@link Mode#BYPASS}:别人的女仆出厂规则一行都没说到,照旧要问主人,用例里的主人
- * 不在线,一问就按拒绝收场;那一条测的是车万女仆自己的主人判据,得先让权限层放过去。
+ * <p>权限层照出厂设置:对她自己的女仆动手归属不表态、野生女仆没主人,都放行,不问。只有主人的女仆那一条把那一只记进主人"交互实体"的
+ * 不用问名单:主人的东西归属要问,用例里的主人不在线,一问就按拒绝收场;那一条测的是车万女仆自己的主人判据,得先让权限层放过去。
  */
 public class TlmGameTests {
 
@@ -411,14 +411,15 @@ public class TlmGameTests {
         });
     }
 
-    /** 主人的女仆(别人的女仆是硬规则拒的,到不了这儿):权限层放行了,车万女仆自己的主人判据不照做;回执说她不是她的,工作没动。 */
+    /** 主人的女仆(主人名单里记了这一只,别人的女仆是归属拒的,到不了这儿):权限层放行了,车万女仆自己的主人判据不照做;回执说她不是她的,工作没动。 */
     @GameTest(template = "floor16", timeoutTicks = 100, batch = BATCH)
     public static void the_owners_maid_keeps_her_task(GameTestHelper helper) {
         NumenPlayer her = keeper(helper, "gametest_tlm_meddler", new BlockPos(3, 2, 3));
-        Permission.setMode(her, Mode.BYPASS);
         EntityMaid maid = maidAt(helper, new BlockPos(5, 2, 3));
         maid.setTame(true, false);
         maid.setOwnerUUID(her.getOwnerUuid());
+        PermissionStore.of(her.getServer(), her.getOwnerUuid())
+                .edit(her.getUUID(), new Edit.Add(Verb.USE_ENTITY, maid.getUUID().toString()));
 
         ToolRun task = lua(her, "tlm.maid.task(\"" + FARM + "\", {maid = " + ref(maid) + "})");
 
@@ -472,7 +473,7 @@ public class TlmGameTests {
 
     // ---- 共用 ----
 
-    /** 一只养女仆的同伴:生存模式,权限照出厂规则(见类注释)。 */
+    /** 一只养女仆的同伴:生存模式,权限照出厂设置(见类注释)。 */
     private static NumenPlayer keeper(GameTestHelper helper, String name, BlockPos rel) {
         return spawnAt(helper, name, rel, false);
     }

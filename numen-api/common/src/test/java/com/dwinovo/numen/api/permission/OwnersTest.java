@@ -61,8 +61,8 @@ class OwnersTest {
 
     /** 此刻登记着的回答者说 {@link #POS} 这一格对她是谁的。 */
     private static Whose whoseBlock() {
-        Owners.Blocks owners = Owners.around(null, POS, Structures.CAPTURE_RADIUS_CHUNKS);
-        return Whose.ofBlock(POS, new Facts(null, null, HER, Structures.NONE, owners, Map.of()));
+        Owners.Blocks owners = Owners.around(null, POS, Permission.OWNER_RADIUS_CHUNKS);
+        return Whose.ofBlock(POS, new Facts(null, null, HER, owners));
     }
 
     private static Map<String, BlockOwner> two(UUID first, UUID second) {
@@ -74,14 +74,14 @@ class OwnersTest {
 
     @Test
     void nobodyAnsweringMeansNobodys() {
-        assertSame(Owners.Blocks.NONE, Owners.around(null, POS, Structures.CAPTURE_RADIUS_CHUNKS), "一个回答者都没有");
+        assertSame(Owners.Blocks.NONE, Owners.around(null, POS, Permission.OWNER_RADIUS_CHUNKS), "一个回答者都没有");
         assertEquals(Whose.NATURE, whoseBlock());
         withBlockOwners(Map.of("gt_silent", (level, center, chunkRadius) -> null), () ->
-                assertSame(Owners.Blocks.NONE, Owners.around(null, POS, Structures.CAPTURE_RADIUS_CHUNKS),
+                assertSame(Owners.Blocks.NONE, Owners.around(null, POS, Permission.OWNER_RADIUS_CHUNKS),
                         "回答者说这一片里它什么都不知道"));
         withBlockOwners(Map.of("gt_elsewhere", saying(STRANGER_ID)), () ->
-                assertEquals(Whose.NATURE, Whose.ofBlock(POS.above(), new Facts(null, null, HER, Structures.NONE,
-                        Owners.around(null, POS, Structures.CAPTURE_RADIUS_CHUNKS), Map.of())), "回答者没说到的那一格"));
+                assertEquals(Whose.NATURE, Whose.ofBlock(POS.above(), new Facts(null, null, HER,
+                        Owners.around(null, POS, Permission.OWNER_RADIUS_CHUNKS))), "回答者没说到的那一格"));
     }
 
     @Test
@@ -118,7 +118,7 @@ class OwnersTest {
         });
         reading.put("gt_claims", saying(OWNER_ID));
         withBlockOwners(reading, () -> {
-            Owners.Blocks owners = Owners.around(null, POS, Structures.CAPTURE_RADIUS_CHUNKS);
+            Owners.Blocks owners = Owners.around(null, POS, Permission.OWNER_RADIUS_CHUNKS);
             assertEquals(List.of(OWNER_ID), owners.at(POS), "读查表时抛的:别人的回答照常");
             assertEquals(List.of(OWNER_ID), owners.at(POS), "坏掉的那一份此后不再问");
         });
@@ -126,7 +126,7 @@ class OwnersTest {
 
     @Test
     void anEntityIsAskedAboutTheSameWayAndAThrowingAnswererIsLeftOut() {
-        Facts facts = new Facts(null, null, HER, Structures.NONE, Owners.Blocks.NONE, Map.of());
+        Facts facts = new Facts(null, null, HER, Owners.Blocks.NONE);
         assertTrue(Owners.of(null).isEmpty(), "没人回答");
         assertEquals(Whose.NATURE, Whose.ofEntity(null, facts), "没人回答的实体没有主人");
 

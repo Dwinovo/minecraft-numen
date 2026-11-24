@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.permission;
 
 import com.dwinovo.numen.permission.Verb;
-import com.dwinovo.numen.permission.Rule;
+import com.dwinovo.numen.permission.Settings;
 import com.dwinovo.numen.api.task.TaskRecord;
 
 import net.minecraft.core.BlockPos;
@@ -22,8 +22,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 征询登记处:发起即推给主人、答复记授权、允许并记住写规则、附言只随拒绝、超时与主人不在按拒绝、新的顶掉旧的、
- * 任务收尾清授权撤请求、撤回说清为什么;清单一堆两种说法。时钟、主人在不在、推送撤回、主人的规则表都经假接线,
+ * 征询登记处:发起即推给主人、答复记授权、以后都允许记进名单、允许与拒绝都能带附言、超时与主人不在按拒绝、新的顶掉旧的、
+ * 任务收尾清授权撤请求、撤回说清为什么;清单一堆两种说法。时钟、主人在不在、推送撤回、主人的名单都经假接线,
  * 不起服务器。
  */
 class ConsentDeskTest {
@@ -33,7 +33,7 @@ class ConsentDeskTest {
         long now = 1000;
         boolean ownerOnline = true;
         final List<ConsentRequest> shown = new ArrayList<>();
-        final List<Rule> remembered = new ArrayList<>();
+        final List<Settings.Entry> remembered = new ArrayList<>();
         final List<ConsentDesk.Withdrawal> clears = new ArrayList<>();
         int cleared;
 
@@ -45,7 +45,7 @@ class ConsentDeskTest {
         @Override public void show(ConsentRequest request) { shown.add(request); }
         @Override public void clear(long id, ConsentDesk.Withdrawal why) { cleared++; clears.add(why); }
         @Override public void answered(long id, UUID by) { cleared++; clears.add(null); answeredBy.add(by); }
-        @Override public void remember(List<Rule> allow) { remembered.addAll(allow); }
+        @Override public void remember(List<Settings.Entry> entries) { remembered.addAll(entries); }
     }
 
     private static final class Task extends TaskRecord<Void> {
@@ -54,15 +54,14 @@ class ConsentDeskTest {
         }
     }
 
-    /** 记住的那一行只用种类项:解析信号名要引导 MC,这里不起。 */
-    private static final Rule REMEMBER_LOGS = Groups.parse("break(minecraft:oak_log)");
+    private static final Settings.Entry REMEMBER_LOGS = new Settings.Entry(Verb.BREAK, "minecraft:oak_log");
 
     private static final Component LOG_NAME = Component.translatable("block.minecraft.oak_log");
     private static final Component OWNERS = Component.translatable("numen.permission.name.owner");
 
     private static ConsentItem log(int x) {
         return new ConsentItem(Verb.BREAK, new BlockPos(x, 64, 0), ConsentItem.NO_ENTITY, "oak_log", null, LOG_NAME,
-                "break(owner)", "belongs to the owner", OWNERS, false, REMEMBER_LOGS);
+                "minecraft:oak_log", "belongs to the owner", OWNERS);
     }
 
     private FakeLine line;
@@ -96,29 +95,28 @@ class ConsentDeskTest {
     }
 
     @Test
-    void rememberWritesTheRulesOnceAndStillGrantsTheTask() {
+    void rememberPutsTheNameOnTheListOnceAndStillGrantsTheTask() {
         Task task = new Task();
         ConsentDesk.Ticket ticket = desk.ask(task, List.of(log(1), log(2)));
         desk.answer(ticket.request().id(), ConsentAnswer.Decision.ALLOW_REMEMBER, "");
         assertTrue(ticket.poll().allowed());
         assertEquals(List.of(log(1), log(2)), desk.granted(), "本任务里照样放行");
-        assertEquals(List.of(REMEMBER_LOGS), line.remembered, "两条同一行规则,只写一次");
+        assertEquals(List.of(REMEMBER_LOGS), line.remembered, "两条同一个名字,只记一次");
         String allowance = ticket.poll().allowance(List.of(log(1), log(2)));
-        assertTrue(allowance.contains("allow break(minecraft:oak_log)"), "回执说记下了哪一行: " + allowance);
-        assertEquals(List.of("allow break(minecraft:oak_log)"), ConsentItem.rememberedRows(List.of(log(1), log(2))),
-                "主人在选项上看到的和回执里的是同一行");
+        assertTrue(allowance.contains("break minecraft:oak_log"), "回执说记下了哪一项: " + allowance);
+        assertEquals(List.of("break minecraft:oak_log"), ConsentItem.rememberedRows(List.of(log(1), log(2))),
+                "主人在选项上看到的和回执里的是同一项");
     }
 
     @Test
-    void aNoteOnlyGoesWithADeny() {
+    void anAllowCanCarryANoteForTheModel() {
         ConsentDesk.Ticket ticket = desk.ask(new Task(), List.of(log(1)));
-        for (ConsentAnswer.Decision allow : List.of(ConsentAnswer.Decision.ALLOW_ONCE,
-                ConsentAnswer.Decision.ALLOW_REMEMBER)) {
-            assertThrows(IllegalArgumentException.class, () -> desk.answer(ticket.request().id(), allow, "小心点"),
-                    "主人要说点什么就是不让她照原样做,允许不带附言");
-        }
-        assertNull(ticket.poll(), "带附言的允许不算答复,请求还挂着");
-        assertSame(ticket.request(), desk.pending());
+        assertTrue(desk.answer(ticket.request().id(), ConsentAnswer.Decision.ALLOW_ONCE, " 小心点 "));
+
+        assertTrue(ticket.poll().allowed());
+        assertEquals("小心点", ticket.poll().words());
+        assertTrue(ticket.poll().allowance(List.of(log(1))).contains("小心点"), "原话进回执");
+        assertEquals(List.of(log(1)), desk.granted());
     }
 
     @Test
@@ -133,18 +131,16 @@ class ConsentDeskTest {
     }
 
     @Test
-    void aRuleEditCanBeAllowedButNeverRemembered() {
-        ConsentItem edit = ConsentItem.ruleEdit("numen permission rules add allow break(owner)", "");
-        assertNull(edit.remember(), "她不能给自己发许可:改规则的征询没有可记住的行");
-        assertEquals("/numen permission rules add allow break(owner)", edit.name().getString());
-        assertEquals("/numen permission rules remove deny 2  (break(owner))",
-                ConsentItem.ruleEdit("numen permission rules remove deny 2", "break(owner)").name().getString());
+    void aSettingsEditCanBeAllowedButNeverRemembered() {
+        ConsentItem edit = ConsentItem.settingsEdit("numen permission set Aria break allow");
+        assertNull(edit.remembering(), "她不能给自己发许可:改设置的征询没有可记住的项");
+        assertEquals("/numen permission set Aria break allow", edit.name().getString());
         assertTrue(ConsentItem.rememberedRows(List.of(edit)).isEmpty());
 
         ConsentDesk.Ticket ticket = desk.ask(new Task(), List.of(edit));
         desk.answer(ticket.request().id(), ConsentAnswer.Decision.ALLOW_REMEMBER, "");
         assertTrue(ticket.poll().allowed());
-        assertTrue(line.remembered.isEmpty(), "点了记住也没有东西写进 allow 表");
+        assertTrue(line.remembered.isEmpty(), "点了以后都允许也没有东西记进名单");
         assertFalse(ticket.poll().allowance(List.of(edit)).contains("remembered"), "回执不谎称记住了");
     }
 
@@ -267,22 +263,19 @@ class ConsentDeskTest {
         }
         Component rex = Component.literal("Rex");
         Component owned = OWNERS;
-        Rule rememberRex = Groups.parse("attack(entity:00000000-0000-0000-0000-00000000002a)");
-        items.add(new ConsentItem(Verb.ATTACK, null, 42, "wolf", null, rex, "attack(owner)", "belongs to the owner", owned,
-                true, rememberRex));
-        items.add(new ConsentItem(Verb.ATTACK, null, 43, "wolf", null, Component.literal("Fang"), "attack(owner)",
-                "belongs to the owner", owned, true, rememberRex));
+        items.add(new ConsentItem(Verb.ATTACK, null, 42, "wolf", null, rex, "00000000-0000-0000-0000-00000000002a",
+                "belongs to the owner", owned));
+        items.add(new ConsentItem(Verb.ATTACK, null, 43, "wolf", null, Component.literal("Fang"),
+                "00000000-0000-0000-0000-00000000002b", "belongs to the owner", owned));
         List<ConsentItem.Group> groups = ConsentItem.listing(items);
         assertEquals(3, groups.size(), "两只起了不同名字的狼各是一堆");
         assertEquals("break 8 oak_log (0,64,0; 1,64,0; 2,64,0; 3,64,0; 4,64,0; 5,64,0; +2 more): belongs to the owner",
                 groups.get(0).text());
         assertEquals(8, groups.get(0).count(), "给主人看的数量是这一堆有几条");
         assertEquals(OWNERS, groups.get(0).head().shownCause(), "给主人看的理由是可翻译的,不带坐标");
-        assertFalse(groups.get(0).irreversible());
         assertEquals("attack 1 wolf: belongs to the owner", groups.get(1).text(), "实体只点名是哪一种,不报它此刻站在哪");
         assertEquals(1, groups.get(1).count());
         assertEquals(rex, groups.get(1).head().name(), "起了名字的叫它的名字");
-        assertTrue(groups.get(1).irreversible(), "撤不回的那一堆带着标记给答复框");
     }
 
     @Test

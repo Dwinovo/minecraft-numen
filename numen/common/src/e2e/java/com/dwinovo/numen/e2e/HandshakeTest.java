@@ -109,7 +109,7 @@ class HandshakeTest extends Scenario {
 
     private static void assertNothingSent(Bot owner, String companion) {
         int mark = owner.mark();
-        owner.command("numen permission mode " + companion);
+        owner.command("numen permission show " + companion);
         owner.await(mark, m -> m.text().contains(companion), WAIT, "native permission query");
         assertTrue(owner.connected());
         assertTrue(owner.payloadChannels().stream().noneMatch(c -> c.startsWith("numen_api:")),
@@ -123,9 +123,8 @@ class HandshakeTest extends Scenario {
     /** 指令的回话按序到达:它到了,先于它发出的包也都到了。 */
     private static void barrier(Bot bot) {
         int mark = bot.mark();
-        bot.command("numen permission rules list");
-        bot.await(mark, m -> m.text().contains("deny:") && m.text().contains("allow:")
-                && m.text().contains("ask:"), WAIT, "ordered command response");
+        bot.command("numen permission show barrier");
+        bot.await(mark, m -> m.text().contains("barrier"), WAIT, "ordered command response");
     }
 
     private static boolean onList(String name) {

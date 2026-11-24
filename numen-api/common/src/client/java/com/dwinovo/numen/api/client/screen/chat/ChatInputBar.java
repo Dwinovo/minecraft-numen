@@ -182,7 +182,7 @@ public final class ChatInputBar {
         return loop == null ? null : ConsentCards.pending(loop.entityUuid());
     }
 
-    /** 挂着的征询正等主人写那一句(点了"说一句再拒绝");没有是 null。 */
+    /** 挂着的征询正等主人写那一句(点了"允许并说一句"或"拒绝并说一句");没有是 null。 */
     private ConsentCards.Card noting() {
         ConsentCards.Card card = waiting();
         return card != null && card.writing() ? card : null;
@@ -280,18 +280,21 @@ public final class ChatInputBar {
         ConsentCards.Card note = card != null && card.writing() ? card : null;
         if (note != null && note != noteShown) {
             cancelQuote();
-            shownTitle = I18n.get(ModLanguageData.Keys.CONSENT_DENY_NOTE);
+            boolean allowing = note.writingKey() == ConsentCards.ALLOW_NOTE;
+            shownTitle = I18n.get(allowing ? ModLanguageData.Keys.CONSENT_ALLOW_NOTE : ModLanguageData.Keys.CONSENT_DENY_NOTE);
             shownText = ConsentMessage.summary(note);
-            shownIcon = com.dwinovo.numen.api.client.ui.mc.Sprites.CANCEL;
+            shownIcon = allowing ? com.dwinovo.numen.api.client.ui.mc.Sprites.CHECK
+                    : com.dwinovo.numen.api.client.ui.mc.Sprites.CANCEL;
             ui.requestFocus(field);
         }
         noteShown = note;
         field.placeholder(note != null
-                ? I18n.get(ModLanguageData.Keys.CONSENT_NOTE_ROW, ConsentCards.name(note.companion()))
+                ? I18n.get(note.writingKey() == ConsentCards.ALLOW_NOTE ? ModLanguageData.Keys.CONSENT_ALLOW_NOTE_ROW
+                        : ModLanguageData.Keys.CONSENT_NOTE_ROW, ConsentCards.name(note.companion()))
                 : host.hint());
     }
 
-    /** 收起输入框上方那条栏:引用或"说一句再拒绝"。 */
+    /** 收起输入框上方那条栏:引用或"说一句再答"。 */
     private void closeBar() {
         ConsentCards.Card note = noting();
         if (note != null) note.stopWriting();
@@ -606,10 +609,10 @@ public final class ChatInputBar {
         if (field == null || panel != null) return;
         String text = field.value() == null ? "" : field.value().trim();
         if (text.isEmpty()) return;
-        // 挂着"说一句再拒绝"的提示栏:这句是拒绝的理由,连同拒绝送给她,不当成一句话
+        // 挂着"说一句再答"的提示栏:这句是答复的附言,连同答复送给她,不当成一句话
         ConsentCards.Card note = noting();
         if (note != null) {
-            note.denyWith(text);
+            note.say(text);
             setText("");
             return;
         }

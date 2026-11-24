@@ -1,8 +1,9 @@
 package com.dwinovo.numen.api.permission;
 
 import com.dwinovo.numen.api.FakeWorld;
-import com.dwinovo.numen.permission.Mode;
-import com.dwinovo.numen.permission.Verdict;
+import com.dwinovo.numen.permission.Edit;
+import com.dwinovo.numen.permission.Tier;
+import com.dwinovo.numen.permission.Verb;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -16,15 +17,14 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * 面板的规则页读写的那一种库:整表和命令列规则读的是同一份({@link RuleBook}),加、删、清空、设模式都落在主人的存档上,
- * 写错了的规则带着教学式的错误被拒、不进表。
+ * 面板的权限页读写的那一种库:整表是名下每只同伴每种动作一行档位、加名单里的每一项一行;设档位、套预设、从名单里删一项都落在
+ * 主人的存档上,认不出的动作与档位办不成、不改任何东西。
  */
 @Tag("mc")
 class PermissionLibraryTest {
@@ -34,17 +34,11 @@ class PermissionLibraryTest {
     private final PermissionStore store = new PermissionStore();
     private final UUID blue = UUID.randomUUID();
     private final Map<UUID, String> companions = new LinkedHashMap<>(Map.of(blue, "小蓝"));
-    private boolean hardRules = true;
 
     private final PermissionLibrary.Ground ground = new PermissionLibrary.Ground() {
         @Override
         public PermissionStore store() {
             return store;
-        }
-
-        @Override
-        public boolean hardRules() {
-            return hardRules;
         }
 
         @Override
@@ -63,117 +57,63 @@ class PermissionLibraryTest {
         assumeTrue(booted, "Minecraft 引导不可用,跳过权限库钉桩");
     }
 
-    private static JsonObject body(String... keyValues) {
+    private static JsonObject body(String... kv) {
         JsonObject o = new JsonObject();
-        for (int i = 0; i < keyValues.length; i += 2) {
-            o.addProperty(keyValues[i], keyValues[i + 1]);
+        for (int i = 0; i < kv.length; i += 2) {
+            o.addProperty(kv[i], kv[i + 1]);
         }
         return o;
     }
 
-    private JsonObject ruleRow(String layer, String table, String rule) {
-        JsonArray rows = PermissionLibrary.view(ground);
-        for (var e : rows) {
-            JsonObject o = e.getAsJsonObject();
-            if ("rule".equals(o.get("row").getAsString()) && layer.equals(o.get("layer").getAsString())
-                    && table.equals(o.get("table").getAsString()) && rule.equals(o.get("rule").getAsString())) {
-                return o;
-            }
-        }
-        return null;
-    }
-
     @Test
-    void theTableListsAllThreeLayersWithTheCompanionsAndTheServersSwitch() {
-        store.add(Verdict.Kind.DENY, Groups.parse("break(owner) @小蓝"));
-        store.add(Verdict.Kind.ALLOW, new PermissionStore.Row(Groups.parse("attack(named)"),
-                PermissionStore.Source.HER, "别误伤"));
-        store.hit(Layers.OWNER, Verdict.Kind.DENY, Groups.parse("break(owner) @小蓝"));
-        store.setMode(blue, Mode.OBSERVE);
+    void theTableHasEightTierRowsPerCompanionThenTheListedNames() {
+        store.edit(blue, new Edit.SetTier(Verb.BREAK, Tier.DENY));
+        store.edit(blue, new Edit.Add(Verb.COMMAND, "msg"));
 
         JsonArray rows = PermissionLibrary.view(ground);
 
-        JsonObject settings = rows.get(0).getAsJsonObject();
-        assertEquals("settings", settings.get("row").getAsString());
-        assertTrue(settings.get("hardRules").getAsBoolean());
-        JsonObject mode = rows.get(1).getAsJsonObject();
-        assertEquals("mode", mode.get("row").getAsString());
-        assertEquals(blue.toString(), mode.get("companion").getAsString());
-        assertEquals("小蓝", mode.get("name").getAsString());
-        assertEquals("observe", mode.get("mode").getAsString());
-
-        assertNotNull(ruleRow("hard", "deny", "break(other)"), "硬规则");
-        assertNotNull(ruleRow("factory", "ask", "break(owner)"), "出厂层");
-        JsonObject mine = ruleRow("owner", "deny", "break(owner) @小蓝");
-        assertEquals("owner", mine.get("source").getAsString());
-        assertEquals(1, mine.get("count").getAsInt());
-        assertTrue(mine.get("last").getAsLong() > 0);
-        JsonObject hers = ruleRow("owner", "allow", "attack(named)");
-        assertEquals("her", hers.get("source").getAsString());
-        assertEquals("别误伤", hers.get("note").getAsString());
-        assertEquals(0, hers.get("count").getAsInt());
+        assertEquals(9, rows.size());
+        JsonObject first = rows.get(0).getAsJsonObject();
+        assertEquals("tier", first.get("row").getAsString());
+        assertEquals(blue.toString(), first.get("companion").getAsString());
+        assertEquals("小蓝", first.get("name").getAsString());
+        assertEquals("break", first.get("verb").getAsString());
+        assertEquals("deny", first.get("tier").getAsString());
+        assertEquals("use_item", rows.get(6).getAsJsonObject().get("verb").getAsString(), "第七个动作是用手里的东西");
+        JsonObject listed = rows.get(8).getAsJsonObject();
+        assertEquals("listed", listed.get("row").getAsString());
+        assertEquals("command", listed.get("verb").getAsString());
+        assertEquals("msg", listed.get("entry").getAsString());
     }
 
     @Test
-    void whenTheServerOwnerSwitchesTheHardRulesOffTheyAreNotListed() {
-        hardRules = false;
+    void settingATierApplyingAPresetAndDeletingAnEntryLandOnTheStore() {
+        assertNull(PermissionLibrary.write(ground, PermissionLibrary.TIER,
+                body("companion", blue.toString(), "verb", "drop", "tier", "allow")).problem());
+        assertEquals(Tier.ALLOW, store.settingsOf(blue).tier(Verb.DROP));
 
-        JsonArray rows = PermissionLibrary.view(ground);
+        assertNull(PermissionLibrary.write(ground, PermissionLibrary.PRESET,
+                body("companion", blue.toString(), "preset", "observe")).problem());
+        assertEquals(Tier.DENY, store.settingsOf(blue).tier(Verb.BREAK));
 
-        assertFalse(rows.get(0).getAsJsonObject().get("hardRules").getAsBoolean());
-        assertNull(ruleRow("hard", "deny", "break(other)"));
+        store.edit(blue, new Edit.Add(Verb.BREAK, "minecraft:stone"));
+        assertNull(PermissionLibrary.write(ground, PermissionLibrary.DELETE,
+                body("companion", blue.toString(), "verb", "break", "entry", "minecraft:stone")).problem());
+        assertTrue(store.settingsOf(blue).names(Verb.BREAK).isEmpty());
     }
 
     @Test
-    void aRuleIsAddedOnceAndDeletedByItsText() {
-        JsonObject row = body("table", "ask", "rule", "drop(*)");
-
-        assertNull(PermissionLibrary.write(ground, PermissionLibrary.PUT, row).problem());
-        assertNull(PermissionLibrary.write(ground, PermissionLibrary.PUT, row).problem(), "再加一次已经如愿");
-        assertEquals(1, store.rows(Verdict.Kind.ASK).size());
-        assertNotNull(ruleRow("owner", "ask", "drop(*)"));
-
+    void whatItDoesNotUnderstandIsRefusedAndNothingChanges() {
+        assertNotNull(PermissionLibrary.write(ground, PermissionLibrary.TIER,
+                body("companion", blue.toString(), "verb", "dig", "tier", "deny")).problem());
+        assertNotNull(PermissionLibrary.write(ground, PermissionLibrary.TIER,
+                body("companion", blue.toString(), "verb", "break", "tier", "maybe")).problem());
+        assertNotNull(PermissionLibrary.write(ground, PermissionLibrary.PRESET,
+                body("companion", blue.toString(), "preset", "wild")).problem());
         assertNotNull(PermissionLibrary.write(ground, PermissionLibrary.DELETE,
-                body("table", "deny", "rule", "drop(*)")).problem(), "那张表里没有这一行");
-        assertNull(PermissionLibrary.write(ground, PermissionLibrary.DELETE, row).problem());
-        assertTrue(store.rows(Verdict.Kind.ASK).isEmpty());
-    }
-
-    @Test
-    void aRuleThatIsWrittenWrongIsRefusedWithTheMistakeAndNotAdded() {
-        PermissionLibrary.Outcome outcome = PermissionLibrary.write(ground, PermissionLibrary.PUT,
-                body("table", "deny", "rule", "dig(owner)"));
-
-        assertNotNull(outcome.problem());
-        assertEquals("verb", outcome.mistake().code());
-        assertTrue(store.rows(Verdict.Kind.DENY).isEmpty());
-        assertNotNull(PermissionLibrary.write(ground, PermissionLibrary.PUT,
-                body("table", "maybe", "rule", "drop(*)")).problem(), "表只有 deny、ask、allow");
-    }
-
-    @Test
-    void resetClearsTheOwnersRulesAndLeavesTheModesAlone() {
-        store.add(Verdict.Kind.DENY, Groups.parse("break(owner)"));
-        store.setMode(blue, Mode.BYPASS);
-
-        assertNull(PermissionLibrary.write(ground, PermissionLibrary.RESET, new JsonObject()).problem());
-
-        assertTrue(store.rows(Verdict.Kind.DENY).isEmpty());
-        assertEquals(Mode.BYPASS, store.modeOf(blue));
-    }
-
-    @Test
-    void aModeIsSetOnlyOnOneOfTheOwnersCompanionsAndOnlyToAKnownMode() {
-        assertNull(PermissionLibrary.write(ground, PermissionLibrary.MODE,
-                body("companion", blue.toString(), "mode", "bypass")).problem());
-        assertEquals(Mode.BYPASS, store.modeOf(blue));
-
-        assertNotNull(PermissionLibrary.write(ground, PermissionLibrary.MODE,
-                body("companion", UUID.randomUUID().toString(), "mode", "observe")).problem(), "不是他名下的");
-        assertNotNull(PermissionLibrary.write(ground, PermissionLibrary.MODE,
-                body("companion", blue.toString(), "mode", "bypas")).problem(), "写错的模式不悄悄当成 ask");
-        assertNotNull(PermissionLibrary.write(ground, PermissionLibrary.MODE,
-                body("companion", "not-a-uuid", "mode", "ask")).problem());
-        assertEquals(Mode.BYPASS, store.modeOf(blue), "办不成的没动它");
+                body("companion", blue.toString(), "verb", "break", "entry", "minecraft:stone")).problem(), "名单里没有这一项");
+        assertNotNull(PermissionLibrary.write(ground, PermissionLibrary.TIER,
+                body("companion", UUID.randomUUID().toString(), "verb", "break", "tier", "deny")).problem(), "不是他的同伴");
+        assertEquals(com.dwinovo.numen.permission.Settings.FACTORY, store.settingsOf(blue));
     }
 }
