@@ -47,7 +47,7 @@ public final class BuildOps {
             return Job.done(BuildCompanionTask.Placed.NOTHING);
         }
         boolean consume = !WorkProfile.of(her).freeMaterials();
-        long deadline = her.level().getGameTime() + BuildOrder.deadlineTicks(targets.size(), consume);
+        long deadline = her.level().getGameTime() + BuildOrder.deadlineTicks(targets.size());
         return Job.of(new BuildTaskRecord(call, deadline, targets, consume));
     }
 
@@ -58,8 +58,6 @@ public final class BuildOps {
                        @Doc("Up to " + LISTED_DIG + " cells holding another block to dig out first, nearest first.")
                        List<BlockPos> dig,
                        @Doc("Cells holding another block with nothing of yours to put there.") int noStock,
-                       @Doc("Cells that would not stay put yet: what holds them (the block below, the wall behind) is "
-                               + "not built.") int unheld,
                        @Doc("Cells that differ and that you leave alone.") int skipped,
                        @Doc("Cells involving liquid, which numen.build.place does not place or drain: water or lava in the "
                                + "design, liquid where the design wants air, and blocks whose water is left out "
@@ -69,13 +67,13 @@ public final class BuildOps {
                                + "Absent when building costs nothing.") Optional<Map<String, Integer>> shortOf) {}
 
     /**
-     * 这一处离要盖的样子还差什么:还剩几格、几格此刻放得进去、几格要先挖开(给出最近的几格)、几格还立不住,以及剩下的格要花的
+     * 这一处离要盖的样子还差什么:还剩几格、几格此刻放得进去、几格要先挖开(给出最近的几格),以及剩下的格要花的
      * 全部料与她还缺多少。只读,当场回;数的判据与 {@link #place} 挑格的是同一个,料的件数与逐格实扣是同一个函数({@link BuildBill})。
      */
     public static Diff diff(NumenPlayer her, Design design) {
         List<BuildTaskRecord.Target> targets = plan(her, design);
         if (Changes.between(targets, seen(her.serverLevel())).none()) {
-            return new Diff(0, 0, List.of(), 0, 0, 0, 0, Map.of(), shortOf(her, Map.of()));
+            return new Diff(0, 0, List.of(), 0, 0, 0, Map.of(), shortOf(her, Map.of()));
         }
         BuildTaskRecord record = new BuildTaskRecord("numen.build.diff", "", 0, targets,
                 !WorkProfile.of(her).freeMaterials());
@@ -83,7 +81,7 @@ public final class BuildOps {
         Map<Item, Integer> cost = BuildBill.cost(tally.pending());
         return new Diff(tally.left(), tally.count(BuildSurvey.State.READY),
                 List.copyOf(tally.dig().subList(0, Math.min(LISTED_DIG, tally.dig().size()))),
-                tally.count(BuildSurvey.State.SHORT), tally.count(BuildSurvey.State.UNHELD),
+                tally.count(BuildSurvey.State.SHORT),
                 tally.count(BuildSurvey.State.SKIPPED), tally.count(BuildSurvey.State.LIQUID) + tally.heldWater(),
                 BuildBill.items(cost), shortOf(her, cost));
     }

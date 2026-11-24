@@ -13,9 +13,8 @@ import net.minecraft.world.phys.Vec3;
 import java.util.List;
 
 /**
- * 施工的演出:放置自己不产生的那些——朝落下的格转头、挥手、手到落点的粒子,对手放与直接写的格一视同仁({@link BuildPlacer}
- * 点一下时的朝向只是那一下点击的参数,点完就还原,不是给人看的);直接写的格再补一声落位声,手放的那一声是原版放置流程自己的。
- * 只管"看起来像有人在干活",不碰任何施工判定与账目——删掉整个类,房子照样盖得出来,只是方块像凭空冒出来的。
+ * 施工的演出:直接写({@link BuildPlacer})自己不产生的那些——朝落下的格转头、挥手、手到落点的粒子、一声落位声,所有落下的格
+ * 一视同仁。只管"看起来像有人在干活",不碰任何施工判定与账目——删掉整个类,房子照样盖得出来,只是方块像凭空冒出来的。
  *
  * <h2>表演不改变世界</h2>
  * 它手里只有身体的输入(转头、挥手)和一份只读的视图:没有挖掘器,没有导航,没有放置的入口,也不挪身体——她站在原地放,
@@ -46,14 +45,13 @@ final class BuildShowmanship {
     }
 
     /**
-     * 演出这一批落下的格({@code landed}):朝它们的中心转头、举起对应方块、挥手,冒方块碎屑;其中直接写的({@code written})
-     * 再放一声落位声。粒子按批限量——整栋房子逐格发粒子会把客户端打垮。
+     * 演出这一批落下的格({@code landed}):朝它们的中心转头、举起对应方块、挥手,冒方块碎屑,放一声落位声。粒子按批限量——
+     * 整栋房子逐格发粒子会把客户端打垮。
      *
-     * @param landed  这一批落下的全部格,手放的与直接写的
-     * @param written 其中直接写进去的格(手放的格自己有落位声)
-     * @param sample  这一批放的那种方块
+     * @param landed 这一批落下的全部格
+     * @param sample 这一批放的那种方块
      */
-    void performWork(List<BlockPos> landed, List<BlockPos> written, BlockState sample) {
+    void performWork(List<BlockPos> landed, BlockState sample) {
         Vec3 centre = center(landed);
         player.look().at(centre);   // 朝这一批的中心转过去,和寻路同一套转头
         // 挥手按动画节拍走,不按落位节拍。原版一轮挥臂约 6 刻,而落位可以每刻好几格
@@ -80,11 +78,8 @@ final class BuildShowmanship {
                     pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5,
                     4, 0.28, 0.28, 0.28, 0.0);
         }
-        if (written.isEmpty()) {
-            return;
-        }
         var sound = sample.getSoundType().getPlaceSound();
-        BlockPos at = written.get(written.size() / 2);
+        BlockPos at = landed.get(landed.size() / 2);
         level.playSound(null, at, sound, SoundSource.BLOCKS, 0.7f, 0.9f + player.getRandom().nextFloat() * 0.2f);
     }
 

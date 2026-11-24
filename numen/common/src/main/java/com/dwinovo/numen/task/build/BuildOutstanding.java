@@ -31,11 +31,11 @@ public final class BuildOutstanding {
         DIG_FIRST("dig_first"),
         /** 身上没有要放的料。 */
         SHORT_OF_MATERIAL("short_of_material"),
-        /** 托着它的那一格还没盖好,放下去立不住。 */
+        /** 问方块自己,它在那儿站不住(排到队尾重试一次仍站不住),没放。 */
         NOTHING_HOLDS_IT("nothing_holds_it"),
         /** 有身体占着这一格(可能是她自己)。 */
         BLOCKED_BY_ENTITY("blocked_by_entity"),
-        /** 点下去世界一格没变:保护、被取消的放置事件。 */
+        /** 写下去世界一格没变。 */
         REFUSED("refused"),
         /** 放下去了,原版弹掉了它或改了它的样子。 */
         DID_NOT_STAY("did_not_stay"),
@@ -118,12 +118,11 @@ public final class BuildOutstanding {
                     + heaps(group, true);
             case SHORT_OF_MATERIAL -> n + " cell(s) could not be placed for lack of material"
                     + (shortOf.isEmpty() ? "" : "; you still need " + shortOf) + ": " + heaps(group, false);
-            case NOTHING_HOLDS_IT -> n + " cell(s) would not stay put yet because what holds them (the block below "
-                    + "or behind) is not built: " + heaps(group, false);
+            case NOTHING_HOLDS_IT -> n + " cell(s) were not placed: the block cannot stay where the design puts it, "
+                    + "even after everything else was placed" + detail(group, " — ") + ": " + heaps(group, false);
             case BLOCKED_BY_ENTITY -> n + " cell(s) have someone in them" + detail(group, " — ") + ": "
                     + heaps(group, false);
-            case REFUSED -> n + " cell(s) were not placed: the click changed nothing, so something refused it "
-                    + "(a protection plugin, a cancelled placement event, or your owner's rules): "
+            case REFUSED -> n + " cell(s) were not placed: the world did not take the block, it stayed as it was: "
                     + heaps(group, false);
             case DID_NOT_STAY -> n + " cell(s) were placed and the world did not let them stay" + detail(group, " — ");
             case NO_ITEM -> n + " cell(s) have no item that places them" + detail(group, " — ") + ": "
@@ -156,10 +155,10 @@ public final class BuildOutstanding {
             case NOT_LOADED -> Optional.of(Call.of("numen.move.walk", at.get(0)));
             case SHORT_OF_MATERIAL -> Optional.of("get those items, then call numen.build.place again with the same "
                     + "design: what already stands is skipped");
-            case NOTHING_HOLDS_IT, DID_NOT_STAY -> Optional.of("build what should hold them first (the block below "
-                    + "or behind each), then call numen.build.place again with the same design");
+            case NOTHING_HOLDS_IT, DID_NOT_STAY -> Optional.of("add what should hold them to the design (the block "
+                    + "below or behind each), then call numen.build.place again");
             case BLOCKED_BY_ENTITY -> Optional.of("have them step aside, then call numen.build.place again");
-            case REFUSED -> Optional.of("check with your owner or the protection, then call numen.build.place again");
+            case REFUSED -> Optional.of("call numen.build.place again");
             case UNFINISHED -> Optional.of("call numen.build.place again with the same design");
             case NO_ITEM -> Optional.of("place what it comes from instead (the empty flower_pot for a potted plant), "
                     + "and leave it out of the design here");

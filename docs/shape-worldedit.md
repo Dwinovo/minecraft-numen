@@ -4,7 +4,7 @@
 
 ## 一、定位
 
-- `numen.shape` 是她的"手":**叫法和操作对齐 WorldEdit**,但**只产出或变换一串格(Cells)**,从不改世界。落进世界只有一条路:`numen.build.place`(征询、报料、手放、权限层、如实回执)。
+- `numen.shape` 是她的"手":**叫法和操作对齐 WorldEdit**,但**只产出或变换一串格(Cells)**,从不改世界。落进世界只有一条路:`numen.build.place`(征询、报料、权限层、如实回执)。
 - 两个名词照 WorldEdit 分:
   - **选区**(`Region`):带形状的选区(cuboid、cyl、ellipsoid、sphere、poly、convex),记得自己的形状参数,所以 `expand`、`contract` 这些能照 WE 按形状改;`r:cells()` 展开成只有位置的格。
   - **剪贴板**:每格带方块的 `Cells`,和现在一样。

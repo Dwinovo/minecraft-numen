@@ -52,7 +52,7 @@
 | `use.wake` / `use.glide` | 起床(与 `use.sleep` 成对);鞘翅起飞,飞行中放烟花是 `use.item` | 条件(在空中、鞘翅没坏……)原版判 |
 | `use.sign` | 写告示牌的一面(刚放下的直接写,别的没涂蜡的先右键);发 `SignUpdate`,读回牌上的字 | 涂蜡、别人在写由原版拒,如实报 |
 | `work.dig` | 挖点名的格:手够得着的先挖,够不着的走到够得着剩下最多格的地方再挖;挡在前面的格一并挖开(要问/被禁的不挖,如实说),换工具 | 不捡 |
-| `build.place` | 把给的格(Cells)放一遍:她站在原地放,不看离得多远;低层先、层内就近,每格走原版的放置流程 | 不挖、不走、不重来 |
+| `build.place` | 把给的格(Cells)放一遍:她站在原地放,不看离得多远;低层先、层内就近,每刻 30 格,每格直接写进世界;站不住的排到队尾重试一次 | 不挖、不走、不重来 |
 | `build.diff` | 查:还差什么,此刻放得进去的、要先挖的、还立不住的,剩下的格要花的全部料(`materials`)与生存模式下还缺多少(`short_of`) | 只读,不走 |
 | `fight.attack` | 打**一只**:追、转头、等冷却、出手,死了/丢了/超时收尾 | 不挑下一只、不跑(跑是逃跑本能) |
 | `use.*` | 按一下键:右键一格/一只实体/前方,左键一下 `use.hit`;够不着先走到能按的地方。交回的都是同一种值(按了哪个键、点了什么、游戏接没接);这一下点开了界面就当场合上,回执与值都不提它(control 0021) | 不挖(挖是 `work.dig`);不在界面里做事(那是各目标自己的一组:`container`、`furnace`……) |
@@ -447,7 +447,7 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
 | 删掉或改原子的 | 组合去了哪 |
 |---|---|
 | `build.new/drop/delete/show/designs/built`、原语 `set/place/line/layer/cylinder/sphere/copy` | 几何是模块 `numen.shape`(`cyl`、`sphere`、`line`、`layer`…);放格子是 `numen.build.place(cells)` 一遍 |
-| `build.at` 放到放完 | `build.place` 整份走一遍、每格试一次,没放好的在回执里报剩余;要不要再来一轮由模型自己定 |
+| `build.at` 放到放完 | `build.place` 整份走一遍(站不住的排到队尾、只重试一次),没放好的在回执里报剩余;要不要再来一轮由模型自己定 |
 | `scan.blocks` 的 `into` 与区域 | `scan.blocks` 交回团,`work.mine(cluster)` 先走后挖(§十二) |
 | `use.block` 的左键、`use.gui/transfer/shift/close` | 左键一下 `use.hit`,挖是 `work.dig`;界面不给她,对一个目标做事是那种目标自己的一组函数(`container`、`furnace`……,control 0021) |
 | `inv.craft` 找配方、找台 | `inv.craft` 在自己的格里或点名的工作台上合一次,`numen.inv.make` 挑配方与工作台 |

@@ -243,21 +243,6 @@ class BuildTaskRecordTest {
         }
     }
 
-    /** 贴附件排在所有层之后:骨架先立完,再回头挂灯摆花。 */
-    @Test
-    void whatStandsOnItsOwnIsBuiltBeforeWhatHangsOnSomething() {
-        List<BuildTaskRecord.Target> mixed = new java.util.ArrayList<>(List.of(
-                new BuildTaskRecord.Target(Blocks.TORCH.defaultBlockState(), Items.TORCH,
-                        new BlockPos(1, 1, 0), "torch"),
-                new BuildTaskRecord.Target(Blocks.RED_CARPET.defaultBlockState(), Items.RED_CARPET,
-                        new BlockPos(2, 1, 0), "carpet"),
-                new BuildTaskRecord.Target(Blocks.STONE, Items.STONE, new BlockPos(0, 9, 0), "stone")));
-        mixed.sort(BuildOrder.from(Vec3.ZERO));
-        assertTrue(mixed.get(0).desiredState().getBlock() == Blocks.STONE,
-                "everything that stands on its own goes first, even nine layers up; got "
-                        + mixed.stream().map(BuildTaskRecord.Target::label).toList());
-    }
-
     /** 低层先;同一层里离她近的先放。 */
     @Test
     void lowerLayersGoFirstAndWithinALayerTheNearerCell() {
@@ -328,20 +313,18 @@ class BuildTaskRecordTest {
         assertEquals(null, com.dwinovo.numen.build.BuildStates.otherHalfOf(a, Blocks.STONE.defaultBlockState()));
     }
 
-    /** 派发层与施工层共用同一个速率公式:时限必须比施工本身多;生存是人手的固定速度,一格五刻,工程再大也不压缩。 */
+    /** 派发层与施工层共用同一个速度:时限必须比施工本身多;每刻三十格,工程再大也一样。 */
     @Test
-    void theDeadlineCoversTheBuildAndSurvivalIsFiveTicksACell() {
-        for (int cells : new int[]{50, 500, 1440, 5859, 16384}) {
-            for (boolean survival : new boolean[]{true, false}) {
-                long need = BuildOrder.estimatedTicks(cells, survival);
-                long budget = BuildOrder.deadlineTicks(cells, survival);
-                assertTrue(budget > need, "deadline must exceed the build itself: " + cells + " cells, survival="
-                        + survival + ", needs " + need + " ticks but budget is " + budget);
-            }
+    void theDeadlineCoversTheBuildAndTheSpeedIsThirtyCellsATick() {
+        for (int cells : new int[]{1, 50, 500, 1440, 5859, 16384}) {
+            long need = BuildOrder.estimatedTicks(cells);
+            long budget = BuildOrder.deadlineTicks(cells);
+            assertTrue(budget > need, "deadline must exceed the build itself: " + cells + " cells, needs " + need
+                    + " ticks but budget is " + budget);
         }
-        for (int cells : new int[]{1, 500, 16384}) {
-            assertEquals(cells * 5L, BuildOrder.estimatedTicks(cells, true),
-                    "survival builds " + cells + " cells at four a second");
-        }
+        assertEquals(1, BuildOrder.estimatedTicks(1));
+        assertEquals(1, BuildOrder.estimatedTicks(30));
+        assertEquals(2, BuildOrder.estimatedTicks(31));
+        assertEquals(547, BuildOrder.estimatedTicks(16384));
     }
 }

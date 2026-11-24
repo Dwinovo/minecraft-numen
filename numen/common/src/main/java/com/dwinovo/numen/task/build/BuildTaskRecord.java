@@ -25,14 +25,11 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
     public final List<Target> targets;
     /** 是否消耗背包材料:随能力画像而定(创造免耗材,生存逐格真扣)。 */
     public final boolean consumeMaterials;
-    /** 按格找目标({@link #targetAt});第一次问时建。 */
-    private Map<Long, Target> byCell;
 
     /** 花掉的带数据的叠(潜影盒里装着东西、附魔物……):描述 → 件数,先见先列。和白货没区别的不记,清单里本来就看得见。 */
     private final Map<String, Integer> spentWithData = new java.util.LinkedHashMap<>();
 
     private int placed;
-    private int setDirectly;
     private int replaced;
     private int broken;
     private int completed;
@@ -52,20 +49,9 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
         this.consumeMaterials = consumeMaterials;
     }
 
-    /** 这一格的目标;不在这件活里是 null。 */
-    public Target targetAt(BlockPos pos) {
-        if (byCell == null) {
-            Map<Long, Target> index = new java.util.HashMap<>(targets.size() * 2);
-            targets.forEach(t -> index.put(t.pos().asLong(), t));
-            byCell = index;
-        }
-        return byCell.get(pos.asLong());
-    }
-
     /**
      * 素面格升格:方块没有任何 blockstate 属性时,物品放下去就是要的,没有哪个状态位要点名。升格改的是 Target 的
-     * itemPlace 字段,对账由此宽容(按方块的自述名):手放时物品放置钩子能把原版设施原地换成自家实现(Visual Workbench
-     * 一类),注册名变了、名字没变。有属性的方块不升格(哪怕目标恰是默认态,如朝北的熔炉):对账照状态位来。
+     * itemPlace 字段,对账由此宽容(按方块的自述名):有模组会把原版设施原地换成自家实现,注册名变了、名字没变。有属性的方块不升格(哪怕目标恰是默认态,如朝北的熔炉):对账照状态位来。
      */
     private static List<Target> promotePlainCells(List<Target> targets) {
         List<Target> out = new java.util.ArrayList<>(targets.size());
@@ -85,16 +71,11 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
         return placed;
     }
 
-    /** 放下的格里,手放不出那个样子、直接写进去的有几格。 */
-    public int setDirectly() {
-        return setDirectly;
-    }
-
     /**
-     * 放下一格;{@code replacing} 是先拆掉了挡着的东西再放,{@code directly} 是手放不出那个样子、直接写进去的,{@code spent}
-     * 是为它花掉的每一叠,{@code her} 是放的那一位(花掉的叠写成什么样问的是她)。
+     * 放下一格;{@code replacing} 是先拆掉了挡着的东西再放,{@code spent} 是为它花掉的每一叠,{@code her} 是放的那一位
+     * (花掉的叠写成什么样问的是她)。
      */
-    public void placedOne(NumenPlayer her, boolean replacing, boolean directly, List<net.minecraft.world.item.ItemStack> spent) {
+    public void placedOne(NumenPlayer her, boolean replacing, List<net.minecraft.world.item.ItemStack> spent) {
         for (net.minecraft.world.item.ItemStack stack : spent) {
             Map<String, Map<String, Object>> details = StackLabel.details(her, stack);
             if (!details.isEmpty()) {
@@ -102,9 +83,6 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
             }
         }
         placed++;
-        if (directly) {
-            setDirectly++;
-        }
         if (replacing) {
             replaced++;
         }
@@ -156,7 +134,7 @@ public final class BuildTaskRecord extends TaskRecord<BuildCompanionTask.Placed>
 
     /**
      * @param itemPlace 素面格:物品放下去就是要的,对账按方块的自述名宽容(见 {@link #matches})。
-     *                  放法不看它:每一格都由 {@link BuildPlacer} 手放或直接写。
+     *                  放法不看它:每一格都由 {@link BuildPlacer} 直接写。
      * @param mask      这一格自己的让路档位;没写是 null,按 {@link ReplaceMode#REPLACE_EMPTY}(见 {@link #mode})
      * @param heldWater 要的方块本来含着水(waterlogged),归一时被去掉了;方块照放,回执的 {@code liquid} 一类如实说去掉了几格的水
      */

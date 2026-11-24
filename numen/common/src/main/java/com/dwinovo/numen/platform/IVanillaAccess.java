@@ -6,12 +6,9 @@ import net.minecraft.world.entity.projectile.FishingHook;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.CraftingContainer;
 import net.minecraft.world.inventory.ResultContainer;
-import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * 内容要读、要调的几处原版私有成员。私有成员怎么够得着是平台的事(模组用 Mixin 访问器,Fabric 生产环境是中间名,
@@ -31,10 +28,4 @@ public interface IVanillaAccess {
      */
     void recomputeCraftingResult(AbstractContainerMenu menu, Level level, Player player, CraftingContainer grid,
                                  ResultContainer result, RecipeHolder<CraftingRecipe> hint);
-
-    /**
-     * 方块物品在这次点击下会放成什么状态:{@code BlockItem.place} 里决定状态的那一步(连带"站得住、没被挡着"的判断),只读、
-     * 不动世界;放不出来为 null。它是受保护成员,各物品还会覆写(火把分立地与贴墙),所以只能经物品自己问。
-     */
-    BlockState placementState(BlockItem item, BlockPlaceContext context);
 }

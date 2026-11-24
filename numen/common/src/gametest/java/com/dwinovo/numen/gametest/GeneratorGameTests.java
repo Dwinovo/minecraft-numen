@@ -141,13 +141,13 @@ public class GeneratorGameTests {
     /**
      * feature:一棵原版橡树种在一块泥土上头。交回的是原木与树叶,真实世界一格没动;放下去之后一致。
      */
-    @GameTest(template = "floor52", timeoutTicks = 2800, batch = BATCH)
+    @GameTest(template = "floor52", timeoutTicks = 200, batch = BATCH)
     public static void feature_grows_a_vanilla_tree_on_the_recorded_level_and_leaves_the_world_alone(GameTestHelper helper) {
         featureTree(helper, "gametest_tree", TREE_SEED);
     }
 
     /** 同上,树冠下面一层比树干宽的那一棵({@link #OVERHUNG_FEATURE_SEED}):树干上每一截都放下去。 */
-    @GameTest(template = "floor52", timeoutTicks = 2800, batch = BATCH)
+    @GameTest(template = "floor52", timeoutTicks = 200, batch = BATCH)
     public static void feature_tree_whose_crown_overhangs_its_trunk_is_placed_whole(GameTestHelper helper) {
         featureTree(helper, "gametest_tree_overhung", OVERHUNG_FEATURE_SEED);
     }
@@ -188,7 +188,7 @@ public class GeneratorGameTests {
      * structure:一个原版小结构(沼泽小屋)在这一块的区块里生成。交回的是方块;它生成的女巫和猫不生成、方块实体的数据不进格,都在 lost 里;
      * 真实世界一格没动;放下去之后一致。
      */
-    @GameTest(template = "open64", timeoutTicks = 2200, batch = BATCH)
+    @GameTest(template = "open64", timeoutTicks = 200, batch = BATCH)
     public static void structure_records_a_swamp_hut_and_says_which_creatures_it_dropped(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         // a structure settles on the highest block of the column: the arena has no walls, but the test frame puts a lid
@@ -250,7 +250,7 @@ public class GeneratorGameTests {
     }
 
     /** 同上,树冠下面一层比树干宽的那一棵({@link #OVERHUNG_FOREST_SEED}):树干上每一截都放下去。 */
-    @GameTest(template = "floor52", timeoutTicks = 3000, batch = BATCH)
+    @GameTest(template = "floor52", timeoutTicks = 200, batch = BATCH)
     public static void forest_tree_whose_crown_overhangs_its_trunk_is_placed_whole(GameTestHelper helper) {
         forestTree(helper, "gametest_forest_overhung", OVERHUNG_FOREST_SEED);
     }

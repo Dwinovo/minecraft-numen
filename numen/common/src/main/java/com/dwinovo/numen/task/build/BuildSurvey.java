@@ -5,7 +5,6 @@ import com.dwinovo.numen.task.dig.DigTaskRecord;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayList;
@@ -15,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 一件施工的每一格此刻是什么情形:已经对上、不去动、得先挖开、还立不住、放得进去。{@code numen.build.place} 只放"放得进去"的那些、
+ * 一件施工的每一格此刻是什么情形:已经对上、不去动、得先挖开、缺料、放得进去。{@code numen.build.place} 只放"放得进去"的那些、
  * 受理前问还有没有,{@code numen.build.diff} 把整份照这同一个判据数给脚本——施工与查询读的是同一份。
  *
  * <p>她站在哪儿、离这一格多远不在判据里:放一格不看距离({@link BuildPlacer})。生存模式下图纸要的格里立着别的东西,得先由
@@ -36,13 +35,6 @@ public final class BuildSurvey {
         DIG,
         /** 生存模式下立着别的方块,身上却没有要放的料。 */
         SHORT,
-        /**
-         * 素面格({@link BuildTaskRecord.Target#itemPlace})此刻放下去立不住(原版 {@code canSurvive}——物品落位时问的就是它),
-         * 而它相邻的设计格还有没盖好的:托着它的(下面那块、背后那面墙、上面挂着它的)还没有,等那一格好了它才是 {@link #READY}。
-         * 带状态位的格不问这一句,立不立得住由放下之后原版说(回执的 {@code did_not_stay});相邻的都盖好了还立不住的也不在这里——
-         * 图纸要的在那儿本来立不住,照常交给 {@code numen.build.place},它直接写进去并如实计数。
-         */
-        UNHELD,
         /** 放得进去:{@code numen.build.place} 这一次就放。 */
         READY
     }
@@ -84,21 +76,7 @@ public final class BuildSurvey {
         if (!instaBreak && DigTaskRecord.wants(null, now)) {
             return BuildCellRules.isAirTarget(target) || affordable(target) ? State.DIG : State.SHORT;
         }
-        if (target.itemPlace() && !target.desiredState().canSurvive(player.level(), pos) && waitsOnNeighbour(pos)) {
-            return State.UNHELD;
-        }
         return State.READY;
-    }
-
-    /** 相邻六格里有还没盖好、也不是不去动的设计格。 */
-    private boolean waitsOnNeighbour(BlockPos pos) {
-        for (Direction side : Direction.values()) {
-            BuildTaskRecord.Target next = r.targetAt(pos.relative(side));
-            if (next != null && !next.matches(rules.peek(next.pos())) && !rules.refused(next) && !rules.hopeless(next)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**
@@ -152,7 +130,7 @@ public final class BuildSurvey {
 
         /** 还没了结的格:不算已经对上的,也不算不去动的。 */
         public int left() {
-            return count(State.DIG) + count(State.SHORT) + count(State.READY) + count(State.UNHELD);
+            return count(State.DIG) + count(State.SHORT) + count(State.READY);
         }
     }
 }
