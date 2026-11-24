@@ -1,6 +1,6 @@
 # 0007 移除 Paper:只做模组加载器上的服务端
 
-- 状态:已接受
+- 状态:已接受,已落地(实现说明见文末)
 - 日期:2026-11-25
 - 修订:[0001](0001-server-agent-two-brains.md) 与 control 0011 里"往服务端插件走、客户端可选"的方向
 - 另见:`docs/paper.md`(随这条删除;最后带 Paper 的提交是 `5f27ef09e`)
@@ -36,3 +36,16 @@
 
 - 大脑、记忆与钥匙要不要回到玩家的客户端、服务端只留身体:方向已有(用户:"会继续考虑 agentloop 在客户端跑,服务端跑假人"),
   另写一条。
+
+## 实现说明
+
+- 删掉的工程与构建:`numen-api/paper`、`numen/paper`;约定插件 `numen-paper`、`numen-e2e-paper`,起 Paper 服务端的 `PaperServer`,
+  只为它存在的链接检查(`LinkCheck*`)与 `paper_dev_bundle`;CI 里的链接检查与端到端的 Paper 一路。发版流程按成品目录逐个上传,没有要改的。
+- **召唤是当场的。** 假玩家进服务器在 Paper 上要等平台接纳,所以召唤、重生原来都是"发起、等回调、可能被拒、可能在路上";
+  NeoForge 与 Fabric 上从来是当场进来。`CompanionFactory.spawn`、`Companions.summon`/`respawn` 现在直接交回身体,
+  异步入场的编排 `Arrivals`、平台接口 `IBodyAdmission` 与 `ICommandSources`(两个加载器的实现都是空的)、
+  "她正在赶来""服务器没有接纳她"两句提示都删了。
+- 别的只为它拐的弯:`Services.load` 带类加载器的重载、聊天改道的 `ChatRoutes.routed`/`deliver`、
+  `ServerLang` 里转消息格式的两个方法、`WorldView` 的两个"已加载才读"的默认方法、只在 Paper 上跑的那条握手用例。
+- 落地后在合并的代码上跑过:单测、默认整套(NeoForge 445、Fabric 444)、慢批 32、车万女仆批 16、NeoForge 端到端 7,全过。
+
