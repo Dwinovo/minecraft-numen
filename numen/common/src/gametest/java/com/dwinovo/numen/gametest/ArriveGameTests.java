@@ -17,7 +17,7 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
 /**
  * 到达,从入口调:{@code numen.use.block} 够不着时自己走到看得见、点得到的地方(狭窄矿道里的熔炉、只有一面敞开的箱子、
  * 悬崖上的工作台),隔着高草时 {@code numen.work.dig} 先清掉再用;四面封死走不到、如实说挖哪一面;{@code numen.move.walk} 到
- * 梯子上、水里的一格;{@code numen.build.place} 走到够得着往一格半空里放的地方。
+ * 梯子上、水里的一格。
  */
 public class ArriveGameTests {
 
@@ -108,25 +108,4 @@ public class ArriveGameTests {
         });
     }
 
-    /**
-     * 一格半空(地面上两格、四周什么都没有):{@code numen.build.place} 自己走到手够得着往里放方块的地方,不站进那一格,放进去——
-     * 够得着就是放得下。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = ON_FOOT)
-    public static void place_walks_within_hand_of_a_cell_in_the_air_and_fills_it(GameTestHelper helper) {
-        BlockPos cell = helper.absolutePos(new BlockPos(11, 4, 11));
-        NumenPlayer companion = spawnAt(helper, "gametest_reacher", new BlockPos(2, 2, 2), false);
-        companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COBBLESTONE));
-        ToolRun run = lua(companion, "numen.build.place({{name = \"cobblestone\", pos = " + xyz(cell) + "}})");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(run.receipt() != null, "the program has not finished");
-            helper.assertTrue(run.ranToTheEnd(), "placing failed: " + run.receipt());
-            helper.assertTrue(helper.getLevel().getBlockState(cell).is(Blocks.COBBLESTONE),
-                    "the cell in the air was not filled");
-            helper.assertTrue(!companion.blockPosition().equals(cell) && !companion.blockPosition().above().equals(cell),
-                    "she stood in the cell she was to fill");
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
 }

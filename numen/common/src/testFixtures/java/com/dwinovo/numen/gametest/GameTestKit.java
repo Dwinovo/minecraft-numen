@@ -659,11 +659,6 @@ public final class GameTestKit {
         return xyz(helper.absolutePos(rel));
     }
 
-    /** 一格写成交回的值里的样子(JSON):和程序拿到的一个 Pos 比对时用。 */
-    static JsonElement posJson(BlockPos pos) {
-        return JsonValues.toJson(Positions.value(pos));
-    }
-
     /** 一格的坐标照回执里说一处地方的写法:{@code x y z}。 */
     static String words(BlockPos pos) {
         return pos.getX() + " " + pos.getY() + " " + pos.getZ();

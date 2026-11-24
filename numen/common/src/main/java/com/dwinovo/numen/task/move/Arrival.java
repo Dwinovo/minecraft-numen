@@ -7,8 +7,8 @@ import net.minecraft.core.BlockPos;
 
 /**
  * 一趟路怎样算到了:去哪儿({@link Where})加到了的样子({@link How})。给模型的只有两种说法——{@link #to}(站进去,或离它不超过几格)和
- * {@link #away}(离它至少几格);{@link How#USE}、{@link How#DIG}、{@link How#PLACE} 是动手的活够不着时替自己走过去用的
- * ({@link #use}、{@link #dig}、{@link #place}),判据就是动作自己那一处的到达目标。形状不成立(只给高度却要离开它)在建的时候就报,
+ * {@link #away}(离它至少几格);{@link How#USE}、{@link How#DIG} 是动手的活够不着时替自己走过去用的
+ * ({@link #use}、{@link #dig}),判据就是动作自己那一处的到达目标。形状不成立(只给高度却要离开它)在建的时候就报,
  * 那是参数写错了;和世界有关的(那一格站不进去、没东西可用)在编成目标时说({@link Destination}),那是这一趟走不通。
  *
  * @param range {@link How#NEAR}、{@link How#BESIDE} 是离它不超过几格,{@link How#AWAY} 是离它至少几格;别的是 0
@@ -29,14 +29,12 @@ public record Arrival(Where to, How how, int range) {
         USE,
         /** 站在手够得着那一格方块的地方(挡着的可以挖开),去挖它。 */
         DIG,
-        /** 站在手够得着往那一格里放方块的地方,不站进去,去往里放。 */
-        PLACE,
         /** 离它至少 {@code range} 格。 */
         AWAY;
 
         /** 要的是一格方块,不是一列、一个高度或一只实体。 */
         boolean namesABlock() {
-            return this == USE || this == DIG || this == PLACE;
+            return this == USE || this == DIG;
         }
     }
 
@@ -85,11 +83,6 @@ public record Arrival(Where to, How how, int range) {
         return new Arrival(cells.size() == 1 ? new Where.Cell(cells.get(0), null) : Where.Cells.of(cells), How.DIG, 0);
     }
 
-    /** 站到手够得着往 {@code cells} 里放方块的地方,不站进格子里。 */
-    public static Arrival place(List<BlockPos> cells) {
-        return new Arrival(cells.size() == 1 ? new Where.Cell(cells.get(0), null) : Where.Cells.of(cells), How.PLACE, 0);
-    }
-
     private static int checked(int distance) {
         if (distance < 1 || distance > MAX_RANGE) {
             throw new IllegalArgumentException("distance must be 1 to " + MAX_RANGE + ", got " + distance);
@@ -105,7 +98,6 @@ public record Arrival(Where to, How how, int range) {
             case NEAR, BESIDE -> where + " (within " + range + ")";
             case USE -> where + " (to use it)";
             case DIG -> where + " (to dig it)";
-            case PLACE -> where + " (to build into it)";
             case AWAY -> where + " (at least " + range + " away)";
         };
     }
@@ -118,7 +110,6 @@ public record Arrival(Where to, How how, int range) {
             case NEAR, BESIDE -> "walking to within " + range + " blocks of " + where;
             case USE -> "going to use " + where;
             case DIG -> "walking to where " + where + " is within reach";
-            case PLACE -> "walking to where a block can be placed into " + where;
             case AWAY -> "getting more than " + range + " blocks away from " + where;
         };
     }
@@ -131,7 +122,6 @@ public record Arrival(Where to, How how, int range) {
             case NEAR, BESIDE -> Activity.of("numen.activity.move_near", where, range);
             case USE -> Activity.of("numen.activity.move_use", where);
             case DIG -> Activity.of("numen.activity.move_dig", where);
-            case PLACE -> Activity.of("numen.activity.move_place", where);
             case AWAY -> Activity.of("numen.activity.move_away", where, range);
         };
     }

@@ -36,12 +36,12 @@ public class GeneratorGameTests {
 
     private static final String BATCH = "numen_shape";
     /**
-     * 树的用例长树用的种子:原版的树形随种子变,长成什么样、随后 {@code place} 怎么垫脚怎么走都跟着变,定下种子一次失败才能原样重放。
+     * 树的用例长树用的种子:原版的树形随种子变,长成什么样、随后 {@code place} 放哪些格都跟着变,定下种子一次失败才能原样重放。
      */
     private static final long TREE_SEED = 0;
     /**
-     * {@code numen.shape.feature(…, "minecraft:oak")} 用这个种子长出的树,树冠下面一层比树干宽:站在地上够不着树冠里那一截树干,
-     * 而它上面一层悬空的树叶哪儿都算够得着。施工要先走去放那一截,不能先把上面一层盖上把它封死。
+     * {@code numen.shape.feature(…, "minecraft:oak")} 用这个种子长出的树,树冠下面一层比树干宽:树冠里那一截树干被四周与上面的
+     * 树叶围着。树干上每一截都得放下去。
      */
     private static final long OVERHUNG_FEATURE_SEED = 1;
     /** {@code forest("minecraft:oak_checked", 100)} 用这个种子长出的树,情形同 {@link #OVERHUNG_FEATURE_SEED}。 */

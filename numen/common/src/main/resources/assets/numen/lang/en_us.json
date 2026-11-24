@@ -8,7 +8,6 @@
   "numen.activity.move_near": "Walking to within %2$s blocks of %1$s",
   "numen.activity.move_use": "Going to use %s",
   "numen.activity.move_dig": "Getting within reach of %s to dig it",
-  "numen.activity.move_place": "Getting within reach of %s to build into it",
   "numen.activity.move_away": "Moving at least %2$s blocks away from %1$s",
   "numen.activity.follow": "Following %1$s, staying within %2$s blocks, for %3$s s",
   "numen.activity.follow_owner": "Following you, staying within %1$s blocks, for %2$s s",

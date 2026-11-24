@@ -11,6 +11,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.level.block.state.properties.SlabType;
+import net.minecraft.world.phys.Vec3;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -242,7 +243,7 @@ class BuildTaskRecordTest {
         }
     }
 
-    /** 贴附件整体推到第二趟:骨架先立完,再回头挂灯摆花。 */
+    /** 贴附件排在所有层之后:骨架先立完,再回头挂灯摆花。 */
     @Test
     void whatStandsOnItsOwnIsBuiltBeforeWhatHangsOnSomething() {
         List<BuildTaskRecord.Target> mixed = new java.util.ArrayList<>(List.of(
@@ -251,10 +252,22 @@ class BuildTaskRecordTest {
                 new BuildTaskRecord.Target(Blocks.RED_CARPET.defaultBlockState(), Items.RED_CARPET,
                         new BlockPos(2, 1, 0), "carpet"),
                 new BuildTaskRecord.Target(Blocks.STONE, Items.STONE, new BlockPos(0, 9, 0), "stone")));
-        mixed.sort(BuildOrder.BUILD_ORDER);
+        mixed.sort(BuildOrder.from(Vec3.ZERO));
         assertTrue(mixed.get(0).desiredState().getBlock() == Blocks.STONE,
                 "everything that stands on its own goes first, even nine layers up; got "
                         + mixed.stream().map(BuildTaskRecord.Target::label).toList());
+    }
+
+    /** 低层先;同一层里离她近的先放。 */
+    @Test
+    void lowerLayersGoFirstAndWithinALayerTheNearerCell() {
+        List<BuildTaskRecord.Target> cells = new java.util.ArrayList<>(List.of(
+                new BuildTaskRecord.Target(Blocks.STONE, Items.STONE, new BlockPos(1, 65, 0), "near, upper"),
+                new BuildTaskRecord.Target(Blocks.STONE, Items.STONE, new BlockPos(20, 64, 0), "far, lower"),
+                new BuildTaskRecord.Target(Blocks.STONE, Items.STONE, new BlockPos(3, 64, 0), "near, lower")));
+        cells.sort(BuildOrder.from(new Vec3(0.5, 64, 0.5)));
+        assertEquals(List.of("near, lower", "far, lower", "near, upper"),
+                cells.stream().map(BuildTaskRecord.Target::label).toList());
     }
 
     /**

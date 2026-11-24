@@ -52,8 +52,8 @@
 | `use.wake` / `use.glide` | 起床(与 `use.sleep` 成对);鞘翅起飞,飞行中放烟花是 `use.item` | 条件(在空中、鞘翅没坏……)原版判 |
 | `use.sign` | 写告示牌的一面(刚放下的直接写,别的没涂蜡的先右键);发 `SignUpdate`,读回牌上的字 | 涂蜡、别人在写由原版拒,如实报 |
 | `work.dig` | 挖点名的格:手够得着的先挖,够不着的走到够得着剩下最多格的地方再挖;挡在前面的格一并挖开(要问/被禁的不挖,如实说),换工具 | 不捡 |
-| `build.place` | 把给的格(Cells)放一遍:够得着的放,够不着的走到够得着最低一层剩下的格的地方再放 | 不挖、不重来 |
-| `build.diff` | 查:还差什么,够得着的、要先挖的、够不着的与最低最近的那一格,剩下的格要花的全部料(`materials`)与生存模式下还缺多少(`short_of`) | 只读,不走 |
+| `build.place` | 把给的格(Cells)放一遍:她站在原地放,不看离得多远;低层先、层内就近,每格走原版的放置流程 | 不挖、不走、不重来 |
+| `build.diff` | 查:还差什么,此刻放得进去的、要先挖的、还立不住的,剩下的格要花的全部料(`materials`)与生存模式下还缺多少(`short_of`) | 只读,不走 |
 | `fight.attack` | 打**一只**:追、转头、等冷却、出手,死了/丢了/超时收尾 | 不挑下一只、不跑(跑是逃跑本能) |
 | `use.*` | 按一下键:右键一格/一只实体/前方,左键一下 `use.hit`;够不着先走到能按的地方。交回的都是同一种值(按了哪个键、点了什么、游戏接没接);这一下点开了界面就当场合上,回执与值都不提它(control 0021) | 不挖(挖是 `work.dig`);不在界面里做事(那是各目标自己的一组:`container`、`furnace`……) |
 | `inv.read` / `inv.write` | 读背包里书的标题作者各页;往书与笔里写页并可署名(发 `EditBook`,读回) | 不合成书 |
@@ -89,8 +89,8 @@
 | `shape.*` | 画格子,叫法与操作对齐 WorldEdit(设计稿 `docs/shape-worldedit.md`):选区 `cuboid`、`cyl`、`sphere`、`poly`、`convex` 与 `set`、`walls`、`faces`、`expand`…;`cyl`/`hcyl`、`sphere`/`hsphere`、`cone`、`pyramid`、`line`、`curve`、`generate` 画形状;`layer` 画字符网格;`copy`、`cut`、`fill`、`drain`、`snow`、`gravity`、`morph` 等读世界的操作(只读已加载区块,不写,交回 Cells);`feature`、`structure`、`forest`、`forestgen`、`flora`、`pumpkins` 让原版的生成器跑在记录用的世界上(真实世界一格不动),`feature`、`structure`、`forest` 交回 `{cells, lost}`(`lost` 是 Cells 装不下的实体与方块实体数据);交回 Cells |
 
 - **"挖"的到达**(`Arrival.dig`,`work.dig` 够不着时走过去用)= 手够得着目标区域里任意一格,不要求看得见。同样划算的站位里,优先一次能够到
-  最多目标格的(定价只在寻路模块 `Goals.dig` 一处)。**"放"的到达**(`Arrival.place`,`build.place` 用)= 手够得着往那一格里放方块,
-  不站进那一格(`Goals.place`,和 `Goals.dig` 同一套够得着的格,只多禁站进目标)。"用"的到达(`Arrival.use`,`use.*` 用)= 看得见、点得到。
+  最多目标格的(定价只在寻路模块 `Goals.dig` 一处)。"用"的到达(`Arrival.use`,`use.*` 用)= 看得见、点得到。`build.place` 没有到达:
+  她站在原地放(body 0011)。
 - `work.dig` 挖完回执说:挖了几格、还剩几格够不着(走不到的才有)。给的是扫描交回的
   Block 时,那一格还是那种方块才挖,挖掉的下一次自动不算。
 - **没有不可拆的行为,只有循环快慢之分**:秒级的决策循环(打哪只、按什么顺序、何时撤、打完捡东西)进脚本;每刻都要转
@@ -489,8 +489,8 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
   `numen.use.dismount()`;走路的一趟从不自己下车。
 - **回执**(`Walked`,`to`/`away`/`follow` 共用,失败时是错误的 `data`):`pos`、`distance_left`、`dug`、`placed`、`rulings`(问过主人的格与
   答复、规则当场不许的格);回执末尾那一句另说挖了什么、放了什么、被拒了什么、潜了几段水。
-- 动手的工具自己走过去:`use.block/entity/hit` 够不着先走到能按的地方;`work.dig` 走到够得着剩下最多格的地方再挖;`build.place` 走到够得着
-  最低一层剩下的格的地方再放;`build.diff` 只读。判据只在动作那一处(`Arrival.use/dig/place`)。
+- 动手的工具自己走过去:`use.block/entity/hit` 够不着先走到能按的地方;`work.dig` 走到够得着剩下最多格的地方再挖。判据只在动作
+  那一处(`Arrival.use/dig`)。`build.place` 不走,站在原地放;`build.diff` 只读。
 - 库:`numen.move.explore(dir, {until_, seconds, hop})` 一跳一跳 `move.walk` 到前面一列的 4 格内。
 - 登记:`numen.codec(Where.class, …)`;读法在 `task/move/Where`,怎样算到在 `Arrival`,编成目标在 `Destination`,任务是 `MoveToCompanionTask`。
 
@@ -516,8 +516,8 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
   掉进虚空、被别的收走、到上限还在动;并堆跟着件数走。落定之后的事不归它。回执那一句(`Drops: 1 obsidian fell into lava and
   burned up at {x = …}`)与数据 `drops`(一笔一项 `{item, count, fate, pos, by?, cause?, id?}`)出自同一份记录。
   `numen.work.collect({items = …})` 只追给它的那几件(按 `id`),`numen.work.mine` 把挖的 `drops` 交给它,不再挖完另扫一遍。
-- `numen.work.collect` 等模块里的走路一律是 `numen.move.walk`;`numen.inv.*` 开箱子、`numen.build.place` 放方块的走路由 `use.block`、
-  `build.place` 自己做;垫路料只有标签 `#numen:throwaway` 一份。
+- `numen.work.collect` 等模块里的走路一律是 `numen.move.walk`;`numen.inv.*` 开箱子的走路由 `use.block` 自己做;垫路料只有标签
+  `#numen:throwaway` 一份。
 - **登记不合规矩当场抛出**:`NumenPlugins.register` 不再接住插件登记块里的异常记一行日志——那样一组会悄悄缺席(例子读不通、
   没声明返回……),模型看到的 API 少了一块却没人知道。现在异常原样抛出、启动失败,那句话写着名字空间、组、动作与哪条规矩。
 

@@ -321,7 +321,6 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             case AWAY -> "got at least " + a.range() + " blocks away from " + where + ", standing at " + here(gy);
             case USE -> "standing at " + here(gy) + ", with " + where + " in sight and in reach";
             case DIG -> "standing at " + here(gy) + ", within reach of " + where;
-            case PLACE -> "standing at " + here(gy) + ", with " + where + " within reach to build into";
         };
         return reached + (player.getVehicle() instanceof Boat ? " in the boat" : "") + ".";
     }

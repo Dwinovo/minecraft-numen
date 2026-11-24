@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.EmptyBlockGetter;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.Comparator;
 
@@ -29,7 +30,7 @@ public final class BuildOrder {
 
     /**
      * 创造模式下这件活是一个动作,不是一段施工:整件活装得进一刻的落位上限({@link #MAX_CELLS_PER_TICK}),就一刻放完、放完收工,
-     * 不绕着工地走,也没有最短时长。
+     * 没有最短时长。
      *
      * <p>判据取这条上限而不是另定一个"几格",因为速率模型里只有它回答"多少格可以同时出现":上限之内的格在同一刻落下
      * 不算卡顿,把它们摊进二十五秒的演出,只是让一次右键排队。超过上限的活怎么排都要分几刻放,那才是一段有先后、
@@ -39,16 +40,26 @@ public final class BuildOrder {
         return cellCount <= MAX_CELLS_PER_TICK;
     }
 
-    /** 施工顺序的唯一定义(公开是为了让测试直接钉住它,而不是靠副作用间接猜)。 */
-    public static final Comparator<BuildTaskRecord.Target> BUILD_ORDER = Comparator
-            .comparingInt((BuildTaskRecord.Target t) -> needsSupport(t.desiredState()) ? 1 : 0)
-            .thenComparingInt(t -> t.pos().getY())
-            .thenComparingInt(BuildOrder::stage)
-            .thenComparingInt(t -> t.pos().getZ())
-            .thenComparingInt(t -> (t.pos().getZ() & 1) == 0 ? t.pos().getX() : -t.pos().getX());
+    /**
+     * 施工顺序的唯一定义:贴附件({@link #needsSupport})全部排在最后,其余低层先(下面盖好了上面才有依托);层内先清障、再整块、
+     * 再非整块({@link #stage});同档之内离 {@code from}(她站的地方)近的先放。末两项只为顺序完全确定。
+     */
+    public static Comparator<BuildTaskRecord.Target> from(Vec3 from) {
+        return Comparator
+                .comparingInt((BuildTaskRecord.Target t) -> needsSupport(t.desiredState()) ? 1 : 0)
+                .thenComparingInt(t -> t.pos().getY())
+                .thenComparingInt(BuildOrder::stage)
+                .thenComparingDouble(t -> {
+                    double dx = t.pos().getX() + 0.5 - from.x;
+                    double dz = t.pos().getZ() + 0.5 - from.z;
+                    return dx * dx + dz * dz;
+                })
+                .thenComparingInt(t -> t.pos().getZ())
+                .thenComparingInt(t -> t.pos().getX());
+    }
 
     /**
-     * 这一格立不立得住:要依托别的方块的算<b>贴附件</b>,推到第二趟。
+     * 这一格立不立得住:要依托别的方块的算<b>贴附件</b>,排在所有层之后。
      *
      * <p>按方块类型判,不按"能不能存活"现场试——现场试要有支撑才知道答案,而主趟
      * 正是支撑还没长出来的时候。类型是封闭集合,一次列完;"能不能存活"是开放的,
@@ -116,15 +127,13 @@ public final class BuildOrder {
     }
 
     private static final long MIN_DEADLINE_TICKS = 60 * 20;
-    private static final long TRAVEL_ALLOWANCE_TICKS = 40 * 20;
-    /** 施工预计时长之上再留的余量(零进展重试吃这笔)。 */
+    /** 施工预计时长之上再留的余量。 */
     private static final double DEADLINE_SLACK = 1.6;
 
     /**
-     * 施工时限:走到工地外圈的行程 + 施工预计时长再留一截余量。预计时长就是 {@link #estimatedTicks}。
+     * 施工时限:施工预计时长再留一截余量。预计时长就是 {@link #estimatedTicks}。
      */
     public static long deadlineTicks(int cellCount, boolean consumeMaterials) {
-        return Math.max(MIN_DEADLINE_TICKS,
-                TRAVEL_ALLOWANCE_TICKS + (long) (estimatedTicks(cellCount, consumeMaterials) * DEADLINE_SLACK));
+        return Math.max(MIN_DEADLINE_TICKS, (long) (estimatedTicks(cellCount, consumeMaterials) * DEADLINE_SLACK));
     }
 }

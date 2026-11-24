@@ -1,8 +1,6 @@
 package com.dwinovo.numen.api.entity;
 
-import java.util.ArrayList;
 import java.util.EnumSet;
-import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -88,22 +86,6 @@ public final class Faces {
         return null;
     }
 
-    /**
-     * 从 {@code eye} 看得见、够得着的全部候选,先后同 {@link #first}:眼睛在面朝外的一侧,面上的点在交互距离 {@code range} 以内,
-     * 射线({@link Sight})第一下碰上的就是这一面。只有要在几个点击之间挑的地方(手放挑与目标状态一字不差的那一下)用它;
-     * 只要第一个的问 {@link #inSight}。
-     */
-    public static List<Face> inSightAll(BlockGetter level, Vec3 eye, double range, BlockPos target, Block placing) {
-        List<Face> out = new ArrayList<>();
-        first(level, target, placing, eye, face -> {
-            if (inSight(level, eye, range, face)) {
-                out.add(face);
-            }
-            return false;
-        });
-        return out;
-    }
-
     /** 往 {@code target} 放方块时有没有能点的地方(不管看不看得见、够不够得着):{@link #first} 会不会交出任何候选。 */
     private static boolean anyCandidate(BlockGetter level, BlockPos target, Block placing) {
         return anyAgainst(level, target, placing)
@@ -111,8 +93,8 @@ public final class Faces {
     }
 
     /**
-     * 站在 {@code eye} 这个位置,往 {@code target} 这一格放方块,手点不点得着——"够得着"在整个仓库里只有这一个判据:站位选择
-     * ({@code Goals.place} 的停点)、施工数格({@code BuildSurvey})、手放挑点击({@code BuildPlacer})问的都是它。
+     * 站在 {@code eye} 这个位置,往 {@code target} 这一格放方块,手点不点得着:寻路"往一格里放"的到达目标({@code Goals.place})
+     * 挑停点问的是它。
      *
      * <p>按这一格里的东西已经清掉了算(创造模式放之前先碎,生存的要挖的格另有说法),所以挡在眼睛和邻格之间的是这一格自己的话不算挡。
      * 没有任何能点的面(悬空)手点不了,放的一方直接写进去,站在哪儿都一样:算够得着,够不够得着只看眼睛到这一格的距离({@code Reach})。

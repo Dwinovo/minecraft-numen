@@ -8,7 +8,6 @@
   "numen.activity.move_near": "走到 %1$s %2$s 格内",
   "numen.activity.move_use": "去用 %s",
   "numen.activity.move_dig": "走到够得着 %s 的地方",
-  "numen.activity.move_place": "走到够得着 %s、往里放方块的地方",
   "numen.activity.move_away": "离开 %1$s %2$s 格以外",
   "numen.activity.follow": "跟着 %1$s,保持 %2$s 米,跟 %3$s 秒",
   "numen.activity.follow_owner": "跟着你,保持 %1$s 米,跟 %2$s 秒",

@@ -29,17 +29,17 @@ import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * 建造动世界的这一半:把一处手够得着的格变成要盖的样子({@code numen.build.place})、数还差什么和要花什么({@code numen.build.diff})。
+ * 建造动世界的这一半:把一串格变成要盖的样子({@code numen.build.place})、数还差什么和要花什么({@code numen.build.diff})。
  *
  * <p>两条路是同一条:摆出这串格({@link #plan})→ 和世界比出要动的格({@link Changes})→ 没有要动的就不派活,有就交执行器,
- * 它只放站在原地够得着的格,每格轮到一次就收场。{@code numen.build.diff} 摆同一串格、比同一份差异,按执行器挑格的同一个判据
+ * 她站在原地放,每格轮到一次就收场。{@code numen.build.diff} 摆同一串格、比同一份差异,按执行器挑格的同一个判据
  * ({@link BuildSurvey})数,不派活。
  */
 public final class BuildOps {
 
     private BuildOps() {}
 
-    /** 把这一处变成要盖的样子:够得着的放一遍;已经是这个样子就不派活,当场交回什么都没放。 */
+    /** 把这一处变成要盖的样子:整份放一遍;已经是这个样子就不派活,当场交回什么都没放。 */
     public static Job<BuildCompanionTask.Placed> place(ServerCall call, Design design) {
         NumenPlayer her = call.her();
         List<BuildTaskRecord.Target> targets = plan(her, design);
@@ -52,13 +52,11 @@ public final class BuildOps {
     }
 
     /** 离要盖的样子还差什么:{@code numen.build.diff} 交回的值。 */
-    @Doc("What a spot still lacks to look like a design, seen from where you stand.")
+    @Doc("What a spot still lacks to look like a design.")
     public record Diff(@Doc("Cells still to do.") int left,
-                       @Doc("Within reach to place now.") int reach,
+                       @Doc("Of those, the cells numen.build.place puts in now.") int ready,
                        @Doc("Up to " + LISTED_DIG + " cells holding another block to dig out first, nearest first.")
                        List<BlockPos> dig,
-                       @Doc("Out of reach.") int far,
-                       @Doc("The lowest, then nearest, of those out of reach: numen.build.place walks up to it.") Optional<BlockPos> next,
                        @Doc("Cells holding another block with nothing of yours to put there.") int noStock,
                        @Doc("Cells that would not stay put yet: what holds them (the block below, the wall behind) is "
                                + "not built.") int unheld,
@@ -71,22 +69,20 @@ public final class BuildOps {
                                + "Absent when building costs nothing.") Optional<Map<String, Integer>> shortOf) {}
 
     /**
-     * 这一处离要盖的样子还差什么,按她此刻站的地方数:还剩几格、几格够得着、几格要先挖开(给出最近的几格)、几格够不着
-     * (给出最低最近的一格),以及剩下的格要花的全部料与她还缺多少。只读,当场回;数的判据与 {@link #place} 挑格的是同一个,
-     * 料的件数与逐格实扣是同一个函数({@link BuildBill})。
+     * 这一处离要盖的样子还差什么:还剩几格、几格此刻放得进去、几格要先挖开(给出最近的几格)、几格还立不住,以及剩下的格要花的
+     * 全部料与她还缺多少。只读,当场回;数的判据与 {@link #place} 挑格的是同一个,料的件数与逐格实扣是同一个函数({@link BuildBill})。
      */
     public static Diff diff(NumenPlayer her, Design design) {
         List<BuildTaskRecord.Target> targets = plan(her, design);
         if (Changes.between(targets, seen(her.serverLevel())).none()) {
-            return new Diff(0, 0, List.of(), 0, Optional.empty(), 0, 0, 0, 0, Map.of(), shortOf(her, Map.of()));
+            return new Diff(0, 0, List.of(), 0, 0, 0, 0, Map.of(), shortOf(her, Map.of()));
         }
         BuildTaskRecord record = new BuildTaskRecord("numen.build.diff", "", 0, targets,
                 !WorkProfile.of(her).freeMaterials());
         BuildSurvey.Tally tally = BuildSurvey.of(her, record).tally();
         Map<Item, Integer> cost = BuildBill.cost(tally.pending());
-        return new Diff(tally.left(), tally.count(BuildSurvey.State.REACH),
-                List.copyOf(tally.dig().subList(0, Math.min(LISTED_DIG, tally.dig().size()))), tally.far().size(),
-                tally.far().isEmpty() ? Optional.empty() : Optional.of(tally.far().get(0)),
+        return new Diff(tally.left(), tally.count(BuildSurvey.State.READY),
+                List.copyOf(tally.dig().subList(0, Math.min(LISTED_DIG, tally.dig().size()))),
                 tally.count(BuildSurvey.State.SHORT), tally.count(BuildSurvey.State.UNHELD),
                 tally.count(BuildSurvey.State.SKIPPED), tally.count(BuildSurvey.State.LIQUID) + tally.heldWater(),
                 BuildBill.items(cost), shortOf(her, cost));

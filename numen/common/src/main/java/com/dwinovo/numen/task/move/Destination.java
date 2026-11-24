@@ -27,11 +27,10 @@ import net.minecraft.world.entity.item.ItemEntity;
  *   <li>{@code use}:用那一格方块——站在它敞开的面前、看得见、点得到({@link Goals#use});</li>
  *   <li>{@code dig}:挖那一格方块——站到手够得着它、身体不占着它、挡着视线的都是 {@code numen.work.dig} 清得掉的地方
  *       ({@link Goals#dig},清不清得掉按 {@link #clearing} 问),那一格本身留给 {@code numen.work.dig};</li>
- *   <li>{@code place}:往那一格里放——手够得着它、身体不占着它({@link Goals#place});</li>
  *   <li>{@code away}:离它至少 {@code range} 格({@link Goals#within} 的最大是无穷)。</li>
  * </ul>
- * 一只实体按编目标那一刻它所在的那一格算。一堆格子(一团矿)对每一种到达都成立:{@code at}、{@code near}、{@code use}、
- * {@code place} 是到了其中任何一格就算({@link Goals#anyOf});{@code dig} 是够得着其中任意一个 {@code numen.work.dig} 挖得成的方块,
+ * 一只实体按编目标那一刻它所在的那一格算。一堆格子(一团矿)对每一种到达都成立:{@code at}、{@code near}、{@code use}
+ * 是到了其中任何一格就算({@link Goals#anyOf});{@code dig} 是够得着其中任意一个 {@code numen.work.dig} 挖得成的方块,
  * 同样划算的站位里优先一次够得着最多格的({@link Goals#dig(List, com.dwinovo.numen.pathing.world.BodyStats, Goals.Clearing)});
  * {@code away} 是离其中每一格都够远({@link Goals#allOf})。成员有界:只取离出发点最近的 {@link #MEMBERS} 格({@code use} 至多
  * {@link #USE_MEMBERS} 个)。
@@ -105,7 +104,6 @@ public record Destination(Arrival arrival, Goal goal, BlockPos toward) {
             case NEAR, BESIDE, AWAY -> ranged(arrival, Goals.at(cell));
             case USE -> use(her, terrain, cell);
             case DIG -> dig(her, terrain, cell);
-            case PLACE -> reach(her, cell);
         };
         return new Destination(arrival, goal, cell);
     }
@@ -117,11 +115,10 @@ public record Destination(Arrival arrival, Goal goal, BlockPos toward) {
         List<Goal> members = new ArrayList<>();
         BlockPos toward = nearest.get(0);
         switch (arrival.how()) {
-            case AT, NEAR, BESIDE, AWAY, PLACE -> {
+            case AT, NEAR, BESIDE, AWAY -> {
                 for (BlockPos cell : nearest.subList(0, Math.min(MEMBERS, nearest.size()))) {
                     members.add(switch (arrival.how()) {
                         case AT -> Goals.at(cell);
-                        case PLACE -> reach(her, cell);
                         default -> ranged(arrival, Goals.at(cell));
                     });
                 }
@@ -212,13 +209,6 @@ public record Destination(Arrival arrival, Goal goal, BlockPos toward) {
                     use.open().stream().map(Direction::getName).toList()));
         }
         return use;
-    }
-
-    /**
-     * 往一格里放方块的目标:手够得着它、身体不占着它。{@code numen.build.place} 判"这一格够不够得着"问的也是它,走到了就放得了。
-     */
-    public static Goal reach(NumenPlayer her, BlockPos cell) {
-        return Goals.place(cell, Snapshots.stats(her));
     }
 
     /** 挖一格方块的目标;空气、流体没有可挖的,站到哪儿 {@code numen.work.dig} 都挖不成的({@link #undiggable}),都当场提醒。 */

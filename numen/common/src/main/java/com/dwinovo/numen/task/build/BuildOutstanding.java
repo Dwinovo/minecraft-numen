@@ -31,8 +31,6 @@ public final class BuildOutstanding {
         DIG_FIRST("dig_first"),
         /** 身上没有要放的料。 */
         SHORT_OF_MATERIAL("short_of_material"),
-        /** 走了一趟之后仍够不着、或走不到。 */
-        OUT_OF_REACH("out_of_reach"),
         /** 托着它的那一格还没盖好,放下去立不住。 */
         NOTHING_HOLDS_IT("nothing_holds_it"),
         /** 有身体占着这一格(可能是她自己)。 */
@@ -60,13 +58,13 @@ public final class BuildOutstanding {
     }
 
     /**
-     * 一格没放好:原因、图纸要的、世界里现在是什么,以及原因的细节(谁站着、为什么没留住、没走成的缘由;没有是 null)。
+     * 一格没放好:原因、图纸要的、世界里现在是什么,以及原因的细节(谁站着、为什么没留住;没有是 null)。
      */
     record Cell(Cause cause, BuildTaskRecord.Target target, BlockState actual, String detail) {}
 
     /** 回执里的一组:同一个原因的几格,一句说明,一行下一步。 */
     @Doc("Cells that were not placed, grouped by what stopped them.")
-    public record Unplaced(@Doc("The reason: dig_first, short_of_material, out_of_reach, nothing_holds_it, "
+    public record Unplaced(@Doc("The reason: dig_first, short_of_material, nothing_holds_it, "
             + "blocked_by_entity, refused, did_not_stay, no_item, liquid, left_alone, not_loaded or unfinished.") String kind,
                            @Doc("What stopped them, said in full.") String says,
                            @Doc("What to do next.") Optional<String> hint,
@@ -120,8 +118,6 @@ public final class BuildOutstanding {
                     + heaps(group, true);
             case SHORT_OF_MATERIAL -> n + " cell(s) could not be placed for lack of material"
                     + (shortOf.isEmpty() ? "" : "; you still need " + shortOf) + ": " + heaps(group, false);
-            case OUT_OF_REACH -> n + " cell(s) stayed out of reach" + detail(group, "; ") + ": "
-                    + heaps(group, false);
             case NOTHING_HOLDS_IT -> n + " cell(s) would not stay put yet because what holds them (the block below "
                     + "or behind) is not built: " + heaps(group, false);
             case BLOCKED_BY_ENTITY -> n + " cell(s) have someone in them" + detail(group, " — ") + ": "
@@ -157,7 +153,7 @@ public final class BuildOutstanding {
         return switch (cause) {
             case DIG_FIRST -> Optional.of(Call.of("numen.work.dig",
                     at.subList(0, Math.min(8, at.size())).toArray()));
-            case OUT_OF_REACH, NOT_LOADED -> Optional.of(Call.of("numen.move.walk", at.get(0)));
+            case NOT_LOADED -> Optional.of(Call.of("numen.move.walk", at.get(0)));
             case SHORT_OF_MATERIAL -> Optional.of("get those items, then call numen.build.place again with the same "
                     + "design: what already stands is skipped");
             case NOTHING_HOLDS_IT, DID_NOT_STAY -> Optional.of("build what should hold them first (the block below "

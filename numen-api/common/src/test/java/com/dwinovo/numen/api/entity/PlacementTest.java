@@ -152,7 +152,6 @@ class PlacementTest {
                 .set(TARGET.north().above(), Blocks.COBBLESTONE.defaultBlockState());
         assertEquals(Set.of(Direction.WEST, Direction.NORTH), Faces.against(hidden, TARGET, COBBLE), "栅栏与圆石都能贴");
         assertNull(Faces.inSight(hidden, eye, 4.5, TARGET, COBBLE), "没有一点瞄得到:圆石挡着");
-        assertTrue(Faces.inSightAll(hidden, eye, 4.5, TARGET, COBBLE).isEmpty());
         FakeWorld open = new FakeWorld().set(TARGET.west(), fence);
         Faces.Face face = Faces.inSight(open, eye, 4.5, TARGET, COBBLE);
         assertEquals(TARGET.west(), face == null ? null : face.clicked(), "没有挡着的就点得中栅栏");
