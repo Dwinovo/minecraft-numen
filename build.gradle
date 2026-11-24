@@ -5,9 +5,6 @@ plugins {
     id 'net.fabricmc.fabric-loom-remap' version '1.14.10' apply false
     // see https://projects.neoforged.net/neoforged/moddevgradle for new versions
     id 'net.neoforged.moddev' version '2.0.141' apply false
-    // Paper 端:开发包(Mojang 名的服务端)与本地起服。见 docs/paper.md §三。
-    id 'io.papermc.paperweight.userdev' version '1.7.2' apply false
-    id 'xyz.jpenilla.run-paper' version '3.1.0' apply false
     // mcp 模块把 OAuth 用的 Nimbus 重定位进自己的产物(见 mcp/build.gradle),用它的 ShadowJar 任务类型
     id 'com.gradleup.shadow' version '9.6.1' apply false
 }
@@ -57,7 +54,7 @@ subprojects {
     }
 }
 
-['numen-api:common', 'numen-api:fabric', 'numen-api:neoforge', 'numen-api:paper'].each { path ->
+['numen-api:common', 'numen-api:fabric', 'numen-api:neoforge'].each { path ->
     project(path) {
         ext.mod_id = 'numen_api'
         // 显示名是模组列表里看到的那个,不是目录名;gradle.properties 的 mod_name 是 Numen 的

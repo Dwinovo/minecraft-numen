@@ -1,6 +1,5 @@
 package com.dwinovo.numen.api.network;
 
-import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.entity.NumenPlayer;
@@ -47,10 +46,6 @@ public final class OwnedBody {
                 }
                 if (reg.outside().isOutside()) {
                     refuse.accept("she is offline (her owner sent her offline); she only comes back when her owner summons her again");
-                    return null;
-                }
-                if (CompanionFactory.isArriving(entityUuid)) {
-                    refuse.accept("she is on her way back into the world (the platform is still admitting her) — wait a moment and send it again");
                     return null;
                 }
             }

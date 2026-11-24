@@ -46,7 +46,7 @@ public interface INumenConfig {
      * <p>Fabric impl rewrites {@code config/numen.json} directly. NeoForge
      * impl writes through {@code ModConfigSpec.ConfigValue.set()}, which
      * NeoForge persists to {@code numen-common.toml} on its own schedule
-     * (this method nudges that schedule when possible). Paper rewrites {@code plugins/numen/config.json}.
+     * (this method nudges that schedule when possible).
      */
     void save();
 }

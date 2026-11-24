@@ -12,9 +12,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * 玩家登入——<b>Fabric 专属</b>。{@link PlayerSessions#joined} 要的是"他已经在玩家表里、在世界里"的那一刻:
- * NeoForge 的 {@code PlayerLoggedInEvent}、Paper 的 {@code PlayerJoinEvent} 都发在原版 {@code placeNewPlayer}
- * 把玩家登记完之后。Fabric 的 {@code ServerPlayConnectionEvents.JOIN} 发在登记之前(发能力包那一句),那一刻开场发不出去,
- * 所以这里挂在 {@code placeNewPlayer} 的末尾,与另两个平台同一个时机。
+ * NeoForge 的 {@code PlayerLoggedInEvent} 发在原版 {@code placeNewPlayer} 把玩家登记完之后。
+ * Fabric 的 {@code ServerPlayConnectionEvents.JOIN} 发在登记之前(发能力包那一句),那一刻开场发不出去,
+ * 所以这里挂在 {@code placeNewPlayer} 的末尾,与 NeoForge 同一个时机。
  */
 @Mixin(PlayerList.class)
 public class MixinPlayerList {

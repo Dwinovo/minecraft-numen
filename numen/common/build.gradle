@@ -73,7 +73,7 @@ neoForge.addModdingDependenciesTo(sourceSets.testFixtures)
 /*
  * 端到端测试(src/e2e):一台真服务端 + 一个按原版客户端协议(MCProtocolLib)连进去的无头客户端,把没装 Numen 客户端的玩家
  * 能做的事从头走一遍。场景只认一份规格(地址、RCON 口、种子),不碰 Minecraft 与 Numen 的任何类,所以只是个独立编的源码集,
- * 不进发行 jar;跑在两个平台项目上:`:numen:neoforge:e2eTest`、`:numen:paper:e2eTest`(任务与起服层见 buildSrc 的 numen-e2e)。
+ * 不进发行 jar;跑在平台项目上:`:numen:neoforge:e2eTest`(任务与起服层见 buildSrc 的 numen-e2e)。
  */
 sourceSets {
     e2e

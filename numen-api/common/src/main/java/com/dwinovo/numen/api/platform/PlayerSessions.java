@@ -37,8 +37,6 @@ public final class PlayerSessions {
         // 只排队,不在这儿对账:登入事件跑在原版 placeNewPlayer 内部,在这里出的任何异常都会打断主人的入场,
         // 客户端只看到"无效的玩家数据"。
         Companions.scheduleReconcile(player.getUUID());
-        // 模组上登入时他的连接已经能收我们的包,开场就在这里发;Paper 上 Fabric 客户端要进游戏之后才登记频道,
-        // 这一刻发不出去,由频道登记的事件再调一次 channelReady
         channelReady(player);
     }
 

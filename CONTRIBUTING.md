@@ -32,9 +32,6 @@ On `1.20.1`, `1.20.2` and `1.20.4`, replace `neoforge` with `forge`.
 # 端到端:起一台真的专用服,用原版客户端协议走一遍玩家能做的事(要先跑过 datagenAll,约 2 分钟)
 # End to end: starts a real dedicated server and drives it with a vanilla-protocol client (run datagenAll first; ~2 min)
 ./gradlew :numen:neoforge:e2eTest
-# Paper 端(第一次要下载 Paper 服务端)
-# Paper side (the first run downloads the Paper server)
-./gradlew :numen:paper:e2eTest                # 同一批端到端场景对着 Paper 服,约 4 分钟 / the same scenarios against a Paper server, ~4 min
 # 端到端时间长,不跟着推送跑;在 GitHub 的 Actions 页手动触发 "Slow tests"。
 # The end-to-end runs are long and do not run on push; trigger "Slow tests" by hand on the Actions page.
 # 排查与证明稳定的开关,加在 runGameTestServer 命令后面 / switches for investigating and proving stability, appended to a runGameTestServer command:

@@ -118,8 +118,7 @@ public final class Harvest {
 
     /**
      * {@code destroyBlock} 开始:{@code player} 的手正在挖碎一格。<b>平台挂点。</b>模组上由 {@code ServerPlayerGameModeHarvestMixin}
-     * 包住 {@code ServerPlayerGameMode.destroyBlock} 调;Paper 上由 {@code BlockDropItemEvent}(它在 {@code destroyBlock} 里触发,
-     * 带这一挖生成的全部掉落物)给出同一段起止。调用方保证:在这一挖生成任何掉落物之前调,每次对应一次 {@link #breakEnds}。
+     * 包住 {@code ServerPlayerGameMode.destroyBlock} 调。调用方保证:在这一挖生成任何掉落物之前调,每次对应一次 {@link #breakEnds}。
      */
     public static void breakStarts(ServerPlayer player) {
         BREAKING.push(player instanceof NumenPlayer her ? new Breaking(her, new ArrayList<>()) : new Breaking(null, null));
@@ -127,7 +126,7 @@ public final class Harvest {
 
     /**
      * 这一挖生成了一只实体:是掉落物、挖的是同伴,就记下等这一挖结束时拾取。<b>平台挂点。</b>模组上由 {@code ServerLevelHarvestMixin}
-     * 在 {@code ServerLevel.addFreshEntity} 真把实体放进世界时调;Paper 上由 {@code BlockDropItemEvent} 把这一挖的每件掉落物交来。
+     * 在 {@code ServerLevel.addFreshEntity} 真把实体放进世界时调。
      * 调用方保证:在 {@link #breakStarts}/{@link #breakEnds} 之间才有意义,别的时候调什么也不做。
      */
     public static void added(Entity entity) {
@@ -138,7 +137,7 @@ public final class Harvest {
 
     /**
      * {@code destroyBlock} 结束(成败都调):挖的是同伴,这一挖生成的掉落物当场进她背包。<b>平台挂点</b>,与 {@link #breakStarts}
-     * 同一处调。Paper 上掉落物这时还没进世界:整件捡走的已被移除,平台不要再把它放进世界。
+     * 同一处调。
      */
     public static void breakEnds() {
         Breaking done = BREAKING.pop();

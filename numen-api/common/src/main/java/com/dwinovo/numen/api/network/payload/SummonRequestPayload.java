@@ -38,10 +38,9 @@ public record SummonRequestPayload(String name, SummonSetup setup) implements Cu
 
     /** Server main thread. */
     public static void handle(SummonRequestPayload p, ServerPlayer owner) {
-        Companions.summonFor(owner, p.name() == null ? "" : p.name().trim(), p.setup(), summoned -> {
-            if (summoned.problem() != null) {
-                owner.sendSystemMessage(summoned.problem());
-            }
-        });
+        Companions.Summoned summoned = Companions.summonFor(owner, p.name() == null ? "" : p.name().trim(), p.setup());
+        if (summoned.problem() != null) {
+            owner.sendSystemMessage(summoned.problem());
+        }
     }
 }

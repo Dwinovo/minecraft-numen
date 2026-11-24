@@ -46,7 +46,7 @@ abstract class Scenario {
         for (Companion companion : companions) {
             companion.owner.command("numen player delete " + companion.name);
         }
-        // 遣散不一定当场落地(Paper 上她走的是异步的离场):等她真离开玩家列表,下一个场景才能用同一个名字
+        // 遣散不一定当场落地:等她真离开玩家列表,下一个场景才能用同一个名字
         for (Companion companion : companions) {
             long deadline = System.nanoTime() + WAIT.toNanos();
             while (console("list").contains(companion.name)) {

@@ -17,7 +17,7 @@ record Spec(String host, int port, int rconPort, String rconPassword, int modelP
     private static String property(String name) {
         String value = System.getProperty(name);
         if (value == null) {
-            throw new IllegalStateException("缺系统属性 " + name + ":端到端测试要经 e2eTest(:numen:neoforge 或 :numen:paper)跑,由它交规格");
+            throw new IllegalStateException("缺系统属性 " + name + ":端到端测试要经 e2eTest(:numen:neoforge)跑,由它交规格");
         }
         return value;
     }

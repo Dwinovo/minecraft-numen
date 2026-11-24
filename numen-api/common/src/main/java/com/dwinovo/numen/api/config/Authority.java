@@ -6,8 +6,7 @@ import net.minecraft.server.level.ServerPlayer;
 
 /**
  * 谁能改服务器上的配置(模型档案与 key、外部大脑、代理、默认人设)。配置的读写入口、界面都问这里,工具和界面里不另写;
- * 判据本身由平台服务给({@link com.dwinovo.numen.api.platform.services.IPermissions}):模组是单人游戏的房主或 op 4 级,
- * Paper 是权限节点 {@code numen.admin}。
+ * 判据本身由平台服务给({@link com.dwinovo.numen.api.platform.services.IPermissions}):是单人游戏的房主或 op 4 级。
  *
  * <p>和权限层({@code com.dwinovo.numen.api.permission},管她能不能动世界)是两回事:这里管的是人。
  */

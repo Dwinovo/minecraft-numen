@@ -14,20 +14,6 @@ import net.minecraft.world.level.material.FluidState;
  */
 public interface WorldView extends BlockGetter {
 
-    /**
-     * Paper 给 {@code BlockGetter} 加了两个抽象方法({@code getBlockStateIfLoaded}、{@code getFluidIfLoaded}:只读已加载的,
-     * 没加载是 null),不实现就编不过。原版的 {@code BlockGetter} 没有它们,下面两个默认实现在原版上只是两个无关的方法。
-     * 视图读的时候从不加载区块(没加载的读出来是空气或带标记),所以答案与 {@code getBlockState} / {@code getFluidState} 一致,
-     * 和原版调 {@code getBlockState} 的行为相同。
-     */
-    default BlockState getBlockStateIfLoaded(BlockPos pos) {
-        return getBlockState(pos);
-    }
-
-    default FluidState getFluidIfLoaded(BlockPos pos) {
-        return getFluidState(pos);
-    }
-
     WorldBorder border();
 
     /** 这个维度倒出的水当场蒸发(原版 {@code dimensionType().ultraWarm()},下界):用水桶接不住坠落。 */

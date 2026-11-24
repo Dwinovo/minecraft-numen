@@ -12,7 +12,7 @@ public final class Attendance {
 
     private Attendance() {}
 
-    /** 她被留在外面的原因:{@link #OWNER} 主人下令下线;{@link #SERVER} 服务器把她请出去了(踢人、插件、不接纳她)。 */
+    /** 她被留在外面的原因:{@link #OWNER} 主人下令下线;{@link #SERVER} 服务器把她请出去了(踢人、插件)。 */
     public enum Why { NONE, OWNER, SERVER }
 
     /**

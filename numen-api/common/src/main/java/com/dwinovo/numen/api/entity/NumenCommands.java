@@ -305,17 +305,14 @@ public final class NumenCommands {
     private static int summon(CommandContext<CommandSourceStack> ctx, String name)
             throws CommandSyntaxException {
         CommandSourceStack source = ctx.getSource();
-        // 结果可能在以后的某一刻才到(平台的接纳是异步的):话说给发指令的人,指令本身的返回值只说受没受理
-        boolean accepted = Companions.summonFor(source.getPlayerOrException(), name,
-                SummonSetup.NONE, summoned -> {
-            if (summoned.problem() != null) {
-                source.sendFailure(summoned.problem());
-            } else if (summoned.body() != null) {
-                source.sendSuccess(() ->
-                        Component.translatable(Keys.COMMAND_SUMMONED, name, summoned.body().getUUID().toString()), false);
-            }
-        });
-        return accepted ? 1 : 0;
+        Companions.Summoned summoned = Companions.summonFor(source.getPlayerOrException(), name, SummonSetup.NONE);
+        if (summoned.problem() != null) {
+            source.sendFailure(summoned.problem());
+            return 0;
+        }
+        source.sendSuccess(() ->
+                Component.translatable(Keys.COMMAND_SUMMONED, name, summoned.body().getUUID().toString()), false);
+        return 1;
     }
 
     private static int despawn(CommandContext<CommandSourceStack> ctx, String name)

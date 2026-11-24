@@ -64,8 +64,7 @@ sourcesJar {
 
 jar {
     with licenseTexts
-    // mcp 模块的第三方库随这个 jar 发出:清单、各许可全文与它们的 NOTICE(嵌套 jar 自带 META-INF;
-    // Paper 平铺时不收各库的同名协议文件,以这里为准)
+    // mcp 模块的第三方库随这个 jar 发出:清单、各许可全文与它们的 NOTICE
     from(rootProject.file('licenses/THIRD-PARTY.txt')) { into 'META-INF/third-party' }
     from(rootProject.file('licenses/third-party')) { into 'META-INF/third-party' }
 
@@ -152,7 +151,6 @@ tasks.register('apiJar', Jar) {
     include 'com/dwinovo/numen/api/describe/**'         // "这是什么"的回答者(方块、实体、物品同一个样子)、问一圈的那一处与回答写成一行短话的那一处——插件自己写的"看"问同一处
     include 'com/dwinovo/numen/api/gear/**'
     include 'com/dwinovo/numen/api/plugin/PluginRoster*.class'  // NumenPlugins.admit 的参数类型 Source;联动型插件(含 Numen 的闸门)用它报到
-    include 'com/dwinovo/numen/api/PluginTags*.class'  // Paper 端:插件在引导阶段把自带的标签文件装进服务端(只有 Paper 的成品里有它)
     include 'com/dwinovo/numen/api/NumenPaths*.class'  // config/numen/ 的唯一答案(NumenApi.configDir 背后那个)
     include 'com/dwinovo/numen/api/agent/tool/api/**'  // per-call tool context
     include 'com/dwinovo/numen/api/agent/tool/**'      // tool contract + registration + Schema/ToolArgs

@@ -61,8 +61,7 @@ public final class ServerLang {
     /**
      * 要发给这位玩家的话,按他客户端报上来的语言翻好。没有 Numen 的键就是原对象。
      *
-     * <p><b>平台挂点。</b>模组上由 {@code MixinServerCommonPacketListener} 在系统聊天包出站时调,改写包再放行;Paper 上把
-     * {@link #translate} 注册成 Adventure 的翻译源({@code GlobalTranslator}),Paper 编码组件时按玩家语言渲染,原版的可翻译组件也走它。
+     * <p><b>平台挂点。</b>由 {@code MixinServerCommonPacketListener} 在系统聊天包出站时调,改写包再放行。
      * 调用方保证:只对没装 Numen 客户端的真玩家调(装了的由他自己的客户端翻);任何线程。
      */
     public static Component forPlayer(ServerPlayer player, Component message) {
@@ -89,43 +88,6 @@ public final class ServerLang {
     /** 这个键在表里有译文。 */
     public boolean has(String key) {
         return table.containsKey(key);
-    }
-
-    /**
-     * 这个键的译文改写成 {@link java.text.MessageFormat} 的写法({@code %s}、{@code %2$s} 变成 {@code {0}}、{@code {1}},
-     * 单引号与花括号转义),给自带 MessageFormat 渲染的文字库用(Paper 的 Adventure)。占位符的语法与 {@link #translate} 同一套:
-     * 不认识的写法与没有这个键一样,返回 {@code null}。
-     */
-    public String asMessageFormat(String key) {
-        String template = table.get(key);
-        if (template == null) {
-            return null;
-        }
-        StringBuilder out = new StringBuilder();
-        Matcher placeholder = PLACEHOLDER.matcher(template);
-        int next = 0;
-        int plain = 0;
-        while (placeholder.find()) {
-            out.append(escapeForMessageFormat(template.substring(plain, placeholder.start())));
-            plain = placeholder.end();
-            String kind = placeholder.group(2);
-            if ("%".equals(kind)) {
-                out.append('%');
-            } else if ("s".equals(kind)) {
-                int index = placeholder.group(1) != null ? Integer.parseInt(placeholder.group(1)) - 1 : next++;
-                if (index < 0) {
-                    return null;
-                }
-                out.append('{').append(index).append('}');
-            } else {
-                return null;
-            }
-        }
-        return out.append(escapeForMessageFormat(template.substring(plain))).toString();
-    }
-
-    private static String escapeForMessageFormat(String text) {
-        return text.replace("'", "''").replace("{", "'{'").replace("}", "'}'");
     }
 
     /**

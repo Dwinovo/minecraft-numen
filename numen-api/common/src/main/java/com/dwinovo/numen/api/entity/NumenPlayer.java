@@ -174,8 +174,7 @@ public final class NumenPlayer extends ServerPlayer {
      * 叠上它({@code getSlotWithRemainingSpace}),或者有空格({@code getFreeSlot});创造模式什么都收。放不下的记下来,由
      * {@link #pollInventoryFull} 交出去。"满了"只在这里判:挖、捡、合成这些活不各自判。
      *
-     * <p><b>平台挂点。</b>模组上由 {@code ItemEntityTouchMixin} 在 {@code ItemEntity.playerTouch} 开头调;Paper 上由
-     * {@code PlayerAttemptPickupItemEvent} 调(它在归属检查之前触发)。调用方保证:主线程,<b>已经自己判过</b>原版真会去捡的
+     * <p><b>平台挂点。</b>由 {@code ItemEntityTouchMixin} 在 {@code ItemEntity.playerTouch} 开头调。调用方保证:主线程,<b>已经自己判过</b>原版真会去捡的
      * 两个条件——拾取冷却已过、这件东西没指名给别人;这里只判背包放不放得下。
      */
     public void touchedItem(ItemEntity item) {
@@ -565,8 +564,7 @@ public final class NumenPlayer extends ServerPlayer {
     }
 
     /**
-     * 原版重生里新身体接上旧身体的那一处(模组上新身体是个新对象,{@code PlayerList.respawn} 之后立刻调它;Paper 上重生沿用原来的对象,
-     * 旧身体就是自己)。原版把背包、经验、游戏模式、皮肤层这些玩家级的东西搬过来;这里搬 Numen 的:主人,和代答的那一份"客户端"。
+     * 原版重生里新身体接上旧身体的那一处(新身体是个新对象,{@code PlayerList.respawn} 之后立刻调它)。原版把背包、经验、游戏模式、皮肤层这些玩家级的东西搬过来;这里搬 Numen 的:主人,和代答的那一份"客户端"。
      * 其余跟着身体走的状态(键盘、本能的按住、同伴级状态)本来就是一条命的事,新身体从干净的开始。
      */
     @Override

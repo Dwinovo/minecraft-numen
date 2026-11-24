@@ -1,6 +1,5 @@
 package com.dwinovo.numen.api.gametest;
 
-import com.dwinovo.numen.api.entity.Arrivals;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.entity.MojangSkins;
@@ -11,27 +10,18 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.UUID;
-import java.util.function.Consumer;
 
 /**
- * GameTest 里让她进世界的几个写法:走的是生产里同一条带回调的路({@link CompanionFactory#spawn} 等),只是把结果收下来。
- * 模组上平台当场接纳,回调在调用里就跑完了,直接交回身体;排给主线程的答复由 {@link MinecraftServer#managedBlock} 推着做完。
- * 等到时限还没来、或被拒,用例就失败并说清楚,不会悄悄拿到 {@code null}。
+ * GameTest 里让她进世界的几个写法:走的是生产里同一条路({@link CompanionFactory#spawn} 等),调用返回时她已经在世界里。
  */
 public final class Bodies {
 
-    /** 接纳的答复最多等多久。 */
-    private static final long WAIT_NANOS = 10_000_000_000L;
-
     private Bodies() {}
 
-    /** 登记里没有这一条也照样进(不经名册的测试用身体):答复回来时总是"仍然要她"。 */
+    /** 登记里没有这一条也照样进(不经名册的测试用身体)。 */
     public static NumenPlayer spawn(MinecraftServer server, UUID companionUuid, String label, UUID ownerUuid,
                                     ServerLevel level, Vec3 pos) {
-        String name = compliant(label);
-        Arrivals.Arrival<NumenPlayer> arrival = await(server,
-                then -> CompanionFactory.spawn(server, companionUuid, name, ownerUuid, level, pos, () -> true, then));
-        return arrived(arrival, name);
+        return CompanionFactory.spawn(server, companionUuid, compliant(label), ownerUuid, level, pos);
     }
 
     /**
@@ -48,62 +38,17 @@ public final class Bodies {
 
     /** 召唤(名册里没有就新建,有就叫醒)。 */
     public static NumenPlayer summon(MinecraftServer server, UUID ownerUuid, String label, ServerLevel level, Vec3 pos) {
-        String name = compliant(label);
-        Arrivals.Arrival<NumenPlayer> arrival = await(server,
-                then -> Companions.summon(server, ownerUuid, name, level, pos, then));
-        return arrived(arrival, name);
+        return Companions.summon(server, ownerUuid, compliant(label), level, pos);
     }
 
     /** 把名册里的她叫回世界;名册不认得她是 {@code null}。 */
     public static NumenPlayer respawn(MinecraftServer server, UUID companionUuid) {
-        Object[] result = new Object[1];
-        if (!Companions.respawn(server, companionUuid, arrival -> result[0] = arrival)) {
-            return null;
-        }
-        return arrived(Bodies.<Arrivals.Arrival<NumenPlayer>>awaited(server, result), companionUuid.toString());
+        return Companions.respawn(server, companionUuid);
     }
 
     /** 玩家召唤的入口;拒绝的话在 {@code problem} 里。 */
     public static Companions.Summoned summonFor(ServerPlayer owner, String name,
                                                 com.dwinovo.numen.api.entity.SummonSetup setup) {
-        Companions.Summoned summoned = await(owner.getServer(), then -> Companions.summonFor(owner, name, setup, then));
-        if (summoned == null) {
-            throw new AssertionError("召唤 " + name + " 没有在时限内回来:平台的接纳没有答复");
-        }
-        return summoned;
-    }
-
-    /**
-     * 经玩家的入口(召唤请求的载荷等,没有回调可等)召唤的她:等到这个名字的玩家进了玩家列表。时限内没进来是 {@code null}。
-     */
-    public static ServerPlayer awaitPlayer(MinecraftServer server, String name) {
-        long deadline = System.nanoTime() + WAIT_NANOS;
-        server.managedBlock(() -> server.getPlayerList().getPlayerByName(name) != null || System.nanoTime() > deadline);
-        return server.getPlayerList().getPlayerByName(name);
-    }
-
-    /** 发起一趟,等它的回调(模组上已经跑完了,不等)。 */
-    private static <T> T await(MinecraftServer server, Consumer<Consumer<T>> start) {
-        Object[] result = new Object[1];
-        start.accept(value -> result[0] = value);
-        return awaited(server, result);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static <T> T awaited(MinecraftServer server, Object[] result) {
-        long deadline = System.nanoTime() + WAIT_NANOS;
-        server.managedBlock(() -> result[0] != null || System.nanoTime() > deadline);
-        return (T) result[0];
-    }
-
-    private static NumenPlayer arrived(Arrivals.Arrival<NumenPlayer> arrival, String name) {
-        if (arrival == null) {
-            throw new AssertionError(name + " 没有在时限内进来:平台的接纳没有答复");
-        }
-        if (arrival.body() == null) {
-            throw new AssertionError(name + " 没有进来:" + arrival.kind()
-                    + (arrival.refusal() == null ? "" : "(" + arrival.refusal().getString() + ")"));
-        }
-        return arrival.body();
+        return Companions.summonFor(owner, name, setup);
     }
 }

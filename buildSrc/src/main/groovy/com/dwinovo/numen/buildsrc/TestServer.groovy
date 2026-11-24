@@ -6,7 +6,7 @@ import org.gradle.api.services.BuildServiceParameters
 import java.util.concurrent.TimeUnit
 
 /**
- * 端到端测试起的那台服务端进程(见 numen-e2e-neoforge.gradle 与 numen-e2e-paper.gradle)。做成构建服务,是为了进程一定收得干净:
+ * 端到端测试起的那台服务端进程(见 numen-e2e-neoforge.gradle)。做成构建服务,是为了进程一定收得干净:
  * 任务失败、被中断、构建结束,Gradle 都会关闭它,不会留一台还占着端口的服务端。
  */
 abstract class TestServer implements BuildService<BuildServiceParameters.None>, AutoCloseable {

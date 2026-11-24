@@ -178,7 +178,6 @@ numen.answer(Questions.BLOCK_OWNER, "my_claims", (level, center, chunkRadius) ->
 
 - 寻路不依赖权限层,经 `TerrainPolicy` 问。
 - 插件经 `numen-api` 登记回答者(§二),不碰纯逻辑。
-- 走服务端插件(Paper 一类没有加载器的平台)时,纯逻辑原样带走,只重写适配层。
 
 ## 八、存储、命令与面板
 

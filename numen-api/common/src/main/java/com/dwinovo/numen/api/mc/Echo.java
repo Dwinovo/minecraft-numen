@@ -1,6 +1,5 @@
 package com.dwinovo.numen.api.mc;
 
-import com.dwinovo.numen.api.platform.Services;
 import net.minecraft.commands.CommandResultCallback;
 import net.minecraft.commands.CommandSource;
 import net.minecraft.network.chat.Component;
@@ -32,8 +31,7 @@ public final class Echo implements CommandResultCallback {
     /** @param informAdmins 执行它的那一方要不要知会别的管理员 */
     public Echo(boolean informAdmins) {
         this.informAdmins = informAdmins;
-        // 原版的 CommandSource 在 Paper 上多一个抽象方法(返回 Bukkit 的类型),common 写不出来,所以来源由平台造
-        this.source = Services.commandSources().echoing(this);
+        this.source = new EchoSource(this);
     }
 
     /** 交给 {@code CommandSourceStack.withSource} 的来源:指令说的话都收进本回话。 */

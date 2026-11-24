@@ -56,9 +56,8 @@ import java.util.function.Consumer;
  * <h2>死了以后点"重生"</h2>
  * 真客户端死后看到死亡画面,玩家点"重生"就发一个 {@code PERFORM_RESPAWN},由原版的 {@code PlayerList.respawn} 把玩家按重生点规则放回世界。
  * {@link #respawn} 代她点这个按钮,重生本身全是原版做的:没有加入广播(不经 {@code placeNewPlayer}),落点、床与重生锚的消耗、
- * 掉落与经验、{@code keepInventory} 都照原版。原版重生会换一个新的 {@code ServerPlayer} 对象(模组上 {@code PlayerListRespawnMixin}
+ * 掉落与经验、{@code keepInventory} 都照原版。原版重生会换一个新的 {@code ServerPlayer} 对象({@code PlayerListRespawnMixin}
  * 让它仍是 {@link NumenPlayer}),所以这一份"客户端"跟着她换身体({@link #movedTo}),等着回的传送回执不会丢给旧身体。
- * Paper 上重生沿用原来的对象,{@code movedTo} 是原地不动。
  *
  * <h2>答话挂在服务端 tick 上,不挂实体 tick</h2>
  * {@link #answer()} 由 {@code CompanionTickDispatcher} 每刻遍历玩家列表时调用。挂
@@ -97,8 +96,8 @@ public final class FakeClient {
     private Consumer<Component> commandOutput;
 
     /**
-     * 她到达了(加入并做完平台的加入后步骤,见 {@link Arrivals})。到达之前发给她的聊天(例如 Paper 在她加入列表之后才广播的、她自己的
-     * 加入消息)不算"听到的话"(她自己执行的指令的回执除外):大脑此时还没建好,模组上本来也听不到,两个平台同一个行为。
+     * 她到达了(加入完成,见 {@link CompanionFactory#spawn})。到达之前发给她的聊天(例如她自己的加入消息)不算"听到的话"
+     * (她自己执行的指令的回执除外):大脑此时还没建好。
      */
     private boolean arrived;
 
@@ -119,7 +118,7 @@ public final class FakeClient {
 
     /**
      * 代她点"重生"(她的身体已经死了):原版的 {@code PlayerList.respawn} 把她放回世界,返回重生后的身体
-     * (模组上是新对象,Paper 上还是原来那个)。重生期间原版发给她的包照常经 {@link #onOutbound},落点的传送编号随后由 {@link #answer} 回执。
+     * (是新对象)。重生期间原版发给她的包照常经 {@link #onOutbound},落点的传送编号随后由 {@link #answer} 回执。
      */
     NumenPlayer respawn() {
         ServerGamePacketListenerImpl connection = player.connection;
@@ -128,9 +127,8 @@ public final class FakeClient {
     }
 
     /**
-     * 服务端刚往"客户端"发了一个包。<b>平台挂点。</b>模组上由 {@code MixinServerCommonPacketListener} 在
-     * {@code ServerCommonPacketListenerImpl.send} 开头调(NeoForge 的频道检查在 {@code Connection.send} 之前就会抛异常,只能在这里截);
-     * Paper 上由 {@code FakeConnection.send} 调(Paper 的发送最终落在这里)。调用方保证:主线程,她这一条连接发出的每个下行包
+     * 服务端刚往"客户端"发了一个包。<b>平台挂点。</b>由 {@code MixinServerCommonPacketListener} 在
+     * {@code ServerCommonPacketListenerImpl.send} 开头调(NeoForge 的频道检查在 {@code Connection.send} 之前就会抛异常,只能在这里截)。调用方保证:主线程,她这一条连接发出的每个下行包
      * 在被丢弃之前都交来一次,且只交她的连接的。
      */
     public void onOutbound(Packet<?> packet) {

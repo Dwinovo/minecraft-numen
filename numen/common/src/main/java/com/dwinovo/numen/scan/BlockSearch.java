@@ -233,9 +233,8 @@ public final class BlockSearch {
 
     /**
      * 方块变了。<b>平台挂点,只负责让索引更热,不负责索引的对错</b>:搜索取用条目时对每一格现读现核"此刻还是不是目标",
-     * 所以漏报(没有通用事件的平台、绕过挂点的写入)至多让新长出的目标晚一点被看见,不会交出已经不是目标的格。
-     * 模组上由 {@code ServerLevelBlockChangeMixin} 在 {@code ServerLevel.onBlockStateChange} 开头调;Paper 上没有通用事件,
-     * 用能拿到的那组(破坏、放置、爆炸、流体、活塞、生长与消退、{@code EntityChangeBlockEvent})喂它。
+     * 所以漏报(绕过挂点的写入)至多让新长出的目标晚一点被看见,不会交出已经不是目标的格。
+     * 由 {@code ServerLevelBlockChangeMixin} 在 {@code ServerLevel.onBlockStateChange} 开头调。
      * 调用方保证:主线程(其他线程的调用被丢弃),{@code oldState}/{@code newState} 是这一格变化前后的状态;可以多报、不能错报方块。
      */
     public static void onBlockChange(ServerLevel level, BlockPos pos, BlockState oldState, BlockState newState) {

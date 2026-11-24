@@ -17,7 +17,7 @@ import net.minecraft.server.level.ServerPlayer;
  * {@link Libraries#saveOwnKey})。服务商写模型档案里的服务商名(补全列他档案用到的与已存过的)。
  *
  * <p>key 不进日志、不进回执全文:回执只露前后几位,只回给他自己、不广播给其他管理员。多人服上第一次存,
- * 和面板一样提醒一次"服主看得到这把 key"。原版与两个加载器不记录玩家执行的命令;Paper 默认会记,服主要知道这一点。
+ * 和面板一样提醒一次"服主看得到这把 key"。原版与两个加载器不记录玩家执行的命令。
  */
 public final class KeyCommand {
 

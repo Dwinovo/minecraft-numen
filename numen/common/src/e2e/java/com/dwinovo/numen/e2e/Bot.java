@@ -87,7 +87,6 @@ final class Bot implements AutoCloseable {
     private boolean informed;
     private final List<String> packetErrors = new CopyOnWriteArrayList<>();
     private final List<String> payloadChannels = new CopyOnWriteArrayList<>();
-    private final List<ClientboundCustomPayloadPacket> payloads = new CopyOnWriteArrayList<>();
 
     private Bot(String name, String locale, Spec server) {
         this.name = name;
@@ -143,7 +142,6 @@ final class Bot implements AutoCloseable {
     private void received(Packet packet, String locale) {
         if (packet instanceof ClientboundCustomPayloadPacket payload) {
             payloadChannels.add(payload.getChannel().asString());
-            payloads.add(payload);
         }
         if (packet instanceof ClientboundCustomPayloadPacket && !informed) {
             // 配置阶段的第一个包(服务端品牌)到了:原版客户端在这个阶段把自己的语言报上去
@@ -321,14 +319,9 @@ final class Bot implements AutoCloseable {
         return List.copyOf(payloadChannels);
     }
 
-    /** 模拟可选模组登记频道与发包;场景自己检查对应版本的载荷。 */
+    /** 模拟可选模组登记频道与发包。 */
     void payload(String channel, byte[] data) {
         session.send(new ServerboundCustomPayloadPacket(net.kyori.adventure.key.Key.key(channel), data));
-    }
-
-    List<byte[]> payloads(String channel) {
-        return payloads.stream().filter(p -> p.getChannel().asString().equals(channel))
-                .map(ClientboundCustomPayloadPacket::getData).toList();
     }
 
     boolean connected() {

@@ -19,8 +19,6 @@ import org.spongepowered.asm.mixin.injection.At;
  *
  * <p>只管她自己的重生,而且是包住这一处构造、不独占它:别的模组也在这里换自己的身体(Carpet 的假人用的是 {@code @Redirect},
  * 一处只容得下一个),死的不是她就原样交回去,由它们或原版来造。
- *
- * <p>Paper 的重生沿用原来的对象,不造新的,所以那边不需要这个挂点。
  */
 @Mixin(PlayerList.class)
 public abstract class PlayerListRespawnMixin {
