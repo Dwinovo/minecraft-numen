@@ -84,8 +84,9 @@ class GateTerrainTest {
     }
 
     @Test
-    void someoneElsesBlockIsAWallNoOwnerCanOpen() {
-        assertInstanceOf(Permit.Deny.class, dig(gate(Map.of(CELL, UUID.randomUUID())), Blocks.DIRT.defaultBlockState()));
+    void aVerbTheOwnerSetToDenyMakesTheCellAWall() {
+        Settings denying = Settings.FACTORY.withTier(Verb.BREAK, Tier.DENY);
+        assertInstanceOf(Permit.Deny.class, dig(gate(denying, Map.of()), Blocks.DIRT.defaultBlockState()));
     }
 
     @Test

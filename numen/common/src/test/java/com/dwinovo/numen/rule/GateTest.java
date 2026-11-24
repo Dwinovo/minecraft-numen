@@ -113,7 +113,7 @@ class GateTest {
     // ==================== 归属 ====================
 
     @Test
-    void ownershipDeniesSomeoneElsesAsksForTheOwnersAndLeavesTheRestToTheTier() {
+    void ownershipAsksForTheOwnersAndLeavesTheRestToTheTier() {
         FakeWorld world = new FakeWorld().set(POS, Blocks.STONE.defaultBlockState());
         Map<BlockPos, UUID> cells = new HashMap<>();
         Gate gate = gate(Settings.FACTORY, cells);
@@ -121,10 +121,7 @@ class GateTest {
         assertTrue(gate.judge(dig(world, POS), world).allowed(), "没人说是谁的,break 的档是许");
 
         cells.put(POS, STRANGER_ID);
-        Verdict other = gate.judge(dig(world, POS), world);
-        assertEquals(Tier.DENY, other.tier());
-        assertEquals(Merge.Step.ANSWERER_DENIED, other.step());
-        assertEquals("belongs to someone else", other.cause());
+        assertTrue(gate.judge(dig(world, POS), world).allowed(), "别人的,归属不表态,看档");
 
         cells.put(POS, OWNER_ID);
         Verdict mine = gate.judge(dig(world, POS), world);
@@ -142,9 +139,9 @@ class GateTest {
     @Test
     void ownershipLooksAtTheBlockPlacedIntoToo() {
         FakeWorld world = new FakeWorld();
-        Gate gate = gate(Settings.FACTORY, Map.of(POS, STRANGER_ID));
+        Gate gate = gate(Settings.FACTORY, Map.of(POS, OWNER_ID));
         Verdict verdict = gate.judge(Action.place(POS, world.getBlockState(POS), Items.DIRT), world);
-        assertEquals(Tier.DENY, verdict.tier());
+        assertEquals(Tier.ASK, verdict.tier());
     }
 
     // ==================== 合并 ====================
@@ -256,8 +253,10 @@ class GateTest {
         assertTrue(withGrant.judge(dig(world, POS.east()), world).allowed(), "同一个动作、同一个名字不再问");
         assertEquals(Tier.ASK, withGrant.judge(dig(world, POS.west()), world).tier(), "换一种方块另问");
 
-        cells.put(POS.east(), STRANGER_ID);
-        assertEquals(Tier.DENY, withGrant.judge(dig(world, POS.east()), world).tier(), "授权解不开不许");
+        Map<String, Answerer> withNo = new LinkedHashMap<>(com.dwinovo.numen.api.Questions.PERMIT.answerers());
+        withNo.put("no", SAYS_NO);
+        Gate refused = new Gate(HER, Settings.FACTORY, owned(cells), List.of(granted), withNo);
+        assertEquals(Tier.DENY, refused.judge(dig(world, POS.east()), world).tier(), "授权解不开不许");
     }
 
     @Test

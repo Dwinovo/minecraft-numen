@@ -619,7 +619,6 @@ public class PermissionGameTests {
 
         wild.discard();
         pet.discard();
-        CompanionFactory.despawn(level.getServer(), companion);
         helper.succeed();
     }
 
@@ -644,21 +643,17 @@ public class PermissionGameTests {
         level.addFreshEntity(minion);
         pet.moveTo(at.getX() + 4.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pet.setNoAi(true);
-        pet.setOwnerUUID(java.util.UUID.randomUUID());
+        java.util.UUID absent = java.util.UUID.randomUUID();
+        pet.setOwnerUUID(absent);
         level.addFreshEntity(pet);
-        NumenPlayer companion = spawnAt(helper, "gametest_hunter", new BlockPos(3, 2, 5), false);
-
-        var gate = com.dwinovo.numen.api.permission.Permission.gateFor(companion);
-        var minionVerdict = gate.judgeLive(com.dwinovo.numen.api.permission.Action.attack(minion), level);
-        helper.assertTrue(minionVerdict.allowed(), "a wolf owned by an evoker is nobody's: " + minionVerdict);
-        var petVerdict = gate.judgeLive(com.dwinovo.numen.api.permission.Action.attack(pet), level);
-        helper.assertTrue(!petVerdict.allowed() && !petVerdict.asks(),
-                "a wolf owned by an absent player is someone's: " + petVerdict);
+        helper.assertTrue(com.dwinovo.numen.api.permission.Owners.of(minion).isEmpty(),
+                "a wolf owned by an evoker is nobody's: " + com.dwinovo.numen.api.permission.Owners.of(minion));
+        helper.assertTrue(com.dwinovo.numen.api.permission.Owners.of(pet).equals(List.of(absent)),
+                "a wolf owned by an absent player is that player's: " + com.dwinovo.numen.api.permission.Owners.of(pet));
 
         evoker.discard();
         minion.discard();
         pet.discard();
-        CompanionFactory.despawn(level.getServer(), companion);
         helper.succeed();
     }
 
@@ -672,7 +667,8 @@ public class PermissionGameTests {
         BlockPos chest = chestWithDiamonds(helper, new BlockPos(6, 2, 5), 3);
         NumenPlayer companion = spawnAt(helper, "gametest_borrower", new BlockPos(4, 2, 5), false);
         ServerPlayer owner = presentPlayer(helper, companion, "gametest_lender");
-        runAs(owner, "numen permission set gametest_borrower use_block ask");
+        List<String> set = runAs(owner, "numen permission set " + companion.getName().getString() + " use_block ask");
+        helper.assertTrue(set.stream().anyMatch(m -> m.contains("use_block is now ask")), "the tier was not set: " + set);
         ToolRun take = lua(companion, "numen.container.take(" + xyz(chest) + ", \"minecraft:diamond\")");
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> {
@@ -806,34 +802,6 @@ public class PermissionGameTests {
         });
     }
 
-    /** 别人养的狼:回答"归属"的说是别人的,不许,主人也答应不了,不弹卡;狼一滴血没掉。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
-    public static void attack_someone_elses_tamed_wolf_is_forbidden_outright(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        var wolf = EntityType.WOLF.create(level);
-        BlockPos at = helper.absolutePos(new BlockPos(7, 2, 4));
-        wolf.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
-        wolf.setTame(true, false);
-        wolf.setOwnerUUID(UUID.randomUUID());
-        wolf.setNoAi(true);
-        level.addFreshEntity(wolf);
-        NumenPlayer companion = spawnAt(helper, "gametest_dogcatcher", new BlockPos(3, 2, 4), false);
-        companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
-        ToolRun attack = lua(companion, "numen.fight.attack(" + ref(wolf) + ")");
-        boolean[] asked = new boolean[1];
-        helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(attack.done(), "attack has not finished");
-            helper.assertTrue(!attack.succeeded() && attack.outcome().contains("belongs to someone else"),
-                    "the refusal does not say whose it is: " + attack.outcome());
-            helper.assertTrue(!asked[0], "a refusal raised a consent card");
-            helper.assertTrue(wolf.getHealth() == wolf.getMaxHealth(), "the tamed wolf was hit");
-            wolf.discard();
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
     /**
      * 主人用命令把"挖方块"定成不许:收下。她 numen.use.hit 左键打石头被拒、理由是主人的这一档,石头还在;主人再把它定回许,同一块石头
      * 就挖掉了。从头到尾不弹卡。
@@ -845,8 +813,9 @@ public class PermissionGameTests {
         level.setBlockAndUpdate(helper.absolutePos(stoneRel), Blocks.STONE.defaultBlockState());
         ServerPlayer owner = presentPlayer(helper, null, "gametest_house_owner");
         NumenPlayer companion = adopted(spawnAt(helper, "gametest_house_sitter", new BlockPos(4, 2, 5), true), owner);
+        String name = companion.getName().getString();
 
-        List<String> set = runAs(owner, "numen permission set gametest_house_sitter break deny");
+        List<String> set = runAs(owner, "numen permission set " + name + " break deny");
         helper.assertTrue(set.stream().anyMatch(m -> m.contains("break is now deny")), "the tier was not set: " + set);
 
         ToolRun[] calls = new ToolRun[2];
@@ -859,7 +828,7 @@ public class PermissionGameTests {
         helper.onEachTick(() -> {
             asked[0] |= desk(companion).pending() != null;
             if (step[0] == 1 && calls[0].done()) {
-                List<String> back = runAs(owner, "numen permission set gametest_house_sitter break allow");
+                List<String> back = runAs(owner, "numen permission set " + name + " break allow");
                 helper.assertTrue(back.stream().anyMatch(m -> m.contains("break is now allow")),
                         "the tier was not set back: " + back);
                 calls[1] = click(helper, companion, "left", stoneRel);
@@ -879,81 +848,7 @@ public class PermissionGameTests {
         });
     }
 
-    /**
-     * 别人的挖不得:谷仓里别人的南瓜离她近,野地里长的远,一次扫描两个都找到。要一个南瓜,{@code arrive = "dig"} 只去挖得成
-     * 的那个,她挖野地里那个,谷仓里的一动不动;对同样的方块再要一个,只剩谷仓里的,当场拒绝、理由是它是别人的。不弹卡。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 231, batch = "numen_permission")
-    public static void work_dig_leaves_someone_elses_blocks_standing(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos insideRel = new BlockPos(5, 2, 5);
-        BlockPos outsideRel = new BlockPos(11, 2, 5);
-        ServerPlayer owner = presentPlayer(helper, null, "gametest_farmer");
-        ownedBlocks(helper, UUID.randomUUID(), List.of(insideRel), Blocks.PUMPKIN);
-        level.setBlockAndUpdate(helper.absolutePos(outsideRel), Blocks.PUMPKIN.defaultBlockState());
-        NumenPlayer companion = adopted(spawnAt(helper, "gametest_harvester", new BlockPos(2, 2, 5), false), owner);
-        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        Mining first = mineScanned(helper, companion, 10, "minecraft:pumpkin", 1);
-        Mining[] second = new Mining[1];
-        boolean[] asked = new boolean[1];
-        helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(first.done(), "the first mine has not finished");
-            helper.assertTrue(first.succeeded() && level.getBlockState(helper.absolutePos(outsideRel)).isAir(),
-                    "the wild pumpkin was not mined: " + first.outcome());
-            helper.assertTrue(level.getBlockState(helper.absolutePos(insideRel)).is(Blocks.PUMPKIN),
-                    "the pumpkin of the owner in the barn was mined");
-            if (second[0] == null) {
-                second[0] = mine(companion, first.blocks(), 1);
-            }
-            helper.assertTrue(second[0].done(), "the second mine has not finished");
-            helper.assertTrue(!second[0].succeeded() && second[0].outcome().contains("belongs to someone else"),
-                    "the second mine does not stop on whose it is: " + second[0].outcome());
-            helper.assertTrue(level.getBlockState(helper.absolutePos(insideRel)).is(Blocks.PUMPKIN),
-                    "the pumpkin of the owner in the barn was mined");
-            helper.assertTrue(!asked[0], "a deny row raised a consent card");
-            CompanionFactory.despawn(level.getServer(), companion);
-            leave(owner);
-        });
-    }
-
     // ---- 谁的:别人的方块 ----
-
-    /**
-     * 方块是谁的由回答者说:一个方块归属的回答者说这块石头是别的玩家的,她 {@code numen.work.dig} 挖它被拒了、不弹卡,石头还在;
-     * 旁边没人说是谁的那一块照常挖掉。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
-    public static void a_block_an_answerer_says_is_someone_elses_is_not_hers_to_dig(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos theirs = helper.absolutePos(new BlockPos(6, 2, 5));
-        BlockPos nobodys = helper.absolutePos(new BlockPos(6, 2, 3));
-        level.setBlockAndUpdate(nobodys, Blocks.STONE.defaultBlockState());
-        ownedBlocks(helper, UUID.randomUUID(), List.of(new BlockPos(6, 2, 5)), Blocks.STONE);
-        NumenPlayer companion = spawnAt(helper, "gametest_neighbour", new BlockPos(4, 2, 4), false);
-        companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
-        ToolRun refused = lua(companion, "numen.work.dig(" + xyz(theirs) + ")");
-        ToolRun[] dug = new ToolRun[1];
-        boolean[] asked = new boolean[1];
-        helper.onEachTick(() -> {
-            asked[0] |= desk(companion).pending() != null;
-            if (dug[0] == null && refused.done()) {
-                dug[0] = lua(companion, "numen.work.dig(" + xyz(nobodys) + ")");
-            }
-        });
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(dug[0] != null && dug[0].done(), "the two digs have not finished");
-            helper.assertTrue(!refused.succeeded() && refused.outcome().contains("belongs to someone else"),
-                    "the dig of someone else's stone was not refused: " + refused.outcome());
-            helper.assertTrue(level.getBlockState(theirs).is(Blocks.STONE), "someone else's stone was dug");
-            helper.assertTrue(dug[0].succeeded() && level.getBlockState(nobodys).isAir(),
-                    "the stone that is nobody's was not dug: " + dug[0].outcome());
-            helper.assertTrue(!asked[0], "a refusal raised a consent card");
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
 
     // ---- 她改设置、默认问的动作、以后都允许 ----
 
@@ -1147,40 +1042,6 @@ public class PermissionGameTests {
                     "the listed drop did not go: " + calls[1].outcome());
             helper.assertTrue(!calls[2].succeeded() && companion.getInventory().countItem(Items.EMERALD) == 2,
                     "something else on the same verb was dropped without asking: " + calls[2].outcome());
-            CompanionFactory.despawn(level.getServer(), companion);
-            leave(owner);
-        });
-    }
-
-    /**
-     * 别人的宠物写在名单里也打不了:主人把那只狼记进"打实体"的名单,回答"归属"的说它是别人的,不许排在名单前面——不弹卡,狼一滴血没掉。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
-    public static void someone_elses_pet_on_the_list_is_still_refused(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        var wolf = EntityType.WOLF.create(level);
-        BlockPos at = helper.absolutePos(new BlockPos(7, 2, 4));
-        wolf.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
-        wolf.setTame(true, false);
-        wolf.setOwnerUUID(UUID.randomUUID());
-        wolf.setNoAi(true);
-        level.addFreshEntity(wolf);
-        NumenPlayer companion = spawnAt(helper, "gametest_listed_hunter", new BlockPos(3, 2, 4), false);
-        ServerPlayer owner = presentOwner(helper, companion, "gametest_listed_owner");
-        storeOf(owner).edit(companion.getUUID(), new com.dwinovo.numen.permission.Edit.Add(
-                com.dwinovo.numen.permission.Verb.ATTACK, wolf.getUUID().toString()));
-        companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
-        ToolRun attack = lua(companion, "numen.fight.attack(" + ref(wolf) + ")");
-        boolean[] asked = new boolean[1];
-        helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(attack.done(), "attack has not finished");
-            helper.assertTrue(!attack.succeeded() && attack.outcome().contains("belongs to someone else"),
-                    "the refusal does not say whose it is: " + attack.outcome());
-            helper.assertTrue(!asked[0], "a refusal raised a consent card");
-            helper.assertTrue(wolf.getHealth() == wolf.getMaxHealth(), "the wolf was hit");
-            wolf.discard();
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
         });

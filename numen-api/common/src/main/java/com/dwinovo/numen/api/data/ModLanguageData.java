@@ -152,7 +152,6 @@ public final class ModLanguageData {
         public static final String CONSENT_ALLOW_REMEMBER_WHAT = "numen.consent.allow_remember_what";
         public static final String CONSENT_ALLOWED_SAYING = "numen.consent.allowed_saying";
         /** 两个内置的回答理由给主人看的那一版,和档位定下"问"、"不许"时的理由。 */
-        public static final String PERMISSION_OTHERS      = "numen.permission.others";
         public static final String PERMISSION_OWNERS      = "numen.permission.owners";
         public static final String PERMISSION_TIER_ASK    = "numen.permission.tier_ask";
         public static final String PERMISSION_TIER_DENY   = "numen.permission.tier_deny";
@@ -1138,7 +1137,6 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_ALLOW_REMEMBER_WHAT, "Always allow: %s");
         adder.add(Keys.CONSENT_ALLOWED_SAYING, "You said yes: %s");
         adder.add(Keys.CONSENT_VERB_PREFIX + "use_item",   "use");
-        adder.add(Keys.PERMISSION_OTHERS,      "someone else's");
         adder.add(Keys.PERMISSION_OWNERS,      "yours");
         adder.add(Keys.PERMISSION_TIER_ASK,    "you set it to ask");
         adder.add(Keys.PERMISSION_TIER_DENY,   "you set it to deny");
@@ -1918,7 +1916,6 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_ALLOW_REMEMBER_WHAT, "以后都允许:%s");
         adder.add(Keys.CONSENT_ALLOWED_SAYING, "你答应了:%s");
         adder.add(Keys.CONSENT_VERB_PREFIX + "use_item",   "用手里的");
-        adder.add(Keys.PERMISSION_OTHERS,      "别人的");
         adder.add(Keys.PERMISSION_OWNERS,      "你的");
         adder.add(Keys.PERMISSION_TIER_ASK,    "你定的是「询问」");
         adder.add(Keys.PERMISSION_TIER_DENY,   "你定的是「拒绝」");

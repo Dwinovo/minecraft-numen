@@ -410,7 +410,9 @@ public class CommandGameTests {
     public static void command_level_follows_the_owners_profile_even_when_offline(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_proxy", new BlockPos(4, 2, 4), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_proxy_owner");
-        storeOf(owner).edit(companion.getUUID(), new com.dwinovo.numen.permission.Edit.Add(Verb.COMMAND, "give"));
+        // 这条验的是命令的权限等级跟着主人走,不是要不要问:把"执行命令"定成许
+        storeOf(owner).edit(companion.getUUID(), new com.dwinovo.numen.permission.Edit.SetTier(Verb.COMMAND,
+                com.dwinovo.numen.permission.Tier.ALLOW));
         companion.getServer().getPlayerList().getOps().add(new ServerOpListEntry(companion.getGameProfile(), 4, false));
         ToolRun borrowed = lua(companion, "numen.mc.run(\"give @s minecraft:diamond\")");
         String help = said(lua(companion, "numen.mc.run(\"help\")"));
@@ -442,7 +444,9 @@ public class CommandGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_op", new BlockPos(4, 2, 4), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_admin");
         grantOp(owner);
-        storeOf(owner).edit(companion.getUUID(), new com.dwinovo.numen.permission.Edit.Add(Verb.COMMAND, "give"));
+        // 这条验的是命令的权限等级跟着主人走,不是要不要问:把"执行命令"定成许
+        storeOf(owner).edit(companion.getUUID(), new com.dwinovo.numen.permission.Edit.SetTier(Verb.COMMAND,
+                com.dwinovo.numen.permission.Tier.ALLOW));
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= ConsentDesk.of(companion).pending() != null);
         ToolRun give = lua(companion, "numen.mc.run(\"give @s minecraft:diamond 2\")");
@@ -640,6 +644,9 @@ public class CommandGameTests {
     public static void command_drive_runs_a_program_through_her_entry(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gt_mc_driven", new BlockPos(4, 2, 4), false);
         var server = helper.getLevel().getServer();
+        // 这条验的是 drive 把程序交到她的入口,不是要不要问:把"执行命令"定成许
+        PermissionStore.of(server, companion.getOwnerUuid()).edit(companion.getUUID(),
+                new com.dwinovo.numen.permission.Edit.SetTier(Verb.COMMAND, com.dwinovo.numen.permission.Tier.ALLOW));
         List<String> programs = List.of("numen.task.status()", "numen.task.stauts()", "numen.mc.run(\"help help\")",
                 "numen.mc.run(\"gvie @s stone\")");
         List<String> heard = new ArrayList<>();

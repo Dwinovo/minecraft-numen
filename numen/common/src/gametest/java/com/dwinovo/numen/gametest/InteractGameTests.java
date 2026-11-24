@@ -202,27 +202,6 @@ public class InteractGameTests {
         });
     }
 
-    /** 有名字的猪要问主人才能打;主人不在,问不到就不打,猪一滴血没掉。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
-    public static void interact_entity_on_a_named_animal_needs_the_owner(GameTestHelper helper) {
-        net.minecraft.world.entity.animal.Pig pig = net.minecraft.world.entity.EntityType.PIG.create(helper.getLevel());
-        BlockPos at = helper.absolutePos(new BlockPos(8, 2, 8));
-        pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
-        pig.setNoAi(true);
-        pig.setCustomName(net.minecraft.network.chat.Component.literal("Wilbur"));
-        helper.getLevel().addFreshEntity(pig);
-        NumenPlayer companion = spawnAt(helper, "gametest_restrained", new BlockPos(6, 2, 8), false);
-        ToolRun hit = lua(companion, "numen.use.hit(" + ref(pig) + ")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(hit.done(), "use entity has not finished");
-            helper.assertTrue(!hit.succeeded() && hit.outcome().contains("owner"),
-                    "the refusal does not come from asking the owner: " + hit.outcome());
-            helper.assertTrue(pig.getHealth() == pig.getMaxHealth(), "the named pig was hit");
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
     // ---- numen.use.entity:挤奶;numen.use.block:门、放方块 ----
 
     /** 拿空桶右键手边的一头牛:挤了奶,空桶换成了一桶牛奶;回执只说牛接了这一下,背包里变了什么她自己看。 */
@@ -299,25 +278,6 @@ public class InteractGameTests {
             helper.assertTrue(sit.done(), "use entity has not finished");
             helper.assertTrue(sit.succeeded() && wolf.isOrderedToSit(),
                     "her own wolf was not told to sit: " + sit.outcome());
-            wolf.discard();
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 右键别人驯服的狼:回答"归属"的说是别人的,不许,不问谁,狼没坐下。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
-    public static void use_entity_on_someone_elses_wolf_is_forbidden_outright(GameTestHelper helper) {
-        var wolf = wolfAt(helper, new BlockPos(10, 2, 2));
-        wolf.setTame(true, true);
-        wolf.setOwnerUUID(java.util.UUID.randomUUID());
-        NumenPlayer companion = spawnAt(helper, "gametest_wolfpetter", new BlockPos(8, 2, 2), false);
-        ToolRun pet = lua(companion, "numen.use.entity(" + ref(wolf) + ")");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(pet.done(), "use entity has not finished");
-            helper.assertTrue(!pet.succeeded() && pet.outcome().contains("belongs to someone else"),
-                    "the refusal does not say whose it is: " + pet.outcome());
-            helper.assertTrue(!wolf.isOrderedToSit(), "someone else's wolf was told to sit");
             wolf.discard();
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
