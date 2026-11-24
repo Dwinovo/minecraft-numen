@@ -171,13 +171,14 @@ class GateTest {
     }
 
     @Test
-    void anAllowBeatsTheTierAndWithNobodyTalkingTheTierDecides() {
+    void anAllowBeatsAnAskTierButNotADenyTierAndWithNobodyTalkingTheTierDecides() {
         FakeWorld world = new FakeWorld().set(POS, Blocks.STONE.defaultBlockState());
-        Settings observe = Settings.FACTORY.with(Preset.OBSERVE);
-        assertTrue(gateWith(observe, Map.of("yes", SAYS_YES)).judge(dig(world, POS), world).allowed());
+        assertTrue(gateWith(Settings.FACTORY, Map.of("yes", SAYS_YES)).judge(Action.drop(Items.DIAMOND), world).allowed(),
+                "档位是问时,回答者的许算数");
 
-        Verdict denied = gateWith(observe, Map.<String, Answerer>of()).judge(dig(world, POS), world);
-        assertEquals(Tier.DENY, denied.tier());
+        Settings observe = Settings.FACTORY.with(Preset.OBSERVE);
+        Verdict denied = gateWith(observe, Map.of("yes", SAYS_YES)).judge(dig(world, POS), world);
+        assertEquals(Tier.DENY, denied.tier(), "主人定的不许,回答者的许盖不过");
         assertEquals(Merge.Step.TIER, denied.step());
         assertEquals("the owner's setting for break is deny", denied.cause());
 

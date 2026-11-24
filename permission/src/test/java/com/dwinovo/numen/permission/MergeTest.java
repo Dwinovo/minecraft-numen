@@ -23,7 +23,7 @@ class MergeTest {
 
     @Test
     void secondStepTheListBeatsAnAsk() {
-        var r = merge(Tier.DENY, true, Say.ASK, Say.ALLOW);
+        var r = merge(Tier.ASK, true, Say.ASK, Say.ALLOW);
         assertEquals(Tier.ALLOW, r.outcome());
         assertEquals(Merge.Step.LISTED, r.step());
         assertNull(r.by());
@@ -38,9 +38,17 @@ class MergeTest {
 
     @Test
     void fourthStepAnAllowBeatsTheTier() {
-        var r = merge(Tier.DENY, false, Say.ABSTAIN, Say.ALLOW);
+        var r = merge(Tier.ASK, false, Say.ABSTAIN, Say.ALLOW);
         assertEquals(Tier.ALLOW, r.outcome());
         assertEquals(Merge.Step.ANSWERER_ALLOWED, r.step());
+    }
+
+    @Test
+    void aDenyTierIsNotUnlockedByTheListOrByAnAllow() {
+        var r = merge(Tier.DENY, true, Say.ALLOW);
+        assertEquals(Tier.DENY, r.outcome());
+        assertEquals(Merge.Step.TIER, r.step());
+        assertNull(r.by());
     }
 
     @Test

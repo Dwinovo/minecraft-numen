@@ -5,12 +5,13 @@ import java.util.function.Function;
 /**
  * 把一圈回答者的话合成一个结果,顺序固定,先碰到哪条算哪条:
  * <ol>
- *   <li>有回答者说不许 → 不许;</li>
+ *   <li>主人把这个动作定成了不许,或有回答者说不许 → 不许;</li>
  *   <li>在主人"不用问"的名单里 → 许;</li>
  *   <li>有回答者说要问 → 问;</li>
  *   <li>有回答者说许 → 许;</li>
- *   <li>都不表态 → 主人给这个动作定的档。</li>
+ *   <li>都不表态 → 主人给这个动作定的档(许或问)。</li>
  * </ol>
+ * 不许是解不开的,不论出自谁:名单只是"不用问",盖不过主人自己定的不许,回答者的许也盖不过。
  * 不认识任何游戏里的东西:回答者是什么、说的话怎么得来,都是调用方的事。几个回答者说同一种话时取先问到的那个。
  * 搜索线程给每一格定价也走这里,所以只扫一遍回答者、不分配集合。
  */
@@ -37,6 +38,9 @@ public final class Merge {
      * @param say     一个回答者对这一件事说什么
      */
     public static <A> Result<A> merge(Tier tier, boolean listed, Iterable<A> answers, Function<A, Say> say) {
+        if (tier == Tier.DENY) {
+            return new Result<>(Tier.DENY, Step.TIER, null);
+        }
         A asked = null;
         A allowed = null;
         for (A answerer : answers) {
