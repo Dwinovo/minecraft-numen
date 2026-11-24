@@ -774,8 +774,8 @@ public class BuildGameTests {
     }
 
     /**
-     * 把她放的一格 A 换成 B:生存模式下先 {@code numen.work.dig} 拆她自己的石头
-     * ({@code break(self_placed & !contents)})、再 {@code numen.build.place} 放玻璃({@code place(!hazard_item)}),主人在场,全程一张卡都不弹。
+     * 把她放的一格 A 换成 B:生存模式下先 {@code numen.work.dig} 拆那块石头(没主人的方块,出厂规则放行)、再
+     * {@code numen.build.place} 放玻璃({@code place(!hazard_item)}),主人在场,全程一张卡都不弹。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void swapping_a_block_she_placed_asks_nobody(GameTestHelper helper) {
@@ -796,12 +796,7 @@ public class BuildGameTests {
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(run.get().done() && run.get().succeeded(),
                         "the first build did not finish: " + run.get().outcome()))
-                .thenExecute(() -> {
-                    var placer = com.dwinovo.numen.api.permission.PlacedBlocks.of(level).placerAt(o, level.getBlockState(o));
-                    helper.assertTrue(placer != null && placer.id().equals(companion.getUUID()),
-                            "the stone she built is not recorded as hers: " + placer);
-                    run.set(lua(companion, "numen.work.dig(" + xyz(o) + ")\nnumen.build.place(" + glass + ")"));
-                })
+                .thenExecute(() -> run.set(lua(companion, "numen.work.dig(" + xyz(o) + ")\nnumen.build.place(" + glass + ")")))
                 .thenWaitUntil(() -> helper.assertTrue(run.get().done(), "the swap has not finished"))
                 .thenExecute(() -> {
                     helper.assertTrue(run.get().ranToTheEnd() && level.getBlockState(o).is(Blocks.GLASS),
@@ -1252,42 +1247,6 @@ public class BuildGameTests {
             }
             CompanionFactory.despawn(level.getServer(), companion);
         });
-    }
-
-    /**
-     * 一次 {@code numen.build.place} 里先放墙、再去放墙另一侧够不着的一格:走过去的路线不挖刚放好的墙。墙两格高、七格长横在她和
-     * 那一格之间,创造模式挖一块几乎不花时间,路线若把刚放下的墙当地形,一定直接挖穿——绕开靠的是放置记号。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 800, batch = "numen_build")
-    public static void build_walks_round_the_wall_it_just_placed(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer companion = spawnAt(helper, "gametest_roundabout", new BlockPos(8, 2, 5), true);
-        BlockPos beyond = helper.absolutePos(new BlockPos(8, 2, 13));
-        List<BlockPos> wall = new ArrayList<>();
-        StringBuilder cells = new StringBuilder("{");
-        for (int x = 5; x <= 11; x++) {
-            for (int y = 2; y <= 3; y++) {
-                BlockPos cell = helper.absolutePos(new BlockPos(x, y, 8));
-                wall.add(cell);
-                cells.append("{name = \"stone_bricks\", pos = ").append(xyz(cell)).append("}, ");
-            }
-        }
-        cells.append("{name = \"stone\", pos = ").append(xyz(beyond)).append("}}");
-        ToolRun[] run = {null};
-        steps(helper)
-                .thenExecute(() -> run[0] = lua(companion, "numen.build.place(" + cells + ")"))
-                .thenWaitUntil(() -> helper.assertTrue(run[0].done(), "numen.build.place has not finished"))
-                .thenExecute(() -> {
-                    helper.assertTrue(run[0].succeeded(), "numen.build.place failed: " + run[0].outcome());
-                    for (BlockPos cell : wall) {
-                        helper.assertTrue(level.getBlockState(cell).is(Blocks.STONE_BRICKS),
-                                "the wall she had just placed has a gap at " + cell.toShortString() + ": " + run[0].outcome());
-                    }
-                    helper.assertTrue(level.getBlockState(beyond).is(Blocks.STONE),
-                            "the cell beyond the wall was not placed: " + run[0].outcome());
-                    CompanionFactory.despawn(level.getServer(), companion);
-                })
-                .thenSucceed();
     }
 
     /**

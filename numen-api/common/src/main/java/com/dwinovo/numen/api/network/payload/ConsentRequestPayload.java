@@ -49,7 +49,7 @@ public record ConsentRequestPayload(UUID companion, long id, List<ConsentRequest
         implements CustomPacketPayload {
 
     /**
-     * 给主人看的一堆:答复框画成"挖 [原木图标]×6 · 玩家放的"。
+     * 给主人看的一堆:答复框画成"挖 [原木图标]×6 · 你的"。
      *
      * @param icon         物品图标;没有(实体、没有物品形态的方块)为 null,这时画名字
      * @param irreversible 撤不回:答复框把这一堆画成警示色

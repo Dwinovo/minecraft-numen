@@ -147,7 +147,6 @@ public final class ModLanguageData {
         public static final String CONSENT_ASK_MANY       = "numen.consent.ask_many";
         /** Numen API 自带的规则词给主人看的自述,后接规则里的名字({@code owner}……)。 */
         public static final String PERMISSION_NAME_PREFIX = "numen.permission.name.";
-        public static final String PERMISSION_PLACED_BY   = "numen.permission.placed_by";
         /** 征询卡上"她要改你的规则"的理由。 */
         public static final String PERMISSION_RULE_EDIT   = "numen.permission.rule_edit";
         /** 她收紧了一条规则,直接告诉主人:她加的是哪张表的哪一行,理由。 */
@@ -1162,12 +1161,10 @@ public final class ModLanguageData {
         adder.add(Keys.PERMISSION_NAME_PREFIX + "owner",       "yours");
         adder.add(Keys.PERMISSION_NAME_PREFIX + "other",       "someone else's");
         adder.add(Keys.PERMISSION_NAME_PREFIX + "structure",   "in a generated structure");
-        adder.add(Keys.PERMISSION_NAME_PREFIX + "nature",      "natural");
-        adder.add(Keys.PERMISSION_NAME_PREFIX + "unknown",     "of unknown origin");
+        adder.add(Keys.PERMISSION_NAME_PREFIX + "nature",      "nobody's");
         adder.add(Keys.PERMISSION_NAME_PREFIX + "block_entity", "functional block");
         adder.add(Keys.PERMISSION_NAME_PREFIX + "named",       "named");
         adder.add(Keys.PERMISSION_NEAR,        "next to something %s");
-        adder.add(Keys.PERMISSION_PLACED_BY,   "placed by %s");
         adder.add(Keys.PERMISSION_RULE_EDIT,   "changes your rules");
         adder.add(Keys.PERMISSION_TIGHTENED,   "%1$s added to your %2$s rules: %3$s");
         adder.add(Keys.PERMISSION_UNCOVERED,   "no rule");
@@ -1973,12 +1970,10 @@ public final class ModLanguageData {
         adder.add(Keys.PERMISSION_NAME_PREFIX + "owner",       "你的");
         adder.add(Keys.PERMISSION_NAME_PREFIX + "other",       "别人的");
         adder.add(Keys.PERMISSION_NAME_PREFIX + "structure",   "生成结构里的");
-        adder.add(Keys.PERMISSION_NAME_PREFIX + "nature",      "天然的");
-        adder.add(Keys.PERMISSION_NAME_PREFIX + "unknown",     "说不清是谁的");
+        adder.add(Keys.PERMISSION_NAME_PREFIX + "nature",      "没主人的");
         adder.add(Keys.PERMISSION_NAME_PREFIX + "block_entity", "功能方块");
         adder.add(Keys.PERMISSION_NAME_PREFIX + "named",       "起了名字");
         adder.add(Keys.PERMISSION_NEAR,        "附近有%s东西");
-        adder.add(Keys.PERMISSION_PLACED_BY,   "%s 放的");
         adder.add(Keys.PERMISSION_RULE_EDIT,   "要改你的规则");
         adder.add(Keys.PERMISSION_TIGHTENED,   "%1$s 往你的 %2$s 规则里加了一行:%3$s");
         adder.add(Keys.PERMISSION_UNCOVERED,   "没有规则");

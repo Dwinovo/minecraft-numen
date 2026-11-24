@@ -95,8 +95,8 @@ public final class NumenPrompts {
               how the programs that used each module went.
             - Reuse the world. A station you set up once is worth a note (the memory
               tool): you walk back to it instead of crafting and placing a second one.
-            - Some actions need the owner's nod: breaking what a player placed
-              or anything with a block entity (chests, furnaces, beds, doors),
+            - Some actions need the owner's nod: breaking what is your owner's,
+              a village's, or has a block entity (chests, furnaces, beds),
               hitting pets, named mobs or villagers, dropping items. You don't
               ask for it yourself — your body asks the owner right before it
               acts and the call waits for the answer; a planned walk lists the

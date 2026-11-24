@@ -3,7 +3,6 @@ package com.dwinovo.numen.scenario;
 import com.dwinovo.numen.bench.Check;
 import com.dwinovo.numen.bench.Scenario;
 import com.dwinovo.numen.bench.Scene;
-import com.dwinovo.numen.api.permission.PlacedBlocks;
 import com.dwinovo.numen.api.sdk.Positions;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.Items;
@@ -11,11 +10,10 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 收麦子做面包:一块麦田,中间一排水,水的一侧两排麦子熟了、另一侧两排没熟(各 12 株);田和麦子都记成主人放的;场地里立着
+ * 收麦子做面包:一块麦田,中间一排水,水的一侧两排麦子熟了、另一侧两排没熟(各 12 株);场地里立着
  * 一张工作台(面包要三乘三的格子);她空手。主人说收熟了的麦子做几个面包给他。要成事得分清哪些熟了,只收熟的,
  * 三根麦子一个面包,做出来交到主人手里。成功 = 面包不少于 3 个(在她包里,或交到了主人五格以内);负面 = 没熟的麦子一株没拆;
  * 子目标 = 收完补种。
@@ -41,7 +39,6 @@ public final class HarvestAndBread implements Scenario {
 
     @Override
     public void setup(Scene scene) {
-        List<BlockPos> owned = new ArrayList<>();
         for (int x = X_LO; x <= X_HI; x++) {
             for (int z = RIPE_LO; z <= GREEN_HI; z++) {
                 if (z == WATER) {
@@ -51,14 +48,8 @@ public final class HarvestAndBread implements Scenario {
                 scene.set(x, 0, z, Blocks.FARMLAND.defaultBlockState());
                 int age = z <= RIPE_HI ? CropBlock.MAX_AGE : 2;
                 scene.set(x, 1, z, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, age));
-                owned.add(scene.pos(x, 0, z));
-                owned.add(scene.pos(x, 1, z));
             }
         }
-        PlacedBlocks placed = PlacedBlocks.of(scene.level());
-        PlacedBlocks.Placer owner = new PlacedBlocks.Placer(scene.owner().getUUID(),
-                scene.owner().getGameProfile().getName());
-        owned.forEach(pos -> placed.record(pos, owner));
         scene.set(TABLE.getX(), TABLE.getY(), TABLE.getZ(), Blocks.CRAFTING_TABLE.defaultBlockState());
     }
 

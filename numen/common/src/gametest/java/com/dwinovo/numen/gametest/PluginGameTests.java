@@ -28,7 +28,7 @@ public class PluginGameTests {
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_plugin")
     public static void a_plugin_hears_a_task_finish_once_with_its_account(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        NumenPlayer companion = spawnBare(helper, "gametest_task_heard", new BlockPos(4, 2, 4), false);
+        NumenPlayer companion = spawnAt(helper, "gametest_task_heard", new BlockPos(4, 2, 4), false);
         java.util.List<com.dwinovo.numen.api.CompanionEvent.TaskFinished> heard =
                 new java.util.concurrent.CopyOnWriteArrayList<>();
         com.dwinovo.numen.api.NumenPlugins.register("gt_task_hears", numen -> numen.on(

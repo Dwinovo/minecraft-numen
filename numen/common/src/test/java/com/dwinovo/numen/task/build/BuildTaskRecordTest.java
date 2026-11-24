@@ -301,6 +301,20 @@ class BuildTaskRecordTest {
                 "a berried cave vine hands the berry straight back — the whole wall would be free");
     }
 
+    /** 双格方块的主半带出另一半:门的下半 → 正上方,床脚 → 朝向那一格;上半、床头与单格方块没有。 */
+    @Test
+    void theOtherHalfOfATwoBlockPlacement() {
+        BlockPos a = new BlockPos(5, 64, 5);
+        BlockState door = Blocks.OAK_DOOR.defaultBlockState();
+        assertEquals(a.above(), com.dwinovo.numen.build.BuildStates.otherHalfOf(a, door));
+        assertEquals(null, com.dwinovo.numen.build.BuildStates.otherHalfOf(a, door.setValue(
+                BlockStateProperties.DOUBLE_BLOCK_HALF,
+                net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER)));
+        BlockState bed = Blocks.RED_BED.defaultBlockState().setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST);
+        assertEquals(a.east(), com.dwinovo.numen.build.BuildStates.otherHalfOf(a, bed));
+        assertEquals(null, com.dwinovo.numen.build.BuildStates.otherHalfOf(a, Blocks.STONE.defaultBlockState()));
+    }
+
     /** 派发层与施工层共用同一个速率公式:时限必须比施工本身多;生存是人手的固定速度,一格五刻,工程再大也不压缩。 */
     @Test
     void theDeadlineCoversTheBuildAndSurvivalIsFiveTicksACell() {

@@ -38,7 +38,7 @@ import java.util.Map;
  * @param name         给主人看的名字(没有图标时显示):方块、物品的名字,实体的名字(起了名的就是那个名字),
  *                     指令的整行,区域名
  * @param rule         问的是哪一行规则的原文;没有任何一行覆盖时为空串
- * @param cause        为什么要问:那一行规则的自述({@code placed by a player})
+ * @param cause        为什么要问:那一行规则的自述({@code belongs to the owner})
  * @param shownCause   给主人看的为什么要问:命中那行规则就这个动作说的那一版({@link ActView#shown}),哪一行都没说到就说没有规则
  * @param irreversible 这件事撤不回(对象身上有在这个动词下算撤不回的名字,见 {@link com.dwinovo.numen.permission.Vocabulary#irreversible})
  * @param remember     主人说"允许并记住"时存下的那一行 allow(推法见 {@link Rule#remembering});改规则的征询({@link #ruleEdit})
@@ -82,7 +82,7 @@ public record ConsentItem(Verb kind, BlockPos pos, int entityId, String subject,
             return head.irreversible;
         }
 
-        /** 给模型:{@code break 6 oak_log (1,64,2; …; +2 more): placed by a player}。 */
+        /** 给模型:{@code break 6 oak_log (1,64,2; …; +2 more): belongs to the owner}。 */
         public String text() {
             return head.kind.word() + ' ' + Listing.part(head.subject, count, cells) + ": " + head.cause;
         }
@@ -131,7 +131,7 @@ public record ConsentItem(Verb kind, BlockPos pos, int entityId, String subject,
     }
 
     /**
-     * 选"允许并记住"会写进主人 allow 表的那几行,写成表里的样子({@code allow break(placed & oak_log)})。
+     * 选"允许并记住"会写进主人 allow 表的那几行,写成表里的样子({@code allow break(owner & minecraft:oak_log)})。
      * 主人在选项上看到的、回执里交代给模型的,都是这一份。
      */
     public static List<String> rememberedRows(List<ConsentItem> items) {
@@ -144,7 +144,7 @@ public record ConsentItem(Verb kind, BlockPos pos, int entityId, String subject,
 
     /**
      * 主人对这一条的同意覆盖不覆盖这个动作:同一个动词、同一行规则问出来的,而且是同一种东西——
-     * 方块与物品认种类,实体认那一只,指令认整行。于是挖一堆主人放的原木只问一次,换成主人放的箱子另问;
+     * 方块与物品认种类,实体认那一只,指令认整行。于是挖一堆主人的原木只问一次,换成主人的箱子另问;
      * 点头打的是这只狼,别的狼另问。
      *
      * @param hit 这个动作此刻命中的那行 ask 规则;没有任何一行覆盖时为 null
@@ -170,7 +170,7 @@ public record ConsentItem(Verb kind, BlockPos pos, int entityId, String subject,
     }
 
     /**
-     * 清单,一堆一条:按"动词 + 对象 + 理由"归堆(实体按名字、玩家放的按谁放的再分开),保持先出现的先列。
+     * 清单,一堆一条:按"动词 + 对象 + 理由"归堆(实体按名字再分开),保持先出现的先列。
      * 答复框与回执都用这一份。
      */
     public static List<Group> listing(List<ConsentItem> items) {

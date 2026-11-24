@@ -77,7 +77,7 @@ public class ElytraGameTests {
 
     /** 穿着鞘翅、背着 {@code rockets} 支烟花的她。 */
     private static NumenPlayer winged(GameTestHelper helper, String name, BlockPos rel, int rockets, boolean creative) {
-        NumenPlayer her = spawnBare(helper, name, rel, creative);
+        NumenPlayer her = spawnAt(helper, name, rel, creative);
         her.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.ELYTRA));
         if (rockets > 0) {
             her.getInventory().add(new ItemStack(Items.FIREWORK_ROCKET, rockets));
@@ -169,7 +169,7 @@ public class ElytraGameTests {
     public static void gliding_without_an_elytra_is_refused_at_once(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         ground(helper, 2);
-        NumenPlayer her = spawnBare(helper, "gametest_bare", new BlockPos(5, 3, MID), false);
+        NumenPlayer her = spawnAt(helper, "gametest_bare", new BlockPos(5, 3, MID), false);
         her.getInventory().add(new ItemStack(Items.FIREWORK_ROCKET, 8));
         ToolRun glide = lua(her, "return numen.move.glide(" + xyz(helper.absolutePos(new BlockPos(120, 3, MID))) + ")");
 

@@ -105,8 +105,6 @@ public final class GameTestKit {
         level.setDayTime(dayTime);
         GameTestWorld.setRule(level, level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING), false);
         level.setWeatherParameters(CLEAR_WEATHER_TICKS, 0, false, false);
-        // 无头测试服是专用服,说不清是谁的方块默认按别人的算(服务器设置)。多数用例要的是"问主人"那一半,所以写明不按。
-        com.dwinovo.numen.api.brain.ModelServices.of(level.getServer()).settings().setPermission(true, false);
     }
 
     /**
@@ -186,7 +184,7 @@ public final class GameTestKit {
         }
     }
 
-    /** 在 rel 处放一块方块。放在拉起她之前,这样算她放的,她动得了。 */
+    /** 在 rel 处放一块方块。 */
     static BlockPos place(GameTestHelper helper, BlockPos rel, net.minecraft.world.level.block.Block block) {
         BlockPos at = helper.absolutePos(rel);
         helper.getLevel().setBlockAndUpdate(at, block.defaultBlockState());
@@ -269,13 +267,8 @@ public final class GameTestKit {
     }
 
     /**
-     * floor20 上拉起同伴的公共步骤;creative = 召后切创造档。用例搭好的场景在放置记录里没有主人,权限层看它是"说不清是谁的"
-     * (装模组前盖的东西),要问主人;这些用例测的是挖、搬、走的机制,主人又不在场,所以把场景里的方块记成她自己放的
-     * (她的东西她可以拆)。权限用例要的正是没有记录的场景,用 {@link #spawnBare}。
-     */
-    /**
      * 自然长出的树叶:不持久(玩家放的才带持久标记),距离 1(贴着树干,生成的树就是这样)。直接 {@code setBlockAndUpdate} 放一块不持久的
-     * 树叶,距离是默认的 7,没有谁去更新它,它就是会随机凋落的树叶——野树的"邻着不持久树叶"在用例中途可能无端消失。
+     * 树叶,距离是默认的 7,没有谁去更新它,它就是会随机凋落的树叶——用例里的树冠在中途可能无端消失。
      */
     static net.minecraft.world.level.block.state.BlockState naturalLeaves() {
         return Blocks.OAK_LEAVES.defaultBlockState()
@@ -283,23 +276,26 @@ public final class GameTestKit {
                 .setValue(net.minecraft.world.level.block.LeavesBlock.DISTANCE, 1);
     }
 
-    static NumenPlayer spawnAt(GameTestHelper helper, String name, BlockPos rel, boolean creative) {
-        NumenPlayer companion = spawnBare(helper, name, rel, creative);
-        ServerLevel level = helper.getLevel();
-        var placed = com.dwinovo.numen.api.permission.PlacedBlocks.of(level);
-        var her = new com.dwinovo.numen.api.permission.PlacedBlocks.Placer(companion.getUUID(), name);
-        var box = helper.getBounds().inflate(0, 10, 0);   // 树冠一类搭得比模板高
-        for (BlockPos pos : BlockPos.betweenClosed(BlockPos.containing(box.minX, box.minY, box.minZ),
-                BlockPos.containing(box.maxX - 1, box.maxY - 1, box.maxZ - 1))) {
-            if (!level.getBlockState(pos).isAir() && placed.placerAt(pos, level.getBlockState(pos)) == null) {
-                placed.record(pos.immutable(), her);
-            }
-        }
-        return companion;
+    /** 用例里登记的方块归属回答者各用一个名字。 */
+    private static final java.util.concurrent.atomic.AtomicInteger CLAIMS = new java.util.concurrent.atomic.AtomicInteger();
+
+    /**
+     * 这条用例里 {@code cells} 这几格是 {@code who} 的:登记一个只认这几格的方块归属回答者(领地模组的插件也是这样答的),用例收场
+     * 不论成败都撤掉。原版里方块没有主人,要"主人的墙""别人的箱子"的用例经它说。回答者全服的同伴都问得到,所以只说这条用例自己场地里的格。
+     */
+    static void claim(GameTestHelper helper, UUID who, java.util.Collection<BlockPos> cells) {
+        java.util.Set<BlockPos> claimed = cells.stream().map(BlockPos::immutable)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        String id = "gt_claim_" + CLAIMS.incrementAndGet();
+        com.dwinovo.numen.api.NumenPlugins.register(id, numen -> numen.answer(
+                com.dwinovo.numen.api.Questions.BLOCK_OWNER, id,
+                (level, center, chunkRadius) -> pos -> claimed.contains(pos) ? who : null));
+        com.dwinovo.numen.api.gametest.TestCleanup.whenFinished(helper,
+                () -> com.dwinovo.numen.api.NumenPlugins.roster().withdraw(id));
     }
 
-    /** 拉起同伴,不碰放置记录:场景里的方块对她来说没有主人。 */
-    static NumenPlayer spawnBare(GameTestHelper helper, String name, BlockPos rel, boolean creative) {
+    /** 场地上拉起同伴的公共步骤;creative = 召后切创造档。 */
+    static NumenPlayer spawnAt(GameTestHelper helper, String name, BlockPos rel, boolean creative) {
         ServerLevel level = helper.getLevel();
         BlockPos spawn = helper.absolutePos(rel);
         NumenPlayer companion = withBrain(Bodies.spawn(level.getServer(), UUID.randomUUID(),
@@ -684,7 +680,7 @@ public final class GameTestKit {
     }
 
 
-    /** 一口自然箱子(不是玩家放的),第一格装着 {@code count} 颗钻石。 */
+    /** 一口箱子,第一格装着 {@code count} 颗钻石。 */
     static BlockPos chestWithDiamonds(GameTestHelper helper, BlockPos rel, int count) {
         ServerLevel level = helper.getLevel();
         BlockPos chest = helper.absolutePos(rel);

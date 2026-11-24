@@ -64,9 +64,9 @@ public final class WorkApi {
             + "within reach or by walking up to it; when nothing is, it fails with kind denied, failed or out_of_reach "
             + "and says why — no task starts and whatever you were doing goes on. It returns when the job ends: how "
             + "many cells it dug and how many are still out of reach, the nearest of them as a pos.")
-    @Note("A block in the way of your hand is dug open too when it is natural terrain. A block in the way that needs "
-            + "your owner's consent or that their rules forbid is not touched: the account names it, where it is and "
-            + "why.")
+    @Note("A block in the way of your hand is dug open too when the rules let you break it without asking. A block in "
+            + "the way that needs your owner's consent or that their rules forbid is not touched: the account names it, "
+            + "where it is and why.")
     @Note("Takes the best tool for each block; only digs what your tools actually harvest, and says so when nothing "
             + "qualifies. Asks your owner before breaking a named block their rules want asked about; a refusal stops "
             + "the job with the reason.")

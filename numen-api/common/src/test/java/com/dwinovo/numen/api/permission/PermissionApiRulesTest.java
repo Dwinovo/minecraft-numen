@@ -54,8 +54,8 @@ class PermissionApiRulesTest {
     @Test
     void sheReadsTheWordsARuleCanUseBuiltInAndRegistered() {
         List<String> builtIn = PermissionApi.rules(RuleBook.of(new PermissionStore(), true)).words();
-        assertEquals(List.of("self", "owner", "other", "structure(#minecraft:village)", "nature", "unknown",
-                "block_entity", "named", "near(owner)"), builtIn.subList(0, 9));
+        assertEquals(List.of("self", "owner", "other", "nature", "structure(#minecraft:village)",
+                "block_entity", "named", "near(owner)"), builtIn.subList(0, 8));
         Handle word = Questions.RULE_WORD.register("gt_listed", new RuleWord("is listed", Component.literal("listed"),
                 Set.of(), view -> true));
         try {

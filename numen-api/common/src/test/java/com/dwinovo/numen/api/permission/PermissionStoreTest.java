@@ -75,6 +75,7 @@ class PermissionStoreTest {
     void modesAndTablesSurviveASaveAndLoad() {
         PermissionStore store = new PermissionStore();
         UUID companion = UUID.randomUUID();
+        assertEquals(Mode.ASK, store.modeOf(companion), "没设过就是 ask");
         store.setMode(companion, Mode.BYPASS);
         store.add(Verdict.Kind.DENY, Groups.parse("break(#minecraft:beds)"));
         store.add(Verdict.Kind.ASK, Groups.parse("break(!owner & !block_entity)"));
@@ -82,6 +83,7 @@ class PermissionStoreTest {
 
         PermissionStore loaded = PermissionStore.load(store.save(new CompoundTag(), null), null);
         assertEquals(Mode.BYPASS, loaded.modeOf(companion));
+        assertEquals(Mode.ASK, loaded.modeOf(UUID.randomUUID()));
         assertEquals(store.rules().deny(), loaded.rules().deny());
         assertEquals(store.rules().ask(), loaded.rules().ask());
         assertEquals(store.rules().allow(), loaded.rules().allow());

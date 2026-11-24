@@ -18,16 +18,17 @@ import java.util.Set;
  * 主人答应不了的事:别人的东西。命中即拒,模式、主人层、任务期授权都解不开。
  *
  * <h2>出厂层</h2>
- * 读法:没人的随便挖、随便打;她自己的随便拆(装着东西的除外);主人的、说不清的、村子里的要问;别人的碰不得(硬规则)。
+ * 读法:没主人的随便挖、随便打;她自己的随便拆(装着东西的除外);主人的、村子里的、带方块实体的要问;别人的碰不得(硬规则)。
+ * 是谁的由回答者说({@link Owners}):没人回答方块归属时每一格都是没主人的,写着 {@code owner}、{@code self}、{@code other} 的
+ * 方块规矩碰不上;装了回答方块归属的插件,同样的规矩自己生效。
  * <ul>
  *   <li>allow 行写得比 ask 行窄,它们才轮得到 ask 表(同层 allow 先于 ask):带方块实体的(地牢的刷怪笼与战利品箱、蜂巢、
- *       可疑的沙子)不进任何拆方块的 allow 行,落到 {@code break(block_entity)} 去问;</li>
- *   <li>床、门、活板门、栅栏门不再单列:主人放的已经是 {@code owner},村子里的已经是 {@code structure(#minecraft:village)},
- *       自然生成的门只在结构里;</li>
+ *       可疑的沙子)与村子里的不进拆没主人的方块那一行,落到 {@code break(block_entity)}、
+ *       {@code break(structure(#minecraft:village))} 去问;</li>
  *   <li>右键一格里面没装东西的方块放行:开门、按按钮、睡床、开空容器不动别人的东西;</li>
- *   <li>右键一格装着东西的容器,问的就是"能不能动里面的东西"——打开之后往外拿不再另问:主人的、她自己的放行(她的设计就是用主人的
- *       工作台熔炉箱子;主人想管就加 {@code ask use_block(contents & owner)}),废弃结构里的战利品箱放行,村子里的、自然里的、
- *       说不清是谁的没有一行说到,去问;别人的是硬规则;</li>
+ *   <li>右键一格装着东西的容器,问的就是"能不能动里面的东西"——打开之后往外拿不再另问:不是别人的、不在村子里的放行(她的设计
+ *       就是用主人的工作台熔炉箱子;主人想管就加 {@code ask use_block(contents & owner)}),村子里的没有一行说到,去问;
+ *       别人的是硬规则;</li>
  *   <li>执行只读或只说话的指令:帮助、在线名单、动作消息、私信、队伍消息、种子、随机数。别名随根名认
  *       ({@code tell}、{@code w} 归 {@code msg}),见 {@link Action#command}。其余指令没有一行说到,照旧问。</li>
  * </ul>
@@ -47,17 +48,14 @@ public final class FactoryRules {
 
     /** 出厂 allow 表原文。 */
     public static final List<String> ALLOW = List.of(
-            "break(nature & !block_entity)",
+            "break(nature & !block_entity & !structure(#minecraft:village))",
             "break(self & !contents)",
-            "break(structure & !structure(#minecraft:village) & !block_entity)",
             "place(!hazard_item)",
             "place(hazard_item & !near(owner) & !near(other))",
             "attack(hostile)",
             "attack(nature & !named & !villager)",
             "use_block(!contents)",
-            "use_block(contents & owner)",
-            "use_block(contents & self)",
-            "use_block(contents & structure & !structure(#minecraft:village))",
+            "use_block(contents & !other & !structure(#minecraft:village))",
             "use_entity(nature)",
             "use_entity(self)",
             "command(help)",
@@ -71,7 +69,6 @@ public final class FactoryRules {
     /** 出厂 ask 表原文。同一个动作命中几行时第一行作数。 */
     public static final List<String> ASK = List.of(
             "break(owner)",
-            "break(unknown)",
             "break(structure(#minecraft:village))",
             "break(block_entity)",
             "break(self & contents)",

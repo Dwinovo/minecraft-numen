@@ -3,15 +3,10 @@ package com.dwinovo.numen.api;
 import com.dwinovo.numen.api.entity.Belongings;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.event.NumenEvents;
-import com.dwinovo.numen.api.permission.PlacedBlocks;
 import org.bukkit.event.player.PlayerAttemptPickupItemEvent;
 import net.minecraft.advancements.AdvancementHolder;
-import net.minecraft.core.BlockPos;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.item.ItemEntity;
-import org.bukkit.block.Block;
-import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.craftbukkit.advancement.CraftAdvancement;
 import org.bukkit.craftbukkit.entity.CraftItem;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
@@ -19,7 +14,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.player.PlayerAdvancementDoneEvent;
 
 import java.util.UUID;
@@ -29,7 +23,6 @@ import java.util.UUID;
  * 这里逐条对着做:
  * <ul>
  *   <li>碰到放不下的掉落物 → {@link NumenPlayer#touchedItem};</li>
- *   <li>谁放的这一格 → {@link PlacedBlocks#placedBy};</li>
  *   <li>进度奖励 → {@link NumenEvents#advancementReward}。</li>
  * </ul>
  * 都在 MONITOR 优先级、跳过已取消的:别的插件对这件事做完决定以后,才轮到我们记。
@@ -48,17 +41,6 @@ final class PaperBodyHooks implements Listener {
                 her.touchedItem((ItemEntity) ((CraftItem) event.getItem()).getHandle());
             }
         }
-    }
-
-    /**
-     * 经物品落位的放置(含双格方块,另一半由 {@code placedBy} 自己带出来)。事件触发时方块已经在那一格;被取消的不记。
-     * 命令、活塞、生长写下的不触发这个事件,本来就不是"玩家放的"。
-     */
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    void onPlaced(BlockPlaceEvent event) {
-        Block placed = event.getBlockPlaced();
-        ServerLevel level = ((CraftWorld) placed.getWorld()).getHandle();
-        PlacedBlocks.placedBy(level, new BlockPos(placed.getX(), placed.getY(), placed.getZ()), handle(event.getPlayer()));
     }
 
     /**

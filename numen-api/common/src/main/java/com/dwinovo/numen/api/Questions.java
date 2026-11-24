@@ -2,7 +2,10 @@ package com.dwinovo.numen.api;
 
 import com.dwinovo.numen.api.describe.Describer;
 import com.dwinovo.numen.api.entity.ClickActions;
+import com.dwinovo.numen.api.permission.BlockOwner;
+import com.dwinovo.numen.api.permission.EntityOwner;
 import com.dwinovo.numen.api.permission.Groups;
+import com.dwinovo.numen.api.permission.Owners;
 import com.dwinovo.numen.api.permission.RuleWord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
@@ -42,8 +45,20 @@ public final class Questions {
 
     /**
      * 规则里能写的词:回答者的名字就是那个词({@code contents}、{@code hostile}),回答者说这个词在一个动作的对象上成不成立。
-     * 主人的规则、出厂的规则写的词,除了 Numen API 自带的那几个({@link Groups}:归属、{@code near}、{@code block_entity}、
-     * {@code named}),都是这里登记的;没人登记的词写进规则是解析错误。自带的名字登记不了。见 {@link RuleWord}。
+     * 主人的规则、出厂的规则写的词,除了 Numen API 自带的那几个({@link Groups}:归属、{@code near}、{@code structure}、
+     * {@code block_entity}、{@code named}),都是这里登记的;没人登记的词写进规则是解析错误。自带的名字登记不了。见 {@link RuleWord}。
      */
     public static final Question<RuleWord> RULE_WORD = Question.of("rule_word", Groups.names());
+
+    /**
+     * 这只实体是谁的:每个回答者说它认得的那一类(原版的驯服记录、你的模组自己记的主人),是某个人的就交回那个人。没人回答就是没主人的。
+     * 权限层的归属、她每轮看四周、{@code numen.scan} 里的 owner 问的都是这一圈({@link Owners})。见 {@link EntityOwner}。
+     */
+    public static final Question<EntityOwner> ENTITY_OWNER = Question.of("entity_owner");
+
+    /**
+     * 这一格方块是谁的:知道哪些格子有主人的一方(领地模组的插件)回答,先在主线程上交回她身边一片的查表,之后逐格问那份查表。
+     * 没人回答就是没主人的;原版里方块没有主人,所以没有原版的回答者。见 {@link BlockOwner}。
+     */
+    public static final Question<BlockOwner> BLOCK_OWNER = Question.of("block_owner");
 }

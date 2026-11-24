@@ -21,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -35,18 +36,15 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 /**
  * 规则对游戏动作的匹配:解析与语法在规则核心的单测里({@code permission} 模块);这里钉的是项对着世界读出来的
  * 事实——自带的对象组与属性(谁的、近旁有谁的)、id、标签,名字表对规则文本的把关,以及登记的词({@link RuleWord})怎么进名字表、
- * 怎么被问。需要 MC 注册表。
+ * 怎么被问。方块是谁的由一份归属查表说(格子到那个人),和回答者交回的是同一种东西。需要 MC 注册表。
  */
 @Tag("mc")
 class RuleTest {
 
     private static final UUID OWNER_ID = UUID.fromString("00000000-0000-0000-0000-0000000000aa");
     private static final UUID HER_ID = UUID.fromString("00000000-0000-0000-0000-0000000000bb");
+    private static final UUID STRANGER_ID = UUID.fromString("00000000-0000-0000-0000-0000000000dd");
     private static final Actor HER = new Actor(HER_ID, "Aria", OWNER_ID);
-    private static final PlacedBlocks.Placer OWNERS = new PlacedBlocks.Placer(OWNER_ID, "Steve");
-    private static final PlacedBlocks.Placer HERS = new PlacedBlocks.Placer(HER_ID, "Aria", OWNER_ID);
-    private static final PlacedBlocks.Placer STRANGERS =
-            new PlacedBlocks.Placer(UUID.fromString("00000000-0000-0000-0000-0000000000dd"), "Alex");
 
     private static boolean booted;
     private static final BlockPos POS = new BlockPos(1, 64, 1);
@@ -61,8 +59,13 @@ class RuleTest {
         assumeTrue(booted, "Minecraft 引导不可用,跳过规则钉桩");
     }
 
-    private static Facts facts(FakeWorld world, PlacedBlocks placed, Actor actor) {
-        return new Facts(world, placed, null, actor, Structures.NONE, false, Groups.registered());
+    /** 一份归属:{@code cells} 里写着哪一格是谁的,此后往里加的也读得到;没写的格没人说。 */
+    private static Owners.Blocks owned(Map<BlockPos, UUID> cells) {
+        return Owners.Blocks.of(List.of(cells::get));
+    }
+
+    private static Facts facts(FakeWorld world, Owners.Blocks owners, Actor actor) {
+        return new Facts(world, null, actor, Structures.NONE, owners, Groups.registered());
     }
 
     private static boolean matches(String rule, Action action, Facts facts) {
@@ -91,51 +94,53 @@ class RuleTest {
     // ==================== 匹配 ====================
 
     @Test
-    void ownershipGroupsReadThePlacementRecordRelativeToTheActor() {
+    void ownershipGroupsReadWhoseTheCellIsRelativeToTheActor() {
         FakeWorld world = new FakeWorld();
         world.set(POS, Blocks.COBBLESTONE.defaultBlockState());
-        PlacedBlocks placed = new PlacedBlocks();
+        Map<BlockPos, UUID> cells = new HashMap<>();
+        Owners.Blocks owners = owned(cells);
         Action dig = Action.breakBlock(POS, world.getBlockState(POS));
 
-        assertFalse(matches("break(owner | other | self)", dig, facts(world, placed, HER)), "没有记号:谁都没放过");
-        placed.record(POS, HERS);
-        assertTrue(matches("break(self)", dig, facts(world, placed, HER)));
-        assertFalse(matches("break(owner | other)", dig, facts(world, placed, HER)), "她自己放的不是别人放的");
-        assertTrue(matches("break(!owner & !other)", dig, facts(world, placed, HER)), "取反与与");
+        assertFalse(matches("break(owner | other | self)", dig, facts(world, owners, HER)), "没人说这一格是谁的");
+        assertTrue(matches("break(nature)", dig, facts(world, owners, HER)), "没人说就是没主人的");
+        cells.put(POS, HER_ID);
+        assertTrue(matches("break(self)", dig, facts(world, owners, HER)));
+        assertFalse(matches("break(owner | other | nature)", dig, facts(world, owners, HER)), "她自己的不是别人的");
+        assertTrue(matches("break(!owner & !other)", dig, facts(world, owners, HER)), "取反与与");
 
-        placed.record(POS, OWNERS);
-        assertTrue(matches("break(owner)", dig, facts(world, placed, HER)));
-        assertTrue(matches("break(owner | other)", dig, facts(world, placed, HER)));
-        placed.record(POS, STRANGERS);
-        assertTrue(matches("break(other)", dig, facts(world, placed, HER)));
-        assertFalse(matches("break(owner)", dig, facts(world, placed, HER)));
+        cells.put(POS, OWNER_ID);
+        assertTrue(matches("break(owner)", dig, facts(world, owners, HER)));
+        assertTrue(matches("break(owner | other)", dig, facts(world, owners, HER)));
+        cells.put(POS, STRANGER_ID);
+        assertTrue(matches("break(other)", dig, facts(world, owners, HER)));
+        assertFalse(matches("break(owner)", dig, facts(world, owners, HER)));
 
-        // 同一格,换一个要动手的人:另一只同伴拆她的,是主人名下另一只放的,在主人这一边
-        placed.record(POS, HERS);
-        Actor sister = new Actor(UUID.randomUUID(), "Bea", OWNER_ID);
-        assertTrue(matches("break(owner)", dig, facts(world, placed, sister)));
-        // 不知道是谁动手,也不认识主人:放的人谁都不是
-        assertTrue(matches("break(other)", dig, facts(world, placed, Actor.NOBODY)));
+        // 同一格,换一个要动手的人:另一只同伴拆她的,是主人名下另一只的,在主人这一边
+        cells.put(POS, HER_ID);
+        Actor sister = new Actor(UUID.randomUUID(), "Bea", OWNER_ID, Set.of(HER_ID));
+        assertTrue(matches("break(owner)", dig, facts(world, owners, sister)));
+        // 不知道是谁动手,也不认识主人:那个人对她谁都不是
+        assertTrue(matches("break(other)", dig, facts(world, owners, Actor.NOBODY)));
     }
 
     @Test
-    void nearReadsTheNeighbourhoodByWhoPlacedWhatIsThere() {
+    void nearReadsTheNeighbourhoodByWhoseTheCellsAre() {
         FakeWorld world = new FakeWorld();
-        PlacedBlocks placed = new PlacedBlocks();
+        Map<BlockPos, UUID> cells = new HashMap<>();
+        Owners.Blocks owners = owned(cells);
         Action lava = Action.place(POS.above(), Blocks.AIR.defaultBlockState(), Items.LAVA_BUCKET);
-        world.set(POS, Blocks.COBBLESTONE.defaultBlockState());
-        placed.record(POS, HERS);
-        assertFalse(matches("place(near(owner) | near(other))", lava, facts(world, placed, HER)));
-        assertTrue(matches("place(near(self))", lava, facts(world, placed, HER)));
-        world.set(POS.east(), Blocks.COBBLESTONE.defaultBlockState());
-        placed.record(POS.east(), OWNERS);
-        assertTrue(matches("place(near(owner))", lava, facts(world, placed, HER)));
-        assertFalse(matches("place(near(other))", lava, facts(world, placed, HER)));
-        world.set(POS.west(), Blocks.COBBLESTONE.defaultBlockState());
-        placed.record(POS.west(), STRANGERS);
-        assertTrue(matches("place(near(other))", lava, facts(world, placed, HER)));
+        assertFalse(matches("place(near(self) | near(owner) | near(other))", lava,
+                facts(world, Owners.Blocks.NONE, HER)), "没人回答方块归属:附近谁的都没有");
+        cells.put(POS, HER_ID);
+        assertFalse(matches("place(near(owner) | near(other))", lava, facts(world, owners, HER)));
+        assertTrue(matches("place(near(self))", lava, facts(world, owners, HER)));
+        cells.put(POS.east(), OWNER_ID);
+        assertTrue(matches("place(near(owner))", lava, facts(world, owners, HER)));
+        assertFalse(matches("place(near(other))", lava, facts(world, owners, HER)));
+        cells.put(POS.west(), STRANGER_ID);
+        assertTrue(matches("place(near(other))", lava, facts(world, owners, HER)));
         assertFalse(matches("place(near(other))", Action.place(POS.offset(9, 1, 0), Blocks.AIR.defaultBlockState(),
-                Items.LAVA_BUCKET), facts(world, placed, HER)), "离得远不算");
+                Items.LAVA_BUCKET), facts(world, owners, HER)), "离得远不算");
     }
 
     @Test
@@ -143,7 +148,7 @@ class RuleTest {
         FakeWorld world = new FakeWorld();
         world.set(POS, Blocks.CHEST.defaultBlockState());
         Action dig = Action.breakBlock(POS, world.getBlockState(POS));
-        Facts f = facts(world, new PlacedBlocks(), HER);
+        Facts f = facts(world, Owners.Blocks.NONE, HER);
         assertTrue(matches("break(minecraft:chest)", dig, f));
         assertFalse(matches("break(minecraft:barrel)", dig, f));
         // 标签内容来自数据包,无头引导下手动绑:石头绑进门标签,钉的是"标签项生效"
@@ -175,7 +180,7 @@ class RuleTest {
             FakeWorld world = new FakeWorld();
             world.set(POS, Blocks.STONE.defaultBlockState());
             world.set(POS.east(), Blocks.DIRT.defaultBlockState());
-            Facts f = facts(world, new PlacedBlocks(), HER);
+            Facts f = facts(world, Owners.Blocks.NONE, HER);
             Action stone = Action.breakBlock(POS, world.getBlockState(POS));
             Action dirt = Action.breakBlock(POS.east(), world.getBlockState(POS.east()));
             assertEquals("break(gt_shiny & !owner)", Groups.parse("break( gt_shiny&!owner )").toString());
@@ -188,7 +193,7 @@ class RuleTest {
             // 一行写着它的规则问出来的征询:理由是它的自述,给主人看的是它登记的那一句,撤不回照它登记的动词标
             Gate gate = new Gate(HER, Layers.policy(Mode.ASK, List.of(),
                     new RuleSet(List.of(), List.of(Groups.parse("break(gt_shiny)")), List.of()), RuleSet.EMPTY),
-                    new PlacedBlocks(), Structures.NONE, false, List.of(), Hits.NONE);
+                    Structures.NONE, Owners.Blocks.NONE, List.of(), Hits.NONE);
             Verdict verdict = gate.judge(stone, world);
             assertTrue(verdict.asks());
             assertEquals("is shiny", verdict.cause());
@@ -208,8 +213,8 @@ class RuleTest {
             Rule.Mistake unknown = assertThrows(Rule.Mistake.class, () -> Groups.parse("break(gt_dull)"));
             assertEquals("name", unknown.code());
             assertEquals("gt_dull", unknown.args().get(0));
-            assertTrue(unknown.args().get(2).startsWith("self, owner, other, structure(#minecraft:village), nature, "
-                    + "unknown, block_entity, named, near(owner)"), "自带的在前: " + unknown.args().get(2));
+            assertTrue(unknown.args().get(2).startsWith("self, owner, other, nature, structure(#minecraft:village), "
+                    + "block_entity, named, near(owner)"), "自带的在前: " + unknown.args().get(2));
             assertTrue(List.of(unknown.args().get(2).split(", ")).contains("gt_shiny"),
                     "登记着的词也在认得的名字里: " + unknown.args().get(2));
         } finally {
@@ -229,11 +234,11 @@ class RuleTest {
         Rule rule;
         try {
             rule = Groups.parse("break(gt_shiny)");
-            assertTrue(rule.matches(new ActView(stone, facts(world, new PlacedBlocks(), HER))));
+            assertTrue(rule.matches(new ActView(stone, facts(world, Owners.Blocks.NONE, HER))));
         } finally {
             word.close();
         }
-        assertFalse(rule.matches(new ActView(stone, facts(world, new PlacedBlocks(), HER))), "没人认得这个词了");
+        assertFalse(rule.matches(new ActView(stone, facts(world, Owners.Blocks.NONE, HER))), "没人认得这个词了");
     }
 
     @Test
@@ -249,7 +254,7 @@ class RuleTest {
                     () -> Questions.RULE_WORD.register(builtIn, SHINY), builtIn);
             assertTrue(taken.getMessage().contains("'" + builtIn + "'"), taken.getMessage());
         }
-        assertEquals(Set.of("self", "owner", "other", "structure", "nature", "unknown", "block_entity", "named", "near"),
+        assertEquals(Set.of("self", "owner", "other", "nature", "structure", "block_entity", "named", "near"),
                 Groups.names(), "自带的词就这几个:不认识任何具体东西的");
         assertThrows(IllegalArgumentException.class, () -> Questions.RULE_WORD.register("Shiny", SHINY), "名字不合规");
         assertThrows(IllegalArgumentException.class, () -> Questions.RULE_WORD.register("mod:shiny", SHINY));

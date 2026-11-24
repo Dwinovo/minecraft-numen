@@ -6,39 +6,40 @@ import com.dwinovo.numen.permission.Rule;
 import com.dwinovo.numen.permission.Verb;
 import com.dwinovo.numen.permission.Vocabulary;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.OwnableEntity;
-import net.minecraft.world.entity.player.Player;
 
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 
 /**
  * 规则行里写的名词。这里是 Numen API 自带的那几个,都不用认识任何具体的东西,每个只回答一个通用问题、各自独立、无状态:
  * <ul>
- *   <li><b>归属</b>六类,互斥且完备({@link Whose}):{@code self}、{@code owner}、{@code other}、{@code structure}(可带结构类型
- *       标签,{@code structure(#minecraft:village)})、{@code nature}、{@code unknown};</li>
- *   <li><b>属性</b>:{@code block_entity}、{@code named}、{@code near(<组>)}(放置点附近有没有属于那一组的方块,组是
- *       {@code self}、{@code owner}、{@code other})。</li>
+ *   <li><b>归属</b>四类,互斥且完备({@link Whose}):{@code self}、{@code owner}、{@code other}、{@code nature}。是谁的不在这里认,
+ *       去问回答者({@link Owners});没人回答的就是 {@code nature};</li>
+ *   <li><b>属性</b>:{@code structure}(这一格在某个生成结构件的范围里,可带结构类型标签,{@code structure(#minecraft:village)})、
+ *       {@code block_entity}、{@code named}、{@code near(<组>)}(放置点附近有没有属于那一组的格,组是 {@code self}、
+ *       {@code owner}、{@code other})。</li>
  * </ul>
  * 说得出"这是哪一类东西"的词(村民、敌对生物、容器里有没有东西)不在这里:谁认得谁登记({@link RuleWord},经
  * {@link Questions#RULE_WORD}),原版的那几个由 Numen 登记。规则能用的词就是这两处合起来的:解析、教学式的错误、撤不回的判断都从
  * {@link #vocabulary} 取,全仓只此一处。
  *
- * <p>只陈述事实,不裁决,只在规则行里起作用。线程:只读 {@link Facts#view}、{@link Facts#placed} 与 {@link Facts#structures}
+ * <p>{@code structure} 是自带的词,不交给谁登记:读区块里的结构起点是引擎的通用机制,和标签、方块实体同类,模组的结构也走同一张
+ * 注册表,所以它只有这一个出处,没有第二个人答得了;它带参数,还要在主线程上先取一份快照({@link Structures}),登记的词两样都没有。
+ * 它说的是格子在哪,和这一格是谁的各说各的:结构里的一格可以同时是某个人的。
+ *
+ * <p>只陈述事实,不裁决,只在规则行里起作用。线程:只读 {@link Facts#view}、{@link Facts#owners} 与 {@link Facts#structures}
  * (任何线程可读)。
  */
 public enum Groups {
 
-    /** 她自己的:她放的方块,她驯服的狼与女仆。 */
+    /** 她自己的:回答者说是她的那些——她驯服的狼与女仆。 */
     SELF("self", "belongs to herself", EnumSet.of(Verb.ATTACK)) {
         @Override
         boolean test(ActView v, String arg) {
@@ -46,65 +47,41 @@ public enum Groups {
         }
     },
 
-    /** 主人的:主人或主人名下别的同伴放的方块,他们的宠物,以及他们本人。 */
+    /** 主人这一边的:回答者说是主人或主人名下别的同伴的那些——他们的宠物、他们圈的地,以及他们本人。 */
     OWNER("owner", "belongs to the owner", EnumSet.of(Verb.ATTACK)) {
         @Override
         boolean test(ActView v, String arg) {
             return v.whose() == Whose.OWNER;
         }
-
-        /** 方块说是谁放的(主人看到的是"你的")。 */
-        @Override
-        Component shown(ActView v, String arg) {
-            return Component.translatable(ModLanguageData.Keys.PERMISSION_NAME_PREFIX + ruleName);
-        }
     },
 
-    /** 别的玩家的:别人或别人名下同伴放的方块,别人的宠物与同伴。 */
+    /** 别人的:回答者说是别的玩家或别人名下同伴的那些——别人的宠物、别人圈的地,以及别的玩家与别人的同伴本人。 */
     OTHER("other", "belongs to someone else", EnumSet.of(Verb.ATTACK)) {
         @Override
         boolean test(ActView v, String arg) {
             return v.whose() == Whose.OTHER;
         }
-
-        /** 主人看到的是谁放的:"Steve 放的";记录说不出是谁就说"别人的"。 */
-        @Override
-        Component shown(ActView v, String arg) {
-            PlacedBlocks.Placer placer = v.placer();
-            return placer != null && placer.known()
-                    ? Component.translatable(ModLanguageData.Keys.PERMISSION_PLACED_BY, placer.name())
-                    : super.shown(v, arg);
-        }
     },
 
-    /**
-     * 生成结构的:世界生成时记下的结构件范围里的方块。不带参数是任何结构;带结构类型标签({@code structure(#minecraft:village)})
-     * 只认那一类。
-     */
-    STRUCTURE("structure", "part of a generated structure", Set.of()) {
-        @Override
-        boolean test(ActView v, String arg) {
-            if (v.whose() != Whose.STRUCTURE) {
-                return false;
-            }
-            return arg == null || v.facts().structures().pieceAt(v.action().pos()).structure()
-                    .is(TagKey.create(Registries.STRUCTURE, ResourceLocation.parse(arg.substring(1))));
-        }
-    },
-
-    /** 没人的:地形自己长的,种类在自然方块表里;野生的、没主人的实体。 */
-    NATURE("nature", "natural, nobody's", Set.of()) {
+    /** 没主人的:没有哪个回答者说它是谁的——原版里的每一格方块,野生的实体。 */
+    NATURE("nature", "nobody's", Set.of()) {
         @Override
         boolean test(ActView v, String arg) {
             return v.whose() == Whose.NATURE;
         }
     },
 
-    /** 说不清的:不在记录里、不在结构里、也不是地形会长出来的方块——装模组前盖的木屋多半落在这里。 */
-    UNKNOWN("unknown", "of unknown origin", Set.of()) {
+    /**
+     * 在生成结构里:这一格在世界生成时记下的某个结构件的范围里。不带参数是任何结构;带结构类型标签
+     * ({@code structure(#minecraft:village)})只认那一类。
+     */
+    STRUCTURE("structure", "inside a generated structure", Set.of()) {
         @Override
         boolean test(ActView v, String arg) {
-            return v.whose() == Whose.UNKNOWN;
+            BlockPos pos = v.action().pos();
+            Structures.Piece piece = pos == null ? null : v.facts().structures().pieceAt(pos);
+            return piece != null && (arg == null
+                    || piece.structure().is(TagKey.create(Registries.STRUCTURE, ResourceLocation.parse(arg.substring(1)))));
         }
     },
 
@@ -122,18 +99,31 @@ public enum Groups {
         }
     },
 
-    /** 放置点附近有没有属于那一组的方块:{@code near(owner)}、{@code near(other)}、{@code near(self)},只看放置记录。 */
+    /**
+     * 放置点附近有没有属于那一组的格:{@code near(owner)}、{@code near(other)}、{@code near(self)},问的是方块归属那一份
+     * ({@link Facts#owners})。没人回答方块归属时哪一组都不成立,不扫。
+     */
     NEAR("near", "next to blocks that belong to someone", Set.of()) {
         @Override
         boolean test(ActView v, String arg) {
-            Action a = v.action();
+            BlockPos center = v.action().pos();
             Facts f = v.facts();
-            if (a.pos() == null || f.placed() == null) {
+            if (center == null || f.owners().isEmpty()) {
                 return false;
             }
             Whose group = NEAR_GROUPS.get(arg);
-            return f.placed().anyPlacedWithin(a.pos(), NEAR_RADIUS, f.view(),
-                    placer -> Whose.ofPlacer(placer, f.actor()) == group);
+            BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+            for (int dx = -NEAR_RADIUS; dx <= NEAR_RADIUS; dx++) {
+                for (int dy = -NEAR_RADIUS; dy <= NEAR_RADIUS; dy++) {
+                    for (int dz = -NEAR_RADIUS; dz <= NEAR_RADIUS; dz++) {
+                        cursor.set(center.getX() + dx, center.getY() + dy, center.getZ() + dz);
+                        if (Whose.ofBlock(cursor, f) == group) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
         }
 
         @Override
@@ -143,7 +133,7 @@ public enum Groups {
         }
     };
 
-    /** {@code near} 的邻域:放置点周围这么多格(切比雪夫距离)内有玩家放的方块就算。 */
+    /** {@code near} 的邻域:放置点周围这么多格(切比雪夫距离)内有那一组的格就算(含放置点自己)。 */
     public static final int NEAR_RADIUS = 3;
 
     /** {@code near(<组>)} 认的三个归属;判断时直接查,不每次拼名字再解析枚举。 */
@@ -168,32 +158,12 @@ public enum Groups {
         return ruleName;
     }
 
-    /**
-     * 同一句自述给主人看的那一版,主人的客户端按自己的语言显示("你的")。按这个动作与事实说,
-     * 说得出具体的就说具体的(谁放的)。
-     */
+    /** 同一句自述给主人看的那一版,主人的客户端按自己的语言显示("你的")。 */
     Component shown(ActView v, String arg) {
         return Component.translatable(ModLanguageData.Keys.PERMISSION_NAME_PREFIX + ruleName);
     }
 
     abstract boolean test(ActView view, String arg);
-
-    /**
-     * 实体的主人是谁:原版 {@link OwnableEntity} 记的主人 UUID(狼、猫、鹦鹉,以及继承原版驯服的模组宠物,比如车万女仆);
-     * 没有主人或不是可驯服的实体为 null。"这只是谁的"只在这里读——对象组与扫描实体都问它。
-     *
-     * <p>只有玩家做主人才算有主:主人是世界里一只活着的非玩家(唤魔者的恼鬼、召唤者的随从)时,它没有人的主人,按没主算。
-     * 找不到这个主人(离线的玩家、没加载的区块)按人算——不知道是谁的就当是人的。
-     */
-    public static UUID ownerOf(Entity entity) {
-        if (!(entity instanceof OwnableEntity o) || o.getOwnerUUID() == null) {
-            return null;
-        }
-        UUID owner = o.getOwnerUUID();
-        boolean mobOwner = entity.level() instanceof ServerLevel level
-                && level.getEntity(owner) instanceof Entity found && !(found instanceof Player);
-        return mobOwner ? null : owner;
-    }
 
     /** 按规则文本里的名字取自带的那一个;不是自带的名字返回 null。 */
     public static Groups byName(String name) {

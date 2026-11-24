@@ -120,7 +120,7 @@ public final class Rule {
         return out;
     }
 
-    /** 命中时给回执的短语:各理由的自述,如 {@code placed by a player}、{@code is #minecraft:beds}。 */
+    /** 命中时给回执的短语:各理由的自述,如 {@code belongs to the owner}、{@code is #minecraft:beds}。 */
     public String describe(Act act) {
         String described = reasons(act).stream().map(Atom::description).filter(d -> !d.isEmpty())
                 .collect(Collectors.joining(", "));

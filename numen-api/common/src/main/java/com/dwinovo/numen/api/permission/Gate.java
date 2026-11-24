@@ -12,45 +12,42 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 一次裁决用的快照:模式、两层规则、所在维度的放置记录、主人答应下来的任务期授权、此刻登记着的词。
+ * 一次裁决用的快照:模式、两层规则、她身边的结构件范围与方块归属、主人答应下来的任务期授权、此刻登记着的词。
  * 主线程建({@link Permission#gateFor}),之后任何线程只读——寻路工作线程拿着它给每条边定价。
  *
  * <p>判定顺序与出厂层、主人层怎么叠都在规则核心({@link Policy});这里只做游戏适配:把一下动作和世界此刻的
  * 事实({@link Facts})接成规则核心问对象的口({@link ActView}),并把任务期授权({@link ConsentItem#covers})
  * 接到核心的授权口上。
  *
- * <p>两种问法,由调用方按所在线程选:{@link #judge} 只读给定的视图与放置记录,任何线程可调,
+ * <p>两种问法,由调用方按所在线程选:{@link #judge} 只读给定的视图与这份快照,任何线程可调,
  * 要活读世界的信号按保守值答;{@link #judgeLive} 主线程专用,信号可以读方块实体内容。
  */
 public final class Gate {
 
     private final Actor actor;
     private final Policy policy;
-    private final PlacedBlocks placed;
     private final Structures structures;
-    private final boolean unknownAsOther;
+    private final Owners.Blocks owners;
     private final List<ConsentItem> granted;
     private final Hits hits;
     /** 建这份快照时登记着的词:规则里不是自带的词在这里查。 */
     private final Map<String, RuleWord> words;
 
     /**
-     * @param actor      要动手的同伴是谁、她的名字与主人;测试可传 {@link Actor#NOBODY}
+     * @param actor      要动手的同伴是谁、她的名字、她的主人与主人名下别的同伴;测试可传 {@link Actor#NOBODY}
      * @param policy     模式、硬规则({@link FactoryRules#hard},服主关掉了是空表)与两层规则:先主人自己写的
      *                   ({@link PermissionStore#rules}),后出厂的({@link FactoryRules#layer})
-     * @param placed     她所在维度的放置记录:这份快照裁决的动作都发生在那里
      * @param structures 她身边世界生成时记下的结构件范围
-     * @param unknownAsOther 说不清是谁的方块按别人的算({@link PermissionConfig#unknownAsOther})
+     * @param owners     她身边的方块归属({@link Owners#around});没人回答方块归属时是 {@link Owners.Blocks#NONE}
      * @param granted    主人答应下来的任务期授权({@link ConsentDesk#granted})
      * @param hits       真动手的裁决({@link #judgeLive})定下答复的那一行规则记一次命中
      */
-    public Gate(Actor actor, Policy policy, PlacedBlocks placed, Structures structures, boolean unknownAsOther,
-                List<ConsentItem> granted, Hits hits) {
+    public Gate(Actor actor, Policy policy, Structures structures, Owners.Blocks owners, List<ConsentItem> granted,
+                Hits hits) {
         this.actor = actor;
         this.policy = policy;
-        this.placed = placed;
         this.structures = structures;
-        this.unknownAsOther = unknownAsOther;
+        this.owners = owners;
         this.granted = List.copyOf(granted);
         this.hits = hits;
         this.words = Groups.registered();
@@ -60,7 +57,7 @@ public final class Gate {
         return policy.mode();
     }
 
-    /** 任何线程:只读 {@code view}(活世界或搜索快照)与放置记录裁决一个动作。 */
+    /** 任何线程:只读 {@code view}(活世界或搜索快照)与这份快照裁决一个动作。 */
     public Verdict judge(Action action, BlockGetter view) {
         return decide(action, facts(view, null));
     }
@@ -88,7 +85,7 @@ public final class Gate {
     }
 
     private Facts facts(BlockGetter view, ServerLevel live) {
-        return new Facts(view, placed, live, actor, structures, unknownAsOther, words);
+        return new Facts(view, live, actor, structures, owners, words);
     }
 
     private Verdict decide(Action action, Facts facts) {

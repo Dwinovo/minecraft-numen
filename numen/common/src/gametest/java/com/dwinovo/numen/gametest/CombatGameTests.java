@@ -402,7 +402,7 @@ public class CombatGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
     public static void a_players_hit_knocks_her_back(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        NumenPlayer companion = spawnBare(helper, "knocked_by_player", new BlockPos(8, 2, 8), false);
+        NumenPlayer companion = spawnAt(helper, "knocked_by_player", new BlockPos(8, 2, 8), false);
         var attacker = presentPlayer(helper, null, "gametest_puncher");
         Vec3 start = companion.position();
         attacker.teleportTo(level, start.x - 1.0, start.y, start.z, 270.0f, 0.0f);
@@ -430,7 +430,7 @@ public class CombatGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
     public static void a_zombies_hit_knocks_her_back(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        NumenPlayer companion = spawnBare(helper, "knocked_by_zombie", new BlockPos(8, 2, 8), false);
+        NumenPlayer companion = spawnAt(helper, "knocked_by_zombie", new BlockPos(8, 2, 8), false);
         Zombie zombie = still(helper, new BlockPos(7, 2, 8));
         Vec3 start = companion.position();
         boolean[] hit = {false};

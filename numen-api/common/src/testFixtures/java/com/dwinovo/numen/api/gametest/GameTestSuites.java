@@ -1,6 +1,5 @@
 package com.dwinovo.numen.api.gametest;
 
-import com.dwinovo.numen.api.permission.PlacedBlocks;
 import com.dwinovo.numen.api.program.ServerPrograms;
 import com.mojang.logging.LogUtils;
 import java.io.IOException;
@@ -16,7 +15,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
-import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
@@ -27,8 +25,6 @@ import net.minecraft.gametest.framework.GlobalTestReporter;
 import net.minecraft.gametest.framework.LogTestReporter;
 import net.minecraft.gametest.framework.StructureUtils;
 import net.minecraft.gametest.framework.TestFunction;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
 import org.slf4j.Logger;
 
 /**
@@ -223,28 +219,10 @@ public final class GameTestSuites {
         String name = owner + "." + method.getName().toLowerCase();
         String template = test.template().isEmpty() ? suite + ":" + name
                 : test.template().contains(":") ? test.template() : suite + ":" + test.template();
-        Consumer<GameTestHelper> body = helper -> {
-            forgetMarks(helper);
-            invoke(method, helper);
-        };
+        Consumer<GameTestHelper> body = helper -> invoke(method, helper);
         return new TestFunction(test.batch(), suite + "." + name, template,
                 StructureUtils.getRotationForRotationSteps(test.rotationSteps()), test.timeoutTicks(), test.setupTicks(),
                 test.required(), test.manualOnly(), test.attempts(), test.requiredSuccesses(), test.skyAccess(), body);
-    }
-
-    /**
-     * 这个场景占的地方上,别的用例留下的放置记号全抹掉。场景是整块清掉再摆的,记号表(随世界存的 {@link PlacedBlocks})不会跟着清;
-     * 同一处后来摆上的石头会被当成"建造的方块",走路规则不许挖({@code Walking.spec}),用例就挖不到本该挖的格子。
-     */
-    private static void forgetMarks(GameTestHelper helper) {
-        PlacedBlocks marks = PlacedBlocks.of(helper.getLevel());
-        BlockState anything = Blocks.STONE.defaultBlockState();
-        for (BlockPos pos : BlockPos.betweenClosed(BlockPos.containing(helper.getBounds().getMinPosition()),
-                BlockPos.containing(helper.getBounds().getMaxPosition()))) {
-            if (marks.placerAt(pos, anything) != null) {
-                marks.forget(pos.immutable());
-            }
-        }
     }
 
     private static void requireStatic(Method method) {

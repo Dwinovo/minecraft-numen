@@ -4,7 +4,7 @@ import com.dwinovo.numen.nav.Terrain;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.permission.Action;
 import com.dwinovo.numen.api.permission.Permission;
-import com.dwinovo.numen.api.permission.PlacedBlocks;
+import com.dwinovo.numen.build.BuildStates;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -67,7 +67,7 @@ final class BuildCellRules {
      * 起就已经注定动不了。
      *
      * <p>让路的档位管"石头挡路要不要顶掉";这一格上的东西许不许清、这一格许不许放,
-     * 问权限层——玩家的箱子、玩家放的墙、观察模式,都是它的裁决,这里不另设判据。
+     * 问权限层——带方块实体的箱子、别人的地、观察模式,都是它的裁决,这里不另设判据。
      * 要问主人的在开工前整批问过({@link #actionsFor});主人答应的这时已是放行,拒绝的仍不许。
      * 双格方块连另一半一起问:任一半不许清就都不动。
      */
@@ -120,7 +120,7 @@ final class BuildCellRules {
         if (!isAirTarget(target)) {
             actions.add(Action.place(pos, current, target.item()));
         }
-        BlockPos other = PlacedBlocks.otherHalfOf(pos, target.desiredState());
+        BlockPos other = BuildStates.otherHalfOf(pos, target.desiredState());
         if (other != null) {
             BlockState otherState = peek(other);
             if (!otherState.isAir()) {
@@ -162,7 +162,7 @@ final class BuildCellRules {
         if (peek(pos).getDestroySpeed(level, pos) == -1) {
             return true;
         }
-        BlockPos other = PlacedBlocks.otherHalfOf(pos, desired);
+        BlockPos other = BuildStates.otherHalfOf(pos, desired);
         return other != null && peek(other).getDestroySpeed(level, other) == -1;
     }
 

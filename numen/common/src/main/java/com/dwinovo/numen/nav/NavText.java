@@ -572,7 +572,7 @@ public final class NavText {
 
     /**
      * 计划要动什么(预算账),与实际账同一种写法:要挖的格按方块归堆,要问主人的缀上为什么问;要放的格按方块归堆。例如
-     * {@code break 2 oak_planks (120,64,-33; 120,65,-33) needing consent (placed by a player); place 1 cobblestone (121,64,-33)}。
+     * {@code break 2 oak_planks (120,64,-33; 120,65,-33) needing consent (belongs to the owner); place 1 cobblestone (121,64,-33)}。
      * 一格都不动是 {@code no terrain change}。
      *
      * @param digs   要挖的格 → 那里规划时的方块,按先后

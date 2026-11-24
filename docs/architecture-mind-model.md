@@ -296,12 +296,12 @@ interface Reflex {
 `attack(entity)`、`use_block(pos)`、`use_entity(entity)`、`drop(item)`、
 `command(整行)`。不带工具名、不带 JSON。从容器里拿东西不是单独的动作,归右键打开它的那一下 `use_block`。
 
-**对象组与属性。** 规则判的是"这东西是谁的"。方块恰好属于六类之一,按次序判、判出来就停:`self`(放置记录:她放的)、
-`owner`(放置记录:主人或主人名下别的同伴放的)、`other`(别的玩家或别人名下同伴放的)、`structure`(世界生成时记下的结构件范围,
-`structure(#minecraft:village)` 按结构类型分)、`nature`(种类在数据标签 `numen:natural` 里;树叶要不持久,原木要连着不持久的树叶)、
-`unknown`(其余;专用服务器上按 `other` 算,服主可在 `config/numen/server/server.json` 的 `unknownAsOther` 改)。实体用 `self`、`owner`、`other`、`nature`,
-认的是驯服记录。放置记录的放的人只在 `PlacedBlocks.placedBy` 一处认。属性分两处:不用认识任何具体东西的 `block_entity`、`named`、
-`near(<组>)` 与六个归属组是 Numen API 自带的(`Groups`);说得出"这是哪一类东西"的由认得的一方登记(`RuleWord`,经 `Questions.RULE_WORD`),
+**对象组与属性。** 规则判的是"这东西是谁的"。方块与实体都恰好属于四类之一:`self`(她自己的)、`owner`(主人或主人名下别的同伴的)、
+`other`(别的玩家或别人名下同伴的)、`nature`(没主人的)。是谁的权限层不认、也不记账,去问:回答者经 `Questions.ENTITY_OWNER`、
+`Questions.BLOCK_OWNER` 登记,说"是某个人的";没人回答就是 `nature`;几个回答者说的不是同一个人取最严的(别人 > 主人 > 自己)。问一圈与合并在
+`Owners` 一处,把那个人换算成四类在 `Whose`。实体的回答由 Numen 登记(原版的驯服记录);方块在原版里没有主人,Numen 不答,留给领地模组的插件。
+属性分两处:不用认识任何具体东西的 `structure`(这一格在不在生成结构件的范围里,`structure(#minecraft:village)` 按结构类型分)、`block_entity`、`named`、
+`near(<组>)` 与四个归属组是 Numen API 自带的(`Groups`);说得出"这是哪一类东西"的由认得的一方登记(`RuleWord`,经 `Questions.RULE_WORD`),
 原版的 `contents`(只在主线程读;搜索线程按"有")、`villager`、`hostile`、`hazard_item` 由 Numen 登记。规则认得的名字在 `Groups.vocabulary`
 一处合起来,交给规则核心的 `Vocabulary`。右键手里的东西会对世界做什么同样是问出来的(`Questions.CLICK`),不按物品的类认。
 
@@ -323,7 +323,7 @@ deny 行与主人选的 observe;其余一律问。身体的物理与安全判断
 允许与记住都盖得住,征询卡片把这些清单项标出"撤不回"。
 
 **裁决(Verdict)。** 唯一入口 `Permission`:主线程 `judge(companion, action)` 对活世界问一个动作;
-`gateFor(companion)` 取一份快照(模式、规则、放置记录、任务期授权)交给搜索线程逐格问。答复
+`gateFor(companion)` 取一份快照(模式、规则、她身边的结构件范围与方块归属、任务期授权)交给搜索线程逐格问。答复
 三种:放行;拒绝并附理由;需要主人同意并附理由。
 
 **模式(Mode)。** 每个同伴一个,存在主人的 SavedData 里:`ask`(默认,走规则表)、`bypass`

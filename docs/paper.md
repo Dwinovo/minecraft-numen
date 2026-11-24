@@ -59,7 +59,6 @@ common 今天经 Mixin 访问器读写原版的私有成员:开船(`Boat.control
 | 她这一挖的掉落物 | `Drops.breakStarts/added/breakEnds` | `ServerPlayerGameMode.destroyBlock` 包住、`ServerLevel.addFreshEntity` | `BlockDropItemEvent`(在 `destroyBlock` 里触发,带这一挖生成的全部掉落物) |
 | 掉落物被捡、并堆、被毁 | `Drops.taken/merged/hurt` | `LivingEntity.take`、`ItemEntity.merge/hurt` | `EntityPickupItemEvent`、`ItemMergeEvent`、`EntityDamageEvent` |
 | 碰到掉落物但背包放不下 | `NumenPlayer.touchedItem` | `ItemEntity.playerTouch` | `PlayerAttemptPickupItemEvent`(在归属检查之前触发,自己判归属) |
-| 谁放的这一格 | `PlacedBlocks.placedBy` | `BlockItem.place` | `BlockPlaceEvent`、`BlockMultiPlaceEvent` |
 | 进度奖励 | `NumenEvents.advancementReward` | 包住 `PlayerAdvancements.award` | `PlayerAdvancementDoneEvent`(在发奖励之前触发:事件里拍快照,下一刻比) |
 | 方块变了 | `BlockSearch.onBlockChange` | `ServerLevel.onBlockStateChange` | 没有通用事件,见下 |
 | 发给她的包(含玩家打她的击退:发给她自己、当时 `hurtMarked` 为真的速度包,下一刻应用) | `FakeClient.onOutbound` | `ServerCommonPacketListenerImpl.send`(NeoForge 在 `Connection.send` 之前就会因频道检查抛异常,只能在这里截) | `FakeConnection.send`(Paper 的发送最终落在这里) |
@@ -111,7 +110,7 @@ common 今天经 Mixin 访问器读写原版的私有成员:开船(`Boat.control
 
 - 内置内容(`numen/` 下的技能、模块、人设)从插件 jar 里读:把 jar 当 zip 文件系统打开,交给 `Shipped.bundle`,同步规则不变。
 - 语言文件打进插件 jar,`ServerLang` 照旧读。
-- 标签(`numen:natural`、`tame_foods` 等)是数据包内容,Paper 1.21.1 的插件没有直接带数据包的 API,怎么装进去待实测(§十二)。
+- 标签(`numen:tame_foods` 等)是数据包内容,Paper 1.21.1 的插件没有直接带数据包的 API,怎么装进去待实测(§十二)。
 
 ## 十一、验证
 
@@ -156,7 +155,7 @@ Paper、Leaves、spark、WorldEdit、PacketEvents、ProtocolLib 是 GPL,Citizens
   那在 Paper 上编不出来)。`Services.load` 多一个按类加载器取的重载:Paper 上每个插件一个类加载器,Numen 的服务实现不在 Numen API 的加载器里。
 - **标签**:Paper 1.21.1 的插件没有带数据包的 API,但有标签的生命周期事件 `LifecycleEvents.TAGS.preFlatten`(起服与 `/reload` 都会触发),只认引导阶段(`PluginBootstrap`)登记的处理器。
   做法是插件 jar 里本来就有的数据包写法的标签文件(手写的在 common 资源里,数据生成的由 `datagenAll` 产出,Paper 的 jar 取 NeoForge 子项目的生成目录)
-  由 `PluginTags` 在引导阶段读出来加进去,内容只有一个出处。只支持方块与物品两个注册表。验证:控制台 `execute if block … #numen:natural`、`clear @a #numen:tame_foods 0` 解析通过,不存在的标签报 Unknown tag。
+  由 `PluginTags` 在引导阶段读出来加进去,内容只有一个出处。只支持方块与物品两个注册表。验证:控制台 `clear @a #numen:tame_foods 0` 解析通过,不存在的标签报 Unknown tag。
   联想到的另一种做法(在 `world/datapacks` 里写数据包文件、要重启或 `/reload`)主流插件里常见,但要写服主的世界目录,这里没采用。
 - **链接检查默认对着编译用的开发包里的服务端**(`-PlinkCheckPaperServer=` 可换成实际运行的 `versions/<mc>/paper-<mc>.jar`);Paper 的 Paperclip 里是二进制补丁不是 jar,所以不解包。
   它读三样东西:成品、原版服务端 jar(取 common 编译用的那份,是"本来是覆写"的依据)、Paper 服务端 jar。对原版 jar 当目标时它会报出 `PlayerList.remove` 那类差异。
@@ -184,7 +183,7 @@ Paper、Leaves、spark、WorldEdit、PacketEvents、ProtocolLib 是 GPL,Citizens
 - **掉落物的几处挂点**:`BlockDropItemEvent` 里包住 `breakStarts/added/breakEnds`(Paper 在这一挖期间把进世界的物品实体都截下来交给它,事件之后才真进世界);`EntityPickupItemEvent`(件数减掉之前)→ `taken`;
   `ItemMergeEvent` 在并之前触发,按原版的并法算好并完以后两堆各剩几件,走 `Drops.merged` 的五参数写法;掉落物被打没了,`EntityDamageEvent` 触发在扣血**之前**,`Drops.hurt` 的"打完再看 `isRemoved`"用不上,
   所以 common 加了入口 `Drops.destroyed`(平台自己断定"被这一下打没了":`Item.getHealth()` 按原版扣法 `(int)(血量 - 伤害)` 扣完不超过 0),`hurt` 是模组上看得到 `isRemoved` 的那一种。不用 `EntityRemoveEvent`:它对每个实体移除都触发,Bukkit 把它标成会拖慢服务器,启动时给服主一行警告。实测岩浆、火、仙人掌、爆炸四种都对。**不能把这些往后拖一刻**:她的账在她自己的玩家刻里就可能结算,拖了会记成"不见了"(实测过:岩浆里的掉落物拖了就是 gone,不拖是"烧没了")。
-  `PlayerAttemptPickupItemEvent` → `touchedItem`(事件只在拾取冷却已过时触发、在归属检查之前,归属自己判);`BlockPlaceEvent` → `placedBy`(双格方块的另一半它自己带出来);
+  `PlayerAttemptPickupItemEvent` → `touchedItem`(事件只在拾取冷却已过时触发、在归属检查之前,归属自己判);
   `PlayerAdvancementDoneEvent` 在发奖励之前,事件里拍背包快照,同一刻末尾再比;方块变化:事件里只记"哪一格、之前是什么",刻末读此刻真正是什么、变了才报,报上去的前后状态是真的。
   `FakeConnection.send` 经 `deliverOutboundTo` 交给 `FakeClient.onOutbound`(在 `admit` 里接上,加入时发出的传送编号也看得到)。
 - **翻译源**:Paper 编码组件时按玩家语言渲染(`PacketEncoder` 的语言来自客户端报上来的 `ClientInformation`,原版客户端在配置阶段就发;MCProtocolLib 默认不发,测试要自己发),NMS 的可翻译组件和 API 的一样走 `GlobalTranslator`。

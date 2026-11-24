@@ -4,7 +4,6 @@
   "package": "com.dwinovo.numen.api.mixin.inject",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "BlockItemPlaceMixin",
     "BoatAccessor",
     "ItemEntityTouchMixin",
     "PlayerAdvancementsRewardMixin",

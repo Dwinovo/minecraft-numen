@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.agent.request;
 
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.permission.Groups;
+import com.dwinovo.numen.api.permission.Owners;
 import com.dwinovo.numen.api.sdk.CompassUtil;
 import com.dwinovo.numen.api.sdk.EntityLabel;
 import com.dwinovo.numen.api.sdk.NearbyEntities;
@@ -63,7 +63,7 @@ public record Nearby(List<Line> lines, List<Count> counts) {
 
     /**
      * 她此刻四周的实体。和她有关系的:盯着她的(怪的攻击目标是她)、她正在打、用、骑着的、她名下的(她驯服的狼、女仆;
-     * 判据和 {@code numen.scan.entities} 的 owner 是同一处,{@link Groups#ownerOf})。
+     * 是谁的和 {@code numen.scan.entities} 的 owner 问的是同一处,{@link Owners#of})。
      */
     public static Nearby of(NumenPlayer her) {
         Set<UUID> engaged = new HashSet<>();
@@ -71,7 +71,7 @@ public record Nearby(List<Line> lines, List<Count> counts) {
         List<Candidate> candidates = new ArrayList<>();
         for (Entity e : NearbyEntities.within(her, NearbyEntities.RADIUS, Entity.class, Entity::isAlive)) {
             boolean targetsHer = e instanceof Mob mob && mob.getTarget() == her;
-            boolean related = targetsHer || engaged.contains(e.getUUID()) || her.getUUID().equals(Groups.ownerOf(e));
+            boolean related = targetsHer || engaged.contains(e.getUUID()) || Owners.of(e).contains(her.getUUID());
             Rank rank = related ? Rank.RELATED
                     : e instanceof Enemy ? Rank.HOSTILE
                     : e instanceof Player ? Rank.PLAYER

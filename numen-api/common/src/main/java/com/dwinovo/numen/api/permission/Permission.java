@@ -7,9 +7,11 @@ import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -25,20 +27,35 @@ public final class Permission {
     private Permission() {}
 
     /**
-     * 主线程:取这只同伴此刻的裁决快照——模式、主人层与出厂层规则、所在维度的放置记录、主人答应下来的任务期授权。
+     * 主线程:取这只同伴此刻的裁决快照——模式、主人层与出厂层规则、她身边的结构件范围与方块归属、主人答应下来的任务期授权。
      * 快照不可变,任何线程可读。
      */
     public static Gate gateFor(NumenPlayer companion) {
         ServerLevel level = (ServerLevel) companion.level();
         PermissionConfig config = PermissionConfig.of(companion.getServer());
-        Actor actor = new Actor(companion.getUUID(), companion.getName().getString(), companion.getOwnerUuid());
         UUID owner = companion.getOwnerUuid();
+        Actor actor = new Actor(companion.getUUID(), companion.getName().getString(), owner, siblingsOf(companion));
         PermissionStore store = owner == null ? null : PermissionStore.of(companion.getServer(), owner);
         Policy policy = Layers.policy(modeOf(companion), config.hardRules() ? FactoryRules.hard() : List.of(),
                 store == null ? RuleSet.EMPTY : store.rules(), FactoryRules.layer());
-        return new Gate(actor, policy, PlacedBlocks.of(level),
+        return new Gate(actor, policy,
                 Structures.capture(level, companion.blockPosition(), Structures.CAPTURE_RADIUS_CHUNKS),
-                config.unknownAsOther(), ConsentDesk.of(companion).granted(), store == null ? Hits.NONE : store::hit);
+                Owners.around(level, companion.blockPosition(), Structures.CAPTURE_RADIUS_CHUNKS),
+                ConsentDesk.of(companion).granted(), store == null ? Hits.NONE : store::hit);
+    }
+
+    /** 主人名下此刻在游戏里的别的同伴;还没有主人是空集。 */
+    private static Set<UUID> siblingsOf(NumenPlayer companion) {
+        UUID owner = companion.getOwnerUuid();
+        Set<UUID> siblings = new HashSet<>();
+        if (owner != null) {
+            for (ServerPlayer body : companion.getServer().getPlayerList().getPlayers()) {
+                if (body != companion && body instanceof NumenPlayer other && other.isOwnedByPlayer(owner)) {
+                    siblings.add(other.getUUID());
+                }
+            }
+        }
+        return siblings;
     }
 
     /** 主线程:对活世界裁决一个动作。 */

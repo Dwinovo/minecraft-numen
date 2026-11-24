@@ -86,7 +86,7 @@ public class PermissionPanelGameTests {
         ServerLevel level = helper.getLevel();
         BlockPos stoneRel = new BlockPos(6, 2, 5);
         level.setBlockAndUpdate(helper.absolutePos(stoneRel), Blocks.STONE.defaultBlockState());
-        NumenPlayer companion = spawnBare(helper, "gametest_panelist", new BlockPos(4, 2, 5), true);
+        NumenPlayer companion = spawnAt(helper, "gametest_panelist", new BlockPos(4, 2, 5), true);
         ServerPlayer owner = clientOwner(helper, companion, "gametest_panel_owner");
         PermissionStore store = PermissionStore.of(owner.getServer(), owner.getUUID());
         String rule = "break(nature & minecraft:stone)";
@@ -132,7 +132,7 @@ public class PermissionPanelGameTests {
     /** 她加了一行 deny:不等主人来要,在线的主人面板收到带新行的表,来源标成她、带着她说的理由。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission_panel")
     public static void a_row_she_adds_is_pushed_to_the_owners_panel(GameTestHelper helper) {
-        NumenPlayer companion = spawnBare(helper, "gametest_scribbler", new BlockPos(4, 2, 5), false);
+        NumenPlayer companion = spawnAt(helper, "gametest_scribbler", new BlockPos(4, 2, 5), false);
         ServerPlayer owner = clientOwner(helper, companion, "gametest_push_owner");
         ToolRun deny = lua(companion, "return numen.permission.deny(\"break(owner & minecraft:chest)\", "
                 + "{why = \"leave the chests\"})");

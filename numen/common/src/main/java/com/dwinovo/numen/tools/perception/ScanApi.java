@@ -10,7 +10,7 @@ import com.dwinovo.numen.api.sdk.NearbyEntities;
 import com.dwinovo.numen.tools.ScanOps;
 import com.dwinovo.numen.tools.ToolParse;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.permission.Groups;
+import com.dwinovo.numen.api.permission.Owners;
 import com.dwinovo.numen.api.sdk.BlockAt;
 import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.api.sdk.CellOrEntity;
@@ -214,21 +214,21 @@ public final class ScanApi {
     }
 
     /**
-     * 这只是谁的:{@code you}(她自己驯服的)、{@code your owner}(她主人的)、别的玩家的名字,名字查不到就是 UUID;没有主人为 null。
-     * 主人只从权限层的同一处读({@link Groups#ownerOf}),{@code self_owned} 与这里说的是同一回事。
+     * 这只是谁的:{@code you}(她自己的)、{@code your owner}(她主人的)、别的玩家的名字,名字查不到就是 UUID;没有主人为 null。
+     * 主人和权限层问的是同一处({@link Owners#of})。几个回答者说的不是同一个人时只说一个:别的玩家先于她的主人,主人先于她自己。
      */
     private static String ownerOf(Entity e, NumenPlayer self) {
-        UUID owner = Groups.ownerOf(e);
-        if (owner == null) {
-            return null;
+        String said = null;
+        for (UUID owner : Owners.of(e)) {
+            if (owner.equals(self.getUUID())) {
+                said = said == null ? "you" : said;
+            } else if (self.isOwnedByPlayer(owner)) {
+                said = "your owner";
+            } else {
+                return EntityLabel.shown(owner, NumenPlayer.playerName(self.getServer(), owner));
+            }
         }
-        if (owner.equals(self.getUUID())) {
-            return "you";
-        }
-        if (self.isOwnedByPlayer(owner)) {
-            return "your owner";
-        }
-        return EntityLabel.shown(owner, NumenPlayer.playerName(self.getServer(), owner));
+        return said;
     }
 
     // ---- entity ----

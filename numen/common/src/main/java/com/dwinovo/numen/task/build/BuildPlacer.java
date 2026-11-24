@@ -3,7 +3,6 @@ package com.dwinovo.numen.task.build;
 import com.dwinovo.numen.api.entity.Faces;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.entity.Stacks;
-import com.dwinovo.numen.api.permission.PlacedBlocks;
 import com.dwinovo.numen.platform.NumenServices;
 
 import net.minecraft.core.BlockPos;
@@ -28,11 +27,11 @@ import java.util.Optional;
  * <h2>手放</h2>
  * 她站在原地,像真玩家那样点一个面——点相邻已有方块朝着这一格的那一面(格内本身是可顶替的方块时原地点),视线就是眼睛到
  * 命中点的那条线(朝向、俯仰由转头得到,命中点由准星的原版拾取给出,所以被别的方块或实体挡着的面点不中),主手拿着那件物品
- * (生存模式从背包切、免耗材临时拿一叠再还原),{@code gameMode.useItemOn},挥手。音效、邻居更新、扣料、放置事件(领地类模组可取消)、
- * 放置记录({@code BlockItem.place} 上的 Mixin)全是原版流程自己产生的。
+ * (生存模式从背包切、免耗材临时拿一叠再还原),{@code gameMode.useItemOn},挥手。音效、邻居更新、扣料、放置事件(领地类模组可取消)
+ * 全是原版流程自己产生的。
  *
  * <h2>直接写</h2>
- * 手放做不出那个样子时的退路:{@code setBlock} 写下期望的状态,补一次 {@code setPlacedBy},逐格扣料,记放置记录。
+ * 手放做不出那个样子时的退路:{@code setBlock} 写下期望的状态,补一次 {@code setPlacedBy},逐格扣料。
  * 做不出的情形有三种:从她站的地方没有可点的面(悬空、面被挡着、够不着)、点得中的任何位置都放不出这个状态(原版的放置规则
  * 按点击与朝向给不出它,或要看她看不出的邻居)、一格要不止一件料(双层半砖、堆叠的雪、花盆加花)。
  *
@@ -238,8 +237,6 @@ final class BuildPlacer {
         BlockState written = player.level().getBlockState(pos);
         Block.updateOrDestroy(written, Block.updateFromNeighbourShapes(written, player.level(), pos), player.level(), pos,
                 Block.UPDATE_ALL);
-        // 直写不经 BlockItem.place,放置记录在这里记:这一格(连回调补出的另一半)是她放的。手放那条路由 BlockItem 上的 Mixin 记
-        PlacedBlocks.placedBy(player.serverLevel(), pos, player);
         return new Placement(Way.SET_DIRECTLY, spent);
     }
 }

@@ -46,7 +46,7 @@ public class WalkGameTests {
         ServerLevel level = helper.getLevel();
         roomAround(helper, 7, 7, Blocks.STONE);
         int wallBefore = roomCount(helper, 7, 7, Blocks.STONE);
-        NumenPlayer companion = spawnBare(helper, "gametest_keeper", new BlockPos(7, 2, 7), false);
+        NumenPlayer companion = spawnAt(helper, "gametest_keeper", new BlockPos(7, 2, 7), false);
         BlockPos target = helper.absolutePos(OUTSIDE);
         ToolRun walk = lua(companion, "return numen.move.walk(" + xyz(target) + ")");
 
@@ -92,7 +92,7 @@ public class WalkGameTests {
         for (int y = 2; y <= 3; y++) {
             level.setBlockAndUpdate(helper.absolutePos(new BlockPos(10, y, 7)), Blocks.DIRT.defaultBlockState());
         }
-        NumenPlayer companion = spawnBare(helper, "gametest_promiser", new BlockPos(3, 2, 7), false);
+        NumenPlayer companion = spawnAt(helper, "gametest_promiser", new BlockPos(3, 2, 7), false);
         BlockPos start = companion.blockPosition();
         BlockPos goal = helper.absolutePos(new BlockPos(12, 2, 7));
         ToolRun walk = lua(companion, "return numen.move.walk(" + xyz(goal) + ")");
@@ -256,7 +256,7 @@ public class WalkGameTests {
         longFloor(helper);
         wallAcross(helper, 30, Blocks.DIRT);
         wallAcross(helper, 150, Blocks.STONE);
-        NumenPlayer companion = spawnBare(helper, "gametest_pioneer", new BlockPos(2, 1, 12), false);
+        NumenPlayer companion = spawnAt(helper, "gametest_pioneer", new BlockPos(2, 1, 12), false);
         BlockPos goal = helper.absolutePos(new BlockPos(210, 1, 12));
         ToolRun walk = lua(companion, "return numen.move.walk(" + xyz(goal) + ")");
 
@@ -278,42 +278,29 @@ public class WalkGameTests {
     }
 
     /**
-     * 垫高上去再回到原处:够不着的高处靠一根垫柱上去(垫的料经 useItemOn 放下,放置记号照记),走到之后要回出发的地方。
-     * 记号让路线不挖自己垫的柱子——回程是不是还有路,看这条用例。
+     * 垫高上去再回到原处:够不着的高处靠一根垫柱上去,走到之后要回出发的地方。回程是不是还有路,看这条用例。
      */
     @GameTest(template = "floor16", timeoutTicks = 400, batch = ON_FOOT)
     public static void a_walk_can_come_back_down_from_a_pillar_she_built(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos perch = helper.absolutePos(new BlockPos(8, 5, 8));
         level.setBlockAndUpdate(perch.below(), Blocks.STONE.defaultBlockState());
-        NumenPlayer companion = spawnBare(helper, "gametest_climber", new BlockPos(2, 2, 2), false);
+        NumenPlayer companion = spawnAt(helper, "gametest_climber", new BlockPos(2, 2, 2), false);
         companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COBBLESTONE, 32));
         BlockPos home = companion.blockPosition();
         ToolRun[] runs = {null, null};
-        int[] marked = {0};
         steps(helper)
                 .thenExecute(() -> runs[0] = lua(companion, "return numen.move.walk(" + xyz(perch) + ")"))
                 .thenWaitUntil(() -> helper.assertTrue(runs[0].done(), "the climb has not finished"))
                 .thenExecute(() -> {
                     helper.assertTrue(runs[0].succeeded() && companion.blockPosition().distSqr(perch) <= 2,
                             "she did not get up: " + runs[0].outcome());
-                    // 只数这块场地里记在她名下的格:记号表是全世界一张,别的用例留下的记号不算
-                    var marks = com.dwinovo.numen.api.permission.PlacedBlocks.of(level);
-                    for (BlockPos pos : BlockPos.betweenClosed(BlockPos.containing(helper.getBounds().getMinPosition()),
-                            BlockPos.containing(helper.getBounds().getMaxPosition()))) {
-                        var placer = marks.placerAt(pos, level.getBlockState(pos));
-                        if (placer != null && placer.id().equals(companion.getUUID())) {
-                            marked[0]++;
-                        }
-                    }
-                    helper.assertTrue(marked[0] > 0, "the pillar blocks she placed carry no placement marks");
                     runs[1] = lua(companion, "return numen.move.walk(" + xyz(home) + ")");
                 })
-                .thenWaitUntil(() -> helper.assertTrue(runs[1].done(), "the way back has not finished (the cell at home carries a mark: "
-                        + marked[0] + ")"))
+                .thenWaitUntil(() -> helper.assertTrue(runs[1].done(), "the way back has not finished"))
                 .thenExecute(() -> {
                     helper.assertTrue(runs[1].succeeded() && companion.blockPosition().distSqr(home) <= 4,
-                            "she did not get back down (pillar blocks marked: " + marked[0] + "): " + runs[1].outcome());
+                            "she did not get back down: " + runs[1].outcome());
                     CompanionFactory.despawn(level.getServer(), companion);
                 })
                 .thenSucceed();

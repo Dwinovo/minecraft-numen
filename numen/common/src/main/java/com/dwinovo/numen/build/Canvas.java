@@ -2,7 +2,6 @@ package com.dwinovo.numen.build;
 
 import com.dwinovo.numen.api.sdk.LuaCodecs;
 import com.dwinovo.numen.task.build.BuildTaskRecord;
-import com.dwinovo.numen.api.permission.PlacedBlocks;
 import net.minecraft.core.BlockPos;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -21,7 +20,7 @@ public final class Canvas {
      */
     public void put(BuildTaskRecord.Target target) {
         cells.remove(target.pos().asLong());
-        BlockPos other = PlacedBlocks.otherHalfOf(target.pos(), target.desiredState());
+        BlockPos other = BuildStates.otherHalfOf(target.pos(), target.desiredState());
         if (other != null) {
             cells.remove(other.asLong());
         }

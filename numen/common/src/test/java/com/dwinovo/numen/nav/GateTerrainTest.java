@@ -14,28 +14,19 @@ import com.dwinovo.numen.api.permission.Gate;
 import com.dwinovo.numen.api.permission.Layers;
 import com.dwinovo.numen.api.permission.Hits;
 import com.dwinovo.numen.permission.Mode;
-import com.dwinovo.numen.api.permission.PlacedBlocks;
+import com.dwinovo.numen.api.permission.Owners;
 import com.dwinovo.numen.api.permission.Structures;
 import com.dwinovo.numen.permission.RuleSet;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Holder;
-import net.minecraft.core.MappedRegistry;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.BlockGetter;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.Level;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -45,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 寻路问"这一格能不能动"时,同伴这一侧怎么答:权限层的裁决原样变成许可——放行;要问,凭据是写给主人的那一条征询;
- * 拒绝,理由是裁决本身。出厂规则下,自然方块放行,主人放的、说不清是谁的(带方块实体的箱子)要问,别人放的拒绝。
+ * 拒绝,理由是裁决本身。出厂规则下,没主人的方块放行,主人的、带方块实体的箱子要问,别人的拒绝。
  */
 @Tag("mc")
 class GateTerrainTest {
@@ -54,27 +45,16 @@ class GateTerrainTest {
     private static final UUID OWNER = UUID.randomUUID();
     private static final Actor HER = new Actor(UUID.randomUUID(), "Aria", OWNER);
 
-    /** 地形自己长的方块表来自数据包,无头引导下手动绑:泥土在里面。 */
-    private static final TagKey<Block> NATURAL = TagKey.create(Registries.BLOCK, ResourceLocation.parse("numen:natural"));
-
     /** 出厂规则写的词有 Numen 登记的那几个,所以装上 Numen 的全部登记再问。 */
     @BeforeAll
     static void boot() {
         com.dwinovo.numen.NumenApiFixture.install();
     }
 
-    @BeforeEach
-    void bindNaturalBlocks() {
-        bindBlockTags(Map.of(NATURAL, List.of(BuiltInRegistries.BLOCK.wrapAsHolder(Blocks.DIRT))));
-    }
-
-    @AfterEach
-    void unbind() {
-        bindBlockTags(Map.of());
-    }
-
-    private static Gate gate(PlacedBlocks placed) {
-        return new Gate(HER, Layers.policy(Mode.ASK, FactoryRules.hard(), RuleSet.EMPTY, FactoryRules.layer()), placed, Structures.NONE, false, List.of(), Hits.NONE);
+    /** 出厂规则的裁决快照;{@code owners} 是哪一格是谁的,没写的格没人说。 */
+    private static Gate gate(Map<BlockPos, UUID> owners) {
+        return new Gate(HER, Layers.policy(Mode.ASK, FactoryRules.hard(), RuleSet.EMPTY, FactoryRules.layer()),
+                Structures.NONE, Owners.Blocks.of(List.of(owners::get)), List.of(), Hits.NONE);
     }
 
     private static Permit dig(Gate gate, BlockState state) {
@@ -84,44 +64,35 @@ class GateTerrainTest {
     }
 
     @Test
-    void naturalBlocksMayBeDug() {
-        assertInstanceOf(Permit.Allow.class, dig(gate(new PlacedBlocks()), Blocks.DIRT.defaultBlockState()));
+    void blocksThatAreNobodysMayBeDug() {
+        assertInstanceOf(Permit.Allow.class, dig(gate(Map.of()), Blocks.DIRT.defaultBlockState()));
     }
 
     @Test
     void aChestNeedsConsentAndTheCredentialSaysWhy() {
-        Permit permit = dig(gate(new PlacedBlocks()), Blocks.CHEST.defaultBlockState());
+        Permit permit = dig(gate(Map.of()), Blocks.CHEST.defaultBlockState());
         Permit.Ask ask = assertInstanceOf(Permit.Ask.class, permit);
         ConsentItem item = assertInstanceOf(ConsentItem.class, ask.credential());
-        assertTrue(item.cause().contains("of unknown origin"), item.cause());
+        assertTrue(item.cause().contains("has a block entity"), item.cause());
     }
 
     @Test
-    void theSameDirtNeedsConsentOnceTheOwnerPlacedIt() {
-        PlacedBlocks placed = new PlacedBlocks();
-        placed.record(CELL, new PlacedBlocks.Placer(OWNER, "Steve"));
-        Permit.Ask ask = assertInstanceOf(Permit.Ask.class, dig(gate(placed), Blocks.DIRT.defaultBlockState()));
+    void theSameDirtNeedsConsentOnceItIsTheOwners() {
+        Permit.Ask ask = assertInstanceOf(Permit.Ask.class, dig(gate(Map.of(CELL, OWNER)), Blocks.DIRT.defaultBlockState()));
         assertTrue(((ConsentItem) ask.credential()).cause().contains("belongs to the owner"));
     }
 
     @Test
     void someoneElsesBlockIsAWallNoOwnerCanOpen() {
-        PlacedBlocks placed = new PlacedBlocks();
-        placed.record(CELL, new PlacedBlocks.Placer(UUID.randomUUID(), "Alex"));
-        assertInstanceOf(Permit.Deny.class, dig(gate(placed), Blocks.DIRT.defaultBlockState()));
+        assertInstanceOf(Permit.Deny.class, dig(gate(Map.of(CELL, UUID.randomUUID())), Blocks.DIRT.defaultBlockState()));
     }
 
     @Test
     void placingIntoOpenAirIsAllowed() {
         View view = new View();
-        Permit permit = new GateTerrain(gate(new PlacedBlocks()))
+        Permit permit = new GateTerrain(gate(Map.of()))
                 .judge(new Change.Place(Blocks.DIRT), CELL, Blocks.AIR.defaultBlockState(), view);
         assertEquals(Permit.ALLOW, permit);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static void bindBlockTags(Map<TagKey<Block>, List<Holder<Block>>> tags) {
-        ((MappedRegistry<Block>) BuiltInRegistries.BLOCK).bindTags(tags);
     }
 
     private static final class View implements BlockGetter {

@@ -59,7 +59,7 @@ public class FlyGameTests {
     public static void a_fly_to_a_cell_in_mid_air_hovers_there(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         floor(helper, 1);
-        NumenPlayer her = spawnBare(helper, "gametest_hover", new BlockPos(8, 2, MID), true);
+        NumenPlayer her = spawnAt(helper, "gametest_hover", new BlockPos(8, 2, MID), true);
         BlockPos hover = helper.absolutePos(new BlockPos(14, 7, MID));
         ToolRun fly = lua(her, "return numen.move.fly(" + xyz(hover) + ")");
 
@@ -77,7 +77,7 @@ public class FlyGameTests {
     public static void a_walk_that_starts_in_the_air_comes_down_first(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         floor(helper, 1);
-        NumenPlayer her = spawnBare(helper, "gametest_alight", new BlockPos(8, 8, MID), true);
+        NumenPlayer her = spawnAt(helper, "gametest_alight", new BlockPos(8, 8, MID), true);
         her.getAbilities().mayfly = true;
         her.getAbilities().flying = true;
         her.onUpdateAbilities();

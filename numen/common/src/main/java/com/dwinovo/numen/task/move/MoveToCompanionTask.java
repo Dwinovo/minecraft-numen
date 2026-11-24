@@ -145,7 +145,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             sail();
             return;
         }
-        nav = Trip.to(player, destination.goal(), Walking.spec(player.serverLevel()), destination.toward());
+        nav = Trip.to(player, destination.goal(), Walking.spec(), destination.toward());
         if (r.travel != Travel.WALK) {
             nav.travelling(r.travel, admission);
         }

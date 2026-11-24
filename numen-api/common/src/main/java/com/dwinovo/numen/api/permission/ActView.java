@@ -44,22 +44,16 @@ public final class ActView implements Act {
     }
 
     /**
-     * 动作的对象是谁的(归属,见 {@link Whose}):实体按驯服记录,格子上的方块按放置记录、结构、自然方块表。
+     * 动作的对象是谁的(归属,见 {@link Whose}):实体与格子上的方块都是问回答者问出来的,没人回答就是没主人的。
      * 丢东西与指令没有这样的对象,为 null。一次裁决里几行规则问好几遍,算一次。
      */
     Whose whose() {
         if (!whoseKnown) {
             whose = action.entity() != null ? Whose.ofEntity(action.entity(), facts)
-                    : action.pos() != null ? Whose.ofBlock(action, facts) : null;
+                    : action.pos() != null ? Whose.ofBlock(action.pos(), facts) : null;
             whoseKnown = true;
         }
         return whose;
-    }
-
-    /** 这一格上放置记号记的那一位;没有记号为 null。 */
-    PlacedBlocks.Placer placer() {
-        return action.pos() == null || facts.placed() == null ? null
-                : facts.placed().placerIn(facts.view(), action.pos());
     }
 
     @Override
@@ -129,8 +123,7 @@ public final class ActView implements Act {
     }
 
     /**
-     * 这个动作命中 {@code rule} 的理由给主人看的那一版:按主人的语言显示(说得出谁放的就说谁),
-     * 种类、标签与实体照原文。没有可说的就是规则原文。
+     * 这个动作命中 {@code rule} 的理由给主人看的那一版:按主人的语言显示,种类、标签与实体照原文。没有可说的就是规则原文。
      */
     Component shown(Rule rule) {
         MutableComponent out = null;

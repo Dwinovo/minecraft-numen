@@ -480,7 +480,7 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
 | `numen.move.away(某物, 距离)` | 离它至少多远 |
 | `numen.move.follow(谁?, {distance, seconds})` | 跟着(不给就是主人),总有结束:`seconds` 不写是 60 秒;走法同 `to` |
 
-- **走法**(`Walking.spec`):能走就不挖,绕太远才挖;垫路料是出厂的 `numen:throwaway`。她盖好的房子不挖。物理安全留在寻路:不挖脚下、
+- **走法**(`Walking.spec`):能走就不挖,绕太远才挖;垫路料是出厂的 `numen:throwaway`。物理安全留在寻路:不挖脚下、
   头顶落沙、会放出流体的格,摔落按血量。
 - **能不能动哪一格只归权限层**:规划时禁止的格是墙,要问的格价钱乘 10;走到那一格动手那一刻才问主人。主人不答应,那几格这一趟里当墙,
   从她当时的位置重新规划绕开;同一行规则问出来的同一种东西不再问第二遍;绕不开才以 `denied` 收场。观察模式下权限层拒一切改动,她自然只走。
