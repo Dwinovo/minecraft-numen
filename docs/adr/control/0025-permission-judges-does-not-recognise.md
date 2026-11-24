@@ -1,6 +1,6 @@
 # 0025 权限层只判不认:动作去掉 take,"这一下会做什么"与规则里的词由懂的人登记
 
-- 状态:已接受,已落地(实现说明见文末);第 4 点里的归属六类与"没有定的"里"实体归谁"由 [0026](0026-ownership-is-asked-not-recorded.md) 修订
+- 状态:已接受,已落地(实现说明见文末);第 4 点里的归属六类与"没有定的"里"实体归谁"由 [0026](0026-ownership-is-asked-not-recorded.md) 修订;规则里的词、出厂与硬规则由 [0027](0027-permission-by-action-answered-by-many.md) 修订
 - 日期:2026-11-24
 - 另见:[0020](0020-questions-answered-by-whoever-knows.md)(问题与登记的门)、
   [0023](0023-mods-belong-to-plugins-no-generic-fallback.md)、[0024](0024-look-answers-are-named-fields.md)(看的三个问题);

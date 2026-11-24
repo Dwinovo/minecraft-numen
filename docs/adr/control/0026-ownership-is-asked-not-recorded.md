@@ -1,6 +1,6 @@
 # 0026 "这是谁的"去问,不自己记:删掉放置记账、自然方块表与"说不清的"
 
-- 状态:已接受,已落地(实现说明见文末)
+- 状态:已接受,已落地(实现说明见文末);第 6、7 点(规矩与 `structure` 这个词)由 [0027](0027-permission-by-action-answered-by-many.md) 修订
 - 日期:2026-11-24
 - 另见:[0020](0020-questions-answered-by-whoever-knows.md)(问题与登记的门)、
   [0025](0025-permission-judges-does-not-recognise.md)(权限层只判不认;本篇修订它第 4 点里的归属六类,并定下它"没有定的"里
