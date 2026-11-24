@@ -336,8 +336,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
         // 问方块自己站不站得住,只在这一格轮到的时候问这一处;问在创造顶掉原来的东西之前,站不住就不白拆。
         // 站不住的第一次排到队尾,等别的格先放完;第二次还站不住就放弃,没扣过料
-        BlockState settled = BuildCellRules.isAirTarget(target) ? desired : placer.settle(target);
-        if (settled == null) {
+        if (!BuildCellRules.isAirTarget(target) && !placer.canStay(target)) {
             if (queue.later(target)) {
                 return null;
             }
@@ -363,7 +362,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
 
         // 落没落成由 BuildPlacer 看世界判:写不进去(超出建造高度)是世界没变,不记账。
-        BuildPlacer.Placement placement = placer.place(target, settled, cost);
+        BuildPlacer.Placement placement = placer.place(target, cost);
         if (placement == null) {
             return missed(pos, BuildOutstanding.Cause.REFUSED, null);
         }

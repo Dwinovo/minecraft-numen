@@ -900,7 +900,7 @@ public class BuildGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void a_built_redstone_line_actually_powers_the_lamp(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        NumenPlayer companion = spawnAt(helper, "gametest_sparky", new BlockPos(11, 2, 10), true);
+        NumenPlayer companion = spawnAt(helper, "gametest_sparky", new BlockPos(7, 2, 10), true);
         BlockPos o = helper.absolutePos(new BlockPos(5, 2, 8));
         ToolRun build = lua(companion, "numen.build.place(numen.shape.layer(" + xyz(o) + ", {\"B####L\"}, "
                 + "{B = \"redstone_block\", [\"#\"] = \"redstone_wire\", L = \"redstone_lamp\"}))");
