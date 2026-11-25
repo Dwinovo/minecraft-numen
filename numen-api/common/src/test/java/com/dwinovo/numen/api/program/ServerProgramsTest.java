@@ -9,8 +9,6 @@ import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Example;
 import com.dwinovo.numen.api.sdk.Fn;
 import com.dwinovo.numen.api.sdk.SdkFixture;
-import com.dwinovo.numen.api.seat.ClientCallsOnly;
-import com.dwinovo.numen.api.seat.LoopbackTransport;
 import com.dwinovo.numen.api.seat.Seats;
 import com.dwinovo.numen.api.sdk.ServerCall;
 import com.google.gson.JsonElement;
@@ -35,6 +33,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 并发上限、停止与打断。客户端函数走回环传输(请求与答复各过一遍线上的编码),没有真客户端的地方用同一条路。
  */
 class ServerProgramsTest {
+
+    /** 没有人坐的座位:程序里的客户端函数走真的座位传输,得到没有座位的失败。 */
+    private static final ClientTransport NO_CLIENT = new Seats(null, Runnable::run).transport();
 
     /** 一组两端的函数:服务端的 up 加一,客户端的 twice 乘二。 */
     public static final class Mix {
@@ -140,7 +141,7 @@ class ServerProgramsTest {
                 local b = gt.gt_mix.twice(a)
                 local c = gt.gt_mix.up(b)
                 return c
-                """);
+                """, Modules.factory(), new com.dwinovo.numen.api.seat.SeatedClient());
         assertTrue(run.ok(), run.message());
         assertEquals(5, run.returned().getAsInt(), "up(1)=2, twice(2)=4, up(4)=5");
         assertEquals(3, run.replies().size());
@@ -202,7 +203,7 @@ class ServerProgramsTest {
         AtomicReference<Runnable> chain = new AtomicReference<>();
         chain.set(() -> ServerPrograms.run(null, companion, companion,
                 new ServerPrograms.Request("chain-" + UUID.randomUUID(), "return 1", Modules.factory(), true),
-                new LoopbackTransport(), CallObserver.NONE, outcome -> {
+                NO_CLIENT, CallObserver.NONE, outcome -> {
                     if (outcome.receipt().contains("already running")) {
                         refusals.add(outcome.receipt());
                     }
@@ -443,7 +444,7 @@ class ServerProgramsTest {
         Started program = start(companion, companion, """
                 local ok, err = pcall(gt.gt_mix.twice, 1)
                 return err.kind .. "|" .. err.message
-                """, new Seats(new ClientCallsOnly(), Runnable::run).transport());
+                """, NO_CLIENT);
         pumpUntil(() -> program.result.get() != null);
         assertEquals("failed|gt.gt_mix.twice runs on your owner's client, and its owner's client has not opened her "
                 + "seat, so nothing there can answer",

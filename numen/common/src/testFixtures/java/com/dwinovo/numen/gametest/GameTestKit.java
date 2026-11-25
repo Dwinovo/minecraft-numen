@@ -778,19 +778,19 @@ public final class GameTestKit {
 
     /**
      * 每只同伴一个扮大脑的程序宿主:程序、停止都交给产品里同一个入口({@link com.dwinovo.numen.api.program.ServerPrograms}),
-     * 客户端函数的反向请求经回环传输(编码、解码再执行)答;她的模块是这一次运行专用的目录。身体不必登记在名册上,
-     * 主人就是她自己——用例造的同伴没有真主人。
+     * 客户端函数的反向请求经主人的客户端({@link com.dwinovo.numen.api.gametest.OwnerClient})答;她的模块是这一次运行专用的目录。身体到第一次
+     * 有客户端函数的请求时才登记进名册。
      */
     static final class Programs implements com.dwinovo.numen.api.program.ProgramHost {
 
         private final net.minecraft.server.MinecraftServer server;
-        private final com.dwinovo.numen.api.seat.LoopbackTransport transport =
-                new com.dwinovo.numen.api.seat.LoopbackTransport();
+        private final com.dwinovo.numen.api.gametest.OwnerClient transport;
         private final java.util.Map<String, java.util.function.Consumer<com.dwinovo.numen.api.agent.loop.Program.Outcome>>
                 waiting = new java.util.concurrent.ConcurrentHashMap<>();
 
-        private Programs(net.minecraft.server.MinecraftServer server) {
+        private Programs(net.minecraft.server.MinecraftServer server, UUID owner) {
             this.server = server;
+            this.transport = new com.dwinovo.numen.api.gametest.OwnerClient(server, owner);
         }
 
         /** 跑一段程序,{@code observer} 看着它的每次调用。 */
@@ -934,7 +934,7 @@ public final class GameTestKit {
     private static final java.util.Map<UUID, Programs> HOSTS = new java.util.concurrent.ConcurrentHashMap<>();
 
     static Programs programs(NumenPlayer body) {
-        return HOSTS.computeIfAbsent(body.getUUID(), uuid -> new Programs(body.getServer()));
+        return HOSTS.computeIfAbsent(body.getUUID(), uuid -> new Programs(body.getServer(), body.getOwnerUuid()));
     }
 
     /**

@@ -20,8 +20,8 @@ public interface SeatWorld {
     /** 这位玩家是不是这只同伴的创建者,并且装着可用的客户端:只有这样的连接坐得上她的座位。 */
     boolean mayOpen(UUID player, UUID companion);
 
-    /** 她此刻的样子({@code <runtime_state>});没有可说的是空串。 */
-    String state(UUID companion);
+    /** 她此刻的样子,读身体写成;只在 {@link #main} 上调。 */
+    SeatState state(UUID companion);
 
     /** 主世界的游戏刻。 */
     long gameTime();

@@ -1,9 +1,8 @@
 package com.dwinovo.numen.api.seat;
 
-import com.dwinovo.numen.api.brain.CompanionLoop;
-import com.dwinovo.numen.api.brain.CompanionLoops;
 import com.dwinovo.numen.api.brain.Presence;
 import com.dwinovo.numen.api.brain.Venue;
+import com.dwinovo.numen.api.agent.request.TaskReport;
 import com.dwinovo.numen.api.brain.Voice;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.program.ClientTransport;
@@ -21,15 +20,18 @@ final class ServerSeatWorld implements SeatWorld {
 
     private volatile MinecraftServer server;
     private volatile LocalPrograms programs;
+    private volatile BodyReports reports;
 
     void start(MinecraftServer server, ClientTransport transport) {
         this.programs = new LocalPrograms(server, transport);
+        this.reports = new BodyReports(server);
         this.server = server;
     }
 
     void stop() {
         this.server = null;
         this.programs = null;
+        this.reports = null;
     }
 
     private MinecraftServer running() {
@@ -52,8 +54,24 @@ final class ServerSeatWorld implements SeatWorld {
     }
 
     @Override
-    public String state(UUID companion) {
-        return CompanionLoops.get(companion).map(CompanionLoop::runtimeState).orElse("");
+    public SeatState state(UUID companion) {
+        return reports.state(companion);
+    }
+
+    /** 任务槽说她在做什么。 */
+    void task(UUID companion, TaskReport report) {
+        BodyReports mine = reports;
+        if (mine != null) {
+            mine.task(companion, report);
+        }
+    }
+
+    /** 她被遣散了。 */
+    void forget(UUID companion) {
+        BodyReports mine = reports;
+        if (mine != null) {
+            mine.forget(companion);
+        }
     }
 
     @Override

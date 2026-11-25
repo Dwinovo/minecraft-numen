@@ -142,9 +142,9 @@ public final class SeatClient {
     }
 
     /** 她此刻的样子。 */
-    public CompletableFuture<SeatState> state(UUID companion) {
-        return call(SeatMethods.STATE_GET, companion, new JsonObject()).thenApply(o -> new SeatState(
-                o.get("generation").getAsLong(), o.get("state").getAsString(), o.get("game_time").getAsLong()));
+    public CompletableFuture<Sitting> state(UUID companion) {
+        return call(SeatMethods.STATE_GET, companion, new JsonObject()).thenApply(o -> new Sitting(
+                o.get("generation").getAsLong(), SeatState.fromJson(o)));
     }
 
     /** 她要说的话,服务端在聊天里说出来。 */
@@ -161,8 +161,8 @@ public final class SeatClient {
         return call(SeatMethods.EVENTS_ACK, companion, extra).thenApply(o -> null);
     }
 
-    /** {@link #state} 的答复。 */
-    public record SeatState(long generation, String state, long gameTime) {}
+    /** {@link #state} 的答复:她的身体此刻的代数,与她此刻的样子。 */
+    public record Sitting(long generation, SeatState state) {}
 
     private CompletableFuture<JsonObject> call(String method, UUID companion, JsonObject params) {
         params.addProperty("companion", companion.toString());

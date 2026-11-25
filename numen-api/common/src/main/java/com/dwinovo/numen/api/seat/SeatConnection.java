@@ -156,8 +156,7 @@ final class SeatConnection {
         JsonObject o = new JsonObject();
         seats.onMain(() -> {
             o.addProperty("generation", seats.generation(seat.companion));
-            o.addProperty("state", seats.world().state(seat.companion));
-            o.addProperty("game_time", seats.world().gameTime());
+            seats.world().state(seat.companion).toJson().asMap().forEach(o::add);
             return null;
         });
         return o;

@@ -20,6 +20,7 @@ final class StubSeatWorld implements SeatWorld {
     final Map<UUID, UUID> creators = new ConcurrentHashMap<>();
     final AtomicReference<String> catalogVersion = new AtomicReference<>("v1");
     volatile String state = "<runtime_state>idle</runtime_state>";
+    volatile BodyTask task;
     volatile long gameTime = 100;
     final List<String> said = new CopyOnWriteArrayList<>();
     final Programs programs = new Programs();
@@ -93,8 +94,8 @@ final class StubSeatWorld implements SeatWorld {
     }
 
     @Override
-    public String state(UUID companion) {
-        return state;
+    public SeatState state(UUID companion) {
+        return new SeatState(state, task, gameTime, 6000);
     }
 
     @Override

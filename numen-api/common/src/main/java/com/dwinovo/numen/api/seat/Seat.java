@@ -122,7 +122,7 @@ final class Seat {
     /** 服务端发出了一条事件(主线程):盖上序号、代数与她此刻的样子,进发件箱,坐着的连接马上收到。 */
     void publish(EventQueue.Entry entry) {
         SeatWorld world = seats.world();
-        add(SeatEvent.of(companion, seats.generation(companion), entry, world.state(companion), world.gameTime()));
+        add(SeatEvent.of(companion, seats.generation(companion), entry, world.gameTime(), world.dayTime()));
     }
 
     private synchronized void add(SeatEvent event) {
@@ -217,18 +217,17 @@ final class Seat {
 
     private void finished(Run run, Program.Outcome outcome) {
         SeatWorld world = seats.world();
-        String state = world.state(companion);
-        long game = world.gameTime();
+        SeatState state = world.state(companion);
         long generation = seats.generation(companion);
         synchronized (this) {
             running.remove(run.program, run);
             if (!run.detached) {
-                run.answer.complete(new ProgramResult(run.program, outcome, generation, state, game));
+                run.answer.complete(new ProgramResult(run.program, outcome, generation, state));
                 return;
             }
             EventQueue.Entry entry = NumenEvents.programStopped(world.dayTime(), run.program, outcome.message(),
                     System.currentTimeMillis());
-            add(SeatEvent.ofOutcome(companion, generation, entry, outcome, state, game));
+            add(SeatEvent.ofOutcome(companion, generation, entry, outcome, state.gameTime(), state.dayTime()));
         }
     }
 

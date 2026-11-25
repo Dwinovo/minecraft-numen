@@ -121,7 +121,7 @@ class SeatsTest {
     void stateIsHerStateWithTheGameTimeAndGeneration() throws Exception {
         get(client.open(HER, 0));
         seats.bodyEntered(HER);
-        assertEquals(new SeatClient.SeatState(1, world.state, 100), get(client.state(HER)));
+        assertEquals(new SeatClient.Sitting(1, new SeatState(world.state, null, 100, 6000)), get(client.state(HER)));
     }
 
     @Test
@@ -150,8 +150,7 @@ class SeatsTest {
         ProgramResult result = get(run);
         assertEquals("p1", result.program());
         assertEquals(1, result.generation());
-        assertEquals(world.state, result.state());
-        assertEquals(250, result.gameTime());
+        assertEquals(new SeatState(world.state, null, 250, 6000), result.state());
         assertEquals(outcome("all done"), result.outcome());
         assertEquals("all done", result.outcome().message());
     }
@@ -194,12 +193,11 @@ class SeatsTest {
     // ---- 事件:序号、代数、确认、续传 ----
 
     @Test
-    void eventsGetIncreasingSeqsAndCarryTheGenerationHerStateAndTheGameTime() throws Exception {
+    void eventsGetIncreasingSeqsAndCarryTheGenerationAndTheTimes() throws Exception {
         seats.bodyEntered(HER);
         get(client.open(HER, 0));
         seats.publish(HER, entry("a"));
         seats.bodyEntered(HER);
-        world.state = "<runtime_state>later</runtime_state>";
         world.gameTime = 400;
         seats.publish(HER, entry("b"));
 
@@ -209,9 +207,8 @@ class SeatsTest {
         assertEquals(List.of(1L, 2L), List.of(first.seq(), second.seq()));
         assertEquals(List.of(1L, 2L), List.of(first.generation(), second.generation()));
         assertEquals("a", first.text());
-        assertEquals("<runtime_state>idle</runtime_state>", first.state());
         assertEquals(100, first.gameTime());
-        assertEquals("<runtime_state>later</runtime_state>", second.state());
+        assertEquals(6000, first.dayTime());
         assertEquals(400, second.gameTime());
         assertEquals(2, client.lastSeq(HER));
     }
@@ -309,7 +306,6 @@ class SeatsTest {
         assertTrue(kept.text().contains("this turn was cut off"), kept.text());
         assertEquals(outcome("this turn was cut off"), kept.outcome());
         assertEquals(1, kept.generation());
-        assertEquals(world.state, kept.state());
     }
 
     @Test

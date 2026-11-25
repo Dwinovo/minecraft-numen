@@ -71,6 +71,43 @@ public final class EventQueue {
         public Entry(String type, String text, long ts, boolean urgent, com.google.gson.JsonObject result) {
             this(type, text, ts, urgent, result, null);
         }
+
+        /**
+         * 条目的 JSON 样子——落盘({@link JsonlJournal})与座位上发送事件共用的唯一编码。{@code result} 不在里面:它只给等这件活的程序,
+         * 不落盘、不上线。
+         */
+        public com.google.gson.JsonObject toJson() {
+            com.google.gson.JsonObject o = new com.google.gson.JsonObject();
+            o.addProperty("type", type);
+            if (id != null) {
+                o.addProperty("id", id);   // 编号是条目的,不是这次重写数出来的:重启前后同一条还是它
+            }
+            o.addProperty("ts", ts);
+            o.addProperty("text", text);
+            if (urgent) {
+                o.addProperty("urgent", true);
+            }
+            return o;
+        }
+
+        /**
+         * {@link #toJson} 的逆。
+         *
+         * @throws IllegalArgumentException 缺正文;类型与真实时间缺了照没有(null、0)读
+         */
+        public static Entry fromJson(com.google.gson.JsonObject o) {
+            if (!field(o, "text")) {
+                throw new IllegalArgumentException("an event entry needs text: " + o);
+            }
+            return new Entry(field(o, "type") ? o.get("type").getAsString() : null, o.get("text").getAsString(),
+                    field(o, "ts") ? o.get("ts").getAsLong() : 0L,
+                    o.has("urgent") && o.get("urgent").getAsBoolean(), null,
+                    field(o, "id") ? o.get("id").getAsString() : null);
+        }
+
+        private static boolean field(com.google.gson.JsonObject o, String key) {
+            return o.has(key) && o.get(key).isJsonPrimitive();
+        }
     }
 
     /** 落盘口。队列不知道自己被存成 JSON 还是 NBT,存在哪。 */

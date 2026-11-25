@@ -38,7 +38,9 @@ class FunctionBuilderTest {
     }
 
     private static ApiTester.Run run(String code) {
-        return ApiTester.run(null, UUID.randomUUID(), code);
+        UUID companion = UUID.randomUUID();
+        return ApiTester.run(null, companion, code, com.dwinovo.numen.api.script.Modules.factory(),
+                new com.dwinovo.numen.api.seat.SeatedClient());
     }
 
     @Test

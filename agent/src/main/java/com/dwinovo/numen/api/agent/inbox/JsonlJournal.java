@@ -54,13 +54,11 @@ public final class JsonlJournal implements EventQueue.Journal {
         List<EventQueue.Entry> out = new ArrayList<>();
         int skipped = loaded.skipped();
         for (AppendLog.Record r : loaded.records()) {
-            String text = r.string("text");
-            if (text == null) {
+            try {
+                out.add(EventQueue.Entry.fromJson(r.json()));
+            } catch (IllegalArgumentException bad) {
                 skipped++;
-                continue;
             }
-            out.add(new EventQueue.Entry(r.type(), text, r.ts(), r.json().has("urgent")
-                    && r.json().get("urgent").getAsBoolean(), null, r.id()));
         }
         if (skipped > 0) {
             AiLog.LOG.warn("[numen-queue] skipped {} bad record(s) in {}", skipped, log.file().getFileName());
@@ -72,17 +70,7 @@ public final class JsonlJournal implements EventQueue.Journal {
     public void save(List<EventQueue.Entry> entries) {
         List<JsonObject> records = new ArrayList<>(entries.size());
         for (EventQueue.Entry e : entries) {
-            JsonObject o = new JsonObject();
-            o.addProperty("type", e.type());
-            if (e.id() != null) {
-                o.addProperty("id", e.id());   // 编号是条目的,不是这次重写数出来的:重启前后同一条还是它
-            }
-            o.addProperty("ts", e.ts());
-            o.addProperty("text", e.text());
-            if (e.urgent()) {
-                o.addProperty("urgent", true);
-            }
-            records.add(o);
+            records.add(e.toJson());
         }
         log.rewrite(records);   // 空箱就是删文件:不留空壳
     }

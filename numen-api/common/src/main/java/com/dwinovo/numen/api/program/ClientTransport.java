@@ -8,7 +8,7 @@ import java.util.function.Consumer;
 /**
  * 反向请求的传输:服务端上的程序调了只有主人客户端答得了的函数({@code ClientCall}),请求怎么到客户端、答复怎么回来。
  * 产品里是座位上的 {@code client/call}({@code Seats#transport});没有真客户端的地方(GameTest、单测、评测)是同一套座位代码经进程内的
- * 管道连着一个客户端({@code LoopbackTransport})。派发的逻辑({@link ClientCalls})不知道是哪一个。
+ * 管道({@code SeatPipe})连着一个客户端。派发的逻辑({@link ClientCalls})不知道是哪一个。
  */
 public interface ClientTransport {
 

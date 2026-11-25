@@ -17,7 +17,7 @@ class OutboxTest {
     private static final UUID HER = UUID.fromString("00000000-0000-0000-0000-0000000000c1");
 
     private static SeatEvent event(String text) {
-        return SeatEvent.of(HER, 1, new EventQueue.Entry("hungry", text, 1L, false), "", 0);
+        return SeatEvent.of(HER, 1, new EventQueue.Entry("hungry", text, 1L, false), 0, 0);
     }
 
     private static List<String> texts(List<SeatEvent> events) {

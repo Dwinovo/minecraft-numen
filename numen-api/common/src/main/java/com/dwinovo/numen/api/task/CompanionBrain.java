@@ -220,7 +220,8 @@ final class CompanionBrain {
             msg = new com.dwinovo.numen.api.agent.request.TaskReport(id, rec.getToolName(), desc, rec.activity(),
                     rec.getDeadlineGameTime() >= TaskRecord.NO_DEADLINE, elapsedMs);
         }
-        // 她的大脑直接收这一份(主人在不在线都要,她下一轮读 <current_task>)
+        // 她的样子里手上那件活照这一份写(座位上的每份结局与 state/get 都读它),大脑也收(主人在不在线都要,她下一轮读 <current_task>)
+        com.dwinovo.numen.api.seat.ServerSeats.task(companion.getUUID(), msg);
         com.dwinovo.numen.api.brain.CompanionLoops.get(companion.getUUID()).ifPresent(brain -> brain.onCurrentTask(msg));
     }
 

@@ -42,6 +42,15 @@ public final class ServerSeats {
         NumenEvents.onDelivered(SEATS::publish);
     }
 
+    /**
+     * 没有真网络的地方(GameTest、评测)把一个客户端接到这台服务器的座位上,作为玩家 {@code player} 的连接:消息照线上的样子过一遍
+     * ({@link SeatPipe}),服务端那头是产品里同一份座位表。
+     */
+    public static SeatPipe pipe(UUID player, java.util.concurrent.Executor clientMain,
+                                java.util.concurrent.Executor clientHandlers) {
+        return SeatPipe.connect(SEATS, player, clientMain, clientHandlers);
+    }
+
     /** 程序里的客户端函数向主人客户端发反向请求走这里。 */
     public static ClientTransport transport() {
         return SEATS.transport();
@@ -70,8 +79,14 @@ public final class ServerSeats {
         SEATS.left(player);
     }
 
+    /** 任务槽说她在做什么:她的样子里手上那件活照它写。 */
+    public static void task(UUID companion, com.dwinovo.numen.api.agent.request.TaskReport report) {
+        WORLD.task(companion, report);
+    }
+
     /** 这只同伴被遣散了。 */
     public static void dismissed(UUID companion) {
+        WORLD.forget(companion);
         SEATS.dismissed(companion);
     }
 }

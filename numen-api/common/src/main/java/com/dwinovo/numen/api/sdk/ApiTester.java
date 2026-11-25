@@ -7,7 +7,7 @@ import com.dwinovo.numen.script.ScriptRun;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.agent.loop.Program;
 import com.dwinovo.numen.api.program.CallObserver;
-import com.dwinovo.numen.api.seat.LoopbackTransport;
+import com.dwinovo.numen.api.seat.Seats;
 import com.dwinovo.numen.api.program.ServerPrograms;
 import com.dwinovo.numen.api.script.BuiltinModules;
 import com.dwinovo.numen.api.script.Modules;
@@ -259,9 +259,12 @@ public final class ApiTester {
         }
     }
 
+    /** 这个进程里没有服务器,谁的座位也没人坐:程序里的客户端函数走真的座位传输,得到的就是没有座位的失败。 */
+    private static final Seats NO_SEATS = new Seats(null, Runnable::run);
+
     /**
      * 在这个进程里跑一段程序,当场跑完的才有回执:程序走产品里的入口({@link ServerPrograms}),服务端函数排进主线程的车道、由这里推进
-     * ({@code her} 是她的身体,没有世界的单测给 null),客户端函数经回环传输(编码、解码再执行)答,模块只有出厂那一套。占身体的活
+     * ({@code her} 是她的身体,没有世界的单测给 null),客户端函数没有座位可去,得到没有座位的那条普通失败,模块只有出厂那一套。占身体的活
      * 要世界一刻一刻地走,不在这里等:那样的程序用 GameTest。
      *
      * @throws IllegalStateException 程序没在当场跑完(在等身体的活或主人的答复)
@@ -272,10 +275,16 @@ public final class ApiTester {
 
     /** 同上,她的模块是 {@code modules}(如 {@code Modules.of(companion)},程序里存的模块落在那个目录里,下一段程序读得到)。 */
     public static Run run(NumenPlayer her, UUID companion, String code, Modules modules) {
+        return run(her, companion, code, modules, NO_SEATS.transport());
+    }
+
+    /** 同上,程序里的客户端函数经 {@code clients} 去主人的客户端。 */
+    public static Run run(NumenPlayer her, UUID companion, String code, Modules modules,
+                          com.dwinovo.numen.api.program.ClientTransport clients) {
         List<String> replies = new java.util.concurrent.CopyOnWriteArrayList<>();
         java.util.concurrent.atomic.AtomicReference<Program.Outcome> result = new java.util.concurrent.atomic.AtomicReference<>();
         ServerPrograms.run(her, companion, companion,
-                new ServerPrograms.Request("test-" + UUID.randomUUID(), code, modules, true), new LoopbackTransport(),
+                new ServerPrograms.Request("test-" + UUID.randomUUID(), code, modules, true), clients,
                 new CallObserver() {
                     @Override
                     public void replied(String callId, String reply) {
