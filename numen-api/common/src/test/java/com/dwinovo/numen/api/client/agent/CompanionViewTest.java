@@ -9,7 +9,6 @@ import com.dwinovo.numen.api.agent.provider.Usage;
 import com.dwinovo.numen.api.brain.Bound;
 import com.dwinovo.numen.api.brain.CompanionState;
 import com.dwinovo.numen.api.brain.Feed;
-import com.dwinovo.numen.api.brain.OwnerInput;
 import com.dwinovo.numen.api.brain.Slot;
 import com.dwinovo.numen.api.library.EntryId;
 import org.junit.jupiter.api.Test;
@@ -23,17 +22,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** 服务端推来的东西照序放进视图;主人做的事只变成发给服务端的话,不在这里办。 */
-class RemoteCompanionTest {
+/** 大脑发生的事照序放进视图;主人做的事交给大脑({@code LoopHostTest}),不在这里办。 */
+class CompanionViewTest {
 
     private static final UUID HER = UUID.randomUUID();
     private static final UUID ME = UUID.randomUUID();
     private static final UUID FRIEND = UUID.randomUUID();
 
-    private final List<OwnerInput> sent = new ArrayList<>();
     private final List<Feed> heard = new ArrayList<>();
     private final List<ConvoLog.Line> lines = new ArrayList<>();
-    private final RemoteCompanion her = new RemoteCompanion(HER, sent::add, heard::add, lines::add);
+    private final CompanionView her = new CompanionView(HER, null, heard::add, lines::add);
 
     private static CompanionState state(Phase phase, String compactProblem, List<String> outstanding) {
         return new CompanionState(phase, null, null, false, null, 0.0,
@@ -115,39 +113,5 @@ class RemoteCompanionTest {
         her.apply(batch);
 
         assertEquals(batch, heard);
-    }
-
-    @Test
-    void theOwnersActionsBecomeWordsToTheServer() {
-        her.apply(List.of(new Feed.Status(state(Phase.MODEL, null, List.of()))));
-
-        assertTrue(her.submitPrompt("你好"));
-        her.submitSkill("/build 木屋", "build", "木屋");
-        assertNull(her.requestCompact(""));
-        assertNull(her.requestCompact(" 坐标别丢 "));
-        assertNull(her.requestClearContext());
-        her.abort();
-        her.setGoal(GoalState.of("挖铁", 0), "/goal 挖铁");
-        her.clearGoal(null);
-        her.bind(Slot.PERSONA, "my:小焰");
-        her.bind(Slot.PROVIDER, "my:prov2");
-        her.bind(Slot.VOICE, null);
-        her.share("Steve");
-        her.unshare(FRIEND);
-
-        assertEquals(List.of(new OwnerInput.Say(HER.toString(), "你好"), new OwnerInput.Command(HER, "/build 木屋"),
-                new OwnerInput.Compact(HER, null), new OwnerInput.Compact(HER, "坐标别丢"), new OwnerInput.Clear(HER), new OwnerInput.Stop(HER.toString()),
-                new OwnerInput.SetGoal(HER, "挖铁", "/goal 挖铁"), new OwnerInput.ClearGoal(HER),
-                new OwnerInput.Bind(HER, Slot.PERSONA, "my:小焰"), new OwnerInput.Bind(HER, Slot.PROVIDER, "my:prov2"),
-                new OwnerInput.Bind(HER, Slot.VOICE, null), new OwnerInput.Share(HER, "Steve"),
-                new OwnerInput.Unshare(HER, FRIEND)), sent);
-    }
-
-    @Test
-    void aCompactTheServerSaysIsNotPossibleIsNotSent() {
-        her.apply(List.of(new Feed.Status(state(Phase.COMPACT, "numen.loop.compacting", List.of()))));
-
-        assertEquals("numen.loop.compacting", her.requestCompact(""), "理由是服务端算的,随状态推来");
-        assertTrue(sent.isEmpty());
     }
 }

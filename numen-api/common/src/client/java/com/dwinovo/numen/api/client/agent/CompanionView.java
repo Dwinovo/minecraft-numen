@@ -6,7 +6,13 @@ import com.dwinovo.numen.api.agent.loop.LoopStatus;
 import com.dwinovo.numen.api.agent.provider.Usage;
 import com.dwinovo.numen.api.brain.CompanionState;
 import com.dwinovo.numen.api.brain.Feed;
+import com.dwinovo.numen.api.agent.skill.SkillInjection;
+import com.dwinovo.numen.api.brain.Bound;
 import com.dwinovo.numen.api.brain.OwnerInput;
+import com.dwinovo.numen.api.library.EntryId;
+import com.dwinovo.numen.api.mind.LoopHost;
+import com.dwinovo.numen.api.network.NumenNetwork;
+import com.dwinovo.numen.api.network.payload.OwnerInputPayload;
 import com.dwinovo.numen.api.brain.Slot;
 
 import java.util.ArrayList;
@@ -15,36 +21,35 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
- * 服务端大脑的一只同伴在主人客户端上的样子:一个只读视图加一副发话的手。读的东西全是服务端推来的({@link Feed}),
- * 照序放进来、不判断不推断;做的事——说话、停止、整理、设目标、换人设——不在这里办,只变成 {@link OwnerInput} 发给服务端,
- * 由它判"这只是不是你的、现在能不能"。这里不存任何她的东西:关了游戏什么都不剩。
+ * 一只同伴的大脑在界面这头的样子:一个只读视图加一副发话的手。读的东西全是她的大脑发来的({@link Feed}),
+ * 照序放进来、不判断不推断;做的事——说话、停止、整理、设目标、换人设——直接交给她的大脑({@link LoopHost}),她的东西都在大脑那里;
+ * 只有分享是服务端管的,变成 {@link OwnerInput} 发给服务端,由它判"是不是你的、现在能不能"。
  *
  * <p>事件放进模型之后原样转给 {@code effects}(气泡、聊天栏、语音、提示条这些画的和听的),模型和它们之间没有别的口。
  *
  * <p>线程:客户端主线程。
  */
-public final class RemoteCompanion {
+public final class CompanionView {
 
     private final UUID uuid;
-    private final Consumer<OwnerInput> send;
+    private final LoopHost host;
     private final Consumer<Feed> effects;
     private final Consumer<ConvoLog.Line> lineSink;
 
     private CompanionState state = CompanionState.idle();
     private final StringBuilder partial = new StringBuilder();
     private final StringBuilder reasoning = new StringBuilder();
-    /** 她自己那本日志里推来的行(实时的),从老到新;翻页取回的老行在 {@link RemoteTranscripts}。 */
+    /** 她自己那本日志里来的行(实时的),从老到新;翻页取回的老行在 {@link Transcripts}。 */
     private final List<ConvoLog.Line> lines = new ArrayList<>();
 
     /**
-     * @param send     发给服务端
+     * @param host     她的大脑
      * @param effects  画的和听的:每个事件在模型更新之后交给它
-     * @param lineSink 推来的日志行再交给会话记录({@link RemoteTranscripts})
+     * @param lineSink 推来的日志行再交给会话记录({@link Transcripts})
      */
-    public RemoteCompanion(UUID uuid, Consumer<OwnerInput> send, Consumer<Feed> effects,
-                           Consumer<ConvoLog.Line> lineSink) {
+    public CompanionView(UUID uuid, LoopHost host, Consumer<Feed> effects, Consumer<ConvoLog.Line> lineSink) {
         this.uuid = uuid;
-        this.send = send;
+        this.host = host;
         this.effects = effects;
         this.lineSink = lineSink;
     }
@@ -83,7 +88,7 @@ public final class RemoteCompanion {
         reasoning.setLength(0);
     }
 
-    /** 服务端对这只同伴最近一次说的样子。 */
+    /** 她的大脑最近一次说的她的样子。 */
     public CompanionState state() {
         return state;
     }
@@ -207,72 +212,75 @@ public final class RemoteCompanion {
 
     // ---- 做 ----
 
-    /** 话发出去了;服务端那头压没压着,从推来的状态里看,这里只报"没压着"。 */
+    /** 话交给她的大脑;大脑那头压没压着,从状态里看,这里只报"没压着"。 */
     public boolean submitPrompt(String text) {
-        send.accept(new OwnerInput.Say(uuid.toString(), text));
-        return true;
+        return host.submitPrompt(text);
     }
 
-    /** 一条技能命令:{@code echo} 是主人打的原文;技能正文由服务端展开。 */
+    /** 一条技能命令:{@code echo} 是主人打的原文;技能的正文向她的技能库(随发布的向服务端)取到了再交给大脑。 */
     public void submitSkill(String echo, String skill, String args) {
-        send.accept(new OwnerInput.Command(uuid, echo));
+        host.skills().read(skill).whenComplete((info, failed) -> onClientThread(() -> {
+            if (failed == null) {
+                host.submitCommand(echo, SkillInjection.body(info, args));
+            }
+        }));
     }
 
-    /** 能不能整理的判据在服务端、随状态推来;不能就当场回理由,能就发出去。{@code focus} 是摘要要特别留意的,没有传空串。 */
+    /** 能不能整理的判据在大脑、随状态给;不能就当场回理由,能就排上。{@code focus} 是摘要要特别留意的,没有传空串。 */
     public String requestCompact(String focus) {
-        if (state.compactProblem() != null) {
-            return state.compactProblem();
-        }
-        send.accept(new OwnerInput.Compact(uuid, focus.isBlank() ? null : focus.strip()));
-        return null;
+        return host.requestCompact(focus.isBlank() ? null : focus.strip());
     }
 
     /** 主人要求清空上下文,形状同 {@link #requestCompact}。 */
     public String requestClearContext() {
-        if (state.clearProblem() != null) {
-            return state.clearProblem();
-        }
-        send.accept(new OwnerInput.Clear(uuid));
-        return null;
+        return host.requestClearContext();
     }
 
-    /** 导出她的记忆:服务端打成 zip 推回来,存成文件见 {@code MemoryFiles}(选好存哪儿之后才调)。 */
-    public void requestExport() {
-        send.accept(new OwnerInput.Export(uuid));
+    /** 导出她的记忆:对话日志与札记打成的 zip(选好存哪儿之后才调,存成文件见 {@code MemoryFiles})。 */
+    public java.util.concurrent.CompletableFuture<byte[]> requestExport() {
+        return host.exportMemory();
     }
 
-    /** 清空她的记忆(界面在主人确认之后才调);服务端办完推 {@link Feed.Wiped}。 */
-    public void requestWipe() {
-        send.accept(new OwnerInput.Wipe(uuid));
+    /** 清空她的记忆(界面在主人确认之后才调);办完大脑发 {@link Feed.Wiped}。拒绝的理由(语言键),办成是 {@code null}。 */
+    public String requestWipe() {
+        return host.wipeMemory();
     }
 
     /** 主人按停止。 */
     public void abort() {
-        send.accept(new OwnerInput.Stop(uuid.toString()));
+        host.abort();
     }
 
     /** 定一个长期目标;{@code echo} 是主人打的原文,聊天里要有这行字。 */
     public void setGoal(GoalState next, String echo) {
-        send.accept(new OwnerInput.SetGoal(uuid, next.objective(), echo));
+        host.setGoal(next, echo);
     }
 
     /** 收工。 */
     public void clearGoal(String why) {
-        send.accept(new OwnerInput.ClearGoal(uuid));
+        host.clearGoal(why);
     }
 
     /** 把她分享给叫这个名字的玩家(界面在主人看过后果、确认之后才调);办不办得成由服务端判,结局回在聊天里。 */
     public void share(String player) {
-        send.accept(new OwnerInput.Share(uuid, player));
+        NumenNetwork.sendToServer(OwnerInputPayload.of(new OwnerInput.Share(uuid, player)));
     }
 
     /** 不再把她分享给这一位;被分享的人退出时 {@code person} 是他自己。 */
     public void unshare(UUID person) {
-        send.accept(new OwnerInput.Unshare(uuid, person));
+        NumenNetwork.sendToServer(OwnerInputPayload.of(new OwnerInput.Unshare(uuid, person)));
     }
 
-    /** 换她的一项绑定(档案、人设、声线);{@code null} = 不绑。条目在不在库里由服务端判。 */
+    /** 换她的一项绑定(档案、人设、声线);{@code null} = 不绑。条目要在主人的库里。 */
     public void bind(Slot slot, String entryId) {
-        send.accept(new OwnerInput.Bind(uuid, slot, entryId));
+        EntryId id = entryId == null ? null : EntryId.parse(entryId);
+        if (id != null && ClientCompanions.library(slot.kind()).find(id) == null) {
+            return;
+        }
+        host.bind(slot, id == null ? null : new Bound(ClientCompanions.viewer(), id));
+    }
+
+    private static void onClientThread(Runnable task) {
+        net.minecraft.client.Minecraft.getInstance().execute(task);
     }
 }

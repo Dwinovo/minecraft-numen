@@ -3,8 +3,8 @@ package com.dwinovo.numen.api.client.screen;
 import com.dwinovo.numen.api.brain.Bound;
 import com.dwinovo.numen.api.brain.Slot;
 import com.dwinovo.numen.api.client.agent.KnownSkins;
-import com.dwinovo.numen.api.client.agent.RemoteCompanion;
-import com.dwinovo.numen.api.client.agent.RemoteCompanions;
+import com.dwinovo.numen.api.client.agent.CompanionView;
+import com.dwinovo.numen.api.client.agent.ClientCompanions;
 import com.dwinovo.numen.api.client.screen.SetupDraft.Item;
 import com.dwinovo.numen.api.client.skin.CompanionFace;
 import com.dwinovo.numen.api.client.ui.NumenTheme;
@@ -57,7 +57,7 @@ public final class CompanionEditPanel extends ModalCard {
     /** 每次开卡:草稿从当下真相取一次基线,"更多选项"收起。 */
     @Override
     void reset() {
-        RemoteCompanion her = RemoteCompanions.getOrCreate(host.uuid());
+        CompanionView her = ClientCompanions.getOrCreate(host.uuid());
         rows.reset(SetupDraft.current(her.binding(Slot.PERSONA), her.binding(Slot.PROVIDER), her.binding(Slot.VOICE),
                 host.currentCreative()));
     }
@@ -84,7 +84,7 @@ public final class CompanionEditPanel extends ModalCard {
     /** 保存:只落与开卡基线不同的项,然后关卡。 */
     private void save() {
         SetupDraft draft = rows.draft();
-        RemoteCompanion her = RemoteCompanions.getOrCreate(host.uuid());
+        CompanionView her = ClientCompanions.getOrCreate(host.uuid());
         for (Item item : draft.changes()) {
             if (item.slot() != null) {
                 her.bind(item.slot(), draft.value(item) instanceof Bound bound ? bound.id().toString() : null);

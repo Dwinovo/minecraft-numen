@@ -2,7 +2,7 @@ package com.dwinovo.numen.api.client.command;
 
 import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
-import com.dwinovo.numen.api.client.agent.RemoteCompanion;
+import com.dwinovo.numen.api.client.agent.CompanionView;
 
 /**
  * 把主人带到她资料页某一节的命令({@code /memory})。和 {@link PopupCommand} 一样是多实现一个接口:命令自己只说"去哪一节",
@@ -17,7 +17,7 @@ public interface PageCommand extends ChatCommand {
     Page page();
 
     @Override
-    default String run(RemoteCompanion loop, String args) {
+    default String run(CompanionView loop, String args) {
         return I18n.get(Keys.CMD_POPUP_ONLY, ChatCommands.PREFIX + name());
     }
 }

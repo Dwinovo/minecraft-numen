@@ -52,8 +52,8 @@ public final class NumenGateway {
      *
      * <p>Any companion on the client's roster is addressable immediately after login.
      *
-     * <p>返回的是<b>实际发生了什么</b>:输入交给了服务端({@link Delivery#HANDED_OFF}),或者这只同伴不在名册上
-     * ({@link Delivery#REJECTED})。服务端那头是排上了、被压着还是给了外接大脑,不再回给这里。
+     * <p>返回的是<b>实际发生了什么</b>:输入交给了她的大脑({@link Delivery#HANDED_OFF}),或者她的大脑不在这台电脑上
+     * ({@link Delivery#REJECTED},不认识的 UUID 与分享来的同伴都是)。她是排上了还是被压着,不回给这里。
      *
      * @param companion the companion entity's UUID
      * @param type      {@link EventTypes#QUERY}, or a type registered as a world event
@@ -63,9 +63,13 @@ public final class NumenGateway {
     public static Delivery emit(UUID companion, String type, String text) {
         com.dwinovo.numen.api.event.NumenEvents.requireClientInput(type);
         if (companion == null || text == null || text.isBlank()) return Delivery.REJECTED;
-        if (com.dwinovo.numen.api.client.agent.NumenRoster.instance().name(companion) == null) return Delivery.REJECTED;
-        com.dwinovo.numen.api.client.agent.RemoteCompanions.send(
-                new com.dwinovo.numen.api.brain.OwnerInput.Emit(companion, type, text));
+        com.dwinovo.numen.api.mind.LoopHost brain = com.dwinovo.numen.api.client.seat.ClientSeats.brain(companion);
+        if (brain == null) return Delivery.REJECTED;
+        if (EventTypes.QUERY.equals(type)) {
+            brain.submitPrompt(text);
+        } else {
+            brain.submitEvent(type, text);
+        }
         return Delivery.HANDED_OFF;
     }
 

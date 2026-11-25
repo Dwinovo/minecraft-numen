@@ -10,8 +10,8 @@ public final class LatestReply {
 
     private int latest;
 
-    /** 包一层要交给 {@link RemoteLibrary#request} 的处理:只有发出它之后再没发过新请求,它才会被调。 */
-    public Consumer<RemoteLibrary.Reply> take(Consumer<RemoteLibrary.Reply> onReply) {
+    /** 包一层要交给 {@link LibraryTables#request} 的处理:只有发出它之后再没发过新请求,它才会被调。 */
+    public Consumer<LibraryTables.Reply> take(Consumer<LibraryTables.Reply> onReply) {
         int mine = ++latest;
         return reply -> {
             if (mine == latest) {

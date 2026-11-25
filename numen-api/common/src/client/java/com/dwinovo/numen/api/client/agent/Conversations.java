@@ -2,15 +2,17 @@ package com.dwinovo.numen.api.client.agent;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.NumenIo;
-import com.dwinovo.numen.api.NumenPaths;
-import com.dwinovo.numen.api.brain.LegacyMigration;
 import com.dwinovo.numen.api.home.Homes;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
+import com.dwinovo.numen.api.brain.OwnerInput;
 import com.dwinovo.numen.api.brain.OwnerInput;
 import com.dwinovo.numen.api.store.JsonDoc;
 import com.dwinovo.numen.api.agent.conversation.Mentions;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+
+import com.dwinovo.numen.api.client.seat.ClientSeats;
+import com.dwinovo.numen.api.mind.LoopHost;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -24,7 +26,7 @@ import java.util.UUID;
 
 /**
  * 主人客户端上的会话:<b>成员表是服务端的</b>(路由、旁听、停止都在那头,见 {@code docs/group-chat.md}),这里读的是它推来的那份
- * ({@link RemoteCompanions#savedConversations})加名册;选中谁、置顶、文件夹、草稿、已读是这台机器的展示偏好,落在
+ * ({@link ClientCompanions#savedConversations})加名册;选中谁、置顶、文件夹、草稿、已读是这台机器的展示偏好,落在
  * {@code conversation_prefs.json},删了不丢她的任何东西。
  *
  * <h2>只有会话这一个概念</h2>
@@ -42,7 +44,6 @@ public final class Conversations {
     private static Conversations instance;
 
     private final Path prefsFile;
-    private final Path legacyFile;
 
     /** 当前交互对象的 id(见 {@link #select});重进游戏还是对着上次那个。 */
     private String selectedId;
@@ -58,15 +59,13 @@ public final class Conversations {
     /** 已经按办成画了、服务端还没回真表的会话改动({@code null} = 解散了)。 */
     private final PendingChanges<Conversation> pending = new PendingChanges<>();
 
-    private Conversations(Path prefsFile, Path legacyFile) {
+    private Conversations(Path prefsFile) {
         this.prefsFile = prefsFile;
-        this.legacyFile = legacyFile;
     }
 
     public static Conversations instance() {
         if (instance == null) {
-            instance = new Conversations(Homes.clientDir().resolve("conversation_prefs.json"),
-                    LegacyMigration.conversationsFile(NumenPaths.config()));
+            instance = new Conversations(Homes.clientDir().resolve("conversation_prefs.json"));
             instance.load();
         }
         return instance;
@@ -78,9 +77,9 @@ public final class Conversations {
         return new JsonDoc(file, JsonDoc.Format.of(1), NumenIo.inline("numen-convo"));
     }
 
-    /** 偏好文件还没有时,从旧版的会话文件里把这几样展示偏好接过来(旧文件原样留着,成员表归服务端)。 */
+    /** 读展示偏好;成员表归服务端。 */
     private void load() {
-        Path source = java.nio.file.Files.isRegularFile(prefsFile) ? prefsFile : legacyFile;
+        Path source = prefsFile;
         try {
             doc(source).read().ifPresent(this::readPrefs);
         } catch (RuntimeException unreadable) {
@@ -269,7 +268,7 @@ public final class Conversations {
 
     /** 服务端那份落过盘的会话,盖上还没回真表的改动。 */
     private List<Conversation> saved() {
-        return pending.over(RemoteCompanions.savedConversations(), Conversation::id);
+        return pending.over(ClientCompanions.savedConversations(), Conversation::id);
     }
 
     /** 落过盘的那条记录;没有是 null("就他俩"没有记录)。 */
@@ -356,7 +355,7 @@ public final class Conversations {
         }
         boolean widens = tagOf(conv) != null;
         Conversation next = widens ? conv.withMembers(members) : Conversation.of(members);
-        RemoteCompanions.send(new OwnerInput.Pull(conv.id(), companion, next.id()));
+        ClientCompanions.send(new OwnerInput.Pull(conv.id(), companion, next.id()));
         pending.put(next.id(), next);
         return next;
     }
@@ -366,7 +365,7 @@ public final class Conversations {
         List<UUID> members = new ArrayList<>(conv.members());
         members.remove(companion);
         Conversation next = conv.withMembers(members);
-        RemoteCompanions.send(new OwnerInput.Drop(conv.id(), companion));
+        ClientCompanions.send(new OwnerInput.Drop(conv.id(), companion));
         pending.put(next.id(), next);
         return next;
     }
@@ -374,7 +373,7 @@ public final class Conversations {
     /** 主人起的名(空白 = 退回拼成员名)。 */
     public Conversation rename(Conversation conv, String name) {
         Conversation next = conv.withName(name);
-        RemoteCompanions.send(new OwnerInput.Rename(conv.id(), name));
+        ClientCompanions.send(new OwnerInput.Rename(conv.id(), name));
         pending.put(next.id(), next);
         return next;
     }
@@ -388,7 +387,7 @@ public final class Conversations {
         pinned.remove(conv.id());
         folders.forget(conv.id());
         save();
-        RemoteCompanions.send(new OwnerInput.Dissolve(conv.id()));
+        ClientCompanions.send(new OwnerInput.Dissolve(conv.id()));
         pending.put(conv.id(), null);
     }
 
@@ -403,21 +402,38 @@ public final class Conversations {
     // ---- 说 ----
 
     /**
-     * 在这个会话里说一句话——Y 键、面板输入框、语音转写共用的唯一一个入口。点了名的醒,其余的旁听,谁醒谁听由服务端路由
-     * (见 {@link Mentions})。
+     * 在这个会话里说一句话——Y 键、面板输入框、语音转写共用的唯一一个入口:交给她的大脑。群聊(要点名、旁听、给日志盖会话的印)
+     * 还没有搬到客户端,群里说的话不送出去。
      *
-     * @return 说完之后的会话(落过盘的发言号拨一),以及这句话有没有送出去(会话里有人、话不空)
+     * @return 说完之后的会话,以及这句话有没有送出去(她的大脑在这台电脑上、话不空)
      */
     public Said say(Conversation conv, String text) {
-        if (membersAlive(conv).isEmpty() || text == null || text.isBlank()) {
+        UUID solo = soloOf(conv);
+        LoopHost brain = solo == null ? null : ClientSeats.brain(solo);
+        if (brain == null || text == null || text.isBlank()) {
             return new Said(conv, false);
         }
-        RemoteCompanions.send(new OwnerInput.Say(conv.id(), text));
-        Conversation next = tagOf(conv) != null ? conv.spoken() : conv;
-        if (next != conv) {
-            pending.put(next.id(), next);
+        brain.submitPrompt(text);
+        return new Said(conv, true);
+    }
+
+    /** 一个会话的成员里大脑在这台电脑上的,和会话给日志盖的印({@code null} = 就他俩)。 */
+    public record Members(List<LoopHost> brains, String tag) {}
+
+    /** 这个会话此刻的成员:大脑在这台电脑上的几只。 */
+    public static Members membersOf(String conversation) {
+        Conversations rooms = instance();
+        Conversation conv = rooms.get(conversation);
+        List<LoopHost> brains = new java.util.ArrayList<>();
+        if (conv != null) {
+            for (UUID member : rooms.membersAlive(conv)) {
+                LoopHost brain = ClientSeats.brain(member);
+                if (brain != null) {
+                    brains.add(brain);
+                }
+            }
         }
-        return new Said(next, true);
+        return new Members(brains, conv == null ? null : rooms.tagOf(conv));
     }
 
     /**
@@ -431,13 +447,18 @@ public final class Conversations {
 
     /** 停止停全体:会话里每个成员的循环都停;单成员时就是她一个——同一条路。 */
     public void abort(Conversation conv) {
-        RemoteCompanions.send(new OwnerInput.Stop(conv.id()));
+        for (UUID member : membersAlive(conv)) {
+            LoopHost brain = ClientSeats.brain(member);
+            if (brain != null) {
+                brain.abort();
+            }
+        }
     }
 
     /** 有谁能停。 */
     public boolean canAbort(Conversation conv) {
         for (UUID m : membersAlive(conv)) {
-            if (RemoteCompanions.get(m).map(view -> view.status().canInterrupt()).orElse(false)) {
+            if (ClientCompanions.get(m).map(view -> view.status().canInterrupt()).orElse(false)) {
                 return true;
             }
         }

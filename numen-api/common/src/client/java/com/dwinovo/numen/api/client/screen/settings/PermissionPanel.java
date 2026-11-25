@@ -1,8 +1,8 @@
 package com.dwinovo.numen.api.client.screen.settings;
 
 import com.dwinovo.numen.api.brain.Libraries;
-import com.dwinovo.numen.api.client.agent.RemoteCompanions;
-import com.dwinovo.numen.api.client.agent.ServerLibraries;
+import com.dwinovo.numen.api.client.agent.ClientCompanions;
+import com.dwinovo.numen.api.client.agent.ClientLibraries;
 import com.dwinovo.numen.api.client.ui.IDrawSurface;
 import com.dwinovo.numen.api.client.ui.NumenStyle;
 import com.dwinovo.numen.api.client.ui.NumenTheme;
@@ -25,7 +25,7 @@ import java.util.UUID;
 
 /**
  * 权限分区——主人管自己名下每只同伴的权限设置:八种动作各一个档位(分段钮,点哪个设哪个),和每种动作"不用问"的名单。
- * 读的是服务端的同一份({@link ServerLibraries#permission},命令 {@code /numen permission show} 读的也是它),写的都是请求,
+ * 读的是服务端的同一份({@link ClientLibraries#permission},命令 {@code /numen permission show} 读的也是它),写的都是请求,
  * 办不办由服务端判。
  *
  * <p>上面一块:每只同伴一节——一行名字加三个预设钮(只看、全放行、恢复出厂),下面八行各是一个动作的名字和它的档位分段钮;
@@ -43,7 +43,7 @@ public final class PermissionPanel {
     /** 上块里的控件:预设钮、档位分段钮、同伴名与动作名。 */
     private final UiRoot top = new UiRoot();
     private final ScrollBox tierScroll = new ScrollBox();
-    private final LibraryListPanel<ServerLibraries.PermissionListed> listed;
+    private final LibraryListPanel<ClientLibraries.PermissionListed> listed;
 
     private int x, y, w, h;
     private int dimX, dimY, dimW, dimH;
@@ -52,19 +52,19 @@ public final class PermissionPanel {
     private List<UUID> builtFor = List.of();
 
     /** 服务端那张表读成的样子,表的版本不变就一直用它。 */
-    private ServerLibraries.Permission snapshot = ServerLibraries.Permission.EMPTY;
+    private ClientLibraries.Permission snapshot = ClientLibraries.Permission.EMPTY;
     private long snapshotVersion = -1;
 
     public PermissionPanel() {
         Minecraft mc = Minecraft.getInstance();
         top.setClipboard(() -> mc.keyboardHandler.getClipboard(), s -> mc.keyboardHandler.setClipboard(s));
-        listed = new LibraryListPanel<ServerLibraries.PermissionListed>(
+        listed = new LibraryListPanel<ClientLibraries.PermissionListed>(
                 () -> permission().listed(),
                 PermissionPanel::row,
                 r -> I18n.get(ModLanguageData.Keys.PERMISSION_DELETE_CONFIRM, r.entry()),
-                r -> ServerLibraries.deleteListed(r.companion(), r.verb(), r.entry()),
+                r -> ClientLibraries.deleteListed(r.companion(), r.verb(), r.entry()),
                 null)
-                .withSections(ServerLibraries.PermissionListed::verb, PermissionPanel::sections)
+                .withSections(ClientLibraries.PermissionListed::verb, PermissionPanel::sections)
                 .following(Libraries.PERMISSION);
     }
 
@@ -73,11 +73,11 @@ public final class PermissionPanel {
         return listed;
     }
 
-    private ServerLibraries.Permission permission() {
-        long version = RemoteCompanions.library().version(Libraries.PERMISSION);
+    private ClientLibraries.Permission permission() {
+        long version = ClientCompanions.library().version(Libraries.PERMISSION);
         if (version != snapshotVersion) {
             snapshotVersion = version;
-            snapshot = ServerLibraries.permission();
+            snapshot = ClientLibraries.permission();
         }
         return snapshot;
     }
@@ -92,7 +92,7 @@ public final class PermissionPanel {
         this.dimW = dimW;
         this.dimH = dimH;
         top.clear();
-        ServerLibraries.Permission now = permission();
+        ClientLibraries.Permission now = permission();
         builtFor = now.companions();
 
         var font = Minecraft.getInstance().font;
@@ -102,13 +102,13 @@ public final class PermissionPanel {
         int ry = tiersTop;
         for (UUID companion : builtFor) {
             String name = now.tiers().stream().filter(t -> t.companion().equals(companion)).findFirst()
-                    .map(ServerLibraries.PermissionTier::name).orElse("?");
+                    .map(ClientLibraries.PermissionTier::name).orElse("?");
             ry = presetRow(companion, name, ry);
             for (Verb verb : Verb.values()) {
                 SettingsRows.label(top, I18n.get(ModLanguageData.Keys.PERMISSION_VERB_PREFIX + verb.word()), x + 6, ry,
                         w - segW - 14);
                 Segmented seg = top.add(new Segmented(tierNames, () -> tierIndex(companion, verb),
-                        pick -> ServerLibraries.setTier(companion, verb.word(), TIERS.get(pick).word())));
+                        pick -> ClientLibraries.setTier(companion, verb.word(), TIERS.get(pick).word())));
                 seg.setBounds(x + w - segW - 2, SettingsRows.controlY(ry, NumenStyle.CONTROL_H), segW, NumenStyle.CONTROL_H);
                 ry += SettingsRows.ROW_H;
             }
@@ -136,7 +136,7 @@ public final class PermissionPanel {
             String label = I18n.get(ModLanguageData.Keys.PERMISSION_PRESET_PREFIX + preset.word());
             int bw = font.width(label) + 16;
             Button button = top.add(new Button(label, Button.Style.GHOST,
-                    () -> ServerLibraries.applyPreset(companion, preset.word())));
+                    () -> ClientLibraries.applyPreset(companion, preset.word())));
             button.setBounds(right - bw, SettingsRows.controlY(ry, NumenStyle.CONTROL_H), bw, NumenStyle.CONTROL_H);
             right -= bw + 4;
         }
@@ -146,7 +146,7 @@ public final class PermissionPanel {
 
     /** 这只同伴服务端此刻存的这种动作的档位是三格里的第几格。 */
     private int tierIndex(UUID companion, Verb verb) {
-        for (ServerLibraries.PermissionTier t : permission().tiers()) {
+        for (ClientLibraries.PermissionTier t : permission().tiers()) {
             if (t.companion().equals(companion) && t.verb().equals(verb.word())) {
                 Tier tier = Tier.byWord(t.tier());
                 return tier == null ? 0 : TIERS.indexOf(tier);
@@ -168,7 +168,7 @@ public final class PermissionPanel {
     }
 
     /** 一行:名单里的名字,下面一行小字是哪只同伴的。能删(右键)。 */
-    private static LibraryListPanel.Row row(ServerLibraries.PermissionListed r) {
+    private static LibraryListPanel.Row row(ClientLibraries.PermissionListed r) {
         return new LibraryListPanel.Row(r.entry(), r.name(), false, null, false, false);
     }
 

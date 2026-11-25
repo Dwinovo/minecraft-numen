@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.client.screen.chat;
 
 import com.dwinovo.numen.api.agent.conversation.Conversation;
-import com.dwinovo.numen.api.client.agent.RemoteCompanion;
+import com.dwinovo.numen.api.client.agent.CompanionView;
 import com.dwinovo.numen.api.client.command.ChatCommands;
 import com.dwinovo.numen.api.client.ui.KeyCodes;
 import net.minecraft.client.resources.language.NumenTestLanguage;
@@ -35,11 +35,11 @@ class ChatInputBarCommandTest {
 
     /** 记下输入行交给宿主的两样东西:说出去的话、命令的回话。 */
     private static final class Host implements ChatInputBar.Host {
-        final RemoteCompanion loop;
+        final CompanionView loop;
         final List<String> sent = new ArrayList<>();
         final List<String> replies = new ArrayList<>();
 
-        Host(RemoteCompanion loop) {
+        Host(CompanionView loop) {
             this.loop = loop;
         }
 
@@ -47,7 +47,7 @@ class ChatInputBarCommandTest {
         @Override public void onAbort() { }
         @Override public boolean canAbort() { return false; }
         @Override public String hint() { return ""; }
-        @Override public RemoteCompanion loop() { return loop; }
+        @Override public CompanionView loop() { return loop; }
         @Override public Conversation conversation() { return null; }
         @Override public void onCommandReply(String reply) { replies.add(reply); }
     }
@@ -91,7 +91,7 @@ class ChatInputBarCommandTest {
 
     @Test
     void facingOneCompanionTheCommandLayerAnswersAsBefore() {
-        Host host = new Host(new RemoteCompanion(HER, input -> { }, feed -> { }, line -> { }));
+        Host host = new Host(new CompanionView(HER, null, feed -> { }, line -> { }));
         type(bar(host), "/nosuchthing");
         assertTrue(host.sent.isEmpty(), host.sent.toString());
         assertEquals(1, host.replies.size());

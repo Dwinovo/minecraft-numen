@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.client.screen.settings;
 
-import com.dwinovo.numen.api.client.agent.RemoteCompanions;
+import com.dwinovo.numen.api.client.agent.ClientCompanions;
 import com.dwinovo.numen.api.client.screen.PopupMenu;
 import com.dwinovo.numen.api.client.ui.Animation;
 import com.dwinovo.numen.api.client.ui.IDrawSurface;
@@ -191,7 +191,7 @@ public final class LibraryListPanel<T> {
     public static Supplier<List<Section>> shelves(String addKey, String emptyKey,
                                                   Runnable onAdd, Runnable onAddServer) {
         return () -> {
-            Add addServer = onAddServer != null && RemoteCompanions.admin() && !RemoteCompanions.host()
+            Add addServer = onAddServer != null && ClientCompanions.admin() && !ClientCompanions.host()
                     ? new Add(t(ModLanguageData.Keys.LIBRARY_ADD_SERVER), onAddServer) : null;
             Add addMine = addKey == null ? null : new Add(t(addKey), onAdd);
             return List.of(
@@ -199,7 +199,7 @@ public final class LibraryListPanel<T> {
                             t(ModLanguageData.Keys.LIBRARY_SERVER_ABOUT), null, addServer, false),
                     new Section(MINE, t(ModLanguageData.Keys.LIBRARY_MINE),
                             t(ModLanguageData.Keys.LIBRARY_MINE_ABOUT),
-                            t(RemoteCompanions.host() ? emptyKey + ".host" : emptyKey), addMine, true));
+                            t(ClientCompanions.host() ? emptyKey + ".host" : emptyKey), addMine, true));
         };
     }
 
@@ -255,7 +255,7 @@ public final class LibraryListPanel<T> {
      * (存不下、排不进队……)在列表顶上亮一条错误,不让玩家以为办成了。
      */
     public LibraryListPanel<T> following(String kind) {
-        var library = RemoteCompanions.library();
+        var library = ClientCompanions.library();
         this.version = () -> library.version(kind);
         this.revision = () -> library.revision(kind);
         this.problem = () -> library.problem(kind);

@@ -3,7 +3,7 @@ package com.dwinovo.numen.api.client.command;
 import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.client.agent.RemoteCompanion;
+import com.dwinovo.numen.api.client.agent.CompanionView;
 import com.dwinovo.numen.api.client.data.ClientPrefs;
 
 import java.util.ArrayList;
@@ -110,7 +110,7 @@ public final class ChatCommands {
     // ---- 查 ----
 
     /** 此刻全部可见的命令,按来源顺序、来源内顺序。 */
-    public static List<ChatCommand> all(RemoteCompanion loop) {
+    public static List<ChatCommand> all(CompanionView loop) {
         List<ChatCommand> out = new ArrayList<>();
         List<CommandSource> sources;
         synchronized (ChatCommands.class) {
@@ -126,7 +126,7 @@ public final class ChatCommands {
     }
 
     /** 按名字找(忽略大小写);没有返回 {@code null}。 */
-    public static ChatCommand find(RemoteCompanion loop, String name) {
+    public static ChatCommand find(CompanionView loop, String name) {
         if (name == null || name.isBlank()) {
             return null;
         }
@@ -146,7 +146,7 @@ public final class ChatCommands {
      * <p>三种局面:还在打命令名(前缀过滤命令表)、命令名已经打完并跟了空格(转交给
      * 那条命令补参数)、根本不是命令(空)。
      */
-    public static List<Completion> complete(RemoteCompanion loop, String text) {
+    public static List<Completion> complete(CompanionView loop, String text) {
         if (!isCommand(text)) {
             return List.of();
         }
@@ -163,7 +163,7 @@ public final class ChatCommands {
                 : command.completeArgs(loop, body.substring(sp).stripLeading());
     }
 
-    private static List<Completion> commandCompletions(RemoteCompanion loop, String prefix) {
+    private static List<Completion> commandCompletions(CompanionView loop, String prefix) {
         String p = prefix.toLowerCase(Locale.ROOT);
         List<ChatCommand> matched = new ArrayList<>();
         for (ChatCommand c : all(loop)) {
@@ -198,7 +198,7 @@ public final class ChatCommands {
      * <p>打开弹层<b>就是</b>这条命令的执行,所以这里记一笔"最近用过"。
      */
     public static com.dwinovo.numen.api.client.ui.widget.Popup popupFor(
-            RemoteCompanion loop, String text) {
+            CompanionView loop, String text) {
         Parsed p = parse(text);
         if (p == null || p.name().isEmpty()) {
             return null;
@@ -215,7 +215,7 @@ public final class ChatCommands {
      * 这串输入要带主人去的资料页那一节;不是页面命令(或命令不存在/此刻不可用)返回 {@code null}。
      * 同 {@link #popupFor}:带去就是执行,记一笔"最近用过"。
      */
-    public static PageCommand.Page pageFor(RemoteCompanion loop, String text) {
+    public static PageCommand.Page pageFor(CompanionView loop, String text) {
         Parsed p = parse(text);
         if (p == null || p.name().isEmpty()) {
             return null;
@@ -233,7 +233,7 @@ public final class ChatCommands {
      *
      * @return 给主人看的话;{@code null} = 这条命令不吭声
      */
-    public static String dispatch(RemoteCompanion loop, String text) {
+    public static String dispatch(CompanionView loop, String text) {
         Parsed p = parse(text);
         if (p == null || p.name().isEmpty()) {
             return I18n.get(Keys.CMD_LIST_HINT, String.valueOf(PREFIX));

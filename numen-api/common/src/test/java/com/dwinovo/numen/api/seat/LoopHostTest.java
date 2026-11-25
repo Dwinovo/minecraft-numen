@@ -143,7 +143,7 @@ class LoopHostTest {
         });
         LibraryHub hub = LibraryHub.local(library, Switches.inMemory(), List.of(), Set.of());
         host = new LoopHost(new LoopHost.Parts(HER, OWNER, home, clientMain::add, pipe.client(), model, SCRIPT_ONLY,
-                () -> false, () -> EventQueue.DEFAULT_LEVEL, bound -> "a test persona", modules,
+                () -> false, () -> EventQueue.DEFAULT_LEVEL, bound -> "a test persona", builtins -> modules,
                 bundled -> SkillRegistry.of(hub.library(SkillRegistry.KIND), bundled), id -> "主人"));
         host.bind(com.dwinovo.numen.api.brain.Slot.PERSONA,
                 new Bound(OWNER, new com.dwinovo.numen.api.library.EntryId("my", "test")));

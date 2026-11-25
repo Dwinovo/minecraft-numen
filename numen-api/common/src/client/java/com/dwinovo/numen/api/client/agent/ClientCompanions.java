@@ -4,19 +4,24 @@ import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.agent.conversation.Transcript;
 import com.dwinovo.numen.api.brain.Feed;
-import com.dwinovo.numen.api.brain.History;
-import com.dwinovo.numen.api.brain.Libraries;
+import com.dwinovo.numen.api.brain.FeedEncoder;
 import com.dwinovo.numen.api.brain.OwnerInput;
 import com.dwinovo.numen.api.brain.Presence;
+import com.dwinovo.numen.api.client.seat.ClientSeats;
+import com.dwinovo.numen.api.library.Library;
+import com.dwinovo.numen.api.library.LibraryKind;
+import com.dwinovo.numen.api.mind.ClientServices;
+import com.dwinovo.numen.api.mind.History;
+import com.dwinovo.numen.api.mind.LibraryDesk;
+import com.dwinovo.numen.api.mind.LoopHost;
 import com.dwinovo.numen.api.network.ClientPayloadSink;
 import com.dwinovo.numen.api.network.NumenNetwork;
-import com.dwinovo.numen.api.network.payload.ConversationsPayload;
-import com.dwinovo.numen.api.network.payload.FeedPayload;
 import com.dwinovo.numen.api.network.payload.ClientCapsPayload;
+import com.dwinovo.numen.api.network.payload.ConversationsPayload;
 import com.dwinovo.numen.api.network.payload.HelloAckPayload;
 import com.dwinovo.numen.api.network.payload.HelloPayload;
-import com.dwinovo.numen.api.network.payload.HistoryPagePayload;
-import com.dwinovo.numen.api.network.payload.HistoryRequestPayload;
+import com.dwinovo.numen.api.network.payload.LibraryPayload;
+import com.dwinovo.numen.api.network.payload.LibraryRequestPayload;
 import com.dwinovo.numen.api.network.payload.OwnerInputPayload;
 import com.dwinovo.numen.api.network.payload.ServerHelloPayload;
 import com.dwinovo.numen.api.plugin.ClientMods;
@@ -25,71 +30,86 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
- * 主人客户端上所有服务端大脑的视图({@link RemoteCompanion}),以及它们共用的东西:往服务端发话、会话记录({@link RemoteTranscripts})的
- * 翻页、服务器报到的结果。服务端推来的包经这里分给各只同伴。内存里的视图,断线就丢,不存任何东西。
+ * 主人客户端上她们的大脑在界面这头的样子:每只同伴一个视图({@link CompanionView}),和它们共用的东西:往服务端发那几样服务端管的事(分享、
+ * 会话的成员表)、配置库的表({@link LibraryTables})、会话记录({@link Transcripts})的翻页、服务器报到的结果。大脑本身在
+ * {@link ClientServices} 的 {@code ClientBrains} 里,一个连接一份;这里只是界面的把手,断线就丢。
  *
  * <p>线程:客户端主线程(包的处理在主线程上)。
  */
-public final class RemoteCompanions {
+public final class ClientCompanions {
 
-    private record Entry(RemoteCompanion view, TurnPresenter presenter) {}
+    private record Entry(CompanionView view, TurnPresenter presenter, FeedEncoder encoder) {}
+
+    /** 随库协议到服务端的几种库:服务端管的皮肤、权限、插件;别的库在这台电脑上,由 {@link LibraryDesk} 答。 */
+    private static final Set<String> SERVER_KINDS = Set.of(com.dwinovo.numen.api.brain.Libraries.SKIN,
+            com.dwinovo.numen.api.brain.Libraries.SKIN_FILES, com.dwinovo.numen.api.brain.Libraries.PERMISSION,
+            com.dwinovo.numen.api.brain.Libraries.PLUGIN);
 
     private static final Map<UUID, Entry> COMPANIONS = new HashMap<>();
-    private static final RemoteTranscripts TRANSCRIPTS = new RemoteTranscripts();
+    private static final Transcripts TRANSCRIPTS = new Transcripts();
     /** 服务端收下了我们的报到(版本对得上):它推的东西我们读得懂。 */
     private static boolean served;
-    /** 这位玩家能不能改服务器上的配置。 */
+    /** 这位玩家能不能改服务器上的配置(插件的开关)。 */
     private static boolean admin;
     /** 这位玩家是不是这台服务器的房主。 */
     private static boolean host;
     /** 服务端发来的落过盘的会话(成员表与名字),整份。 */
     private static List<Conversation> saved = List.of();
-    private static long nextRequest;
-    private static final RemoteLibrary LIBRARY = new RemoteLibrary(NumenNetwork::sendToServer);
+    private static final LibraryTables LIBRARY = new LibraryTables(ClientCompanions::route);
 
-    private RemoteCompanions() {}
+    private ClientCompanions() {}
 
     // ---- 取 ----
 
-    public static Optional<RemoteCompanion> get(UUID companion) {
+    public static Optional<CompanionView> get(UUID companion) {
         Entry entry = COMPANIONS.get(companion);
         return entry == null ? Optional.empty() : Optional.of(entry.view());
     }
 
-    /** 这只同伴的视图,没有就建一个:它只是个把手,她的东西什么时候推来什么时候有。 */
-    public static RemoteCompanion getOrCreate(UUID companion) {
-        return COMPANIONS.computeIfAbsent(companion, RemoteCompanions::open).view();
+    /**
+     * 这只同伴的视图,没有就建一个:她的大脑在这台电脑上({@link ClientSeats#brain})就接上它,不在(分享来的,脑子在她的创建者那台)
+     * 就是一个没有大脑的视图,只能看。
+     */
+    public static CompanionView getOrCreate(UUID companion) {
+        return COMPANIONS.computeIfAbsent(companion, ClientCompanions::open).view();
     }
 
     private static Entry open(UUID companion) {
-        RemoteCompanion[] self = new RemoteCompanion[1];
+        LoopHost brain = ClientSeats.brain(companion);
+        CompanionView[] self = new CompanionView[1];
         TurnPresenter presenter = new TurnPresenter(companion, () -> self[0].status(), () -> self[0].personaName(),
-                playing -> send(new OwnerInput.Speaking(companion, playing)));
-        self[0] = new RemoteCompanion(companion, RemoteCompanions::send, feed -> {
-            if (feed instanceof com.dwinovo.numen.api.brain.Feed.Wiped) {
+                playing -> NumenNetwork.sendToServer(
+                        new com.dwinovo.numen.api.network.payload.SpeakingStatePayload(companion, playing)));
+        self[0] = new CompanionView(companion, brain, feed -> {
+            if (feed instanceof Feed.Wiped) {
                 TRANSCRIPTS.clear();   // 她的日志没了;群里别的会话里她说过的也在其中,都重新取
             }
             presenter.on(feed);
-        },
-                line -> TRANSCRIPTS.live(line.conv() == null ? companion.toString() : line.conv(), companion, line));
-        return new Entry(self[0], presenter);
+        }, line -> TRANSCRIPTS.live(line.conv() == null ? companion.toString() : line.conv(), companion, line));
+        FeedEncoder encoder = brain == null ? null : new FeedEncoder(brain, events -> self[0].apply(events));
+        return new Entry(self[0], presenter, encoder);
     }
 
-    /** 她不在了(遣散):放掉这头的视图。她的东西都在服务端,那边收。 */
+    /** 她不在了(遣散):放掉这头的视图。她的家由大脑那头收。 */
     public static void forget(UUID companion) {
         COMPANIONS.remove(companion);
     }
 
-    /** 每个客户端刻一次:各视图的表现层往前走一步(打字机、语音、说话状态)。 */
+    /** 每个客户端刻一次:各只的大脑往前走一步,发生的事交给视图,表现层往前走一步(打字机、语音、说话状态)。 */
     public static void tick() {
         // 循环属于一次连接:标题画面上没有连接,身体够不着、包发不出去
         if (net.minecraft.client.Minecraft.getInstance().getConnection() == null) {
             return;
         }
+        ClientSeats.tick();
         for (Entry entry : COMPANIONS.values()) {
+            if (entry.encoder() != null) {
+                entry.encoder().flush();
+            }
             entry.presenter().tick();
         }
     }
@@ -103,7 +123,7 @@ public final class RemoteCompanions {
         return admin;
     }
 
-    /** 我是这台服务器的房主:我的"我的"就是服务器目录,没有"为所有人新建"这回事。 */
+    /** 我是这台服务器的房主:他的"我的"皮肤文件夹就是服务器那一个。 */
     public static boolean host() {
         return host;
     }
@@ -117,9 +137,14 @@ public final class RemoteCompanions {
         return client == null || client.player == null ? null : client.player.getUUID();
     }
 
-    /** 服务器上的库(人设、模型档案、服务器配置)在这里读写。 */
-    public static RemoteLibrary library() {
+    /** 配置库(人设、模型档案、钥匙串……在这台电脑上;皮肤、权限、插件在服务器上)的表在这里读写。 */
+    public static LibraryTables library() {
         return LIBRARY;
+    }
+
+    /** 主人这台电脑上的一种库。 */
+    public static Library library(LibraryKind kind) {
+        return ClientSeats.services().library(kind);
     }
 
     public static List<Conversation> savedConversations() {
@@ -128,32 +153,34 @@ public final class RemoteCompanions {
 
     // ---- 发 ----
 
-    /** 主人做的一件事,发给服务端;能不能办、办不办由它判。 */
+    /** 主人做的一件服务端管的事(分享、会话的成员表),发给服务端;能不能办、办不办由它判。 */
     public static void send(OwnerInput input) {
         NumenNetwork.sendToServer(OwnerInputPayload.of(input));
     }
 
+    /** 一次配置库的读写:服务端管的库发给服务端,别的在这台电脑上办,答复同样交回表里。 */
+    private static void route(LibraryRequestPayload request) {
+        if (SERVER_KINDS.contains(request.kind())) {
+            NumenNetwork.sendToServer(request);
+            return;
+        }
+        LibraryDesk.Result result = ClientSeats.services().desk().handle(viewer(), true, request.kind(), request.op(),
+                com.google.gson.JsonParser.parseString(request.json()).getAsJsonObject());
+        long answerNow = result.later() == null ? request.request() : 0;
+        LIBRARY.onPayload(new LibraryPayload(request.kind(), result.entries(),
+                result.problem() == null ? "" : result.problem(), answerNow));
+        if (result.later() != null) {
+            result.later().thenAccept(entries -> net.minecraft.client.Minecraft.getInstance().execute(
+                    () -> LIBRARY.onPayload(new LibraryPayload(request.kind(), entries, "", request.request()))));
+        }
+    }
+
     /** 服务端推来的包挂进主源码集的挂点(客户端入口启动时调一次)。 */
     public static void install() {
-        ClientPayloadSink.serverHello = RemoteCompanions::onServerHello;
-        ClientPayloadSink.helloAck = RemoteCompanions::onHelloAck;
-        ClientPayloadSink.feed = RemoteCompanions::onFeed;
-        ClientPayloadSink.historyPage = RemoteCompanions::onHistoryPage;
-        ClientPayloadSink.conversations = RemoteCompanions::onConversations;
-        ClientPayloadSink.export = MemoryFiles::receive;
-        ClientPayloadSink.skinHandover = SkinHandovers::receive;
-        ClientPayloadSink.library = p -> {
-            LIBRARY.onPayload(p);
-            if (Libraries.MCP_CLIENT.equals(p.kind())) {
-                McpAuthPrompt.onServers();
-            }
-            if (Libraries.KEY.equals(p.kind()) && ServerLibraries.keyNotice() != null) {
-                com.dwinovo.numen.api.client.hud.NumenHudToasts.push(
-                        com.dwinovo.numen.api.client.ui.NumenToasts.Severity.WARN,
-                        net.minecraft.client.resources.language.I18n.get(
-                                com.dwinovo.numen.api.data.ModLanguageData.Keys.KEY_OWNER_SEES));
-            }
-        };
+        ClientPayloadSink.serverHello = ClientCompanions::onServerHello;
+        ClientPayloadSink.helloAck = ClientCompanions::onHelloAck;
+        ClientPayloadSink.conversations = ClientCompanions::onConversations;
+        ClientPayloadSink.library = LIBRARY::onPayload;
     }
 
     // ---- 会话记录 ----
@@ -173,10 +200,18 @@ public final class RemoteCompanions {
         }
     }
 
+    /** 这个会话的成员里大脑在这台电脑上的,从各自的日志读一页。 */
     private static void requestPage(String conversation) {
         TRANSCRIPTS.asked(conversation);
-        NumenNetwork.sendToServer(new HistoryRequestPayload(nextRequest++, conversation,
-                TRANSCRIPTS.cursor(conversation), History.PAGE));
+        Conversations.Members members = Conversations.membersOf(conversation);
+        History.page(members.brains(), members.tag(), TRANSCRIPTS.cursor(conversation), History.PAGE)
+                .whenComplete((page, failed) -> net.minecraft.client.Minecraft.getInstance().execute(() -> {
+                    if (failed != null) {
+                        Constants.LOG.warn("[numen-mind] could not read a page of {}: {}", conversation, failed.toString());
+                    } else {
+                        TRANSCRIPTS.page(conversation, page.entries(), page.cursor(), page.more());
+                    }
+                }));
     }
 
     // ---- 服务端推来的 ----
@@ -197,46 +232,23 @@ public final class RemoteCompanions {
         served = true;
         admin = p.admin();
         host = p.host();
+        ClientSeats.open(viewer());
         // 召唤卡、设置页要用的这几张表先要来;页面打开时再要一次拿最新的
-        for (String kind : List.of(Libraries.PERSONA, Libraries.PROVIDER, Libraries.PREFS, Libraries.SKILL,
-                Libraries.COMPANION_SKILLS, Libraries.NOTES, Libraries.SCHEDULES, Libraries.MCP_CLIENT, Libraries.MCP_SERVER)) {
+        for (String kind : List.of(LibraryDesk.PERSONA, LibraryDesk.PROVIDER, LibraryDesk.PREFS, LibraryDesk.SKILL,
+                LibraryDesk.NOTES, LibraryDesk.SCHEDULES, LibraryDesk.MCP_CLIENT)) {
             LIBRARY.ask(kind);
         }
-    }
-
-    static void onFeed(FeedPayload p) {
-        List<Feed> events;
-        try {
-            events = p.events();
-        } catch (RuntimeException unreadable) {
-            Constants.LOG.warn("[numen-net] dropped an unreadable feed for {}: {}", p.companion(), unreadable.toString());
-            return;
-        }
-        getOrCreate(p.companion()).apply(events);
-    }
-
-    static void onHistoryPage(HistoryPagePayload p) {
-        List<Transcript.Entry> entries;
-        try {
-            entries = p.entries();
-        } catch (RuntimeException unreadable) {
-            Constants.LOG.warn("[numen-net] dropped an unreadable history page: {}", unreadable.toString());
-            return;
-        }
-        TRANSCRIPTS.page(p.conversation(), entries, p.cursor(), p.more());
     }
 
     static void onConversations(ConversationsPayload p) {
         saved = List.copyOf(p.conversations());
     }
 
-    /** 断线:服务端推来的东西都不算数了。 */
+    /** 断线:这条连接上的东西都不算数了。 */
     public static void disconnected() {
-        com.dwinovo.numen.api.client.seat.ClientSeats.close();
+        ClientSeats.close();
         COMPANIONS.clear();
         TRANSCRIPTS.clear();
-        MemoryFiles.reset();
-        SkinHandovers.reset();
         saved = List.of();
         LIBRARY.clear();
         McpAuthPrompt.clear();

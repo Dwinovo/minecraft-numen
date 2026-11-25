@@ -96,7 +96,7 @@ class SetupDraftTest {
         draft.set(Item.PROVIDER, mine("server:deepseek"));
         draft.set(Item.MODE, true);
         SummonSetup setup = draft.summonSetup();
-        assertEquals(Map.of(Slot.PROVIDER, "server:deepseek"), setup.entries());
+        assertEquals(Map.of(Slot.PROVIDER, "server:deepseek"), draft.bindings());
         assertEquals(Boolean.TRUE, setup.creative());
         assertNull(setup.skin());
     }

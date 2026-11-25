@@ -130,18 +130,13 @@ public final class SetupDraft {
         return (SkinChoices.Pick) now.get(Item.SKIN);
     }
 
-    /** 随召唤请求发出的那几项:只有改过的;没改的服务端照不指定时的规矩办,和基线是同一回事。 */
+    /** 随召唤请求发给服务端的那几项:模式与皮肤,只有改过的;没改的服务端照不指定时的规矩办,和基线是同一回事。 */
     public SummonSetup summonSetup() {
-        Map<Slot, String> entries = new EnumMap<>(Slot.class);
         Boolean creative = null;
         SummonSetup.Skin skin = null;
         for (Item item : changes()) {
             Object value = now.get(item);
-            if (item.slot() != null) {
-                if (value != null) {
-                    entries.put(item.slot(), ((Bound) value).id().toString());
-                }
-            } else if (item == Item.MODE) {
+            if (item == Item.MODE) {
                 creative = (Boolean) value;
             } else if (value instanceof SkinChoices.Pick pick) {
                 boolean server = pick.choice().where() == SkinChoices.Where.SERVER;
@@ -149,6 +144,18 @@ public final class SetupDraft {
                         pick.variant());
             }
         }
-        return new SummonSetup(entries, creative, skin);
+        return new SummonSetup(creative, skin);
+    }
+
+    /** 改过的库绑定({@code 命名空间:名字}):绑定在主人这台电脑上、她的大脑里,她到达后由客户端落下。 */
+    public Map<Slot, String> bindings() {
+        Map<Slot, String> entries = new EnumMap<>(Slot.class);
+        for (Item item : changes()) {
+            Object value = now.get(item);
+            if (item.slot() != null && value != null) {
+                entries.put(item.slot(), ((Bound) value).id().toString());
+            }
+        }
+        return entries;
     }
 }

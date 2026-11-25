@@ -16,13 +16,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** 面板看的会话记录:翻页取回的老行加上实时推来的新行,一行不重不漏;群里主人的一句话副本只画一次。 */
-class RemoteTranscriptsTest {
+class TranscriptsTest {
 
     private static final UUID A = UUID.randomUUID();
     private static final UUID B = UUID.randomUUID();
     private static final String G = "group-1";
 
-    private final RemoteTranscripts transcripts = new RemoteTranscripts();
+    private final Transcripts transcripts = new Transcripts();
 
     private static Transcript.Entry entry(UUID who, String id, long ts, ConvoState.Msg msg) {
         return new Transcript.Entry(ts, who, msg, Map.of(who, id));

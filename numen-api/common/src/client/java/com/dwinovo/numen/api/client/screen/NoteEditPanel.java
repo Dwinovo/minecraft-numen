@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.client.screen;
 
 import com.dwinovo.numen.api.agent.memory.NoteBook;
-import com.dwinovo.numen.api.client.agent.ServerLibraries;
+import com.dwinovo.numen.api.client.agent.ClientLibraries;
 import com.dwinovo.numen.api.client.ui.widget.Button;
 import com.dwinovo.numen.api.client.ui.widget.DialogBox;
 import com.dwinovo.numen.api.client.ui.widget.MultilineTextField;
@@ -56,7 +56,7 @@ public final class NoteEditPanel extends ModalCard {
         type = NoteBook.DEFAULT_TYPE;
         content = "";
         if (host.note() != null) {
-            ServerLibraries.NoteText text = ServerLibraries.noteText(host.companion(), host.note());
+            ClientLibraries.NoteText text = ClientLibraries.noteText(host.companion(), host.note());
             if (text != null) {
                 description = text.description();
                 type = text.type();

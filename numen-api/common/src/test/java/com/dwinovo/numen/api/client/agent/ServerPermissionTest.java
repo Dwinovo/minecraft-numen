@@ -31,9 +31,9 @@ class ServerPermissionTest {
         store.edit(blue, new Edit.SetTier(Verb.USE_ITEM, Tier.DENY));
         store.edit(blue, new Edit.Add(Verb.COMMAND, "msg"));
 
-        RemoteCompanions.library().onPayload(new LibraryPayload(Libraries.PERMISSION,
+        ClientCompanions.library().onPayload(new LibraryPayload(Libraries.PERMISSION,
                 PermissionLibrary.view(ground(store, blue)).toString(), ""));
-        ServerLibraries.Permission read = ServerLibraries.permission();
+        ClientLibraries.Permission read = ClientLibraries.permission();
 
         assertEquals(java.util.List.of(blue), read.companions());
         assertEquals(Verb.values().length, read.tiers().size());

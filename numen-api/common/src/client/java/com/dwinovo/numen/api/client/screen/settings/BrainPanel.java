@@ -16,9 +16,9 @@ import com.dwinovo.numen.api.client.ui.widget.Toggle;
 import com.dwinovo.numen.api.client.ui.widget.UiRoot;
 import com.dwinovo.numen.mcp.server.McpConfig;
 import com.dwinovo.numen.api.brain.Libraries;
-import com.dwinovo.numen.api.client.agent.RemoteCompanions;
-import com.dwinovo.numen.api.client.agent.RemoteLibrary;
-import com.dwinovo.numen.api.client.agent.ServerLibraries;
+import com.dwinovo.numen.api.client.agent.ClientCompanions;
+import com.dwinovo.numen.api.client.agent.LibraryTables;
+import com.dwinovo.numen.api.client.agent.ClientLibraries;
 import com.dwinovo.numen.api.mcp.server.McpAccessPrompt;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -84,7 +84,7 @@ public final class BrainPanel {
     private int x, y, w, h;
 
     /** 搭这一页时的宿主状态;{@code null} = 不是管理员(或服务端还没说)。配置变了才重搭,谁连着这类随时在变的不重搭。 */
-    private ServerLibraries.McpServerState builtFor;
+    private ClientLibraries.McpServerState builtFor;
     private long lastAskMs;
 
     /** 手绘几条的基线(滚动层坐标,画的时候减 {@link ScrollBox#offset()})。 */
@@ -113,7 +113,7 @@ public final class BrainPanel {
         portField = null;
         saveButton = null;
         iconButtons.clear();
-        ServerLibraries.McpServerState st = ServerLibraries.mcpServer();
+        ClientLibraries.McpServerState st = ClientLibraries.mcpServer();
         builtFor = st;
         Font font = Minecraft.getInstance().font;
         if (st == null) {
@@ -236,7 +236,7 @@ public final class BrainPanel {
 
     /** 端点改了且服务在跑 → 这次保存要重开服务,按钮如实说。 */
     private String saveLabel() {
-        ServerLibraries.McpServerState cfg = state();
+        ClientLibraries.McpServerState cfg = state();
         boolean endpointChanged = portValue() != cfg.port() || lanNow() != cfg.lanExposed();
         return t(cfg.enabled() && endpointChanged
                 ? "numen.brain.save_restart" : "numen.brain.save");
@@ -272,7 +272,7 @@ public final class BrainPanel {
     }
 
     private void save() {
-        ServerLibraries.McpServerState cfg = state();
+        ClientLibraries.McpServerState cfg = state();
         JsonArray hidden = new JsonArray();
         for (String piece : (hiddenText == null ? "" : hiddenText).split(",")) {
             String name = piece.strip();
@@ -291,18 +291,18 @@ public final class BrainPanel {
         body.addProperty("port", portValue());
         body.addProperty("callTimeoutSeconds", Math.max(1, timeout));
         body.add("hiddenTools", hidden);
-        RemoteCompanions.library().put(Libraries.MCP_SERVER, body, this::settleSave);
+        ClientCompanions.library().put(Libraries.MCP_SERVER, body, this::settleSave);
     }
 
     /** 拨一个开关,只改这一项。 */
     private void put(String key, boolean value) {
         JsonObject body = new JsonObject();
         body.addProperty(key, value);
-        RemoteCompanions.library().put(Libraries.MCP_SERVER, body);
+        ClientCompanions.library().put(Libraries.MCP_SERVER, body);
     }
 
     /** 服务端答了保存:办成,草稿作废、配置重新成为真源;没办成(最常见是端口被占),话挂回出错的那个框。 */
-    private void settleSave(RemoteLibrary.Reply reply) {
+    private void settleSave(LibraryTables.Reply reply) {
         if (reply.ok()) {
             portText = timeoutText = hiddenText = null;
             lanOn = null;
@@ -312,23 +312,23 @@ public final class BrainPanel {
         }
     }
 
-    private static ServerLibraries.McpServerState state() {
-        return ServerLibraries.mcpServer();
+    private static ClientLibraries.McpServerState state() {
+        return ClientLibraries.mcpServer();
     }
 
     private static String accessPrompt() {
-        ServerLibraries.McpServerState st = state();
+        ClientLibraries.McpServerState st = state();
         return McpAccessPrompt.build(st.endpoint());
     }
 
     // ---- 渲染 ----
 
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
-        ServerLibraries.McpServerState mcp = state();
+        ClientLibraries.McpServerState mcp = state();
         // 状态页开着时每两秒向服务端要一次最新的(谁接进来了、多久前动过);配置变了才重搭
         if (nowMs - lastAskMs > 2_000) {
             lastAskMs = nowMs;
-            RemoteCompanions.library().ask(Libraries.MCP_SERVER);
+            ClientCompanions.library().ask(Libraries.MCP_SERVER);
         }
         if (mcp == null || !mcp.sameConfig(builtFor)) {
             if (mcp != null || builtFor != null) build(x, y, w, h);
@@ -441,7 +441,7 @@ public final class BrainPanel {
     }
 
     /** 开着时的一句:等谁来接,或者谁在用、多久前活跃过。关着不说——开关自己就说明了。 */
-    private static String statusLine(ServerLibraries.McpServerState mcp) {
+    private static String statusLine(ClientLibraries.McpServerState mcp) {
         String who = mcp.clientName();
         if (who == null) return t("numen.brain.status_waiting");
         return I18n.get("numen.brain.status_connected", who, sinceLabel(mcp.lastActivityMs()));

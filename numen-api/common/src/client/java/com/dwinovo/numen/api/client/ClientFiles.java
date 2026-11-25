@@ -1,8 +1,8 @@
 package com.dwinovo.numen.api.client;
 
 import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.brain.LegacyMigration;
 import com.dwinovo.numen.api.store.StoreException;
+import com.dwinovo.numen.api.store.Trees;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -34,8 +34,8 @@ public final class ClientFiles {
         for (String name : NAMES) {
             Path from = legacyRoot.resolve(name);
             try {
-                boolean moved = Files.isDirectory(from) ? LegacyMigration.tree(from, clientDir.resolve(name))
-                        : LegacyMigration.file(from, clientDir.resolve(name));
+                boolean moved = Files.isDirectory(from) ? tree(from, clientDir.resolve(name))
+                        : file(from, clientDir.resolve(name));
                 if (moved) {
                     Constants.LOG.info("[numen-migrate] client file {} was copied into client/", name);
                 }
@@ -43,6 +43,60 @@ public final class ClientFiles {
                 // 一项没复制成不拦着别的,也不拦着游戏启动;原件还在,下次启动再来
                 Constants.LOG.warn("[numen-migrate] copying {} failed, the original is still there: {}", name, e.getMessage());
             }
+        }
+    }
+
+    private static final String STAGING = ".migrating";
+
+    /** 一个目录整个搬过去:目标不在、旧的在才搬。复制到暂存再改名,目标要么不在、要么完整。 */
+    private static boolean tree(Path legacy, Path target) {
+        if (!Files.isDirectory(legacy) || Files.exists(target)) {
+            return false;
+        }
+        Path staging = target.resolveSibling(target.getFileName() + STAGING);
+        Trees.delete(staging);   // 上次崩在半路留下的
+        Trees.copy(legacy, staging);
+        verify(legacy, staging);
+        place(staging, target);
+        return true;
+    }
+
+    /** 一个文件搬过去:目标不在、旧的在才搬;先复制到暂存再改名,目标要么不在、要么完整。 */
+    private static boolean file(Path legacy, Path target) {
+        if (Files.exists(target) || !Files.isRegularFile(legacy)) {
+            return false;
+        }
+        Path staging = target.resolveSibling(target.getFileName() + STAGING);
+        try {
+            Files.createDirectories(target.getParent());
+            Files.copy(legacy, staging, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.io.IOException e) {
+            throw new StoreException("cannot move " + legacy + ": " + e, e);
+        }
+        place(staging, target);
+        return true;
+    }
+
+    /** 复制出来的每个文件和旧的一样大。 */
+    private static void verify(Path from, Path copy) {
+        try (java.util.stream.Stream<Path> walk = Files.walk(copy)) {
+            for (Path made : walk.filter(Files::isRegularFile).toList()) {
+                Path source = from.resolve(copy.relativize(made).toString());
+                if (!Files.isRegularFile(source) || Files.size(source) != Files.size(made)) {
+                    throw new StoreException("the copy " + made + " does not match the old one");
+                }
+            }
+        } catch (java.io.IOException e) {
+            throw new StoreException("cannot verify " + copy + ": " + e, e);
+        }
+    }
+
+    private static void place(Path staging, Path target) {
+        try {
+            Files.createDirectories(target.getParent());
+            Files.move(staging, target, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        } catch (java.io.IOException e) {
+            throw new StoreException("cannot put into " + target + ": " + e, e);
         }
     }
 }

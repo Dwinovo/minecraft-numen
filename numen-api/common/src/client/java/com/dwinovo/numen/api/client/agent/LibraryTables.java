@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.client.agent;
 
+import com.dwinovo.numen.api.mind.LibraryDesk;
 import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.network.payload.LibraryPayload;
 import com.dwinovo.numen.api.network.payload.LibraryRequestPayload;
@@ -19,7 +20,7 @@ import java.util.function.Consumer;
  * 内存里的,不落盘、不是副本——真源在服务器,关了就丢,界面打开时再要。存和删不在这里办,只变成请求发给服务端,
  * 能不能由它判;办成之后它把新表推回来,视图才变。删是例外:那一行先画成没了({@link PendingChanges}),真表一到以真表为准。
  */
-public final class RemoteLibrary {
+public final class LibraryTables {
 
     private final Consumer<LibraryRequestPayload> send;
     private final Map<String, List<JsonElement>> tables = new HashMap<>();
@@ -40,7 +41,7 @@ public final class RemoteLibrary {
         }
     }
 
-    public RemoteLibrary(Consumer<LibraryRequestPayload> send) {
+    public LibraryTables(Consumer<LibraryRequestPayload> send) {
         this.send = send;
     }
 
@@ -50,7 +51,7 @@ public final class RemoteLibrary {
         List<JsonElement> table = tables.get(kind);
         if (table != null) {
             pending.computeIfAbsent(kind, k -> new PendingChanges<>())
-                    .over(table, RemoteLibrary::rowKey)
+                    .over(table, LibraryTables::rowKey)
                     .forEach(out::add);
         }
         return out;
@@ -132,8 +133,8 @@ public final class RemoteLibrary {
         List<JsonElement> rows = new ArrayList<>();
         String created = null;
         for (JsonElement row : JsonParser.parseString(p.entries()).getAsJsonArray()) {
-            if (row.isJsonObject() && row.getAsJsonObject().has(Libraries.CREATED)) {
-                created = row.getAsJsonObject().get(Libraries.CREATED).getAsString();
+            if (row.isJsonObject() && row.getAsJsonObject().has(LibraryDesk.CREATED)) {
+                created = row.getAsJsonObject().get(LibraryDesk.CREATED).getAsString();
             } else {
                 rows.add(row);
             }

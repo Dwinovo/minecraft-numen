@@ -20,7 +20,7 @@ import java.util.UUID;
  *
  * <p>线程:客户端主线程。
  */
-public final class RemoteTranscripts {
+public final class Transcripts {
 
     /** 一个会话的时间线,和再往前翻的状态。 */
     private static final class Line {

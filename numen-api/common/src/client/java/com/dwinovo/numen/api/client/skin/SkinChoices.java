@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.client.skin;
 
-import com.dwinovo.numen.api.client.agent.ServerLibraries;
+import com.dwinovo.numen.api.client.agent.ClientLibraries;
 import com.dwinovo.numen.api.skin.SkinError;
 import com.dwinovo.numen.api.skin.SkinFolder;
 import com.dwinovo.numen.api.skin.SkinRef;
@@ -70,7 +70,7 @@ public final class SkinChoices {
     /** 服务器皮肤文件夹里的全部(服务端推来的最近一张表);房主没有。 */
     public static List<Choice> server() {
         List<Choice> out = new ArrayList<>();
-        for (ServerLibraries.ServerSkin file : ServerLibraries.serverSkins()) {
+        for (ClientLibraries.ServerSkin file : ClientLibraries.serverSkins()) {
             out.add(file.problem() != null ? new Choice(Where.SERVER, file.name(), new byte[0], "", null, file.problem())
                     : choice(Where.SERVER, file.name(), file.png()));
         }

@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.client.screen;
 
 import com.dwinovo.numen.api.brain.OwnerSchedules;
-import com.dwinovo.numen.api.client.agent.ServerLibraries;
+import com.dwinovo.numen.api.client.agent.ClientLibraries;
 import com.dwinovo.numen.api.client.ui.widget.Button;
 import com.dwinovo.numen.api.client.ui.widget.DialogBox;
 import com.dwinovo.numen.api.client.ui.widget.MultilineTextField;
@@ -23,7 +23,7 @@ public final class ScheduleEditPanel extends ModalCard {
     public interface Host {
         UUID companion();
 
-        ServerLibraries.Schedule schedule();
+        ClientLibraries.Schedule schedule();
 
         void onSave(String id, String text, long everyTicks);
 
@@ -57,7 +57,7 @@ public final class ScheduleEditPanel extends ModalCard {
         text = "";
         amount = "1";
         days = true;
-        ServerLibraries.Schedule s = host.schedule();
+        ClientLibraries.Schedule s = host.schedule();
         if (s != null) {
             text = s.text();
             days = s.every() % DAY_TICKS == 0;

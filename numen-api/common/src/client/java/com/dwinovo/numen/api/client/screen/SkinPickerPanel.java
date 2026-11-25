@@ -1,8 +1,8 @@
 package com.dwinovo.numen.api.client.screen;
 
 import com.dwinovo.numen.api.brain.Libraries;
-import com.dwinovo.numen.api.client.agent.RemoteCompanions;
-import com.dwinovo.numen.api.client.agent.ServerLibraries;
+import com.dwinovo.numen.api.client.agent.ClientCompanions;
+import com.dwinovo.numen.api.client.agent.ClientLibraries;
 import com.dwinovo.numen.api.client.skin.FolderOpener;
 import com.dwinovo.numen.api.client.skin.SkinChoices;
 import com.dwinovo.numen.api.client.skin.SkinTextures;
@@ -111,7 +111,7 @@ public final class SkinPickerPanel extends ModalCard {
         ask();
         refresh();
         // 上一回没成的留在服务端的队里,这一回不再带着:看过了就撤掉
-        for (ServerLibraries.SkinJob job : ServerLibraries.skinJobs()) {
+        for (ClientLibraries.SkinJob job : ClientLibraries.skinJobs()) {
             if (job.failed()) {
                 cancel(job.job());
             }
@@ -120,8 +120,8 @@ public final class SkinPickerPanel extends ModalCard {
 
     /** 向服务端要它的皮肤文件夹此刻的样子,和我在队里的几行。 */
     private static void ask() {
-        RemoteCompanions.library().ask(Libraries.SKIN_FILES);
-        RemoteCompanions.library().ask(Libraries.SKIN);
+        ClientCompanions.library().ask(Libraries.SKIN_FILES);
+        ClientCompanions.library().ask(Libraries.SKIN);
     }
 
     /** 重列两个文件夹。 */
@@ -177,17 +177,17 @@ public final class SkinPickerPanel extends ModalCard {
         if (draft != null) {
             return draft.skin() == null ? null : draft.skin().ref();
         }
-        return SkinRef.parse(RemoteCompanions.getOrCreate(host.uuid()).skinId());
+        return SkinRef.parse(ClientCompanions.getOrCreate(host.uuid()).skinId());
     }
 
     private boolean admin() {
-        return RemoteCompanions.admin();
+        return ClientCompanions.admin();
     }
 
     /** 服务器钥匙串里 MineSkin 的 key;房主的钥匙就是服务器那一本,在他自己的那一份里。 */
     private static String storedKey() {
-        return RemoteCompanions.host() ? ServerLibraries.mineKey(MineSkinClient.KEY_SERVICE)
-                : ServerLibraries.serverKey(MineSkinClient.KEY_SERVICE);
+        return ClientCompanions.host() ? ClientLibraries.mineKey(MineSkinClient.KEY_SERVICE)
+                : ClientLibraries.serverKey(MineSkinClient.KEY_SERVICE);
     }
 
     // ---- 版式 ----
@@ -276,7 +276,7 @@ public final class SkinPickerPanel extends ModalCard {
             return;
         }
         if (admin()) {
-            ServerLibraries.saveKey(MineSkinClient.KEY_SERVICE, mineSkinKey, !RemoteCompanions.host());
+            ClientLibraries.saveKey(MineSkinClient.KEY_SERVICE, mineSkinKey, !ClientCompanions.host());
         }
         SetupDraft draft = host.draft();
         if (draft != null) {
@@ -289,7 +289,7 @@ public final class SkinPickerPanel extends ModalCard {
         body.addProperty("companion", host.uuid().toString());
         if (rows.get(selected) instanceof Row.Default) {
             takingOff = true;
-            RemoteCompanions.library().request(Libraries.SKIN, Libraries.DELETE, body, this::answered);
+            ClientCompanions.library().request(Libraries.SKIN, Libraries.DELETE, body, this::answered);
             return;
         }
         SkinChoices.Choice choice = ((Row.Item) rows.get(selected)).choice();
@@ -302,11 +302,11 @@ public final class SkinPickerPanel extends ModalCard {
         }
         expected = choice.ref(arm);
         problem = null;
-        RemoteCompanions.library().request(Libraries.SKIN, Libraries.PUT, body, this::answered);
+        ClientCompanions.library().request(Libraries.SKIN, Libraries.PUT, body, this::answered);
     }
 
     /** 服务端答了这一次请求:没办成就把原因摆出来。 */
-    private void answered(com.dwinovo.numen.api.client.agent.RemoteLibrary.Reply reply) {
+    private void answered(com.dwinovo.numen.api.client.agent.LibraryTables.Reply reply) {
         if (!reply.ok()) {
             expected = null;
             takingOff = false;
@@ -317,7 +317,7 @@ public final class SkinPickerPanel extends ModalCard {
     private static void cancel(long job) {
         JsonObject body = new JsonObject();
         body.addProperty("job", job);
-        RemoteCompanions.library().request(Libraries.SKIN, Libraries.CANCEL, body);
+        ClientCompanions.library().request(Libraries.SKIN, Libraries.CANCEL, body);
     }
 
     /** 等着她穿上(或脱掉)。 */
@@ -327,7 +327,7 @@ public final class SkinPickerPanel extends ModalCard {
 
     /** 这一刻该画在状态行上的话和颜色;没什么可说是 {@code null}。 */
     private String status(NumenTheme.Colors c, int[] color) {
-        for (ServerLibraries.SkinJob job : ServerLibraries.skinJobs()) {
+        for (ClientLibraries.SkinJob job : ClientLibraries.skinJobs()) {
             if (job.failed()) {
                 if (waiting()) {
                     expected = null;
@@ -343,7 +343,7 @@ public final class SkinPickerPanel extends ModalCard {
         }
         if (waiting()) {
             color[0] = c.textSecondary();
-            for (ServerLibraries.SkinJob job : ServerLibraries.skinJobs()) {
+            for (ClientLibraries.SkinJob job : ClientLibraries.skinJobs()) {
                 if ("WAITING".equals(job.state())) {
                     return t(ModLanguageData.Keys.SKIN_JOB_WAITING);
                 }

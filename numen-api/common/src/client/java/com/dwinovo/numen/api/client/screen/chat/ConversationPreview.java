@@ -3,7 +3,7 @@ package com.dwinovo.numen.api.client.screen.chat;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.agent.conversation.Transcript;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
-import com.dwinovo.numen.api.client.agent.RemoteCompanions;
+import com.dwinovo.numen.api.client.agent.ClientCompanions;
 import com.dwinovo.numen.api.client.agent.Conversations;
 import com.dwinovo.numen.api.client.agent.NumenRoster;
 import com.dwinovo.numen.api.client.chat.ChatDisplayModes;
@@ -50,14 +50,14 @@ public final class ConversationPreview {
     private static Cached cached(Conversation c) {
         Conversations convos = Conversations.instance();
         // 和面板正文同一个出口:服务端大脑下它按会话要最近一页并接上实时推来的行
-        List<Transcript.Entry> merged = RemoteCompanions.transcript(c.id());
+        List<Transcript.Entry> merged = ClientCompanions.transcript(c.id());
         int total = merged.size();
         Cached hit = CACHE.get(c.id());
         if (hit != null && hit.lines() == total) {
             return hit;
         }
         UUID her = convos.soloOf(c);
-        UUID me = RemoteCompanions.viewer();
+        UUID me = ClientCompanions.viewer();
         // 说话的不止她和我:群,或者她不止一位主人——最后一句得标是谁说的
         boolean group = her == null || NumenRoster.instance().severalKeepers(her);
         Line out = null;

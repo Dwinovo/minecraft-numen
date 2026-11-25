@@ -12,10 +12,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /** 库在客户端只是服务端说的那张表:存和删只变成请求,表要等服务端推回来才变。 */
-class RemoteLibraryTest {
+class LibraryTablesTest {
 
     private final List<LibraryRequestPayload> sent = new ArrayList<>();
-    private final RemoteLibrary library = new RemoteLibrary(sent::add);
+    private final LibraryTables library = new LibraryTables(sent::add);
 
     @Test
     void whatTheServerSaysIsTheTableAndTheLastRefusalIsTheProblem() {
@@ -33,7 +33,7 @@ class RemoteLibraryTest {
 
     @Test
     void anAnswerGoesToTheAskerByRequestNumberAndAPushSqueezedInBetweenIsNotTheAnswer() {
-        List<RemoteLibrary.Reply> replies = new ArrayList<>();
+        List<LibraryTables.Reply> replies = new ArrayList<>();
         library.request("permission", "put", new JsonObject(), replies::add);
         long id = sent.get(0).request();
         assertEquals(1, id);
@@ -90,7 +90,7 @@ class RemoteLibraryTest {
 
     @Test
     void theCreatedIdRidesTheAnswerToTheAskerAndIsNotARowOfTheTable() {
-        List<RemoteLibrary.Reply> replies = new ArrayList<>();
+        List<LibraryTables.Reply> replies = new ArrayList<>();
         library.put("voice", new JsonObject(), replies::add);
 
         library.onPayload(new LibraryPayload("voice", "[{\"id\":\"my:甲\",\"name\":\"甲\"},{\"created\":\"my:甲\"}]", "",

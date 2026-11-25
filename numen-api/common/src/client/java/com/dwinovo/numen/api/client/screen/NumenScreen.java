@@ -6,15 +6,15 @@ import com.dwinovo.numen.api.agent.llm.ConvoState;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.agent.provider.AssistantTurn;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
-import com.dwinovo.numen.api.client.agent.RemoteCompanions;
+import com.dwinovo.numen.api.client.agent.ClientCompanions;
 import com.dwinovo.numen.api.client.agent.ChatFolders;
 import com.dwinovo.numen.api.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.api.client.agent.Conversations;
-import com.dwinovo.numen.api.client.agent.RemoteCompanion;
+import com.dwinovo.numen.api.client.agent.CompanionView;
 import com.dwinovo.numen.api.client.agent.NumenRoster;
 import com.dwinovo.numen.api.client.chat.SelectedCompanion;
 import com.dwinovo.numen.api.client.data.ClientNumenState;
-import com.dwinovo.numen.api.client.agent.ServerLibraries;
+import com.dwinovo.numen.api.client.agent.ClientLibraries;
 import com.dwinovo.numen.api.data.ModLanguageData;
 import com.dwinovo.numen.api.entity.Keeper;
 import com.dwinovo.numen.api.network.payload.RequestStatePayload;
@@ -191,7 +191,7 @@ public final class NumenScreen extends Screen {
         if (outside.isOutside()) {
             return new HeaderStatus("offline", I18n.get(ModLanguageData.Keys.HEADER_OFFLINE));
         }
-        var st = RemoteCompanions.get(her).map(RemoteCompanion::status).orElse(null);
+        var st = ClientCompanions.get(her).map(CompanionView::status).orElse(null);
         if (st == null) return new HeaderStatus("online", I18n.get(ModLanguageData.Keys.HEADER_ONLINE));
         if (st.phase() == com.dwinovo.numen.api.agent.loop.Phase.COMPACT) {
             return new HeaderStatus("compacting", I18n.get(ModLanguageData.Keys.HEADER_COMPACTING) + dots(now));
@@ -480,9 +480,9 @@ public final class NumenScreen extends Screen {
     }
 
     /** 就他俩那只的大脑;会话没有单一的主时 null。 */
-    private RemoteCompanion loop() {
+    private CompanionView loop() {
         UUID her = solo();
-        return her == null ? null : RemoteCompanions.getOrCreate(her);
+        return her == null ? null : ClientCompanions.getOrCreate(her);
     }
 
     /**
@@ -748,8 +748,11 @@ public final class NumenScreen extends Screen {
 
     /** 召唤卡的宿主面:发包与开选皮肤卡留在屏幕这边。 */
     private final class SummonHost implements SummonPanel.Host {
-        @Override public void onCreate(String name, com.dwinovo.numen.api.entity.SummonSetup setup) {
-            // 名字和改过的配置一包发出,服务端在她到达时落下;新同伴经 CompanionListPayload 到达——点它的头像即可开工
+        @Override public void onCreate(String name, com.dwinovo.numen.api.entity.SummonSetup setup,
+                                       java.util.Map<com.dwinovo.numen.api.brain.Slot, String> bindings) {
+            // 名字与模式、皮肤一包发出,服务端在她到达时落下;库绑定留在这台电脑上,她的大脑建起来时落下;
+            // 新同伴经 CompanionListPayload 到达——点它的头像即可开工
+            com.dwinovo.numen.api.client.seat.ClientSeats.expect(name, bindings);
             NumenNetwork.sendToServer(new com.dwinovo.numen.api.network.payload.SummonRequestPayload(name, setup));
             closeCard();
         }
@@ -891,7 +894,7 @@ public final class NumenScreen extends Screen {
             openCard(noteEditPanel());
             return;
         }
-        ServerLibraries.askNote(who, name, reply -> {
+        ClientLibraries.askNote(who, name, reply -> {
             if (reply.ok()) {
                 openCard(noteEditPanel());
             } else {
@@ -912,7 +915,7 @@ public final class NumenScreen extends Screen {
         @Override public String note() { return noteName; }
 
         @Override public void onSave(String name, String description, String type, String content) {
-            ServerLibraries.saveNote(noteOf, name, description, type, content, reply -> {
+            ClientLibraries.saveNote(noteOf, name, description, type, content, reply -> {
                 if (!reply.ok()) warn(reply.problem());
             });
             closeCard();
@@ -925,7 +928,7 @@ public final class NumenScreen extends Screen {
                     I18n.get(ModLanguageData.Keys.NOTE_DELETE_TITLE),
                     I18n.get(ModLanguageData.Keys.NOTE_DELETE_WARNING),
                     I18n.get(ModLanguageData.Keys.GUI_SETTINGS_CANCEL), I18n.get(ModLanguageData.Keys.NOTE_DELETE),
-                    () -> ServerLibraries.deleteNote(her, name, reply -> {
+                    () -> ClientLibraries.deleteNote(her, name, reply -> {
                         if (!reply.ok()) warn(reply.problem());
                     }));
             rebuild();
@@ -938,13 +941,13 @@ public final class NumenScreen extends Screen {
 
     /** 定时编辑卡对着哪只、哪一条({@code null} = 新增)。 */
     private UUID scheduleOf;
-    private ServerLibraries.Schedule scheduleEdited;
+    private ClientLibraries.Schedule scheduleEdited;
     private ScheduleEditPanel scheduleEditPanel;
 
     /** 新增或编辑她的一条定时:全部内容都在表里,直接开卡。 */
     private void openSchedule(UUID who, String id) {
         scheduleOf = who;
-        scheduleEdited = id == null ? null : ServerLibraries.schedules(who).stream()
+        scheduleEdited = id == null ? null : ClientLibraries.schedules(who).stream()
                 .filter(s -> s.id().equals(id)).findFirst().orElse(null);
         if (scheduleEditPanel == null) {
             scheduleEditPanel = new ScheduleEditPanel(new ScheduleHost());
@@ -956,10 +959,10 @@ public final class NumenScreen extends Screen {
     private final class ScheduleHost implements ScheduleEditPanel.Host {
         @Override public UUID companion() { return scheduleOf; }
 
-        @Override public ServerLibraries.Schedule schedule() { return scheduleEdited; }
+        @Override public ClientLibraries.Schedule schedule() { return scheduleEdited; }
 
         @Override public void onSave(String id, String text, long everyTicks) {
-            ServerLibraries.saveSchedule(scheduleOf, id, text, everyTicks, reply -> {
+            ClientLibraries.saveSchedule(scheduleOf, id, text, everyTicks, reply -> {
                 if (!reply.ok()) warn(reply.problem());
             });
             closeCard();
@@ -972,7 +975,7 @@ public final class NumenScreen extends Screen {
                     I18n.get(ModLanguageData.Keys.SCHEDULE_DELETE_TITLE),
                     I18n.get(ModLanguageData.Keys.SCHEDULE_DELETE_WARNING),
                     I18n.get(ModLanguageData.Keys.GUI_SETTINGS_CANCEL), I18n.get(ModLanguageData.Keys.SCHEDULE_DELETE),
-                    () -> ServerLibraries.deleteSchedule(her, id, reply -> {
+                    () -> ClientLibraries.deleteSchedule(her, id, reply -> {
                         if (!reply.ok()) warn(reply.problem());
                     }));
             rebuild();
@@ -1119,7 +1122,7 @@ public final class NumenScreen extends Screen {
      * 驾驶着的时候服务端不清,这里先把原因说出来,不让主人白点一遍确认。
      */
     private void openWipeConfirm(UUID target) {
-        var her = RemoteCompanions.getOrCreate(target);
+        var her = ClientCompanions.getOrCreate(target);
         String problem = her.clearProblem() != null ? her.clearProblem()
                 : her.status().phase() != null ? ModLanguageData.Keys.LOOP_WIPE_BUSY : null;
         if (problem != null) {
@@ -1158,7 +1161,7 @@ public final class NumenScreen extends Screen {
         @Override public String name() { return nameFor(shareOf); }
 
         @Override public void onShare(String player) {
-            RemoteCompanions.getOrCreate(shareOf).share(player);
+            ClientCompanions.getOrCreate(shareOf).share(player);
             closeCard();
         }
 
@@ -1174,7 +1177,7 @@ public final class NumenScreen extends Screen {
                 I18n.get(ModLanguageData.Keys.UNSHARE_WARNING),
                 I18n.get(ModLanguageData.Keys.GUI_SETTINGS_CANCEL), I18n.get(ModLanguageData.Keys.UNSHARE_CONFIRM),
                 () -> {
-                    RemoteCompanions.getOrCreate(target).unshare(keeper.uuid());
+                    ClientCompanions.getOrCreate(target).unshare(keeper.uuid());
                     rebuild();
                 });
         rebuild();
@@ -1190,7 +1193,7 @@ public final class NumenScreen extends Screen {
                 I18n.get(ModLanguageData.Keys.LEAVE_WARNING, row.creator().shown()),
                 I18n.get(ModLanguageData.Keys.GUI_SETTINGS_CANCEL), I18n.get(ModLanguageData.Keys.SHARE_LEAVE),
                 () -> {
-                    RemoteCompanions.getOrCreate(target).unshare(RemoteCompanions.viewer());
+                    ClientCompanions.getOrCreate(target).unshare(ClientCompanions.viewer());
                     rebuild();
                 });
         rebuild();
@@ -1214,7 +1217,7 @@ public final class NumenScreen extends Screen {
 
     /** 这只同伴分享的事用一句话说:创建者看到"分享给了 甲、乙",被分享的人看到"来自 某某"。只对不止一位主人的她问。 */
     private static String shareWords(NumenRoster.Entry row) {
-        if (row.sharedWith(RemoteCompanions.viewer())) {
+        if (row.sharedWith(ClientCompanions.viewer())) {
             return I18n.get(ModLanguageData.Keys.SHARE_FROM, row.creator().shown());
         }
         return I18n.get(ModLanguageData.Keys.SHARE_WITH, row.keepers().stream().skip(1).map(Keeper::shown)
@@ -1239,7 +1242,7 @@ public final class NumenScreen extends Screen {
                 x, iconTop(), ICON_N, fade(hot ? CTA : t.accent(), alpha));
         if (hot) tip(java.util.List.of(Component.literal(shareWords(row))), mouseX, mouseY);
         x += ICON_N + 3;
-        if (row.sharedWith(RemoteCompanions.viewer()) && x + font.width("…") <= limit) {
+        if (row.sharedWith(ClientCompanions.viewer()) && x + font.width("…") <= limit) {
             String from = Nb.clip(font, shareWords(row), limit - x);
             txt(g, Component.literal(from), x, top + NAME_Y, fade(t.accent(), alpha));
             x += font.width(from);
@@ -1401,7 +1404,7 @@ public final class NumenScreen extends Screen {
             return I18n.get("numen.chat.hint", n == null ? "" : n);
         }
 
-        @Override public RemoteCompanion loop() {
+        @Override public CompanionView loop() {
             return NumenScreen.this.loop();
         }
 
@@ -1792,7 +1795,7 @@ public final class NumenScreen extends Screen {
     private String activePersonaName() {
         UUID her = solo();
         if (her == null) return null;
-        return RemoteCompanions.get(her).map(RemoteCompanion::personaName).orElse(null);
+        return ClientCompanions.get(her).map(CompanionView::personaName).orElse(null);
     }
 
     @Override
@@ -2989,7 +2992,7 @@ public final class NumenScreen extends Screen {
         String tag = Conversations.instance().tagOf(c);
         boolean group = Conversations.instance().soloOf(c) == null;
         for (UUID m : Conversations.instance().membersAlive(c)) {
-            RemoteCompanion lp = RemoteCompanions.get(m).orElse(null);
+            CompanionView lp = ClientCompanions.get(m).orElse(null);
             if (lp == null || !java.util.Objects.equals(lp.conversation(), tag)) continue;
             HeaderStatus s = headerStatus(m, now);
             if (s == null || !(s.key().equals("typing") || s.key().equals("busy") || s.key().equals("compacting"))) {
@@ -3045,7 +3048,7 @@ public final class NumenScreen extends Screen {
 
     /** idle = green, working/compacting = amber, queued = gold; faint if no loop yet. */
     private int statusColor(UUID u) {
-        return RemoteCompanions.get(u).map(loop -> {
+        return ClientCompanions.get(u).map(loop -> {
             var status = loop.status();
             if (status.busy()) return RUN;   // 等模型、跑工具、整理记忆、身体有后台任务
             if (!status.queuedPreview().isEmpty()) return CTA;
@@ -3153,7 +3156,7 @@ public final class NumenScreen extends Screen {
 
     private void renderChat(GuiGraphics g, int mouseX, int mouseY) {
         renderFind(g, mouseX, mouseY);
-        RemoteCompanion lp = loop();
+        CompanionView lp = loop();
         long now = System.currentTimeMillis();
         float dt = lastPinFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastPinFrameMs) / 1000f);
         lastPinFrameMs = now;

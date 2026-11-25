@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.client.agent;
 
+import com.dwinovo.numen.api.mind.LibraryDesk;
 import com.dwinovo.numen.mcp.client.McpServerSpec;
 import com.dwinovo.numen.api.agent.catalog.ThinkingLevel;
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
@@ -21,16 +22,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 服务器上那几种库在界面眼里的样子:{@link RemoteLibrary} 里最近一次读到的整表,读成界面直接用的小记录。真源在服务器——
- * 这里不存、不缓存,每次现读;存和删经 {@link RemoteCompanions#library()} 发给服务端,谁能做什么由它判。
+ * 服务器上那几种库在界面眼里的样子:{@link LibraryTables} 里最近一次读到的整表,读成界面直接用的小记录。真源在服务器——
+ * 这里不存、不缓存,每次现读;存和删经 {@link ClientCompanions#library()} 发给服务端,谁能做什么由它判。
  * 看不到的东西(普通玩家看不到的 key、地址、令牌)服务端编码时就没有,这里读不出来也就谈不上泄露。
  */
-public final class ServerLibraries {
+public final class ClientLibraries {
 
-    private ServerLibraries() {}
+    private ClientLibraries() {}
 
     private static JsonArray entries(String kind) {
-        return RemoteCompanions.library().entries(kind);
+        return ClientCompanions.library().entries(kind);
     }
 
     private static String text(JsonObject o, String key) {
@@ -79,7 +80,7 @@ public final class ServerLibraries {
     /** 服务器提供的在前,我的在后。 */
     public static List<Persona> personas() {
         List<Persona> out = new ArrayList<>();
-        for (JsonElement e : entries(Libraries.PERSONA)) {
+        for (JsonElement e : entries(LibraryDesk.PERSONA)) {
             JsonObject o = e.getAsJsonObject();
             out.add(new Persona(base(o), text(o, "text") == null ? "" : text(o, "text")));
         }
@@ -113,7 +114,7 @@ public final class ServerLibraries {
         if (!row.id().equals(bound.id().toString())) {
             return false;
         }
-        return bound.by().equals(viewer) ? effective(row) : row.server() || RemoteCompanions.host();
+        return bound.by().equals(viewer) ? effective(row) : row.server() || ClientCompanions.host();
     }
 
     // ---- 模型档案 ----
@@ -139,8 +140,8 @@ public final class ServerLibraries {
 
     public static List<Provider> providers() {
         List<Provider> out = new ArrayList<>();
-        boolean admin = RemoteCompanions.admin();
-        for (JsonElement e : entries(Libraries.PROVIDER)) {
+        boolean admin = ClientCompanions.admin();
+        for (JsonElement e : entries(LibraryDesk.PROVIDER)) {
             JsonObject o = e.getAsJsonObject();
             Base base = base(o);
             boolean visible = admin || !base.server();
@@ -174,7 +175,7 @@ public final class ServerLibraries {
 
     public static List<KeyRow> keys() {
         List<KeyRow> out = new ArrayList<>();
-        for (JsonElement e : entries(Libraries.KEY)) {
+        for (JsonElement e : entries(LibraryDesk.KEY)) {
             JsonObject o = e.getAsJsonObject();
             if (o.has("service")) {
                 out.add(new KeyRow(text(o, "service"), text(o, "mine"), flag(o, "serverSet"), text(o, "server")));
@@ -208,12 +209,12 @@ public final class ServerLibraries {
         body.addProperty("service", service);
         body.addProperty("key", typed);
         body.addProperty("scope", server ? "server" : "mine");
-        RemoteCompanions.library().request(Libraries.KEY, Libraries.PUT, body);
+        ClientCompanions.library().request(LibraryDesk.KEY, Libraries.PUT, body);
     }
 
     /** 答复里带的提醒({@link Libraries#NOTICE_OWNER_SEES_KEY});没有是 null。 */
     public static String keyNotice() {
-        for (JsonElement e : entries(Libraries.KEY)) {
+        for (JsonElement e : entries(LibraryDesk.KEY)) {
             if (e.getAsJsonObject().has("notice")) {
                 return text(e.getAsJsonObject(), "notice");
             }
@@ -255,7 +256,7 @@ public final class ServerLibraries {
 
     /** 服务端对目录问题的最近一次答案;还没答过是 {@link CatalogAnswer#EMPTY}。 */
     public static CatalogAnswer catalog() {
-        JsonArray answers = entries(Libraries.CATALOG);
+        JsonArray answers = entries(LibraryDesk.CATALOG);
         return answers.isEmpty() ? CatalogAnswer.EMPTY : catalogOf(answers.get(0).getAsJsonObject());
     }
 
@@ -308,7 +309,7 @@ public final class ServerLibraries {
 
     /** 最近一次检测的结局;没试过是 {@code null}。 */
     public static Check check() {
-        JsonArray results = entries(Libraries.PROVIDER_CHECK);
+        JsonArray results = entries(LibraryDesk.PROVIDER_CHECK);
         if (results.isEmpty()) {
             return null;
         }
@@ -324,7 +325,7 @@ public final class ServerLibraries {
     /** 这只同伴的札记索引。 */
     public static List<Note> notes(java.util.UUID companion) {
         List<Note> out = new ArrayList<>();
-        for (JsonElement e : entries(Libraries.NOTES)) {
+        for (JsonElement e : entries(LibraryDesk.NOTES)) {
             JsonObject o = e.getAsJsonObject();
             if (companion.toString().equals(text(o, "companion"))) {
                 out.add(new Note(text(o, "name"), text(o, "description"), text(o, "type"), o.get("day").getAsInt()));
@@ -338,7 +339,7 @@ public final class ServerLibraries {
 
     /** 最近一次读到的这条札记的全文;没读到(没问过、服务端说没有)是 {@code null}。 */
     public static NoteText noteText(java.util.UUID companion, String name) {
-        for (JsonElement e : entries(Libraries.NOTE)) {
+        for (JsonElement e : entries(LibraryDesk.NOTE)) {
             JsonObject o = e.getAsJsonObject();
             if (companion.toString().equals(text(o, "companion")) && name.equals(text(o, "name"))) {
                 return new NoteText(name, text(o, "description"), text(o, "type"), text(o, "content"));
@@ -349,8 +350,8 @@ public final class ServerLibraries {
 
     /** 向服务端要这条札记的全文;答复到了({@code onReply})之后用 {@link #noteText} 读。 */
     public static void askNote(java.util.UUID companion, String name,
-                               java.util.function.Consumer<RemoteLibrary.Reply> onReply) {
-        RemoteCompanions.library().request(Libraries.NOTE, Libraries.LIST, noteBody(companion, name), onReply);
+                               java.util.function.Consumer<LibraryTables.Reply> onReply) {
+        ClientCompanions.library().request(LibraryDesk.NOTE, Libraries.LIST, noteBody(companion, name), onReply);
     }
 
     /**
@@ -358,18 +359,18 @@ public final class ServerLibraries {
      * 答复到了({@code onReply})带回办不成的原因。
      */
     public static void saveNote(java.util.UUID companion, String name, String description, String type, String content,
-                                java.util.function.Consumer<RemoteLibrary.Reply> onReply) {
+                                java.util.function.Consumer<LibraryTables.Reply> onReply) {
         JsonObject body = noteBody(companion, name);
         body.addProperty("description", description);
         body.addProperty("type", type);
         body.addProperty("content", content);
-        RemoteCompanions.library().request(Libraries.NOTES, Libraries.PUT, body, onReply);
+        ClientCompanions.library().request(LibraryDesk.NOTES, Libraries.PUT, body, onReply);
     }
 
     /** 删一条札记。 */
     public static void deleteNote(java.util.UUID companion, String name,
-                                  java.util.function.Consumer<RemoteLibrary.Reply> onReply) {
-        RemoteCompanions.library().request(Libraries.NOTES, Libraries.DELETE, noteBody(companion, name), onReply);
+                                  java.util.function.Consumer<LibraryTables.Reply> onReply) {
+        ClientCompanions.library().request(LibraryDesk.NOTES, Libraries.DELETE, noteBody(companion, name), onReply);
     }
 
     private static JsonObject noteBody(java.util.UUID companion, String name) {
@@ -389,7 +390,7 @@ public final class ServerLibraries {
     /** 这只同伴的定时,按服务端给的顺序。 */
     public static List<Schedule> schedules(java.util.UUID companion) {
         List<Schedule> out = new ArrayList<>();
-        for (JsonElement e : entries(Libraries.SCHEDULES)) {
+        for (JsonElement e : entries(LibraryDesk.SCHEDULES)) {
             JsonObject o = e.getAsJsonObject();
             if (companion.toString().equals(text(o, "companion"))) {
                 out.add(new Schedule(text(o, "id"), text(o, "text"), o.get("every").getAsLong()));
@@ -402,17 +403,17 @@ public final class ServerLibraries {
      * 新增({@code id} 为 {@code null})或改一条定时。能不能办、条数与间隔够不够格都由服务端判,答复到了({@code onReply})带回办不成的原因。
      */
     public static void saveSchedule(java.util.UUID companion, String id, String text, long every,
-                                    java.util.function.Consumer<RemoteLibrary.Reply> onReply) {
+                                    java.util.function.Consumer<LibraryTables.Reply> onReply) {
         JsonObject body = scheduleBody(companion, id);
         body.addProperty("text", text);
         body.addProperty("every", every);
-        RemoteCompanions.library().request(Libraries.SCHEDULES, Libraries.PUT, body, onReply);
+        ClientCompanions.library().request(LibraryDesk.SCHEDULES, Libraries.PUT, body, onReply);
     }
 
     /** 删一条定时。 */
     public static void deleteSchedule(java.util.UUID companion, String id,
-                                      java.util.function.Consumer<RemoteLibrary.Reply> onReply) {
-        RemoteCompanions.library().request(Libraries.SCHEDULES, Libraries.DELETE, scheduleBody(companion, id), onReply);
+                                      java.util.function.Consumer<LibraryTables.Reply> onReply) {
+        ClientCompanions.library().request(LibraryDesk.SCHEDULES, Libraries.DELETE, scheduleBody(companion, id), onReply);
     }
 
     private static JsonObject scheduleBody(java.util.UUID companion, String id) {
@@ -441,7 +442,7 @@ public final class ServerLibraries {
     /** 服务器提供的在前,我的在后。 */
     public static List<Skill> skills() {
         List<Skill> out = new ArrayList<>();
-        for (JsonElement e : entries(Libraries.SKILL)) {
+        for (JsonElement e : entries(LibraryDesk.SKILL)) {
             JsonObject o = e.getAsJsonObject();
             out.add(new Skill(base(o), text(o, "skill"), text(o, "description")));
         }
@@ -457,9 +458,8 @@ public final class ServerLibraries {
     public record HerSkill(String name, String description) {}
 
     /**
-     * 这只同伴用得了的技能——她读的永远是创建者的那一份:我创建的,就是我技能库里叠起来算数、没关掉的;分享来的,是服务端说的
-     * 她创建者的那一份({@link Libraries#COMPANION_SKILLS}),我自己的技能库管不着她。没指明哪一只({@code null}:会话没有单一的主)
-     * 给的是我自己技能库里的。
+     * 这只同伴用得了的技能:她的大脑在我这台电脑上,就是我技能库里叠起来算数、没关掉的;分享来的她,技能在她创建者的电脑上,
+     * 这里看不到,是空的。没指明哪一只({@code null}:会话没有单一的主)给的是我自己技能库里的。
      *
      * @param viewer 这台客户端的玩家
      */
@@ -467,12 +467,6 @@ public final class ServerLibraries {
         NumenRoster.Entry her = companion == null ? null : NumenRoster.instance().entry(companion);
         List<HerSkill> out = new ArrayList<>();
         if (her != null && her.sharedWith(viewer)) {
-            for (JsonElement e : entries(Libraries.COMPANION_SKILLS)) {
-                JsonObject o = e.getAsJsonObject();
-                if (companion.toString().equals(text(o, "companion"))) {
-                    out.add(new HerSkill(text(o, "skill"), text(o, "description")));
-                }
-            }
             return out;
         }
         for (Skill skill : skillsEffective()) {
@@ -531,7 +525,7 @@ public final class ServerLibraries {
     /** 服务器提供的在前,我的在后。 */
     public static List<Voice> voices() {
         List<Voice> out = new ArrayList<>();
-        for (JsonElement e : entries(Libraries.VOICE)) {
+        for (JsonElement e : entries(LibraryDesk.VOICE)) {
             JsonObject o = e.getAsJsonObject();
             out.add(new Voice(base(o), flag(o, "unreadable") ? null : VoiceProfile.fromJson(o)));
         }
@@ -602,7 +596,7 @@ public final class ServerLibraries {
 
     /** 主动性档位;服务端还没说过是默认档。 */
     public static int initiative() {
-        JsonArray prefs = entries(Libraries.PREFS);
+        JsonArray prefs = entries(LibraryDesk.PREFS);
         if (prefs.isEmpty()) {
             return com.dwinovo.numen.api.agent.inbox.EventQueue.DEFAULT_LEVEL;
         }
@@ -614,7 +608,7 @@ public final class ServerLibraries {
     public static void setInitiative(int level) {
         JsonObject body = new JsonObject();
         body.addProperty("initiative", level);
-        RemoteCompanions.library().put(Libraries.PREFS, body);
+        ClientCompanions.library().put(LibraryDesk.PREFS, body);
     }
 
     // ---- 接进来的 MCP 服务器 ----
@@ -643,7 +637,7 @@ public final class ServerLibraries {
 
     public static List<McpClientRow> mcpClients() {
         List<McpClientRow> out = new ArrayList<>();
-        for (JsonElement e : entries(Libraries.MCP_CLIENT)) {
+        for (JsonElement e : entries(LibraryDesk.MCP_CLIENT)) {
             JsonObject o = e.getAsJsonObject();
             if (flag(o, "unreadable")) {
                 continue;
@@ -729,14 +723,14 @@ public final class ServerLibraries {
         JsonObject body = body(companion);
         body.addProperty("verb", verb);
         body.addProperty("tier", tier);
-        RemoteCompanions.library().request(Libraries.PERMISSION, Libraries.TIER, body);
+        ClientCompanions.library().request(Libraries.PERMISSION, Libraries.TIER, body);
     }
 
     /** 给一只同伴套一个预设:{@code observe}、{@code bypass}、{@code factory}。 */
     public static void applyPreset(java.util.UUID companion, String preset) {
         JsonObject body = body(companion);
         body.addProperty("preset", preset);
-        RemoteCompanions.library().request(Libraries.PERMISSION, Libraries.PRESET, body);
+        ClientCompanions.library().request(Libraries.PERMISSION, Libraries.PRESET, body);
     }
 
     /** 从一只同伴一种动作的名单里删一项。 */
@@ -744,7 +738,7 @@ public final class ServerLibraries {
         JsonObject body = body(companion);
         body.addProperty("verb", verb);
         body.addProperty("entry", entry);
-        RemoteCompanions.library().request(Libraries.PERMISSION, Libraries.DELETE, body);
+        ClientCompanions.library().request(Libraries.PERMISSION, Libraries.DELETE, body);
     }
 
     private static JsonObject body(java.util.UUID companion) {

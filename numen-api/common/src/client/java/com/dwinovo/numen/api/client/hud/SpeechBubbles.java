@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.client.hud;
 
 import com.dwinovo.numen.api.client.agent.ActivityWords;
-import com.dwinovo.numen.api.client.agent.RemoteCompanions;
+import com.dwinovo.numen.api.client.agent.ClientCompanions;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -123,7 +123,7 @@ public final class SpeechBubbles {
         boolean asking = com.dwinovo.numen.api.client.consent.ConsentCards.pending(entityUuid) != null;
         String activity = null;
         boolean waiting = false;
-        var loop = RemoteCompanions.get(entityUuid).orElse(null);
+        var loop = ClientCompanions.get(entityUuid).orElse(null);
         if (loop != null) {
             var status = loop.status();
             activity = status.activity() == null ? null : ActivityWords.text(status.activity());

@@ -1,15 +1,16 @@
 package com.dwinovo.numen.api.client.screen;
 
+import com.dwinovo.numen.api.mind.LibraryDesk;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.brain.CompanionState;
 import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.brain.OwnerSchedules;
 import com.dwinovo.numen.api.brain.Slot;
-import com.dwinovo.numen.api.client.agent.RemoteCompanions;
+import com.dwinovo.numen.api.client.agent.ClientCompanions;
 import com.dwinovo.numen.api.client.agent.ActivityWords;
 import com.dwinovo.numen.api.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.api.client.agent.Conversations;
-import com.dwinovo.numen.api.client.agent.RemoteCompanion;
+import com.dwinovo.numen.api.client.agent.CompanionView;
 import com.dwinovo.numen.api.client.agent.KnownSkins;
 import com.dwinovo.numen.api.client.agent.NumenRoster;
 import com.dwinovo.numen.api.client.data.ClientNumenState;
@@ -19,7 +20,7 @@ import com.dwinovo.numen.api.client.ui.mc.Sprites;
 import com.dwinovo.numen.api.client.ui.widget.DialogBox;
 import com.dwinovo.numen.api.data.ModLanguageData;
 import com.dwinovo.numen.api.entity.Keeper;
-import com.dwinovo.numen.api.client.agent.ServerLibraries;
+import com.dwinovo.numen.api.client.agent.ClientLibraries;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -212,12 +213,12 @@ final class ProfilePage {
         }
         var snap = ClientNumenState.get(who).orElse(null);
         AbstractClientPlayer e = ClientNumenLookup.resolve(who);
-        RemoteCompanion loop = RemoteCompanions.get(who).orElse(null);
+        CompanionView loop = ClientCompanions.get(who).orElse(null);
         ItemStack[] hover = {ItemStack.EMPTY};
         tip = null;
         // 她的主人表:创建者是不是我,决定只有创建者办得成的那几个入口摆不摆
         NumenRoster.Entry entry = NumenRoster.instance().entry(who);
-        UUID me = RemoteCompanions.viewer();
+        UUID me = ClientCompanions.viewer();
         Keeper creator = entry == null ? null : entry.creator();
         boolean mine = entry != null && entry.createdBy(me);
         boolean shared = entry != null && entry.sharedWith(me);
@@ -295,14 +296,14 @@ final class ProfilePage {
             memoryPending = false;
         }
         refreshTables();
-        List<ServerLibraries.Note> all = ServerLibraries.notes(who);
+        List<ClientLibraries.Note> all = ClientLibraries.notes(who);
         cy = sectionHead(g, t, I18n.get("numen.profile.memories"), all.isEmpty() ? "" : String.valueOf(all.size()),
                 x + PAD, cy, iw);
         if (all.isEmpty()) {
             Nb.text(g, font, I18n.get("numen.profile.memories_none"), x + PAD, cy, t.textDim());
             cy += 14;
         } else {
-            for (ServerLibraries.Note n : all) {
+            for (ClientLibraries.Note n : all) {
                 boolean hot = mouseX >= x && mouseX < x + w && mouseY >= cy - 2 && mouseY < cy + ROW_H - 2;
                 if (hot) g.fill(x, cy - 2, x + w, cy + ROW_H - 2, t.over());
                 infoRow(g, t, Sprites.BOOK, n.description(),
@@ -317,7 +318,7 @@ final class ProfilePage {
 
         // ---- 定时:到点她听到主人的这句话;点开编辑,最后一行新增 ----
         cy = gap(g, t, x, w, cy);
-        List<ServerLibraries.Schedule> timed = ServerLibraries.schedules(who);
+        List<ClientLibraries.Schedule> timed = ClientLibraries.schedules(who);
         cy = sectionHead(g, t, I18n.get(ModLanguageData.Keys.SCHEDULE_SECTION),
                 timed.isEmpty() ? "" : String.valueOf(timed.size()), x + PAD, cy, iw);
         if (timed.isEmpty()) {
@@ -327,7 +328,7 @@ final class ProfilePage {
             }
             cy += 3;
         } else {
-            for (ServerLibraries.Schedule s : timed) {
+            for (ClientLibraries.Schedule s : timed) {
                 boolean hot = mouseX >= x && mouseX < x + w && mouseY >= cy - 2 && mouseY < cy + ROW_H - 2;
                 if (hot) g.fill(x, cy - 2, x + w, cy + ROW_H - 2, t.over());
                 infoRow(g, t, Sprites.MESSAGE, s.text(), every(s.every()), x + PAD, cy, iw);
@@ -401,7 +402,7 @@ final class ProfilePage {
         CompanionState.Binding modelBound = loop == null ? null : loop.binding(Slot.PROVIDER);
         String model = I18n.get("numen.profile.model_none");
         if (modelBound != null) {
-            var seen = ServerLibraries.provider(modelBound.bound(), me);
+            var seen = ClientLibraries.provider(modelBound.bound(), me);
             model = boundBy(modelBound, seen != null ? seen.model() == null || seen.model().isBlank() ? seen.name() : seen.model()
                     : modelBound.bound().by().equals(me) ? I18n.get("numen.profile.model_deleted")
                     : modelBound.bound().id().name(), me);
@@ -410,7 +411,7 @@ final class ProfilePage {
         CompanionState.Binding voiceBound = loop == null ? null : loop.binding(Slot.VOICE);
         String voice = I18n.get("numen.profile.voice_none");
         if (voiceBound != null) {
-            var seen = ServerLibraries.voice(voiceBound.bound(), me);
+            var seen = ClientLibraries.voice(voiceBound.bound(), me);
             if (seen != null) {
                 voice = boundBy(voiceBound, seen.name(), me);
             } else if (!voiceBound.bound().by().equals(me)) {
@@ -527,16 +528,16 @@ final class ProfilePage {
         long now = System.currentTimeMillis();
         if (now - askedMs > REFRESH_MS) {
             askedMs = now;
-            RemoteCompanions.library().ask(Libraries.NOTES);
-            RemoteCompanions.library().ask(Libraries.SCHEDULES);
+            ClientCompanions.library().ask(LibraryDesk.NOTES);
+            ClientCompanions.library().ask(LibraryDesk.SCHEDULES);
         }
     }
 
     /** 简介:她人设的开头一段(跳过标题行),最多两行,再长截短。没有人设正文是空。 */
-    private List<FormattedCharSequence> bio(RemoteCompanion loop, int width) {
+    private List<FormattedCharSequence> bio(CompanionView loop, int width) {
         CompanionState.Binding bound = loop == null ? null : loop.binding(Slot.PERSONA);
         if (bound == null) return List.of();
-        var persona = ServerLibraries.persona(bound.bound(), RemoteCompanions.viewer());
+        var persona = ClientLibraries.persona(bound.bound(), ClientCompanions.viewer());
         if (persona == null || persona.text() == null) return List.of();
         StringBuilder para = new StringBuilder();
         for (String line : persona.text().split("\n")) {
@@ -757,7 +758,7 @@ final class ProfilePage {
      * 的话那三段自然消失。它是给想知道的人看的,住在上下文那一行的悬停提示里,不常驻。
      * 命中率只看<b>最近一轮</b>:累计命中率会被历史稀释,看不出"刚才那轮把缓存打穿了"。
      */
-    private static String usageDetail(RemoteCompanion lp) {
+    private static String usageDetail(CompanionView lp) {
         var sum = lp.usageTotals();
         List<String> parts = new ArrayList<>();
         if (sum.input() > 0) parts.add("↑" + com.dwinovo.numen.api.client.ui.TokenFormat.tokens(sum.input()));

@@ -1,9 +1,10 @@
 package com.dwinovo.numen.api.client.screen;
 
+import com.dwinovo.numen.api.mind.LibraryDesk;
 import com.dwinovo.numen.api.brain.Bound;
 import com.dwinovo.numen.api.brain.Libraries;
-import com.dwinovo.numen.api.client.agent.RemoteCompanions;
-import com.dwinovo.numen.api.client.agent.ServerLibraries;
+import com.dwinovo.numen.api.client.agent.ClientCompanions;
+import com.dwinovo.numen.api.client.agent.ClientLibraries;
 import com.dwinovo.numen.api.client.screen.SetupDraft.Item;
 import com.dwinovo.numen.api.client.ui.widget.Dropdown;
 import com.dwinovo.numen.api.client.ui.widget.Reveal;
@@ -67,7 +68,7 @@ final class SetupRows {
     void reset(SetupDraft draft) {
         this.draft = draft;
         more.snap(false);
-        RemoteCompanions.library().request(Libraries.PERSONA, Libraries.RELOAD, new JsonObject());
+        ClientCompanions.library().request(LibraryDesk.PERSONA, LibraryDesk.RELOAD, new JsonObject());
     }
 
     SetupDraft draft() {
@@ -88,7 +89,7 @@ final class SetupRows {
     void layout(ModalCard card, int ry) {
         picks.clear();
         options.clear();
-        viewer = RemoteCompanions.viewer();
+        viewer = ClientCompanions.viewer();
         row(card, null, Item.PERSONA, ry);
         ry += ModalCard.ROW_H;
         row(card, null, Item.PROVIDER, ry);
@@ -127,17 +128,17 @@ final class SetupRows {
         switch (item) {
             case PERSONA -> {
                 out.put(null, defaultName(item));
-                ServerLibraries.personasInUse().forEach(p -> out.put(mine(p.id()), p.name()));
+                ClientLibraries.personasInUse().forEach(p -> out.put(mine(p.id()), p.name()));
             }
             case PROVIDER -> {
                 if (draft.base(item) == null) {
                     out.put(null, defaultName(item));
                 }
-                ServerLibraries.providersInUse().forEach(p -> out.put(mine(p.id()), p.name()));
+                ClientLibraries.providersInUse().forEach(p -> out.put(mine(p.id()), p.name()));
             }
             case VOICE -> {
                 out.put(null, defaultName(item));
-                ServerLibraries.voicesInUse().forEach(v -> out.put(mine(v.id()), v.name()));
+                ClientLibraries.voicesInUse().forEach(v -> out.put(mine(v.id()), v.name()));
             }
             case MODE -> {
                 out.put(Boolean.FALSE, context == Context.SUMMON ? defaultName(item) : t(Keys.SUMMON_MODE_SURVIVAL));
@@ -204,7 +205,7 @@ final class SetupRows {
             }
             // 另一位主人绑的那一项:说清它算谁的;他"我的"里的声线这台电脑看不到,不念
             if (draft.value(e.getKey()) instanceof Bound bound && foreign(bound)) {
-                boolean unheard = e.getKey() == Item.VOICE && ServerLibraries.voice(bound, viewer) == null;
+                boolean unheard = e.getKey() == Item.VOICE && ClientLibraries.voice(bound, viewer) == null;
                 return I18n.get(unheard ? Keys.SETUP_BOUND_BY_UNHEARD : Keys.SETUP_BOUND_BY_TIP, draft.baseBy(e.getKey()));
             }
         }
