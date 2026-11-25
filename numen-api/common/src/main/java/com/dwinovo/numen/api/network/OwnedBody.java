@@ -30,7 +30,7 @@ public final class OwnedBody {
         return of(sender.level().getServer(), sender.getUUID(), entityUuid, refuse);
     }
 
-    /** 同上,不是玩家发的包而是服务端大脑替这位主人办事:{@code ownerUuid} 是该在她主人表上的那一位。 */
+    /** 同上,不是玩家发的包而是座位替这位主人办事:{@code ownerUuid} 是该在她主人表上的那一位。 */
     public static NumenPlayer of(MinecraftServer server, UUID ownerUuid, UUID entityUuid, Consumer<String> refuse) {
         NumenPlayer companion = NumenPlayer.findByUuid(server, entityUuid);
         if (companion == null) {

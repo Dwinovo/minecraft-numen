@@ -20,7 +20,7 @@ import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /**
- * 在服务端跑她的 Lua 程序的<b>唯一入口</b>:她的大脑({@link LocalPrograms})、管理员的
+ * 在服务端跑她的 Lua 程序的<b>唯一入口</b>:座位送来的她的程序({@link LocalPrograms})、管理员的
  * {@code /numen drive <同伴> <程序>}、重启后接回她手上那件活(记下的那一行 Lua 再跑一遍)、GameTest 与单测都经它。
  *
  * <h2>谁做什么</h2>
@@ -139,8 +139,8 @@ public final class ServerPrograms {
                 new ServerCalls(her, companion, running.lane,
                         job -> running.claimed = request.reportsToModel() ? job : null),
                 client), observer);
-        Constants.LOG.info("[numen-program] {} runs {} on the server ({} chars)", companion, request.programId(),
-                request.code().length());
+        Constants.LOG.info("[numen-program] {} runs {} on the server for {} ({} chars)", companion, request.programId(),
+                request.keeper() == null ? "its creator" : request.keeper(), request.code().length());
         running.program = new Program(request.programId(), request.code(),
                 new ProgramPort(her, request.modules(), calls), new SerialExecutor(THREADS), outcome -> {
                     // 程序以任何方式结束(跑完、出错、打断、切断、主人断线)都经这里:它等着的反向请求在这一处撤掉

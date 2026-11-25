@@ -20,7 +20,7 @@
  * 把三处合成一条能出声的声线,设置面板"语音"tab 是库的编辑界面。未绑定的同伴静音且零开销。
  *
  * <h2>生命周期</h2>
- * 管线归 {@code TurnPresenter} 所有:服务端大脑每次调模型推来 {@code TurnStart} 就 beginTurn,主人打断 /
+ * 管线归 {@code TurnPresenter} 所有:大脑每次调模型发出 {@code TurnStart} 就 beginTurn,主人打断 /
  * 同伴死亡 interrupt。
  */
 package com.dwinovo.numen.api.client.voice;

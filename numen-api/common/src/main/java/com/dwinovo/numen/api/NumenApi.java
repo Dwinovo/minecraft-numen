@@ -254,7 +254,7 @@ public interface NumenApi {
      * 服务端:她身上发生了一件事,告诉她。
      *
      * <p>和 Numen API 自带的事件走同一个发出口:按类型查表,盖上游戏内时间戳,拼成
-     * {@code <event kind="type" …>text</event>},送进她的收件箱(她的大脑在服务端,主人在不在线都一样,离线只是攒着)。
+     * {@code <event kind="type" …>text</event>},送进服务端的收件箱(主人在不在线都一样,离线只是攒着)。
      *
      * @param type   {@link #registerEventType} 登记过的种类
      * @param attrs  拼进 {@code <event>} 的属性,按迭代顺序;没有就给 null

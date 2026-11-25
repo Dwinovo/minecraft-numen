@@ -224,7 +224,7 @@ public final class NumenNetwork {
                 Execution.NETWORK);
         toClient(FragmentPayload.TO_CLIENT, FragmentPayload.TO_CLIENT_CODEC, NumenNetwork::fragmentFromServer);
 
-        // 服务端大脑与主人的客户端之间:握手、主人做的事、一刻的事件、历史分页、会话列表(见 brain 包)。
+        // 服务端与主人的客户端之间:握手、主人做的事、一刻的事件、历史分页、会话列表(见 brain 包)。
         toClient(com.dwinovo.numen.api.network.payload.ServerHelloPayload.TYPE,
                 com.dwinovo.numen.api.network.payload.ServerHelloPayload.STREAM_CODEC,
                 com.dwinovo.numen.api.network.payload.ServerHelloPayload::handle);

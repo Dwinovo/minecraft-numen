@@ -49,7 +49,7 @@ public final class ConversationPreview {
 
     private static Cached cached(Conversation c) {
         Conversations convos = Conversations.instance();
-        // 和面板正文同一个出口:服务端大脑下它按会话要最近一页并接上实时推来的行
+        // 和面板正文同一个出口:它按会话要最近一页并接上实时推来的行
         List<Transcript.Entry> merged = ClientCompanions.transcript(c.id());
         int total = merged.size();
         Cached hit = CACHE.get(c.id());

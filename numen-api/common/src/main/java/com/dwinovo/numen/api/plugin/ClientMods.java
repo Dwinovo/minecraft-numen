@@ -53,7 +53,7 @@ public final class ClientMods {
         return TARGETS.get(namespace);
     }
 
-    /** 同伴到主人的对应由服务端大脑的接线注入。<b>Numen API 内部调用</b>。 */
+    /** 同伴到主人的对应由服务端的接线注入。<b>Numen API 内部调用</b>。 */
     public static void bindOwners(Function<UUID, UUID> companionToOwner) {
         ownerOf = companionToOwner;
     }

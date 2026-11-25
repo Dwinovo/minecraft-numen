@@ -46,7 +46,7 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
     }
 
     /**
-     * @param programs 程序交给谁跑:大脑是本进程里的 {@code LocalPrograms}
+     * @param programs 程序交给谁跑:座位把程序送到服务端,由服务端的 {@code LocalPrograms} 跑
      * @param tools    她看得到的工具:模型点名的工具从这里取
      */
     public CompanionToolPort(UUID companion, Supplier<? extends ToolAnchor> anchor, ProgramHost programs,

@@ -34,7 +34,7 @@ public final class ClientPayloadHandlers {
     public static void install() {
         ClientPayloadSink.companionList = ClientPayloadHandlers::handleCompanionList;
         ClientPayloadSink.consent = com.dwinovo.numen.api.client.consent.ConsentCards::accept;
-        // 身体状态只给物品页画(ClientNumenState);大脑在服务端,直接读身体,不吃这一包
+        // 身体状态只给物品页画(ClientNumenState);大脑经座位向服务端要身体的样子,不吃这一包
         ClientPayloadSink.state = p ->
                 ClientNumenState.update(p.uuid(), com.dwinovo.numen.api.agent.request.BodySnapshot.of(p,
                         System.currentTimeMillis()));

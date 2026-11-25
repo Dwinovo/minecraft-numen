@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 哪些在线的玩家装着我们的客户端:服务端开场({@code ServerHelloPayload})之后,客户端报到,报两样东西——协议版本({@code HelloPayload})与
  * 它提供哪些目标模组只在客户端的联动({@code ClientCapsPayload},见 {@link com.dwinovo.numen.api.plugin.ClientMods})。<b>两样都到齐才算报到</b>:
  * 这是"发不发 Numen 包"的唯一判据({@code NumenNetwork#sendToPlayer}),也是"这位主人的客户端提供哪些联动"的唯一出处
- * ({@link #provides}:API 清单、技能表、客户端函数的放行都读它)。报到过的才推 {@link Feed} 等一切;没有的,服务端大脑的回话改成只发给主人的
+ * ({@link #provides}:API 清单、技能表、客户端函数的放行都读它)。报到过的才推 {@link Feed} 等一切;没有的,她的回话改成只发给主人的
  * 系统消息。版本对不上的客户端不算数——它看不懂我们推的东西。
  *
  * <p>因为"有客户端"与"客户端提供什么"在同一刻成立,一个时刻里提示词里列着哪些客户端联动、调用它们放不放行,永远一致:客户端还没到齐的那些

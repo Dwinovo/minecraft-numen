@@ -12,7 +12,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
- * 座位送来的程序交给本进程里的 {@link ServerPrograms}:模块是座位按这一段程序的清单备好的({@link Modules});程序里的客户端函数经
+ * 座位送来的程序交给服务端的 {@link ServerPrograms}:模块是座位按这一段程序的清单备好的({@link Modules});程序里的客户端函数经
  * {@link ClientTransport} 问主人的客户端。结局和 {@link ServerPrograms#run} 一样在服务端主线程上交回。
  *
  * <p>线程:都在服务端主线程上。

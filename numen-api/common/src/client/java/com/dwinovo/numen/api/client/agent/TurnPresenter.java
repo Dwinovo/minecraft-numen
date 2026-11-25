@@ -23,7 +23,7 @@ import java.util.function.Supplier;
  * 一只同伴的<b>表现层</b>:聊天框打字机、头顶气泡、聊天栏的话与提示、错误 toast、说话状态上报、
  * 流式语音(TTS)的接线与在飞文本缓冲。
  *
- * <p>吃服务端大脑推来的 {@link Feed}({@link #on}):大脑只管什么时候调模型、派工具、停下来,不碰界面;这里只管
+ * <p>吃她的大脑(在主人的客户端上)交来的 {@link Feed}({@link #on}):大脑只管什么时候调模型、派工具、停下来,不碰界面;这里只管
  * "她看/听起来在干什么",不碰会话与队列。删掉这一层,对话照常进行,只是又聋又哑。
  */
 final class TurnPresenter {
@@ -72,7 +72,7 @@ final class TurnPresenter {
         this.speakingSink = speakingSink;
     }
 
-    /** 服务端大脑推来的事件在这里变成主人看得见、听得见的东西。 */
+    /** 大脑交来的事件在这里变成主人看得见、听得见的东西。 */
     void on(Feed event) {
         switch (event) {
             case Feed.TurnStart turn -> beginTurn(turn.ownerSpoke());

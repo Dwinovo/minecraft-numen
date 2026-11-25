@@ -11,7 +11,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
- * 服务端大脑怎么跟模型说话:同伴绑的档案({@link Bound}:谁绑的、哪一条)进来,端点、可不可用、发请求都在这一侧。产品里是
+ * 大脑怎么跟模型说话:同伴绑的档案({@link Bound}:谁绑的、哪一条)进来,端点、可不可用、发请求都在这一侧。产品里是
  * {@link LlmMind}(档案在绑的那个人的库里解析,用他的 key);GameTest 给脚本化的一个。
  *
  * <p>回调可以在任何线程上交回——循环自己把它切回服务端主线程。
