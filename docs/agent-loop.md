@@ -1,7 +1,8 @@
 # 智能体循环:ReAct + 事件队列(设计稿)
 
-同伴的大脑在服务端:一只同伴一个循环(`CompanionLoop`),调模型、派工具、收结果,主人的话和世界事件进同一个队列。
-这份设计把原来客户端上的那个循环类重做成**一个 ReAct 循环加一个事件队列**(后来整体搬到了服务端,见 `input-pipeline.md` §十四),参照 pi-mono 的
+同伴的大脑在她的创建者(主人)的客户端上:一只同伴一个循环宿主(`LoopHost`,`com.dwinovo.numen.api.mind`),调模型、派程序、收回执,
+主人的话和世界事件进同一个队列;身体在服务端,两端之间只有一个座位(`docs/adr/runtime/0008-brain-on-owners-client.md`,`input-pipeline.md` §十四)。
+这份设计把最早的那个循环类重做成**一个 ReAct 循环加一个事件队列**(历史上它在客户端、后来搬去服务端、现在回到客户端),参照 pi-mono 的
 `packages/agent`(`agent-loop.ts`、`agent.ts`、`ai/src/api/transform-messages.ts`)。
 
 模型看到的内容、工具串行、主动性档位、失败重试一次、自动压缩、长期目标,这些行为不变;
@@ -63,10 +64,11 @@ pi 默认"插话一次取一条"、工具并行;这两点我们不照搬(§七�
 ## 二、分层
 
 ```
-┌─ 同伴的大脑 CompanionLoop(numen-api,服务端)───────────────────────────────┐
-│  拼请求:系统提示、运行期状态;模型与人设绑定;外接模型取件口;把端口接给内核  │
-│  订阅者:TokenLedger、Compactor、GoalSteward、RuntimeState、MemoryPreamble、    │
-│          FeedEncoder(推给主人客户端,TurnPresenter 在那头画打字机/语音/气泡)   │
+┌─ 同伴的大脑 LoopHost(numen-api 的 mind 包,主人的客户端)─────────────────────┐
+│  拼请求:系统提示(用座位上取来的目录拼)、运行期状态(每轮开头 state/get);      │
+│          模型与人设绑定;外接大脑取件口;把端口接给内核                          │
+│  订阅者:TokenLedger、Compactor、GoalSteward、MemoryPreamble、                 │
+│          FeedEncoder(给本机的视图,TurnPresenter 画打字机/语音/气泡)、TraceRecorder│
 └──────────────────────────────┬──────────────────────────────────────────────┘
                                │ 端口
 ┌─ 循环内核 AgentLoop(agent 模块,com.dwinovo.numen.api.agent.loop,纯 Java)──────┐
@@ -86,7 +88,7 @@ pi 默认"插话一次取一条"、工具并行;这两点我们不照搬(§七�
 | `store`(纯 Java,只依赖 Gson) | 只追加日志 `AppendLog`、小文档 `JsonDoc`、原子写 `Atomic`、读写放哪个线程的 `Io`;不认识任何业务 |
 | `ai`(现有,纯 Java,依赖 store) | 传输、服务商、`NumenLlmClient`、`ConvoState`/`ConvoLog`/`CompactSplit`;新增 `ProtocolView` |
 | `agent`(新建,纯 Java,依赖 ai) | 循环内核(`Run`、`Hold`、`pump`、`halt`、`LoopEvent`、`LoopStatus`、端口接口);队列 `EventQueue`/`EventTypes`/`JsonlJournal`(从 Numen API 的 `event` 包搬来,包名 `com.dwinovo.numen.api.agent.inbox`;落盘是 store 的日志,每次存盘整本换进去);长期目标 `GoalState`/`GoalPrompts`(从 Numen API 搬来)与 `GoalSteward`;`Compactor` |
-| `numen-api`(依赖 agent) | 服务端大脑 `CompanionLoop`、工具口 `CompanionToolPort`、`FeedEncoder`(客户端的 `TurnPresenter` 画它推来的事件)、`SystemPromptComposer`、`RuntimeState`;`NumenEvents`(用到 Minecraft,留下) |
+| `numen-api`(依赖 agent) | 客户端上的大脑宿主 `LoopHost`(`mind` 包)与座位的客户端一端(`seat` 包)、工具口 `CompanionToolPort`、`FeedEncoder`(客户端的 `TurnPresenter` 画它交来的事件)、`SystemPromptComposer`;服务端的座位、`ServerPrograms`、`RuntimeState` 一类的身体报告(`BodyReports`);`NumenEvents`(用到 Minecraft,留下) |
 
 - **内核单独成模块**:不放 Numen API——Numen API 依赖 Minecraft,"不引用 Minecraft"只能靠自觉,编译器拦不住;
   不放 ai——ai 是"大脑与服务商之间的连接层",循环是大脑本身。`agent` 模块零 Minecraft 依赖,
@@ -98,8 +100,8 @@ pi 默认"插话一次取一条"、工具并行;这两点我们不照搬(§七�
   类与源码;NeoForge 开发运行带上它的源码集;插件编译路径 `compileOnly`;根构建发布依赖它。
 - **ProtocolView 放 ai**:`NumenLlmClient.chatStreaming` 把消息转成服务商格式是全仓唯一的出口,
   正常一轮、压缩、目标评估都经过它。
-- **线程**:内核的一切状态只在服务端主线程读写。异步回调(模型流、工具结果)由门面注入的
-  主线程执行器切回主线程再进内核。
+- **线程**:内核的一切状态只在大脑所在线程(客户端主线程)读写。异步回调(模型流、座位上的答复)由宿主注入的
+  执行器切回这个线程再进内核。
 
 ---
 
@@ -241,11 +243,11 @@ void end(RunEnd reason) {
   `CompanionToolPort` 只管怎么执行一个调用;结果逐条经 `Transcript` 写入,一批全部结算后回调
   `onToolsSettled`。
 - **程序整段在服务端跑**(`docs/shell.md` §十四):跑 Lua 的那个工具的调用(`ScriptTool`)是一整段程序,`SerialCalls.Port.invoke`
-  把它整段交给 `ProgramHost`(`LocalPrograms`,本进程里的 `ServerPrograms`),程序在身体旁边跑完,回一张回执(连同每次 API 调用的结局与是不是被叫停的)。程序
+  把它整段经座位的 `program/run` 交给服务端的 `LocalPrograms`(`ServerPrograms`),程序在身体旁边跑完,回一张回执(连同每次 API 调用的结局与是不是被叫停的)。程序
   跑的时候,这一批后面的调用等着;程序里每件身体活都在程序里等它收尾,所以回执回来时那些活已经做完。大脑不逐次派发 API 调用、
   不等 `task_finished`(收尾归程序的那些就写进了回执)。
 - **等的时候来了急件**:这一批还没结算时,内核把入了队的条目连同急不急转给工具口(`ToolPort.arrived`);一段程序在服务端跑着,急件就让
-  `SerialCalls` 让它停在调用之间(`ProgramHost.interrupt`),交回的结局里带结构化的"为什么停",这一批余下的调用
+  `SerialCalls` 让它停在调用之间(座位上的 `program/interrupt`),交回的结局里带结构化的"为什么停",这一批余下的调用
   逐条回"没执行"并写那个原因(规则见宪法 §六)。最后一件受理了这批就结算,所以 run 往往在身体还在干活时就结束了;
   `task_finished` 作为插话进队,下次 pump 开新 run。这正是 pi 的"闲时来消息就开 run"。
 - **没有轮数上限、没有循环检测**:保持现状(模型合理地连着派很多任务;失控由主人停止)。
@@ -364,10 +366,10 @@ record Type(String id,
   `<event kind="…">` 里的 kind 取自同一个 id。`NumenEvents.Kind` 删掉,`event` 这个笼统类型也不再需要。
 - **`body_log` 退役**:本能做的事登记成 `reflex` 一种,带上是哪个本能(溺水自救、下落放水、防御……)。
   不再有"身体日志"这个桶。
-- **一个发出口**:服务端发事件只有一个方法(`NumenEvents.emit`),按类型查表,直接进她的收件箱(主人在不在线都一样,
-  离线只是攒着)——内置事件和插件事件同一条路。
+- **一个发出口**:服务端发事件只有一个方法(`NumenEvents.emit`),按类型查表,进服务端为她留的事件队列,经座位的 `events/new` 送到创建者客户端上的收件箱(带序号,断线重连续传)——内置事件和插件事件同一条路。
 - **插件同一扇门**:`NumenApi` 提供"登记事件类型"与"发出一条事件"。`NumenGateway.emit`(客户端、语义是
-  "主人说了一句话")收进同一扇门——发的就是 `query` 类型;在客户端调时如实返回 `Delivery`。
+  "主人说了一句话")收进同一扇门——发的就是 `query` 类型;在客户端调时如实返回 `Delivery`。别人对她说的话(群聊、私聊、共享主人在面板里说)
+  只经服务端的 `Hearing`,送进创建者的座位。
   插件不需要任何旁路。第一个用户是 Curios 插件的 `accessory_changed`(戴上、摘下、坏了、死亡掉落)。
 
 ### 状态不是事件:身体状态片段
@@ -377,7 +379,7 @@ record Type(String id,
 (现已删除,公开 API 移除);核心的背包块直接读身体,没有这个问题。
 
 - **新增服务端身体状态片段**:插件在服务端给一个"身体 → 一段描述"的函数;Numen API 在 `CompanionStateWatch`
-  检测变化时一并算、有变化随状态包推给主人的客户端;这段描述出现在运行期状态里,也出现在
+  检测变化时一并算、有变化随状态包推给主人的客户端(物品页画它);大脑的提示里这一段由服务端在 `state/get` 与程序结局里写成;这段描述出现在运行期状态里,也出现在
   `status_self` 里("你的全部"不再漏掉插件管的部位)。
 - **一个事实只有一个来源**:身体上的事实(饰品栏、模组给的装备位)用身体状态片段 `contributeBodyState`。
 
@@ -419,7 +421,7 @@ void halt(HaltReason reason) {
 - **交还时不自动续跑**:halt 已记录中断标记,链条算结束;外接期间攒的事件由 pump 按熟度处理。
 - **`RESET_LOOPS` 先 halt 再清表**:现在直接清表,旧循环的在飞回合继续写同一个会话文件。
 - **只取消这个循环的调用**:`ToolPort.cancel` 按调用 id 取消(在服务端跑着的程序先被叫停),按同伴整批清空的做法删掉——否则
-  内脑的打断会把外接模型挂着的调用一起丢掉。
+  内置循环的打断会把外接模型挂着的调用一起丢掉。
 - **复活**:死亡事件在死亡当刻就进队(`onDied`);重生以后推一条重生事件(急件)进队,清 `dead`,pump。补悬空结果交给 §九,不再在这里写。
 
 ---
@@ -462,7 +464,7 @@ record Halt(String reason) implements Msg {}   // 这一轮在这里被切断:�
 | `halt` | 一轮在这里被切断:给模型的 `reason`,和给面板翻译的 `code`+`args` |
 | `compact` | 整理:只写摘要 `content` 和 `firstKeptId`("从哪条 id 起原文保留"),保留的几条仍是它们原来的记录,不抄第二份 |
 | `clear`、`persona-change` | 清空、换人设的分界,只记何时 |
-| `model-change`、`thinking-change` | 这一轮起换了模型 / 换了思考档位,各自单独一条;`CompanionLoop` 每轮发请求前比一下,没变不写 |
+| `model-change`、`thinking-change` | 这一轮起换了模型 / 换了思考档位,各自单独一条;`LoopHost` 每轮发请求前比一下,没变不写 |
 | `<命名空间>:<名字>` | 插件自己的记录(`appendCustom`/`custom`),不进模型上下文也不进面板 |
 
 每条记录有 `type`、`id`(文件内唯一)、`parentId`(上一条的 id)、`ts`。认不得的类型两个视图都跳过但留在文件里。
@@ -545,30 +547,31 @@ sealed interface LoopEvent {
 ```
 
 订阅方:
-- **FeedEncoder → TurnPresenter**:服务端把循环事件按刻译成展示用的 `Feed` 推给主人的客户端,客户端的 `TurnPresenter` 画:打字机、思考流、语音(`TurnStart.ownerSpoke` 决定硬停/句界衔接)、说话状态包、
+- **FeedEncoder → TurnPresenter**:客户端上把循环事件按刻译成展示用的 `Feed`,同一台客户端的 `TurnPresenter` 画:打字机、思考流、语音(`TurnStart.ownerSpoke` 决定硬停/句界衔接)、说话状态包、
   头顶气泡、聊天行、提示条、"想了想什么也没说"。`SpeechBubbles`/`ChatLines`/`NumenHudToasts`/`TalkHint`
   的调用都在客户端这一头,循环里没有。
 - **TokenLedger**:`ModelUsed`,三种用途都记。
 - **显示记录**:`TranscriptBoundary` 驱动分隔线;现在"写日志事件 + 手动加分隔"的三处双写删除,
   显示记录与 `ConvoLog.loadDisplay` 共用一份映射。
 - **WorkBlockMemory**:`ToolFinished` 里收工作站坐标(现在的 `harvestWorkBlocks`)。
-- **BrainEventBridge → 插件**:`RunStarted`、`RunEnded` 按刻攒下,在 `CompanionLoops.tick` 里于内核两步之间、服务端主线程译成 `CompanionEvent.RUN_STARTED`、`RUN_ENDED` 派给插件(循环换新桥跟着换;外接大脑驾驶时没有 run 也就不发)。
+- **run 的开收 → 插件**:`RunStarted`、`RunEnded` 由宿主经座位的通知 `run/started`、`run/ended` 报回服务端,服务端在 `SeatConnection` 这一处、主线程上译成 `CompanionEvent.RUN_STARTED`、`RUN_ENDED` 派给插件(外接大脑驾驶时没有 run 也就不发)。
 - 订阅者逐个隔离:`AgentLoop.emit` 里一个订阅者抛了只记日志、事件接着送给后面的,同一个连续出错只记一次。
 
 ---
 
 ## 十三、同伴门面与组件
 
-`CompanionLoop` 是门面,只剩同伴侧的事:
+`LoopHost` 是门面,只剩同伴侧的事:
 
 | 组件 | 职责 | 来源 |
 |---|---|---|
-| `CompanionLoop` | 构造内核并接端口;人设/模型绑定;外接模型取件与 `externalSay`;她的家(日志、收件箱、台账、目标、绑定) | 旧的客户端循环类的服务端版 |
+| `LoopHost` | 构造内核并接端口;人设/模型绑定;外接大脑取件与说话;她的家(日志、收件箱、台账、目标、绑定,在主人客户端上) | 最早的循环类 |
 | `SystemPromptComposer` | 人设 + 操作核心 + 技能表 + 本能名册 | `composeSystemPrompt` |
 | `RuntimeState` | `<runtime_state>`:当前任务、背包、效果、骑乘、插件片段、附近(`Nearby`) | `runtimeStateXml` 等 |
 | `Compactor` | 压缩提示、切分、摘要提取、熔断 | 压缩相关方法 |
 | `GoalSteward` | 目标设定、评估、续跑、收工 | 目标相关方法 |
 | `TurnPresenter` | 订阅事件的全部表现层(客户端) | 循环里散落的 UI 调用 |
+| `TraceRecorder` | 大脑这一头的旁路轨迹:每一轮看到了什么;身体那一头(寻路为什么放弃)另有服务端的 `BodyTrace`,两本互不相识 | |
 
 其他收口:
 - **主人的话一个入口**:面板也走 `NumenGateway`(现在面板直调循环并自己先查端点);端点检查只在
@@ -711,8 +714,8 @@ sealed interface LoopEvent {
   门面不再转述。
 - **目标的评估窗口按消息认起点**:往回扫到设定目标的那条(`GoalPrompts.isDirective`),不记"设定时的历史位置"——
   目标跨重进游戏活着,重进后历史按条数上限读回,位置早就对不上了。
-- **组件**:`Compactor` 在 `agent.memory`,`GoalSteward` 在 `agent.goal`(都有单测);`SystemPromptComposer`、
-  `RuntimeState`(含当前任务的镜像)在 Numen API(服务端)。工作站坐标与任务镜像也各自订阅内核,门面自己不订阅任何事件。
+- **组件**:`Compactor` 在 `agent.memory`,`GoalSteward` 在 `agent.goal`(都有单测);`SystemPromptComposer` 在客户端拼,
+  `RuntimeState`(含当前任务的镜像)由服务端在 Numen API 里写成,随 `state/get` 与程序结局到大脑。工作站坐标与任务镜像也各自订阅内核,门面自己不订阅任何事件。
 - **模型端口的失败只有一个出口**:请求还没组装出来就出的错(服务商配置对不上、历史转不成线格式)同样作为
   失败交回,不会同步抛出去让内核永远等在 `MODEL`。
 

@@ -12,8 +12,7 @@ import net.minecraft.world.entity.Entity;
  * <p>前面几批只要有一条用例多跑或少跑几刻(原版烟花的寿命、MCP 的 HTTP),这一批开始的那一刻、开始时造过多少实体就跟着变。
  * 有两样东西按这两个数的余数做事:
  * <ul>
- *   <li>全服按刻数取余的周期:到点的表每 20 刻扫一次({@code TimerRegistry}),没装客户端的主人的动作栏每 20 刻一行
- *       ({@code CompanionLoops}),规则面板的推送每 10 刻一包({@code PermissionFeed});</li>
+ *   <li>全服按刻数取余的周期:到点的表每 20 刻扫一次({@code TimerRegistry}),规则面板的推送每 10 刻一包({@code PermissionFeed});</li>
  *   <li>原版按实体编号错开的节拍:掉落物在地上每 {@code (tickCount + id) % 4} 刻才动一次,怪的部分 AI 也按编号错开。</li>
  * </ul>
  * 还有全服共用的世界随机数(掉落物的初速、战利品表):原版是不定种子的,前面几批用掉多少也跟着变。

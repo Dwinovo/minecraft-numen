@@ -1,6 +1,6 @@
 # 0008 大脑在主人的客户端,身体在服务端:两端之间只有一个座位,说 JSON-RPC
 
-- 状态:已接受,在落地
+- 状态:已接受,已落地
 - 日期:2026-11-25
 - 修订:[0001](0001-server-agent-two-brains.md)(服务端 Agent、配置与 key 归服主)、[control 0011](../control/0011-brain-on-server.md)
   (循环、记忆与外接大脑放服务端);回到 [control 0010](../control/0010-programs-run-on-server.md) 的"客户端想,服务端做"

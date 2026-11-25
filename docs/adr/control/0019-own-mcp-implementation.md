@@ -74,3 +74,9 @@ MCP 规范本身不大,我们用到的面更小,而且已有自写 `ai` 传输�
   (`@modelcontextprotocol/conformance` 的 server 与 client 场景)、官方 Inspector 与 everything 服务器互通、以及本模块的单测守住;
   不实现的协议面在一致性测试里是"不适用",实现了的必须全过。
 - 将来要做 2026-07-28 无状态版,加一个传输与会话的实现,协议核心不动。
+
+## 修订(2026-11-25)
+
+实现本身(协议、`RpcPeer`、传输、限流与审计)不变,位置变了:[runtime 0008](../runtime/0008-brain-on-owners-client.md) 把端点与接进来的 MCP 连接搬到主人的客户端上,
+`McpMode` 是 `ClientServices` 持有的实例(不再是静态单例,`GameWaits`、`brainConnected` 一类只为服务端宿主存在的账随之删除),驾驶席由客户端 `McpMode.driving(companion)` 一处定,
+经座位开她;服务器不再开端口,`/numen token` 改为客户端的会话命令 `/token`。上面"服务端""在场记录"里的服务端宿主说法,读作"端点这一端(主人的客户端)"。
