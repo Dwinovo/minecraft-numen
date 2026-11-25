@@ -206,12 +206,15 @@ public class GeneratorGameTests {
                 }
             }
         }
-        NumenPlayer her = spawnAt(helper, "gametest_hut", new BlockPos(2, 2, 2), true);
         BlockPos origin = helper.absolutePos(BlockPos.ZERO);
         // the first chunk that lies wholly inside the arena, and the one after it: the hut reaches into both
         int cx = ((origin.getX() + 15) >> 4);
         int cz = ((origin.getZ() + 15) >> 4);
         BlockPos at = new BlockPos(cx * 16 + 8, origin.getY() + 2, cz * 16 + 8);
+        // she stands beside the hut, not on it: where the hut lands depends on how the arena lines up with the chunk grid, and a block
+        // cannot be placed where her body is
+        NumenPlayer her = spawnAt(helper, "gametest_hut",
+                new BlockPos(at.getX() - origin.getX() + 12, 2, at.getZ() - origin.getZ() + 12), true);
         BlockPos min = new BlockPos(cx * 16 - 1, origin.getY() - 3, cz * 16 - 1);
         BlockPos max = new BlockPos(cx * 16 + 33, origin.getY() + 20, cz * 16 + 33);
         // 和同文件另外几条一样,铺地板排给光照线程的更新算完了再拍"前":不然更新落在两次快照之间,光照对不上
