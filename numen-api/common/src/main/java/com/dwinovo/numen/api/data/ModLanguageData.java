@@ -295,7 +295,6 @@ public final class ModLanguageData {
         public static final String SKIN_NOT_WORN        = "numen.skin.not_worn";
         public static final String SKIN_MINESKIN_KEY    = "numen.skin.mineskin_key";
         public static final String SKIN_MINESKIN_KEY_HINT = "numen.skin.mineskin_key_hint";
-        public static final String SKIN_HANDOVER        = "numen.skin.handover";
         /** 皮肤导入的唯一入口:原生文件对话框(FCL 端翻译成安卓文件选择器)。 */
         /** 原生选文件对话框的标题。 */
         public static final String SUMMON_CREATE           = "numen.summon.create";
@@ -904,7 +903,6 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_NOT_WORN,        "[Numen] Skin '%1$s' could not be worn: %2$s");
         adder.add(Keys.SKIN_MINESKIN_KEY,    "MineSkin API key (optional)");
         adder.add(Keys.SKIN_MINESKIN_KEY_HINT, "Empty = anonymous, lower rate limit");
-        adder.add(Keys.SKIN_HANDOVER,        "Your skin '%s' that the server kept is now in your skins folder");
         adder.add("numen.summon.mode",       "Mode");
         adder.add("numen.bubble.thinking",   "✦ Thinking");
         adder.add("numen.bubble.asking",     "⌛ Waiting for your OK");
@@ -1684,7 +1682,6 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_NOT_WORN,        "[Numen] 皮肤「%1$s」没能穿上:%2$s");
         adder.add(Keys.SKIN_MINESKIN_KEY,    "MineSkin API key(可不填)");
         adder.add(Keys.SKIN_MINESKIN_KEY_HINT, "留空 = 匿名档,限流更紧");
-        adder.add(Keys.SKIN_HANDOVER,        "服务器上替你存着的皮肤「%s」已放进你本机的皮肤文件夹");
         adder.add("numen.summon.mode",       "模式");
         adder.add("numen.bubble.thinking",   "✦ 正在思考");
         adder.add("numen.bubble.asking",     "⌛ 等你点头");
