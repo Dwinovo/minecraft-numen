@@ -702,7 +702,6 @@ public final class ModLanguageData {
         adder.add("numen.persona.title", "Personas");
         adder.add("numen.persona.empty", "No personas yet. Create one.");
         adder.add("numen.persona.add", "New persona");
-        adder.add("numen.persona.preset_badge", "Preset");
         adder.add("numen.persona.form_name", "Name");
         adder.add("numen.persona.form_text", "Persona");
         adder.add("numen.persona.text_placeholder", "Personality, tone, background…");
@@ -1468,7 +1467,6 @@ public final class ModLanguageData {
         adder.add("numen.persona.title", "人设库");
         adder.add("numen.persona.empty", "还没有人设。新建一条。");
         adder.add("numen.persona.add", "新建人设");
-        adder.add("numen.persona.preset_badge", "内置");
         adder.add("numen.persona.form_name", "名称");
         adder.add("numen.persona.form_text", "人设描述");
         adder.add("numen.persona.text_placeholder", "性格、说话风格、背景…");

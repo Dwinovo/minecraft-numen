@@ -42,16 +42,11 @@ public final class LibraryListPanel<T> {
 
     /** 一行的展示数据(每帧按条目现算,绑定标记等活状态即时反映)。
      *  {@code marked}:null = 没有选中的同伴(不谈绑定);TRUE = 当前同伴在用(行尾勾);FALSE = 没在用。
-     *  {@code toggle}=该行有行尾开关(库配了行开关时;不是库条目的行没有)。 */
+     *  {@code toggle}=该行有行尾开关(库配了行开关时;插件这种由服务端说这一行能不能翻)。 */
     public record Row(String name, String meta, boolean metaDanger, Boolean marked, boolean toggle) {
 
         public Row(String name, String meta, boolean metaDanger, Boolean marked) {
             this(name, meta, metaDanger, marked, true);
-        }
-
-        /** 这一行不是库里的条目(排队中的签名):没有行尾开关。 */
-        public Row withoutToggle() {
-            return new Row(name, meta, metaDanger, marked, false);
         }
     }
 

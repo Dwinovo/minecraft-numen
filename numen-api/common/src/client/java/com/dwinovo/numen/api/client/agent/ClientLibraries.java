@@ -108,9 +108,9 @@ public final class ClientLibraries {
     // ---- 模型档案 ----
 
     /**
-     * {@code full} 是档案的全部内容(含地址、代理);读不通的条目是 {@code null}。{@code keySource}:用这份档案会用谁的 key,没有是空串。
+     * {@code full} 是档案的全部内容(含地址、代理);读不通的条目是 {@code null}。{@code keySet}:这台电脑的钥匙串里有没有它的服务商的 key。
      */
-    public record Provider(Base base, String provider, String model, ProviderLibrary.Entry full, String keySource) {
+    public record Provider(Base base, String provider, String model, ProviderLibrary.Entry full, boolean keySet) {
 
         public String id() {
             return base.id();
@@ -121,7 +121,7 @@ public final class ClientLibraries {
         }
 
         public boolean hasKey() {
-            return !keySource.isEmpty();
+            return keySet;
         }
     }
 
@@ -133,7 +133,7 @@ public final class ClientLibraries {
             out.add(new Provider(base, text(o, "provider"), text(o, "model"),
                     !flag(o, "unreadable") ? new ProviderLibrary.Entry(base.id(), base.name(),
                             ProviderLibrary.profileFromJson(o)) : null,
-                    text(o, "keySource") == null ? "" : text(o, "keySource")));
+                    flag(o, "keySet")));
         }
         return out;
     }

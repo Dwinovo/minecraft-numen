@@ -5,7 +5,6 @@ import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.config.Authority;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.Companions;
-import com.dwinovo.numen.api.home.Homes;
 import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.payload.ConsentRequestPayload;
 import com.dwinovo.numen.api.permission.ConsentDesk;
@@ -63,8 +62,7 @@ public final class Replies {
         if (!Presence.ready(player.getUUID(), provided)) {
             return;
         }
-        NumenNetwork.sendToPlayer(player, new HelloAckPayload(Authority.isAdmin(player),
-                Homes.of(player.server).isHost(player.getUUID())));
+        NumenNetwork.sendToPlayer(player, new HelloAckPayload());
         Companions.syncRosterToOwner(player.server, player);
         conversations(player.server, player.getUUID());
         ConsentDesk.resendTo(player);

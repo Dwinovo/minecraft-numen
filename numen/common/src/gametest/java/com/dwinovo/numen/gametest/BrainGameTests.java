@@ -285,8 +285,7 @@ public class BrainGameTests {
         com.dwinovo.numen.api.owner.Replies.hello(owner, com.dwinovo.numen.api.owner.Presence.PROTOCOL);
 
         var sent = GameTestKit.received(owner);
-        helper.assertTrue(sent.stream().anyMatch(p -> p instanceof com.dwinovo.numen.api.network.payload.HelloAckPayload a
-                        && !a.admin()),
+        helper.assertTrue(sent.stream().anyMatch(p -> p instanceof com.dwinovo.numen.api.network.payload.HelloAckPayload),
                 "no hello answer for an ordinary player: " + sent);
         helper.assertTrue(sent.stream().anyMatch(p -> p instanceof com.dwinovo.numen.api.network.payload.CompanionListPayload),
                 "the roster was not sent after the hello: " + sent);
