@@ -8,8 +8,7 @@
  * not an executor.
  *
  * <p>Also public: {@link Schema} (the JSON-schema builder every tool's
- * {@code parameterSchema} uses) and {@link ToolArgs} (shared argument-parsing
- * helpers). The per-call {@code ToolContext} lives next door in
+ * {@code parameterSchema} uses). The per-call {@code ToolContext} lives next door in
  * {@code agent.tool.api}; any server-side task execution ships in the tool pack
  * (Numen) — not in Numen API.
  */
