@@ -30,16 +30,17 @@ HITL 确实是一个工具"。
    decisions or offer them choices." 与它的用法说明(偏好、澄清、做选择;"其他"永远在;多选;推荐项放第一个并在名字后加
    "(Recommended)"),同样换成 "your owner";计划模式与预览那两段删掉,她没有这两样。
 3. **四种结局,模型看到的话照抄:**
-   - 答了:`Your owner has answered your questions: "<问话>"="<答案>" user notes: <附言>, …. You can now continue with your owner's
-     answers in mind.`(多选的答案用逗号连起来;"其他"的答案是主人写的原话)
+   - 答了:`Your owner has answered your questions: "<问话>"="<答案>", …. You can now continue with your owner's answers in mind.`
+     (多选的答案用逗号连起来;"其他"的答案是主人写的原话)
    - 拒绝(Esc):"Your owner doesn't want to answer right now. STOP what you are doing and wait for your owner to tell you how to proceed."
    - 想先聊聊("聊聊这个"):拒绝并附上主人的话与已问的问题,照原文 "The owner wants to clarify these questions…"。
    - 打断(停止键、急事、她离开世界):照内核里别的工具被打断的那一句。
 4. **面板。** 挂起时这次调用的面板接管输入框:标签、问句、编号选项(选项名后跟淡色的说明)、"其他回答…"输入行、"聊聊这个"。
    数字键选,回车交"其他";多个问题一次显示一个,上面标 1/3,最后一步"确认提交";只有一个单选问题时选了就交。
    挂着时她的过程那一行写"等待回答"。
-5. **谁答、在哪答。** 只问创建者(脑子在他电脑上)。只在游戏里答:G 面板与 Y 快捷对话;QQ 等渠道与外接大脑不收这个问题,
-   照 Claude Code(开着渠道时它不提供这个工具)。外接大脑驾驶时它自己问坐在电脑前的人,不用这个工具。
+5. **谁答、在哪答。** 只问创建者(脑子在他电脑上)。只在游戏里答:G 面板与 Y 快捷对话;没在看那个会话时,照她说话那样弹消息通知、
+   聊天栏留一行。QQ 等渠道不收这个问题:主人从渠道来跟她说话时她调用它,当场拒绝并告诉她在回话里问(工具表不随渠道变,免得
+   打乱缓存)。外接大脑驾驶时它自己问坐在电脑前的人,工具表里没有这个工具。
 6. **不设超时。** 主人下线她本来就登出(body 0008),问题随之打断。
 
 ## 后果
