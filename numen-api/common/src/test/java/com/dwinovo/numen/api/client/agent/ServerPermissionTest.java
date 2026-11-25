@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.client.agent;
 
 import com.dwinovo.numen.api.FakeWorld;
-import com.dwinovo.numen.api.brain.Libraries;
+import com.dwinovo.numen.api.owner.Libraries;
 import com.dwinovo.numen.api.network.payload.LibraryPayload;
 import com.dwinovo.numen.api.permission.PermissionLibrary;
 import com.dwinovo.numen.api.permission.PermissionStore;

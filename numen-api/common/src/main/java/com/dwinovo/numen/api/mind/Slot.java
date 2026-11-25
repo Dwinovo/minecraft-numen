@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.brain;
+package com.dwinovo.numen.api.mind;
 
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
@@ -47,15 +47,5 @@ public enum Slot {
     /** 这一项的条目住在哪一种库里。 */
     public LibraryKind kind() {
         return kind;
-    }
-
-    /** 读线上的写法;不认得是 {@code null}。 */
-    public static Slot ofWire(String wire) {
-        for (Slot slot : values()) {
-            if (slot.wire.equals(wire)) {
-                return slot;
-            }
-        }
-        return null;
     }
 }

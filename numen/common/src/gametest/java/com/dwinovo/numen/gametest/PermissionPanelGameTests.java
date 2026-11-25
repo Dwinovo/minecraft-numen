@@ -1,8 +1,8 @@
 package com.dwinovo.numen.gametest;
 
-import com.dwinovo.numen.api.brain.Libraries;
-import com.dwinovo.numen.api.brain.Presence;
-import com.dwinovo.numen.api.brain.Replies;
+import com.dwinovo.numen.api.owner.Libraries;
+import com.dwinovo.numen.api.owner.Presence;
+import com.dwinovo.numen.api.owner.Replies;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.NumenPlayer;

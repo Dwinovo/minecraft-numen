@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.entity;
 
-import com.dwinovo.numen.api.brain.ServerSkins;
+import com.dwinovo.numen.api.owner.ServerSkins;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.network.Wire;
 import com.dwinovo.numen.api.skin.SkinError;

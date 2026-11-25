@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.client.screen;
 
-import com.dwinovo.numen.api.brain.Libraries;
+import com.dwinovo.numen.api.owner.Libraries;
 import com.dwinovo.numen.api.client.agent.ClientCompanions;
 import com.dwinovo.numen.api.client.agent.ClientLibraries;
 import com.dwinovo.numen.api.client.skin.FolderOpener;

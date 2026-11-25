@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.brain;
+package com.dwinovo.numen.api.owner;
 
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.commands.CommandSourceStack;

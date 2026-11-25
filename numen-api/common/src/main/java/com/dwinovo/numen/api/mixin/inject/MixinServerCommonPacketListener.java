@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.mixin.inject;
 
-import com.dwinovo.numen.api.brain.Presence;
+import com.dwinovo.numen.api.owner.Presence;
 import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.entity.FakeConnection;
 import com.dwinovo.numen.api.entity.NumenPlayer;

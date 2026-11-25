@@ -1,6 +1,6 @@
 package com.dwinovo.numen.gametest;
 
-import com.dwinovo.numen.api.brain.ServerSkins;
+import com.dwinovo.numen.api.owner.ServerSkins;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.skin.MineSkinClient;
 import com.dwinovo.numen.api.skin.MojangSkinLookup;

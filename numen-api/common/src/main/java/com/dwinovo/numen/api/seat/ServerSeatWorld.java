@@ -1,12 +1,12 @@
 package com.dwinovo.numen.api.seat;
 
-import com.dwinovo.numen.api.brain.Presence;
+import com.dwinovo.numen.api.owner.Presence;
 import com.dwinovo.numen.api.agent.request.TaskReport;
-import com.dwinovo.numen.api.brain.Conversations;
-import com.dwinovo.numen.api.brain.Hearing;
+import com.dwinovo.numen.api.talk.Conversations;
+import com.dwinovo.numen.api.talk.Hearing;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
-import com.dwinovo.numen.api.brain.Spoken;
-import com.dwinovo.numen.api.brain.Voice;
+import com.dwinovo.numen.api.talk.Spoken;
+import com.dwinovo.numen.api.talk.Voice;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.program.ClientTransport;

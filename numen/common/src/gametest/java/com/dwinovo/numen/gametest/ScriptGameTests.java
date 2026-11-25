@@ -614,7 +614,7 @@ public class ScriptGameTests {
                     seat.pump();
                     helper.assertTrue(seat.clientCalls == 0, "a call for a mod the client lacks was sent to it");
                     // 主人的客户端报了它(版本在先,能力在后,到齐才算报到)
-                    com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL,
+                    com.dwinovo.numen.api.owner.Replies.hello(owner, com.dwinovo.numen.api.owner.Presence.PROTOCOL,
                             java.util.Set.of("gtcm"));
                     seat.pump();
                     helper.assertTrue(com.dwinovo.numen.api.sdk.ApiDocs.index(Modules.of(her.getUUID(), java.util.Map.of(), java.util.Set.of())).contains("gtcm.pad"),

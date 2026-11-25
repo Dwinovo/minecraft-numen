@@ -1,8 +1,9 @@
-package com.dwinovo.numen.api.brain;
+package com.dwinovo.numen.api.owner;
 
 import com.google.gson.JsonObject;
 
 import java.util.UUID;
+import com.dwinovo.numen.api.talk.Hearing;
 
 /**
  * 主人经客户端对服务端管的东西做的事,上线时的样子:谁是她的主人(分享)、会话的成员表。每一种都是主人的一个动作,

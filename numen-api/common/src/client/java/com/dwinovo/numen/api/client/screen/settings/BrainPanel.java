@@ -16,7 +16,7 @@ import com.dwinovo.numen.api.client.ui.widget.TextField;
 import com.dwinovo.numen.api.client.ui.widget.Toggle;
 import com.dwinovo.numen.api.client.ui.widget.UiRoot;
 import com.dwinovo.numen.mcp.server.McpConfig;
-import com.dwinovo.numen.api.brain.Libraries;
+import com.dwinovo.numen.api.owner.Libraries;
 import com.dwinovo.numen.api.client.agent.ClientCompanions;
 import com.dwinovo.numen.api.client.agent.LibraryTables;
 import com.dwinovo.numen.api.client.agent.ClientLibraries;

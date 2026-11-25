@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.brain;
+package com.dwinovo.numen.api.owner;
 
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
@@ -15,6 +15,7 @@ import net.minecraft.server.level.ServerPlayer;
 
 import java.util.List;
 import java.util.UUID;
+import com.dwinovo.numen.api.talk.Conversations;
 
 /**
  * 改她的主人表——<b>只有这一处</b>(见 {@code docs/adr/runtime/0006-keepers-ownership-use-provenance.md} 第 5、6 条)。

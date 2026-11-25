@@ -131,7 +131,7 @@ public final class Seats {
     }
 
     /** 别人对她说的话到了(主线程):她的座位在,它就进发件箱,带着谁说的、在哪儿说的。 */
-    public void publish(UUID companion, EventQueue.Entry entry, com.dwinovo.numen.api.brain.Spoken spoken) {
+    public void publish(UUID companion, EventQueue.Entry entry, com.dwinovo.numen.api.talk.Spoken spoken) {
         Seat seat = seats.get(companion);
         if (seat != null) {
             seat.publish(entry, spoken);

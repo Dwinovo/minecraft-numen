@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.seat;
 
-import com.dwinovo.numen.api.brain.Spoken;
+import com.dwinovo.numen.api.talk.Spoken;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.skill.BundledSkills;
 import com.dwinovo.numen.api.agent.skill.SkillInfo;

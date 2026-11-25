@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.permission;
 
-import com.dwinovo.numen.api.brain.Replies;
+import com.dwinovo.numen.api.owner.Replies;
 import com.dwinovo.numen.api.platform.ServerLifecycle;
 
 import net.minecraft.server.MinecraftServer;

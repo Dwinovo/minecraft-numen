@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.brain;
+package com.dwinovo.numen.api.owner;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
@@ -20,6 +20,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.UUID;
+import com.dwinovo.numen.api.talk.Conversations;
 
 /**
  * 服务端对主人客户端的答复与推送:报到的回答和补课、会话列表、征询。包怎么编、往哪发只在这一处。

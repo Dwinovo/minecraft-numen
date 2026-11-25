@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.platform;
 
-import com.dwinovo.numen.api.brain.OwnerPresence;
-import com.dwinovo.numen.api.brain.Presence;
+import com.dwinovo.numen.api.owner.OwnerPresence;
+import com.dwinovo.numen.api.owner.Presence;
 import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.network.NumenNetwork;
@@ -64,7 +64,7 @@ public final class PlayerSessions {
             OwnerPresence.playerLeft(player.server, player.getUUID());
             Companions.scheduleReconcile(player.getUUID());
             ANNOUNCED.remove(player.getUUID());
-            com.dwinovo.numen.api.brain.ChatBar.forget(player.getUUID());
+            com.dwinovo.numen.api.talk.ChatBar.forget(player.getUUID());
         }
     }
 

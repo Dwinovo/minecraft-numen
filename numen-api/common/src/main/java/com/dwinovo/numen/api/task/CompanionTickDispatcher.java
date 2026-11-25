@@ -117,7 +117,7 @@ public final class CompanionTickDispatcher {
         Companions.reconcilePending(server);
         // 她们的程序排着的服务端调用:在预算里执行,主线程不等任何程序
         com.dwinovo.numen.api.program.ServerPrograms.tick();
-        com.dwinovo.numen.api.brain.OwnerInputs.tick(server);   // 主人经客户端做的事:信箱里取几条处理
+        com.dwinovo.numen.api.owner.OwnerInputs.tick(server);   // 主人经客户端做的事:信箱里取几条处理
         Companions.respawnDead(server);    // 死了的同伴经原版重生流程回到世界
         TimerRegistry.tick(server);        // 她自己定的表,到点发事件
         com.dwinovo.numen.api.permission.PermissionFeed.tick(server);   // 规则表变了,合并推给主人的面板

@@ -12,7 +12,7 @@ import com.dwinovo.numen.api.agent.llm.ModelCatalog;
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
 import com.dwinovo.numen.api.agent.loop.Cause;
 import com.dwinovo.numen.api.agent.provider.ThinkingPlan;
-import com.dwinovo.numen.api.brain.CompanionState;
+import com.dwinovo.numen.api.mind.CompanionState;
 import com.dwinovo.numen.api.keys.Keys;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;

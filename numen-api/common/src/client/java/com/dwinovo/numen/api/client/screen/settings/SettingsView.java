@@ -3,8 +3,8 @@ package com.dwinovo.numen.api.client.screen.settings;
 import com.dwinovo.numen.api.mind.LibraryDesk;
 
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
-import com.dwinovo.numen.api.brain.Libraries;
-import com.dwinovo.numen.api.brain.Slot;
+import com.dwinovo.numen.api.owner.Libraries;
+import com.dwinovo.numen.api.mind.Slot;
 import com.dwinovo.numen.api.client.ClientKeys;
 import com.dwinovo.numen.api.client.data.ClientPrefs;
 import com.dwinovo.numen.api.voice.VoiceProfile;

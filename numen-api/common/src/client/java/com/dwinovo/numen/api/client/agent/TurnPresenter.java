@@ -5,7 +5,7 @@ import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.loop.LoopStatus;
 import com.dwinovo.numen.api.agent.loop.Phase;
-import com.dwinovo.numen.api.brain.Feed;
+import com.dwinovo.numen.api.mind.Feed;
 import com.dwinovo.numen.api.client.chat.ChatDisplayModes;
 import com.dwinovo.numen.api.client.chat.ChatLines;
 import com.dwinovo.numen.api.client.hud.NumenHudToasts;

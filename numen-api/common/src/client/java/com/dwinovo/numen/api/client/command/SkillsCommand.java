@@ -3,7 +3,7 @@ package com.dwinovo.numen.api.client.command;
 import com.dwinovo.numen.api.mind.LibraryDesk;
 import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
-import com.dwinovo.numen.api.brain.Libraries;
+import com.dwinovo.numen.api.owner.Libraries;
 import com.dwinovo.numen.api.client.agent.NumenRoster;
 import com.dwinovo.numen.api.client.agent.CompanionView;
 import com.dwinovo.numen.api.client.agent.ClientCompanions;

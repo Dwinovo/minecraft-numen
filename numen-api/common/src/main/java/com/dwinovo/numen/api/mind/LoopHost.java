@@ -38,17 +38,17 @@ import com.dwinovo.numen.api.agent.trace.TraceRecorder;
 import com.dwinovo.numen.api.agent.trace.TraceRecorders;
 import com.dwinovo.numen.api.agent.tool.ToolAnchor;
 import com.dwinovo.numen.api.agent.tool.ToolBook;
-import com.dwinovo.numen.api.brain.Bindings;
-import com.dwinovo.numen.api.brain.Bound;
-import com.dwinovo.numen.api.brain.CompanionState;
-import com.dwinovo.numen.api.brain.MemoryExport;
-import com.dwinovo.numen.api.brain.Mind;
-import com.dwinovo.numen.api.brain.OwnerSchedules;
-import com.dwinovo.numen.api.brain.Slot;
-import com.dwinovo.numen.api.brain.TokenLedger;
-import com.dwinovo.numen.api.brain.Spoken;
+import com.dwinovo.numen.api.mind.Bindings;
+import com.dwinovo.numen.api.mind.Bound;
+import com.dwinovo.numen.api.mind.CompanionState;
+import com.dwinovo.numen.api.mind.MemoryExport;
+import com.dwinovo.numen.api.mind.Mind;
+import com.dwinovo.numen.api.mind.OwnerSchedules;
+import com.dwinovo.numen.api.mind.Slot;
+import com.dwinovo.numen.api.mind.TokenLedger;
+import com.dwinovo.numen.api.talk.Spoken;
 import com.dwinovo.numen.api.agent.loop.RunEnd;
-import com.dwinovo.numen.api.brain.Venue;
+import com.dwinovo.numen.api.talk.Venue;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.event.NumenEvents;
 import com.dwinovo.numen.api.home.Home;
@@ -227,7 +227,6 @@ public final class LoopHost implements ClientContext {
         loop.subscribe(memory::on);
         this.trace = TraceRecorders.recording() ? new TraceRecorder(home.dir(), home.io(), companion) : null;
         if (trace != null) {
-            TraceRecorders.put(companion, trace);
             loop.subscribe(trace::on);
         }
         this.wasDriving = parts.driving().getAsBoolean();
@@ -546,7 +545,6 @@ public final class LoopHost implements ClientContext {
 
     /** 这只同伴离场或遣散:在飞的回合作废,不再往她的会话里写任何东西。 */
     public void dispose() {
-        TraceRecorders.forget(companion);
         loop.halt(HaltReason.DISPOSE);
     }
 

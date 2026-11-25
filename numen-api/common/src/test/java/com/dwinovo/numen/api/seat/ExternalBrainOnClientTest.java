@@ -16,8 +16,8 @@ import com.dwinovo.numen.api.agent.skill.SkillRegistry;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
 import com.dwinovo.numen.api.agent.tool.ScriptTool;
 import com.dwinovo.numen.api.agent.tool.ToolBook;
-import com.dwinovo.numen.api.brain.Bound;
-import com.dwinovo.numen.api.brain.Mind;
+import com.dwinovo.numen.api.mind.Bound;
+import com.dwinovo.numen.api.mind.Mind;
 import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.library.LibraryHub;
 import com.dwinovo.numen.api.library.Switches;
@@ -184,7 +184,7 @@ class ExternalBrainOnClientTest {
                     clientMain::add, pipe.client(), model, SCRIPT_ONLY, () -> mode.driving(companion),
                     () -> EventQueue.DEFAULT_LEVEL, bound -> "a test persona", builtins -> modules,
                     bundled -> SkillRegistry.of(hub.library(SkillRegistry.KIND), bundled), id -> "主人"));
-            made.bind(com.dwinovo.numen.api.brain.Slot.PERSONA,
+            made.bind(com.dwinovo.numen.api.mind.Slot.PERSONA,
                     new Bound(OWNER, new com.dwinovo.numen.api.library.EntryId("my", "test")));
             return made;
         });

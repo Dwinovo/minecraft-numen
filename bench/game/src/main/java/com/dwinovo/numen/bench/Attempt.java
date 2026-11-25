@@ -12,11 +12,11 @@ import com.dwinovo.numen.api.agent.loop.LoopEvent;
 import com.dwinovo.numen.api.agent.loop.LoopStatus;
 import com.dwinovo.numen.api.agent.loop.RunEnd;
 import com.dwinovo.numen.api.agent.prompt.NumenPrompts;
-import com.dwinovo.numen.api.brain.Bound;
-import com.dwinovo.numen.api.brain.Feed;
-import com.dwinovo.numen.api.brain.FeedEncoder;
-import com.dwinovo.numen.api.brain.Presence;
-import com.dwinovo.numen.api.brain.Replies;
+import com.dwinovo.numen.api.mind.Bound;
+import com.dwinovo.numen.api.mind.Feed;
+import com.dwinovo.numen.api.mind.FeedEncoder;
+import com.dwinovo.numen.api.owner.Presence;
+import com.dwinovo.numen.api.owner.Replies;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.agent.skill.SkillRegistry;
@@ -250,7 +250,7 @@ final class Attempt {
                     mail::add, seat, mind, tools, () -> false, () -> EventQueue.DEFAULT_LEVEL,
                     bound -> NumenPrompts.DEFAULT_PERSONA, builtins -> modules,
                     bundled -> SkillRegistry.of(hub.library(SkillRegistry.KIND), bundled), id -> "Owner"));
-            made.bind(com.dwinovo.numen.api.brain.Slot.PERSONA, new Bound(ownerId, BENCH_PERSONA));
+            made.bind(com.dwinovo.numen.api.mind.Slot.PERSONA, new Bound(ownerId, BENCH_PERSONA));
             return made;
         });
         brains.sit(java.util.Set.of(her.getUUID()));
@@ -350,9 +350,16 @@ final class Attempt {
         error = why;
     }
 
+    /** 她身体的轨迹所在的目录(寻路为什么放弃写在这一本里);不记轨迹时是 null。 */
+    private Path bodyTraceDir() {
+        NumenPlayer body = her == null ? null : NumenPlayer.findByUuid(level.getServer(), her.getUUID());
+        Path file = body == null ? null : com.dwinovo.numen.api.entity.BodyTrace.of(body).file();
+        return file == null ? null : file.getParent();
+    }
+
     /** 判断言、记一行、收拾场地。 */
     Run finish() {
-        Path trace = host == null ? null : host.trace().file().getParent();
+        Path trace = bodyTraceDir();
         if (host != null) {
             promptHash = sha256(host.systemPrompt()).substring(0, 12);
             brains.leave();
@@ -460,12 +467,12 @@ final class Attempt {
      * 把这次的轨迹搬到记录旁边。临时目录整个删掉,轨迹跟着删的话,报告里写着"规划失败"而凭据已经没了——
      * 分类说得出是哪一类,人还要看得到那一趟到底发生了什么。搬不动不算评测失败,记一行接着走。
      */
-    private void keepTrace(Path trace) {
+    private void keepTrace(Path trace, String kind) {
         if (trace == null || !Files.isDirectory(trace)) {
             return;
         }
         Path kept = Results.get().transcript(suite, scenario.id(), variant.id(), number)
-                .resolveSibling(suite + "-" + scenario.id() + "-" + variant.id() + "-" + number + "-trace.jsonl");
+                .resolveSibling(suite + "-" + scenario.id() + "-" + variant.id() + "-" + number + "-" + kind + ".jsonl");
         try (Stream<Path> segments = Files.list(trace)) {
             List<String> lines = new ArrayList<>();
             for (Path segment : segments.sorted().toList()) {
@@ -481,7 +488,8 @@ final class Attempt {
     private void cleanUp() {
         MinecraftServer server = level.getServer();
         if (her != null) {
-            keepTrace(host == null ? null : host.trace().file().getParent());
+            keepTrace(host == null ? null : host.trace().file().getParent(), "brain-trace");
+            keepTrace(bodyTraceDir(), "body-trace");
             CompanionRegistry.get(server).remove(her.getUUID());
             // 她死过的话 her 是死掉的那具,世界里站着的是原版重生换上来的新身体
             NumenPlayer now = NumenPlayer.findByUuid(server, her.getUUID());

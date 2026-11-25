@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.brain;
+package com.dwinovo.numen.api.talk;
 
 import com.dwinovo.numen.api.agent.loop.LoopEvent;
 import net.minecraft.ChatFormatting;

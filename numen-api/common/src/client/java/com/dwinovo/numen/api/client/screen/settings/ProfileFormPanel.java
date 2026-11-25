@@ -7,7 +7,7 @@ import com.dwinovo.numen.api.agent.llm.ConnectionProfile;
 import com.dwinovo.numen.api.agent.llm.EndpointResolver;
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
 import com.dwinovo.numen.api.agent.provider.ThinkingPlan;
-import com.dwinovo.numen.api.brain.Libraries;
+import com.dwinovo.numen.api.owner.Libraries;
 import com.dwinovo.numen.api.client.agent.CauseWords;
 import com.dwinovo.numen.api.client.agent.LatestReply;
 import com.dwinovo.numen.api.client.agent.ClientCompanions;

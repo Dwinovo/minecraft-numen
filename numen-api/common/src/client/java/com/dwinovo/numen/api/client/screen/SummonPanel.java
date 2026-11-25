@@ -22,7 +22,7 @@ public final class SummonPanel extends ModalCard {
 
     /** 提交面:选择由面板收集,发包与开别的卡留在宿主。 */
     public interface Host {
-        void onCreate(String name, SummonSetup setup, java.util.Map<com.dwinovo.numen.api.brain.Slot, String> bindings);
+        void onCreate(String name, SummonSetup setup, java.util.Map<com.dwinovo.numen.api.mind.Slot, String> bindings);
 
         void onCancel();
 

@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.client.screen;
 
-import com.dwinovo.numen.api.brain.OwnerSchedules;
+import com.dwinovo.numen.api.mind.OwnerSchedules;
 import com.dwinovo.numen.api.client.agent.ClientLibraries;
 import com.dwinovo.numen.api.client.ui.widget.Button;
 import com.dwinovo.numen.api.client.ui.widget.DialogBox;

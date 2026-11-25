@@ -6,10 +6,10 @@ import com.dwinovo.numen.api.agent.llm.ConvoLog;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
 import com.dwinovo.numen.api.agent.loop.Phase;
 import com.dwinovo.numen.api.agent.provider.Usage;
-import com.dwinovo.numen.api.brain.Bound;
-import com.dwinovo.numen.api.brain.CompanionState;
-import com.dwinovo.numen.api.brain.Feed;
-import com.dwinovo.numen.api.brain.Slot;
+import com.dwinovo.numen.api.mind.Bound;
+import com.dwinovo.numen.api.mind.CompanionState;
+import com.dwinovo.numen.api.mind.Feed;
+import com.dwinovo.numen.api.mind.Slot;
 import com.dwinovo.numen.api.library.EntryId;
 import org.junit.jupiter.api.Test;
 

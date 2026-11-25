@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.client.screen;
 
-import com.dwinovo.numen.api.brain.Bound;
-import com.dwinovo.numen.api.brain.Slot;
+import com.dwinovo.numen.api.mind.Bound;
+import com.dwinovo.numen.api.mind.Slot;
 import com.dwinovo.numen.api.client.agent.KnownSkins;
 import com.dwinovo.numen.api.client.agent.CompanionView;
 import com.dwinovo.numen.api.client.agent.ClientCompanions;

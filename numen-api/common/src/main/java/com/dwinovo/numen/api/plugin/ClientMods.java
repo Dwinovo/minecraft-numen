@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.plugin;
 
-import com.dwinovo.numen.api.brain.Presence;
+import com.dwinovo.numen.api.owner.Presence;
 import com.dwinovo.numen.api.platform.Services;
 
 import java.util.Collections;

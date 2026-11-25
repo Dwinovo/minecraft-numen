@@ -78,13 +78,13 @@ public final class NumenNetwork {
     /**
      * 发给一位玩家的客户端:量过、装得下一个包的才交给加载器,超过的可分片的包分成片(见 {@link Fragments#packets})。
      * 我们的频道是可选的(原版客户端不装我们也进得来),收不收得到只看一件事:他的客户端报到过、协议对得上
-     * ({@link com.dwinovo.numen.api.brain.Presence})。频道同名不说明读得懂——不同版本的客户端登记着同名的频道,格式却不一样,
+     * ({@link com.dwinovo.numen.api.owner.Presence})。频道同名不说明读得懂——不同版本的客户端登记着同名的频道,格式却不一样,
      * 发过去它解不开就断线。唯一的例外是开场的 {@link ServerHelloPayload}:它的格式永远不变,正是用来对版本的。
      * 连接上没有这个频道(平台的 {@code canSend})只是传输层的事,照样不发。
      */
     public static void sendToPlayer(ServerPlayer player, CustomPacketPayload payload) {
         if (payload.type() != ServerHelloPayload.TYPE
-                && !com.dwinovo.numen.api.brain.Presence.hasClient(player.getUUID())) {
+                && !com.dwinovo.numen.api.owner.Presence.hasClient(player.getUUID())) {
             return;
         }
         if (!Services.network().canSend(player, payload.type())) {

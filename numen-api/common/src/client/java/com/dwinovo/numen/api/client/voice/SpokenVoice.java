@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.client.voice;
 
-import com.dwinovo.numen.api.brain.CompanionState;
-import com.dwinovo.numen.api.brain.Slot;
+import com.dwinovo.numen.api.mind.CompanionState;
+import com.dwinovo.numen.api.mind.Slot;
 import com.dwinovo.numen.api.client.ClientKeys;
 import com.dwinovo.numen.api.client.agent.ClientCompanions;
 import com.dwinovo.numen.api.client.agent.ClientLibraries;

@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.network.payload;
 
 import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.brain.Replies;
+import com.dwinovo.numen.api.owner.Replies;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;

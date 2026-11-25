@@ -1,8 +1,8 @@
 package com.dwinovo.numen.api.client.seat;
 
 import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.brain.Bound;
-import com.dwinovo.numen.api.brain.Slot;
+import com.dwinovo.numen.api.mind.Bound;
+import com.dwinovo.numen.api.mind.Slot;
 import com.dwinovo.numen.api.client.agent.NumenRoster;
 import com.dwinovo.numen.api.library.EntryId;
 import com.dwinovo.numen.api.home.Homes;

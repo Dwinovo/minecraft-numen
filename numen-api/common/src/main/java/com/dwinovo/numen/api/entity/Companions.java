@@ -344,7 +344,7 @@ public final class Companions {
             return;
         }
         NumenPlayer body = NumenPlayer.findByUuid(server, companionUuid);
-        boolean ownerPresent = com.dwinovo.numen.api.brain.OwnerPresence.present(companionUuid);
+        boolean ownerPresent = com.dwinovo.numen.api.owner.OwnerPresence.present(companionUuid);
         switch (Attendance.move(entry.outside(), ownerPresent, body != null)) {
             case BRING -> bringBack(server, companionUuid);
             case LOG_OUT -> logOut(server, body);
@@ -699,7 +699,7 @@ public final class Companions {
             if (gone != null) {
                 for (UUID keeper : gone.keepers()) {
                     // 和她同过会话的告诉一声她走了;名册上已经没有她,成员表按名册过滤
-                    com.dwinovo.numen.api.brain.Conversations.of(server, keeper).left(uuid, gone.name());
+                    com.dwinovo.numen.api.talk.Conversations.of(server, keeper).left(uuid, gone.name());
                 }
                 tell.addAll(gone.keepers());
             }

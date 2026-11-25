@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.brain;
+package com.dwinovo.numen.api.owner;
 
 import com.dwinovo.numen.api.platform.ServerLifecycle;
 
@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import com.dwinovo.numen.api.mind.Feed;
 
 /**
  * 哪些在线的玩家装着我们的客户端:服务端开场({@code ServerHelloPayload})之后,客户端报到,报两样东西——协议版本({@code HelloPayload})与

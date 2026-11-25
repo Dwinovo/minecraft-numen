@@ -2,11 +2,11 @@ package com.dwinovo.numen.gametest;
 
 import com.dwinovo.numen.api.agent.llm.ConvoState;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
-import com.dwinovo.numen.api.brain.ChatBar;
-import com.dwinovo.numen.api.brain.Conversations;
-import com.dwinovo.numen.api.brain.OwnerInput;
-import com.dwinovo.numen.api.brain.OwnerInputs;
-import com.dwinovo.numen.api.brain.Sharing;
+import com.dwinovo.numen.api.talk.ChatBar;
+import com.dwinovo.numen.api.talk.Conversations;
+import com.dwinovo.numen.api.owner.OwnerInput;
+import com.dwinovo.numen.api.owner.OwnerInputs;
+import com.dwinovo.numen.api.owner.Sharing;
 import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.gametest.Bodies;

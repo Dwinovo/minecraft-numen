@@ -2,10 +2,10 @@ package com.dwinovo.numen.api.client.screen;
 
 import com.dwinovo.numen.api.mind.LibraryDesk;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
-import com.dwinovo.numen.api.brain.CompanionState;
-import com.dwinovo.numen.api.brain.Libraries;
-import com.dwinovo.numen.api.brain.OwnerSchedules;
-import com.dwinovo.numen.api.brain.Slot;
+import com.dwinovo.numen.api.mind.CompanionState;
+import com.dwinovo.numen.api.owner.Libraries;
+import com.dwinovo.numen.api.mind.OwnerSchedules;
+import com.dwinovo.numen.api.mind.Slot;
 import com.dwinovo.numen.api.client.agent.ClientCompanions;
 import com.dwinovo.numen.api.client.agent.ActivityWords;
 import com.dwinovo.numen.api.client.agent.ClientNumenLookup;

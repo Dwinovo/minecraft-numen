@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.brain;
+package com.dwinovo.numen.api.mind;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.provider.CacheWaste;

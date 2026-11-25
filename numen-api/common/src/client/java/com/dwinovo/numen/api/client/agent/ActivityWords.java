@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.client.agent;
 
 import com.dwinovo.numen.api.agent.loop.LoopStatus;
-import com.dwinovo.numen.api.brain.DoingText;
+import com.dwinovo.numen.api.mind.DoingText;
 import net.minecraft.client.resources.language.I18n;
 
 /**

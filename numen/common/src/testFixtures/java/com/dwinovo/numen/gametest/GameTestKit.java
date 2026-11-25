@@ -910,7 +910,7 @@ public final class GameTestKit {
             com.dwinovo.numen.api.entity.CompanionRegistry.get(owner.getServer()).put(her.getUUID(),
                     new com.dwinovo.numen.api.entity.CompanionRegistry.Entry(name, owner.getUUID(),
                             net.minecraft.world.level.Level.OVERWORLD, her.blockPosition()));
-            com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
+            com.dwinovo.numen.api.owner.Replies.hello(owner, com.dwinovo.numen.api.owner.Presence.PROTOCOL);
             OwnerSeat seat = new OwnerSeat(owner);
             seat.opening = seat.client.open(her.getUUID(), 0);
             return seat;

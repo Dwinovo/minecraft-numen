@@ -2,9 +2,9 @@ package com.dwinovo.numen.api.permission;
 
 import com.dwinovo.numen.permission.Settings;
 import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.brain.OwnerPresence;
+import com.dwinovo.numen.api.owner.OwnerPresence;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.brain.Replies;
+import com.dwinovo.numen.api.owner.Replies;
 import com.dwinovo.numen.api.network.payload.ConsentRequestPayload;
 
 import net.minecraft.server.MinecraftServer;

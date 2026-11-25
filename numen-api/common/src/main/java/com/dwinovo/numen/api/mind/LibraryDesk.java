@@ -6,9 +6,9 @@ import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
 import com.dwinovo.numen.api.agent.memory.NoteBook;
 import com.dwinovo.numen.api.agent.skill.SkillInfo;
 import com.dwinovo.numen.api.agent.skill.SkillRegistry;
-import com.dwinovo.numen.api.brain.Bound;
-import com.dwinovo.numen.api.brain.OwnerSchedules;
-import com.dwinovo.numen.api.brain.Slot;
+import com.dwinovo.numen.api.mind.Bound;
+import com.dwinovo.numen.api.mind.OwnerSchedules;
+import com.dwinovo.numen.api.mind.Slot;
 import com.dwinovo.numen.api.keys.Keychain;
 import com.dwinovo.numen.api.keys.Keys;
 import com.dwinovo.numen.api.library.EntryId;
@@ -89,9 +89,6 @@ public final class LibraryDesk {
     /** 请求里选哪一组:缺省是我的;{@code "server"} 是服务器提供(只有管理员)。 */
     public static final String GROUP_SERVER = "server";
     public static final String GROUP_MINE = "mine";
-
-    /** 多人服上玩家第一次存自己的 key 时,答复表里多一行 {@code {"notice": …}} 提醒他服主看得到这把 key。 */
-    public static final String NOTICE_OWNER_SEES_KEY = "owner_sees_key";
 
     /**
      * 一次读写的结果。

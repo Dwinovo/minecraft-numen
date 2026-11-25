@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.client.agent;
 
 import com.dwinovo.numen.api.mind.LibraryDesk;
-import com.dwinovo.numen.api.brain.Libraries;
+import com.dwinovo.numen.api.owner.Libraries;
 import com.dwinovo.numen.api.network.payload.LibraryPayload;
 import com.dwinovo.numen.api.network.payload.LibraryRequestPayload;
 import com.google.gson.JsonArray;

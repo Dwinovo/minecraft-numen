@@ -1,8 +1,8 @@
 package com.dwinovo.numen.api.entity;
 
 import com.dwinovo.numen.api.agent.scope.Handle;
-import com.dwinovo.numen.api.brain.Presence;
-import com.dwinovo.numen.api.brain.Sharing;
+import com.dwinovo.numen.api.owner.Presence;
+import com.dwinovo.numen.api.owner.Sharing;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.network.payload.ClientUiActionPayload;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
@@ -69,7 +69,6 @@ import java.util.function.Predicate;
  *   /numen chat [&lt;conversation&gt; [&lt;text&gt;]]                  route the caller's chat bar into a conversation, or say one line
  *   /numen companion &lt;her&gt; profile|persona|voice [&lt;entry&gt;]  bind one of her library entries (see BindingCommands)
  *   /numen companion &lt;her&gt; skin [player &lt;name&gt;|url &lt;address&gt;|server &lt;file&gt;]  give her a skin, signed in the server's queue when needed (see SkinCommand)
- *   /numen key &lt;service&gt; &lt;key&gt;                            store a key in the caller's own keychain (see KeyCommand)
  * </pre>
  *
  * <h2>只给玩家</h2>
@@ -211,10 +210,10 @@ public final class NumenCommands {
         graft(dispatcher, Commands.literal("settings")
                 .executes(ctx -> clientAction(ctx, ClientUiActionPayload.Action.OPEN_SETTINGS)));
         graft(dispatcher, Commands.literal("debug").executes(NumenCommands::toggleDebugText));
-        graft(dispatcher, com.dwinovo.numen.api.brain.ChatBar.node());
+        graft(dispatcher, com.dwinovo.numen.api.talk.ChatBar.node());
         graft(dispatcher, permissionCommand());
         graft(dispatcher, consentCommand());
-        graft(dispatcher, com.dwinovo.numen.api.brain.BindingCommands.node());
+        graft(dispatcher, com.dwinovo.numen.api.owner.BindingCommands.node());
         graft(dispatcher, Commands.literal("drive").requires(source -> com.dwinovo.numen.api.platform.Services.permissions().isGameMaster(source))
                 .then(Commands.argument("companion", StringArgumentType.string())
                         .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(companionsHere(ctx.getSource())

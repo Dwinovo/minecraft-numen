@@ -18,8 +18,8 @@ import com.dwinovo.numen.api.agent.skill.SkillRegistry;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
 import com.dwinovo.numen.api.agent.tool.ScriptTool;
 import com.dwinovo.numen.api.agent.tool.ToolBook;
-import com.dwinovo.numen.api.brain.Bound;
-import com.dwinovo.numen.api.brain.Mind;
+import com.dwinovo.numen.api.mind.Bound;
+import com.dwinovo.numen.api.mind.Mind;
 import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.library.LibraryHub;
 import com.dwinovo.numen.api.library.Switches;
@@ -145,7 +145,7 @@ class LoopHostTest {
         host = new LoopHost(new LoopHost.Parts(HER, OWNER, home, clientMain::add, pipe.client(), model, SCRIPT_ONLY,
                 () -> false, () -> EventQueue.DEFAULT_LEVEL, bound -> "a test persona", builtins -> modules,
                 bundled -> SkillRegistry.of(hub.library(SkillRegistry.KIND), bundled), id -> "主人"));
-        host.bind(com.dwinovo.numen.api.brain.Slot.PERSONA,
+        host.bind(com.dwinovo.numen.api.mind.Slot.PERSONA,
                 new Bound(OWNER, new com.dwinovo.numen.api.library.EntryId("my", "test")));
         seats.bodyEntered(HER);
         Opened opened = pipe.client().open(HER, 0).get(5, TimeUnit.SECONDS);
@@ -223,8 +223,8 @@ class LoopHostTest {
     void aFriendsWhisperIsAnsweredAsAWhisperToHimAndTheProgramsThatFollowAreHis() throws Exception {
         world.sharedWith.put(HER, Set.of(FRIEND));
         model.program("call-2", "return 1").say("在的");
-        com.dwinovo.numen.api.brain.Spoken whisper = new com.dwinovo.numen.api.brain.Spoken(FRIEND,
-                com.dwinovo.numen.api.brain.Venue.WHISPER, null);
+        com.dwinovo.numen.api.talk.Spoken whisper = new com.dwinovo.numen.api.talk.Spoken(FRIEND,
+                com.dwinovo.numen.api.talk.Venue.WHISPER, null);
 
         seats.publish(HER, new EventQueue.Entry(EventTypes.QUERY,
                 EventQueue.query("你好", 6000, "player@abcdef (Friend)", "whisper"), 5L, false), whisper);

@@ -135,7 +135,7 @@ final class Seat {
     }
 
     /** 别人对她说的话到了(主线程):和别的事件同一个发件箱,多带着谁说的、在哪儿说的。 */
-    void publish(EventQueue.Entry entry, com.dwinovo.numen.api.brain.Spoken spoken) {
+    void publish(EventQueue.Entry entry, com.dwinovo.numen.api.talk.Spoken spoken) {
         SeatWorld world = seats.world();
         add(SeatEvent.ofSpoken(companion, seats.generation(companion), entry, spoken, world.gameTime(), world.dayTime()));
     }

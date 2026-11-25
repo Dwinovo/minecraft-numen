@@ -39,7 +39,7 @@ public class NumenMod {
         NeoForge.EVENT_BUS.addListener(NumenMod::onPlayerChangedDimension);
         // 聊天栏切进了会话的玩家,他打的字进会话、不广播到公屏(见 ChatBar)
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.ServerChatEvent e) -> {
-            if (com.dwinovo.numen.api.brain.ChatBar.take(e.getPlayer(), e.getRawText())) {
+            if (com.dwinovo.numen.api.talk.ChatBar.take(e.getPlayer(), e.getRawText())) {
                 e.setCanceled(true);
             }
         });

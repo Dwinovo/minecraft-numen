@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.entity;
 
-import com.dwinovo.numen.api.brain.Presence;
+import com.dwinovo.numen.api.owner.Presence;
 import com.dwinovo.numen.api.network.payload.NumenStatePayload;
 import com.dwinovo.numen.api.network.payload.RequestStatePayload;
 import com.dwinovo.numen.api.network.NumenNetwork;

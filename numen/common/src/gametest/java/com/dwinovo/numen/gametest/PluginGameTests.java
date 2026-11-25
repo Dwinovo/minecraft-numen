@@ -94,7 +94,7 @@ public class PluginGameTests {
         com.google.gson.JsonObject found = null;
         for (Object packet : told) {
             if (packet instanceof com.dwinovo.numen.api.network.payload.LibraryPayload table
-                    && com.dwinovo.numen.api.brain.Libraries.PLUGIN.equals(table.kind())) {
+                    && com.dwinovo.numen.api.owner.Libraries.PLUGIN.equals(table.kind())) {
                 for (var row : com.google.gson.JsonParser.parseString(table.entries()).getAsJsonArray()) {
                     if (id.equals(row.getAsJsonObject().get("id").getAsString())) {
                         found = row.getAsJsonObject();
@@ -195,14 +195,14 @@ public class PluginGameTests {
         var admin = GameTestKit.presentPlayer(helper, null, "gametest_plugin_toggler");
         server.getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(admin.getGameProfile(),
                 4, false));
-        com.dwinovo.numen.api.brain.Replies.hello(admin, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
+        com.dwinovo.numen.api.owner.Replies.hello(admin, com.dwinovo.numen.api.owner.Presence.PROTOCOL);
         GameTestKit.received(admin);
 
         helper.assertTrue(listsDyn(), "her listing lacks the group before it was switched off");
         ToolRun on = ping(companion);
         helper.assertTrue(answered(on), "the group's function did not answer: " + on.outcome());
 
-        com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PLUGIN, "disable",
+        com.dwinovo.numen.api.owner.Replies.library(admin, com.dwinovo.numen.api.owner.Libraries.PLUGIN, "disable",
                 "{\"id\":\"gt_dyn\"}", 0);
         var row = pluginRow(GameTestKit.received(admin), "gt_dyn");
         helper.assertTrue(row != null && row.get("disabled").getAsBoolean() && !row.get("pending").getAsBoolean()
@@ -213,7 +213,7 @@ public class PluginGameTests {
         helper.assertTrue(!off.succeeded() && "no_function".equals(off.kind()),
                 "her program could still call the switched-off group: " + off.outcome());
 
-        com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PLUGIN, "enable",
+        com.dwinovo.numen.api.owner.Replies.library(admin, com.dwinovo.numen.api.owner.Libraries.PLUGIN, "enable",
                 "{\"id\":\"gt_dyn\"}", 0);
         row = pluginRow(GameTestKit.received(admin), "gt_dyn");
         helper.assertTrue(row != null && !row.get("disabled").getAsBoolean() && "loaded".equals(row.get("status").getAsString()),
@@ -223,11 +223,11 @@ public class PluginGameTests {
         helper.assertTrue(answered(back), "the group's function did not answer after switching on: " + back.outcome());
 
         // 再关再开一轮:任务执行器不留尸体、也不登记两份
-        com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PLUGIN, "disable",
+        com.dwinovo.numen.api.owner.Replies.library(admin, com.dwinovo.numen.api.owner.Libraries.PLUGIN, "disable",
                 "{\"id\":\"gt_dyn\"}", 0);
         GameTestKit.received(admin);
         helper.assertTrue(!runnerRegistered(companion), "the task runner stayed registered after the plugin was switched off");
-        com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PLUGIN, "enable",
+        com.dwinovo.numen.api.owner.Replies.library(admin, com.dwinovo.numen.api.owner.Libraries.PLUGIN, "enable",
                 "{\"id\":\"gt_dyn\"}", 0);
         GameTestKit.received(admin);
         helper.assertTrue(runnerRegistered(companion), "the task runner did not come back after switching the plugin on again");

@@ -130,7 +130,7 @@ class SeatsTest {
         get(client.interrupt(HER, "p1", "your owner spoke"));
         get(client.cut(HER, "p1", true));
         get(client.stopBody(HER));
-        get(client.say(HER, "hello there", com.dwinovo.numen.api.brain.Spoken.panel(OWNER)));
+        get(client.say(HER, "hello there", com.dwinovo.numen.api.talk.Spoken.panel(OWNER)));
         assertEquals(List.of("p1: your owner spoke"), world.programs.interrupts);
         assertEquals(List.of("p1: true"), world.programs.cuts);
         assertEquals(List.of(HER), world.programs.bodyStops);
@@ -386,14 +386,14 @@ class SeatsTest {
     void herWordsGoToTheSpeakerShePointsAtOnlyIfHeIsOneOfHerKeepers() throws Exception {
         get(client.open(HER, 0));
         world.sharedWith.put(HER, java.util.Set.of(FRIEND));
-        com.dwinovo.numen.api.brain.Spoken whisper = new com.dwinovo.numen.api.brain.Spoken(FRIEND,
-                com.dwinovo.numen.api.brain.Venue.WHISPER, null);
+        com.dwinovo.numen.api.talk.Spoken whisper = new com.dwinovo.numen.api.talk.Spoken(FRIEND,
+                com.dwinovo.numen.api.talk.Venue.WHISPER, null);
 
         get(client.say(HER, "你好", whisper));
 
         assertEquals(List.of(whisper), world.spokenTo);
         assertEquals(com.dwinovo.numen.mcp.rpc.RpcError.INVALID_PARAMS, refusedWith(client.say(HER, "x",
-                new com.dwinovo.numen.api.brain.Spoken(UUID.randomUUID(), com.dwinovo.numen.api.brain.Venue.WHISPER, null))));
+                new com.dwinovo.numen.api.talk.Spoken(UUID.randomUUID(), com.dwinovo.numen.api.talk.Venue.WHISPER, null))));
     }
 
     @Test

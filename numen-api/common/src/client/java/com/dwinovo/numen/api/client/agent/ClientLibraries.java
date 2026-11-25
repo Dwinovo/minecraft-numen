@@ -6,9 +6,9 @@ import com.dwinovo.numen.api.agent.catalog.ThinkingLevel;
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
 import com.dwinovo.numen.api.agent.loop.Cause;
 import com.dwinovo.numen.api.agent.provider.ThinkingPlan;
-import com.dwinovo.numen.api.brain.Bound;
-import com.dwinovo.numen.api.brain.CompanionState;
-import com.dwinovo.numen.api.brain.Libraries;
+import com.dwinovo.numen.api.mind.Bound;
+import com.dwinovo.numen.api.mind.CompanionState;
+import com.dwinovo.numen.api.owner.Libraries;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.api.plugin.PluginRoster;
 import com.dwinovo.numen.mcp.client.McpConnections;
@@ -210,16 +210,6 @@ public final class ClientLibraries {
         body.addProperty("key", typed);
         body.addProperty("scope", server ? "server" : "mine");
         ClientCompanions.library().request(LibraryDesk.KEY, Libraries.PUT, body);
-    }
-
-    /** 答复里带的提醒({@link Libraries#NOTICE_OWNER_SEES_KEY});没有是 null。 */
-    public static String keyNotice() {
-        for (JsonElement e : entries(LibraryDesk.KEY)) {
-            if (e.getAsJsonObject().has("notice")) {
-                return text(e.getAsJsonObject(), "notice");
-            }
-        }
-        return null;
     }
 
     // ---- 型号目录与连通性检测(管理员的档案表单问的;目录、端点解析、检测都在服务端算) ----

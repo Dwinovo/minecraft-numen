@@ -11,7 +11,7 @@ import com.dwinovo.numen.api.agent.loop.ModelRequest;
 import com.dwinovo.numen.api.agent.provider.AssistantTurn;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.agent.provider.Usage;
-import com.dwinovo.numen.api.brain.Bound;
+import com.dwinovo.numen.api.mind.Bound;
 import com.dwinovo.numen.script.ScriptEngine;
 import com.dwinovo.numen.api.agent.tool.ScriptTool;
 
@@ -23,11 +23,11 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
- * 回话的那一方:真实模型,或者两种基线。就是产品大脑({@code CompanionLoop})的模型口({@link com.dwinovo.numen.api.brain.Mind}),
+ * 回话的那一方:真实模型,或者两种基线。就是产品大脑({@code CompanionLoop})的模型口({@link com.dwinovo.numen.api.mind.Mind}),
  * 评测里换上它;请求怎么组装、什么时候调模型都是产品的代码,它只管"谁来答"。评测不分档案,所以档案 id 一概不看。
  * 加上一样评测才有的:最近一次失败的原话,和调模型的次数预算——用完了这次调用不发,运行器随即按超轮数收场。
  */
-interface Mind extends com.dwinovo.numen.api.brain.Mind {
+interface Mind extends com.dwinovo.numen.api.mind.Mind {
 
     /** 最近一次失败的 HTTP 状态与服务端原话;没失败过是 null。 */
     default Failure lastFailure() {

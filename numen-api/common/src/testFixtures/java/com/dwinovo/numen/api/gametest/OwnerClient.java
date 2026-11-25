@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.gametest;
 
-import com.dwinovo.numen.api.brain.Presence;
+import com.dwinovo.numen.api.owner.Presence;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.program.ClientTransport;

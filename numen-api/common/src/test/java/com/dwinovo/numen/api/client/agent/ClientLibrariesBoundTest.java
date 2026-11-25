@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.client.agent;
 
-import com.dwinovo.numen.api.brain.Bound;
+import com.dwinovo.numen.api.mind.Bound;
 import com.dwinovo.numen.api.entity.Attendance;
 import com.dwinovo.numen.api.entity.Keeper;
 import com.dwinovo.numen.api.library.EntryId;

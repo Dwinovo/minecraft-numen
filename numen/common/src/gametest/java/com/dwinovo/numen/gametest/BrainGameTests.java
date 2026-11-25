@@ -9,10 +9,10 @@ import com.dwinovo.numen.api.agent.loop.ModelPort;
 import com.dwinovo.numen.api.agent.loop.ModelRequest;
 import com.dwinovo.numen.api.agent.provider.AssistantTurn;
 import com.dwinovo.numen.api.agent.provider.Usage;
-import com.dwinovo.numen.api.brain.Bound;
-import com.dwinovo.numen.api.brain.Mind;
-import com.dwinovo.numen.api.brain.OwnerInput;
-import com.dwinovo.numen.api.brain.OwnerInputs;
+import com.dwinovo.numen.api.mind.Bound;
+import com.dwinovo.numen.api.mind.Mind;
+import com.dwinovo.numen.api.owner.OwnerInput;
+import com.dwinovo.numen.api.owner.OwnerInputs;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.NumenPlayer;
@@ -162,7 +162,20 @@ public class BrainGameTests {
         }
     }
 
-    /** 寻路的"为什么"落到她自己的轨迹文件里:服务端的寻路经同一个进程里的登记找到她大脑那一头的轨迹。 */
+    /** 她身体这一本轨迹里 {@code type} 那一类的记录;身体的轨迹经服务端的写车道落盘,还没落下来就是空的。 */
+    private static List<TraceRecord> bodyTraceRecords(NumenPlayer her, String type) {
+        java.nio.file.Path file = com.dwinovo.numen.api.entity.BodyTrace.of(her).file();
+        if (file == null || !java.nio.file.Files.exists(file)) {
+            return List.of();
+        }
+        try {
+            return TraceRecord.readAll(file).stream().filter(r -> r.type().equals(type)).toList();
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
+    /** 寻路的"为什么"落到她身体的轨迹文件里:服务端的寻路写服务端那一本,不经她的大脑。 */
     @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_brain")
     public static void aPathThatGivesUpLandsInHerTrace(GameTestHelper helper) {
         com.dwinovo.numen.api.agent.trace.TraceRecorders.record();
@@ -193,8 +206,8 @@ public class BrainGameTests {
         succeedWhen(helper, () -> {
             var status = nav.tick();
             helper.assertTrue(!status.running(), "这一趟还没收场: " + status);
-            List<TraceRecord> paths = traceRecords(brain, "path");
-            helper.assertTrue(!paths.isEmpty(), "寻路的一条都没落进她的轨迹,结局是 " + status);
+            List<TraceRecord> paths = bodyTraceRecords(her, "path");
+            helper.assertTrue(!paths.isEmpty(), "寻路的一条都没落进她身体的轨迹,结局是 " + status);
             TraceRecord last = paths.get(paths.size() - 1);
             helper.assertTrue(!"Arrived".equals(last.string("outcome")), "围死了却说到了: " + last.json());
             helper.assertTrue(last.string("outcome") != null, "收场那条没结局: " + last.json());
@@ -242,7 +255,7 @@ public class BrainGameTests {
         var owner = GameTestKit.presentPlayer(helper, null, "gametest_opened");
         var sent = GameTestKit.received(owner).stream()
                 .filter(p -> p instanceof com.dwinovo.numen.api.network.payload.ServerHelloPayload opener
-                        && opener.protocol() == com.dwinovo.numen.api.brain.Presence.PROTOCOL)
+                        && opener.protocol() == com.dwinovo.numen.api.owner.Presence.PROTOCOL)
                 .toList();
         helper.assertTrue(sent.size() == 1, "the opener was not sent once when the player joined: " + sent);
         GameTestKit.leave(owner);
@@ -266,10 +279,10 @@ public class BrainGameTests {
                 .filter(p -> p.type().id().getNamespace().equals(com.dwinovo.numen.api.Constants.MOD_ID)).toList();
         helper.assertTrue(before.size() == 1
                         && before.get(0) instanceof com.dwinovo.numen.api.network.payload.ServerHelloPayload opener
-                        && opener.protocol() == com.dwinovo.numen.api.brain.Presence.PROTOCOL,
+                        && opener.protocol() == com.dwinovo.numen.api.owner.Presence.PROTOCOL,
                 "before the hello the server sent more than its opener: " + before);
 
-        com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
+        com.dwinovo.numen.api.owner.Replies.hello(owner, com.dwinovo.numen.api.owner.Presence.PROTOCOL);
 
         var sent = GameTestKit.received(owner);
         helper.assertTrue(sent.stream().anyMatch(p -> p instanceof com.dwinovo.numen.api.network.payload.HelloAckPayload a
@@ -295,8 +308,8 @@ public class BrainGameTests {
         var server = level.getServer();
         var creator = GameTestKit.presentPlayer(helper, null, "gt_panel_owner");
         var friend = GameTestKit.presentPlayer(helper, null, "gt_panel_pal");
-        com.dwinovo.numen.api.brain.Replies.hello(creator, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
-        com.dwinovo.numen.api.brain.Replies.hello(friend, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
+        com.dwinovo.numen.api.owner.Replies.hello(creator, com.dwinovo.numen.api.owner.Presence.PROTOCOL);
+        com.dwinovo.numen.api.owner.Replies.hello(friend, com.dwinovo.numen.api.owner.Presence.PROTOCOL);
         NumenPlayer her = com.dwinovo.numen.api.gametest.Bodies.summon(server, creator.getUUID(), "gt_panel_her", level,
                 net.minecraft.world.phys.Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(8, 2, 8))));
         UUID id = her.getUUID();
@@ -358,7 +371,7 @@ public class BrainGameTests {
                 helper.getLevel(), net.minecraft.world.phys.Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(8, 2, 8))));
         GameTestKit.received(owner);
 
-        com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL + 1);
+        com.dwinovo.numen.api.owner.Replies.hello(owner, com.dwinovo.numen.api.owner.Presence.PROTOCOL + 1);
         com.dwinovo.numen.api.entity.Companions.syncRosterToOwner(owner.server, owner);
 
         var sent = GameTestKit.received(owner);

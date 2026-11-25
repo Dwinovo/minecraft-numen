@@ -25,7 +25,7 @@ final class StubSeatWorld implements SeatWorld {
     volatile long gameTime = 100;
     final List<String> said = new CopyOnWriteArrayList<>();
     /** 她说话时带的是谁、在哪儿说的。 */
-    final List<com.dwinovo.numen.api.brain.Spoken> spokenTo = new CopyOnWriteArrayList<>();
+    final List<com.dwinovo.numen.api.talk.Spoken> spokenTo = new CopyOnWriteArrayList<>();
     /** 创建者之外、在她主人表上的人。 */
     final Map<UUID, java.util.Set<UUID>> sharedWith = new ConcurrentHashMap<>();
     final Programs programs = new Programs();
@@ -125,7 +125,7 @@ final class StubSeatWorld implements SeatWorld {
     }
 
     @Override
-    public void say(UUID companion, String text, com.dwinovo.numen.api.brain.Spoken spoken) {
+    public void say(UUID companion, String text, com.dwinovo.numen.api.talk.Spoken spoken) {
         said.add(text);
         spokenTo.add(spoken);
     }

@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.entity;
 
-import com.dwinovo.numen.api.brain.Slot;
+import com.dwinovo.numen.api.mind.Slot;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.network.payload.SummonRequestPayload;
 import com.dwinovo.numen.api.skin.SkinError;

@@ -3,10 +3,10 @@ package com.dwinovo.numen.api.client.agent;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.agent.conversation.Transcript;
-import com.dwinovo.numen.api.brain.Feed;
-import com.dwinovo.numen.api.brain.FeedEncoder;
-import com.dwinovo.numen.api.brain.OwnerInput;
-import com.dwinovo.numen.api.brain.Presence;
+import com.dwinovo.numen.api.mind.Feed;
+import com.dwinovo.numen.api.mind.FeedEncoder;
+import com.dwinovo.numen.api.owner.OwnerInput;
+import com.dwinovo.numen.api.owner.Presence;
 import com.dwinovo.numen.api.client.seat.ClientSeats;
 import com.dwinovo.numen.api.library.Library;
 import com.dwinovo.numen.api.library.LibraryKind;
@@ -45,9 +45,9 @@ public final class ClientCompanions {
     private record Entry(CompanionView view, TurnPresenter presenter, FeedEncoder encoder) {}
 
     /** 随库协议到服务端的几种库:服务端管的皮肤、权限、插件;别的库在这台电脑上,由 {@link LibraryDesk} 答。 */
-    private static final Set<String> SERVER_KINDS = Set.of(com.dwinovo.numen.api.brain.Libraries.SKIN,
-            com.dwinovo.numen.api.brain.Libraries.SKIN_FILES, com.dwinovo.numen.api.brain.Libraries.PERMISSION,
-            com.dwinovo.numen.api.brain.Libraries.PLUGIN);
+    private static final Set<String> SERVER_KINDS = Set.of(com.dwinovo.numen.api.owner.Libraries.SKIN,
+            com.dwinovo.numen.api.owner.Libraries.SKIN_FILES, com.dwinovo.numen.api.owner.Libraries.PERMISSION,
+            com.dwinovo.numen.api.owner.Libraries.PLUGIN);
 
     private static final Map<UUID, Entry> COMPANIONS = new HashMap<>();
     private static final Transcripts TRANSCRIPTS = new Transcripts();

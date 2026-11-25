@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.brain;
+package com.dwinovo.numen.api.talk;
 
 /**
  * 主人是在哪儿跟她说的这句话。她的回话在哪问就在哪答({@link Voice} 按它分发):

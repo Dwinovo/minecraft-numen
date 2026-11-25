@@ -2,7 +2,7 @@ package com.dwinovo.numen.api.seat;
 
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.loop.Program;
-import com.dwinovo.numen.api.brain.Spoken;
+import com.dwinovo.numen.api.talk.Spoken;
 import com.google.gson.JsonObject;
 
 import java.util.UUID;

@@ -1,8 +1,8 @@
 package com.dwinovo.numen.api.network.payload;
 
 import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.brain.OwnerInput;
-import com.dwinovo.numen.api.brain.OwnerInputs;
+import com.dwinovo.numen.api.owner.OwnerInput;
+import com.dwinovo.numen.api.owner.OwnerInputs;
 import com.dwinovo.numen.api.network.Wire;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;

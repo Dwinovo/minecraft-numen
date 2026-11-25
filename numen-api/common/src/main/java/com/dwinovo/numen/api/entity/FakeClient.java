@@ -138,7 +138,7 @@ public final class FakeClient {
                 && chat.chatType().chatType().is(net.minecraft.network.chat.ChatType.MSG_COMMAND_INCOMING)) {
             // 签了名的私聊带着发话人的 uuid;正文是服务端加工过的那一版,没有就是原文
             Component text = chat.unsignedContent();
-            com.dwinovo.numen.api.brain.Hearing.whisper(player, chat.sender(), chat.chatType().name().getString(),
+            com.dwinovo.numen.api.talk.Hearing.whisper(player, chat.sender(), chat.chatType().name().getString(),
                     text != null ? text.getString() : chat.body().content());
         }
     }

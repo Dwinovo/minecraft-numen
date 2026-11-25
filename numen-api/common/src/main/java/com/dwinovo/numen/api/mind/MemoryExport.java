@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.brain;
+package com.dwinovo.numen.api.mind;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

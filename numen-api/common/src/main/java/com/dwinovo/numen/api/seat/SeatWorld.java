@@ -3,7 +3,7 @@ package com.dwinovo.numen.api.seat;
 import com.dwinovo.numen.api.program.ProgramRunner;
 import com.google.gson.JsonObject;
 
-import com.dwinovo.numen.api.brain.Spoken;
+import com.dwinovo.numen.api.talk.Spoken;
 
 import java.util.UUID;
 import java.util.concurrent.Executor;

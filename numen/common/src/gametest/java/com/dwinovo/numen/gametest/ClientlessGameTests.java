@@ -1,7 +1,7 @@
 package com.dwinovo.numen.gametest;
 
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
-import com.dwinovo.numen.api.brain.Replies;
+import com.dwinovo.numen.api.owner.Replies;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.server.level.ServerLevel;
@@ -158,8 +158,8 @@ public class ClientlessGameTests {
         helper.assertTrue(registry.find(id) != null
                         && refused.stream().anyMatch(m -> isKey(m, Keys.COMMAND_NO_SUCH_COMPANION)),
                 "the friend could delete a companion he did not create: " + refused);
-        helper.assertTrue(com.dwinovo.numen.api.brain.Sharing.share(server, friend.getUUID(), id,
-                        java.util.UUID.randomUUID()) == com.dwinovo.numen.api.brain.Sharing.Outcome.NOT_CREATOR,
+        helper.assertTrue(com.dwinovo.numen.api.owner.Sharing.share(server, friend.getUUID(), id,
+                        java.util.UUID.randomUUID()) == com.dwinovo.numen.api.owner.Sharing.Outcome.NOT_CREATOR,
                 "the friend could share her on");
 
         run(friend, "numen player leave gt_shared", refused);

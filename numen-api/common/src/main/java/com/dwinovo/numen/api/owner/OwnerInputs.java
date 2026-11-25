@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.brain;
+package com.dwinovo.numen.api.owner;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
@@ -18,6 +18,9 @@ import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Optional;
 import java.util.UUID;
+import com.dwinovo.numen.api.talk.Hearing;
+import com.dwinovo.numen.api.talk.ChatBar;
+import com.dwinovo.numen.api.talk.Conversations;
 
 /**
  * 主人经客户端做的、服务端管的事({@link OwnerInput})的唯一入口。上行的东西在网络线程上读懂、验过形状就投进信箱

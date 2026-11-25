@@ -1,6 +1,6 @@
 package com.dwinovo.numen.e2e;
 
-import com.dwinovo.numen.api.brain.OwnerInput;
+import com.dwinovo.numen.api.owner.OwnerInput;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

@@ -1,4 +1,4 @@
-package com.dwinovo.numen.api.brain;
+package com.dwinovo.numen.api.owner;
 
 import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.api.entity.CompanionRegistry;

@@ -112,7 +112,7 @@ public final class ServerSeats {
      * 别人对她说的话送到她的座位(主线程):{@code entry} 是给模型看的那一条,{@code spoken} 是谁说的、在哪儿说的。
      * 座位上没人时攒在发件箱里,创建者回来补上。
      */
-    public static void hear(UUID companion, EventQueue.Entry entry, com.dwinovo.numen.api.brain.Spoken spoken) {
+    public static void hear(UUID companion, EventQueue.Entry entry, com.dwinovo.numen.api.talk.Spoken spoken) {
         SEATS.publish(companion, entry, spoken);
     }
 

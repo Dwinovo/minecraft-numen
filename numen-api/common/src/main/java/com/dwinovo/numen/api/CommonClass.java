@@ -24,7 +24,7 @@ public class CommonClass {
         wireTaskMachine();
         wireRegistrationChanges();
         com.dwinovo.numen.api.seat.ServerSeats.register();
-        com.dwinovo.numen.api.brain.ServerSkins.register();
+        com.dwinovo.numen.api.owner.ServerSkins.register();
     }
 
     /**
