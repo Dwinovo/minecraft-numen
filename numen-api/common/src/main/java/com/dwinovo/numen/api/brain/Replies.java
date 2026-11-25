@@ -3,7 +3,6 @@ package com.dwinovo.numen.api.brain;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.config.Authority;
-import com.dwinovo.numen.api.agent.loop.LoopStatus;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.home.Homes;
@@ -11,27 +10,21 @@ import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.payload.ConsentRequestPayload;
 import com.dwinovo.numen.api.permission.ConsentDesk;
 import com.dwinovo.numen.api.network.payload.ConversationsPayload;
-import com.dwinovo.numen.api.network.payload.FeedPayload;
 import com.dwinovo.numen.api.network.payload.HelloAckPayload;
-import com.dwinovo.numen.api.network.payload.HistoryPagePayload;
 import com.dwinovo.numen.api.network.payload.LibraryPayload;
-import com.dwinovo.numen.api.permission.ConsentChat;
-import com.dwinovo.numen.api.text.ServerLang;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.dwinovo.numen.api.permission.ConsentChat;
+import com.google.gson.JsonArray;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
-import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 /**
- * 服务端对主人客户端的答复与推送:报到的回答和补课、会话列表、一页历史、一刻的事件。包怎么编、往哪发只在这一处。
- * 线程:服务端主线程(历史页是在她们的写车道上算好之后发的,发包本身线程安全)。
+ * 服务端对主人客户端的答复与推送:报到的回答和补课、会话列表、征询。包怎么编、往哪发只在这一处。
+ * 线程:服务端主线程。
  */
 public final class Replies {
 
@@ -63,7 +56,7 @@ public final class Replies {
     }
 
     /**
-     * 客户端报了它提供哪些联动({@code ClientCapsPayload}),报到齐了:回答是否管理员、是否房主,推名册,补给他用得了的各大脑此刻的样子和会话列表。
+     * 客户端报了它提供哪些联动({@code ClientCapsPayload}),报到齐了:回答是否管理员、是否房主,推名册,补给他的会话列表。
      * 没有先报过对得上的版本就什么也不做。
      */
     public static void ready(ServerPlayer player, java.util.Set<String> provided) {
@@ -73,19 +66,8 @@ public final class Replies {
         NumenNetwork.sendToPlayer(player, new HelloAckPayload(Authority.isAdmin(player),
                 Homes.of(player.server).isHost(player.getUUID())));
         Companions.syncRosterToOwner(player.server, player);
-        snapshots(player.server, player.getUUID());
         conversations(player.server, player.getUUID());
         ConsentDesk.resendTo(player);
-        HostNotices.deliver(player);
-        SkinHandover.offer(player.server, player);
-    }
-
-    /** 这位主人用得了的各只同伴(他创建的、分享给他的)的大脑此刻的样子,补给他的客户端。 */
-    static void snapshots(MinecraftServer server, UUID owner) {
-        CompanionLoops.Link link = link(server, owner);
-        for (Map.Entry<UUID, CompanionRegistry.Entry> hers : CompanionRegistry.get(server).usableBy(owner)) {
-            CompanionLoops.sendSnapshot(hers.getKey(), link);
-        }
     }
 
     /** 这位主人落过盘的会话(成员表与名字),整份。"就他俩"不用推:客户端按名册自己有。 */
@@ -102,29 +84,10 @@ public final class Replies {
         NumenNetwork.sendToPlayer(player, new ConversationsPayload(saved.toString()));
     }
 
-    /** 一页历史:算好之后(在她们的写车道上,排在已交的写后面)发给他。 */
-    public static void history(ServerPlayer player, long requestId, String conversation, String cursor, int limit) {
-        MinecraftServer server = player.server;
-        Conversations rooms = Conversations.of(server, player.getUUID());
-        Conversation conv = rooms.find(conversation);
-        if (conv == null) {
-            NumenNetwork.sendToPlayer(player, new HistoryPagePayload(requestId, conversation, "[]", "", false));
-            return;
-        }
-        History.page(rooms, conv, cursor, Math.max(1, Math.min(History.PAGE, limit))).thenAccept(page -> {
-            NumenNetwork.sendToPlayer(player, HistoryPagePayload.of(requestId, conversation, page));
-        });
-    }
-
     /**
-     * 读写一种库:谁能做什么由 {@link Libraries} 判,答复是这位玩家此刻看得到的整表(办不成附原因)。模型档案、服务器配置
-     * 改成了,在线的其他玩家也各收到他们看得到的新表——档案选择器里的名单不能是旧的。
+     * 读写一种库:谁能做什么由 {@link Libraries} 判,答复是这位玩家此刻看得到的整表(办不成附原因)。插件的开关改成了,在线的其他玩家
+     * 也各收到他们看得到的新表。
      */
-    public static void library(ServerPlayer player, String kind, String op, String json) {
-        library(player, kind, op, json, 0);
-    }
-
-    /** 同上;{@code request} 是客户端起的请求号,原样带在答复里(0 = 他不等答复)。 */
     public static void library(ServerPlayer player, String kind, String op, String json, long request) {
         JsonObject body = new JsonObject();
         try {
@@ -135,29 +98,15 @@ public final class Replies {
             // 读不懂的请求体当空:各库按"缺字段"拒绝
         }
         MinecraftServer server = player.server;
-        Libraries libraries = Libraries.of(server);
-        Libraries.Result result = libraries.handle(player.getUUID(), Authority.isAdmin(player), kind, op, body);
-        // 还要等一会儿才有结局的请求(连通性检测):现在送的只是"在试"的一张表,不是答复;答复是结局到了的那一张,带请求号
-        long answerNow = result.later() == null ? request : 0;
+        Libraries.Result result = Libraries.of(server).handle(player.getUUID(), Authority.isAdmin(player), kind, op, body);
         NumenNetwork.sendToPlayer(player, new LibraryPayload(kind, result.entries(),
-                result.problem() == null ? "" : result.problem(), answerNow));
-        if (result.later() != null) {
-            result.later().thenAccept(entries -> server.execute(
-                    () -> NumenNetwork.sendToPlayer(player, new LibraryPayload(kind, entries, "", request))));
-        }
+                result.problem() == null ? "" : result.problem(), request));
         if (result.shared()) {
             share(server, player, kind);
         }
-        if (Libraries.SKILL.equals(kind) && !Libraries.LIST.equals(op)) {
-            // 技能库动了:分享来的她读的是创建者的那一份,被分享的各位面板上她的技能名单跟着换
-            share(server, null, Libraries.COMPANION_SKILLS);
-        }
     }
 
-    /**
-     * 一种库变了:在线、装着客户端的玩家各收到他们此刻看得到的新表({@code except} 已经收到了答复)。
-     * 接进来的 MCP 服务器连上、断开、等授权都是自己变的,也经这里推。
-     */
+    /** 一种库变了:在线、装着客户端的玩家各收到他们此刻看得到的新表({@code except} 已经收到了答复)。 */
     public static void share(MinecraftServer server, ServerPlayer except, String kind) {
         Libraries libraries = Libraries.of(server);
         for (ServerPlayer other : server.getPlayerList().getPlayers()) {
@@ -168,13 +117,18 @@ public final class Replies {
         }
     }
 
-    /** 一种库只在这位玩家看得到的那一份变了(他自己的 MCP 连接连上、断开):推给他。 */
+    /** 一种库只在这位玩家看得到的那一份变了(皮肤的签名队、权限的规则表):推给他。 */
     public static void pushTo(MinecraftServer server, UUID owner, String kind) {
         ServerPlayer player = server.getPlayerList().getPlayer(owner);
         if (player != null && Presence.hasClient(owner)) {
             NumenNetwork.sendToPlayer(player, new LibraryPayload(kind,
                     Libraries.of(server).view(owner, Authority.isAdmin(player), kind), ""));
         }
+    }
+
+    /** 这位主人的权限表变了:推给他的面板。 */
+    public static void permission(MinecraftServer server, UUID owner) {
+        pushTo(server, owner, Libraries.PERMISSION);
     }
 
     /**
@@ -189,73 +143,5 @@ public final class Replies {
         } else if (request.withdrawnBecause() != null) {
             owner.sendSystemMessage(ConsentChat.withdrawn(companion, request.withdrawnBecause(), request.withdrawnBy()));
         }
-    }
-
-    /**
-     * 这位主人没装客户端:他用得了的各只此刻在干什么,合成一行放在他的动作栏上,按他客户端的语言。只含正在干着具体活的。
-     */
-    static void activities(ServerPlayer player, Map<UUID, LoopStatus.Doing> doing) {
-        MinecraftServer server = player.server;
-        ServerLang lang = ServerLang.of(ServerLang.localeOf(player));
-        MutableComponent bar = Component.empty();
-        for (Map.Entry<UUID, LoopStatus.Doing> each : doing.entrySet()) {
-            CompanionRegistry.Entry entry = CompanionRegistry.get(server).find(each.getKey());
-            if (entry != null) {
-                bar.append(bar.getSiblings().isEmpty() ? "" : " | ").append(entry.name() + ": ")
-                        .append(DoingText.of(each.getValue(), lang::has));
-            }
-        }
-        if (!bar.getSiblings().isEmpty()) {
-            player.displayClientMessage(bar, true);
-        }
-    }
-
-    /**
-     * 她的记忆导出好了(或没成):装了客户端的,打成的 zip 按段下行({@link Exports})交给他存成文件;读不出来、他前一份还在路上、他没装客户端,
-     * 都如实说给他听。
-     */
-    public static void exported(MinecraftServer server, UUID owner, UUID companion, byte[] zip, Throwable failure) {
-        ServerPlayer player = server.getPlayerList().getPlayer(owner);
-        CompanionRegistry.Entry entry = CompanionRegistry.get(server).find(companion);
-        if (player == null || entry == null) {
-            return;
-        }
-        if (failure != null) {
-            Constants.LOG.warn("[numen-entity#{}] exporting memory failed: {}", companion, failure.toString());
-            player.sendSystemMessage(Component.translatable(com.dwinovo.numen.api.data.ModLanguageData.Keys.EXPORT_FAILED,
-                    entry.name()));
-        } else if (!Presence.hasClient(owner)) {
-            player.sendSystemMessage(Component.translatable(com.dwinovo.numen.api.data.ModLanguageData.Keys.EXPORT_NEEDS_CLIENT));
-        } else if (!Exports.SERVER.start(owner, companion, entry.name(), zip)) {
-            player.sendSystemMessage(Component.translatable(com.dwinovo.numen.api.data.ModLanguageData.Keys.EXPORT_BUSY));
-        }
-    }
-
-    /** 这位主人那一头:他的客户端在不在、事件怎么推给他、她的话怎么交到他手里。 */
-    public static CompanionLoops.Link link(MinecraftServer server, UUID owner) {
-        return new CompanionLoops.Link() {
-            @Override
-            public boolean hasClient() {
-                return Presence.hasClient(owner) && server.getPlayerList().getPlayer(owner) != null;
-            }
-
-            @Override
-            public void send(UUID companion, List<Feed> events) {
-                ServerPlayer player = server.getPlayerList().getPlayer(owner);
-                if (player != null) {
-                    NumenNetwork.sendToPlayer(player, FeedPayload.of(companion, events));
-                }
-            }
-
-            @Override
-            public void said(UUID companion, String said, Venue venue, String conversation) {
-                ServerPlayer player = server.getPlayerList().getPlayer(owner);
-                CompanionRegistry.Entry entry = CompanionRegistry.get(server).find(companion);
-                if (player == null || entry == null || venue == Venue.PANEL && hasClient()) {
-                    return;
-                }
-                player.sendSystemMessage(Voice.line(venue, entry.name(), conversation, said));
-            }
-        };
     }
 }

@@ -6,6 +6,7 @@ import com.dwinovo.numen.api.entity.CompanionEvents;
 import com.dwinovo.numen.api.event.NumenEvents;
 import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.Wire;
+import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.network.payload.SeatPayload;
 import com.dwinovo.numen.api.platform.ServerLifecycle;
 import com.dwinovo.numen.api.plugin.Registrations;
@@ -31,7 +32,14 @@ public final class ServerSeats {
 
     /** 模组初始化时调一次。 */
     public static void register() {
-        ServerLifecycle.onStarted(server -> WORLD.start(server, SEATS.transport()));
+        ServerLifecycle.onStarted(server -> {
+            WORLD.start(server, SEATS.transport());
+            // 目标模组只在客户端的联动,按主人的客户端提供什么显示给她的名字空间:同伴到主人的对应在这里接上
+            com.dwinovo.numen.api.plugin.ClientMods.bindOwners(companion -> {
+                CompanionRegistry.Entry entry = CompanionRegistry.get(server).find(companion);
+                return entry == null ? null : entry.owner();
+            });
+        });
         ServerLifecycle.onStopped(() -> {
             SEATS.clear();
             WORLD.stop();
@@ -77,6 +85,21 @@ public final class ServerSeats {
     /** 这位玩家断线了。 */
     public static void left(UUID player) {
         SEATS.left(player);
+    }
+
+    /** 她的座位上此刻有没有人坐:她的创建者的客户端连着、坐上了。 */
+    public static boolean occupied(UUID companion) {
+        return SEATS.seated(companion) != null;
+    }
+
+    /** 她最近一段程序用的那一套模块:服务端自己起的程序({@code ServerPrograms#launch})借用它。 */
+    public static com.dwinovo.numen.api.script.Modules modules(UUID companion) {
+        return SEATS.modules(companion);
+    }
+
+    /** 世界上没有哪一个身体发出、却要告诉她的一件事(别的成员离开了会话……):盖上此刻的时刻,送进她的座位。 */
+    public static void tell(UUID companion, String type, String text) {
+        SEATS.publish(companion, NumenEvents.entry(WORLD.dayTime(), type, null, text, System.currentTimeMillis(), false));
     }
 
     /** 任务槽说她在做什么:她的样子里手上那件活照它写。 */

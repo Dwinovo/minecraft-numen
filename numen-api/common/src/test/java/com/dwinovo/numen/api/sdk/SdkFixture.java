@@ -22,15 +22,6 @@ public final class SdkFixture {
         if (ApiRegistry.group("numen.api") == null) {
             CommonClass.registerApi();
         }
-        try {
-            Path modules = Files.createTempDirectory("numen-test-lua-");
-            modules.toFile().deleteOnExit();
-            var hub = com.dwinovo.numen.api.library.LibraryHub.headless(modules);
-            java.util.UUID owner = java.util.UUID.randomUUID();
-            Modules.init(uuid -> hub.library(Modules.KIND, owner));
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
     }
 
     private SdkFixture() {}

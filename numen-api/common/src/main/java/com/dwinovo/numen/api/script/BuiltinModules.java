@@ -37,6 +37,9 @@ public final class BuiltinModules {
      */
     public record Builtin(String code, String summary) {}
 
+    /** 一个根下放模块的目录名:内置的(模组与插件的资源)与她自己的(主人客户端上的库)都用它。 */
+    public static final String DIR = "modules";
+
     private static final SortedMap<String, Builtin> MODULES = new TreeMap<>();
 
     private BuiltinModules() {}

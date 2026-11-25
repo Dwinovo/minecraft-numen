@@ -60,12 +60,6 @@ class ServerProgramsTest {
     @BeforeAll
     static void register() throws java.io.IOException {
         SdkFixture.register("gt_mix", Mix.class);
-        // 这个类自己的模块目录:别的测试类可能已经把目录换成别的了
-        java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("numen-programs-lua-");
-        dir.toFile().deleteOnExit();
-        var hub = com.dwinovo.numen.api.library.LibraryHub.headless(dir);
-        java.util.UUID owner = java.util.UUID.randomUUID();
-        Modules.init(uuid -> hub.library(Modules.KIND, owner));
     }
 
     private static final String PIT = "-- A pit.\nlocal M = {}\n---Seven.\nfunction M.seven() return 7 end\nreturn M\n";
@@ -146,46 +140,6 @@ class ServerProgramsTest {
         assertEquals(5, run.returned().getAsInt(), "up(1)=2, twice(2)=4, up(4)=5");
         assertEquals(3, run.replies().size());
         assertTrue(run.message().contains("3 calls"), run.message());
-    }
-
-    // ---- 她的模块 ----
-
-    /** 跑一段程序,她的模块是 {@link #register} 给的目录里的文件。 */
-    private static ApiTester.Run files(UUID companion, String code) {
-        return ApiTester.run(null, companion, code, Modules.of(companion));
-    }
-
-    @Test
-    void aModuleTheProgramSavesIsUsedByTheSameProgramAndKeptForTheNext() {
-        UUID companion = UUID.randomUUID();
-        // 程序开跑时就有的名字空间里,中途存的模块同一段程序就能用
-        ApiTester.Run seed = files(companion, "numen.module.save([[" + PIT + "]], {name = \"my.pit_seed\"})");
-        assertTrue(seed.ok(), seed.message());
-        ApiTester.Run run = files(companion, "numen.module.save([[" + PIT + "]], {name = \"my.pit_mid\"})\n"
-                + "return my.pit_mid.seven()");
-        assertTrue(run.ok(), run.message());
-        assertEquals(7, run.returned().getAsInt(), "saved in the middle of the program, used right after");
-
-        ApiTester.Run next = files(companion, "return my.pit_mid.seven()");
-        assertTrue(next.ok(), next.message());
-        assertEquals(7, next.returned().getAsInt(), "the file is the one source: the next program sees it");
-    }
-
-    @Test
-    void aModuleTheProgramDeletesIsGoneFromTheNextProgram() {
-        UUID companion = UUID.randomUUID();
-        files(companion, "numen.module.save([[" + PIT + "]], {name = \"my.pit_gone\"})");
-        ApiTester.Run deleting = files(companion, """
-                local before = my.pit_gone.seven()
-                numen.module.delete("my.pit_gone")
-                return before
-                """);
-        assertTrue(deleting.ok(), deleting.message());
-        ApiTester.Run next = files(companion, """
-                local ok = pcall(function() return my.pit_gone.seven() end)
-                return tostring(ok)
-                """);
-        assertEquals("false", next.returned().getAsString(), "the file is gone, so the next program lacks the module");
     }
 
     // ---- 回执交出去时,这段程序已经不占位 ----

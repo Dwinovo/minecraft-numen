@@ -51,7 +51,11 @@ public final class ReflexRegistry {
      * explicit actions always win. Empty when nothing is registered.
      */
     public static synchronized String overview() {
-        List<String> lines = descriptions();
+        return overview(descriptions());
+    }
+
+    /** 同上,自述由调用方给:主人的客户端上的大脑读的是服务端目录里的那一份。 */
+    public static String overview(List<String> lines) {
         if (lines.isEmpty()) return "";
         return "Your body has these instincts; they happen on their own and need no tool: "
                 + String.join("; ", lines)

@@ -1,6 +1,5 @@
 package com.dwinovo.numen.api.mcp.server;
 
-import com.dwinovo.numen.api.brain.Visits;
 import com.dwinovo.numen.api.permission.ConsentDesk;
 import com.dwinovo.numen.api.permission.ConsentVenues;
 import com.google.gson.JsonArray;
@@ -16,11 +15,24 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 渠道令牌的信箱:她的回话和要问主人的事({@link Visits.Channel})攒在这里,渠道用 {@code get_replies} 取走。
+ * 渠道令牌的信箱:她的回话和要问主人的事({@link Channel})攒在这里,渠道用 {@code get_replies} 取走。
  * 一张令牌一个信箱,满了丢最老的——渠道桥长时间没来取,攒下的不该无限涨。条目是通用形式的 JSON,
  * 在 QQ、Discord 上怎么显示是渠道插件自己的事。
  */
-final class McpChannels {
+public final class McpChannels {
+
+    /** 一个渠道那一头:收她的回话和征询。 */
+    public interface Channel {
+
+        /** 她说话了。 */
+        void said(UUID companion, String text);
+
+        /** 她要问主人一件事:渠道去问人。 */
+        void ask(ConsentVenues.Offer offer);
+
+        /** 那一条不用答了。 */
+        void clear(long id, ConsentDesk.Withdrawal why);
+    }
 
     private static final int CAPACITY = 256;
 
@@ -43,8 +55,8 @@ final class McpChannels {
     }
 
     /** 这张令牌的渠道那一头:来访期间她的话和征询都投到它的信箱。 */
-    Visits.Channel channel(String token) {
-        return new Visits.Channel() {
+    Channel channel(String token) {
+        return new Channel() {
             @Override
             public void said(UUID companion, String text) {
                 JsonObject item = new JsonObject();

@@ -71,14 +71,14 @@ public final class MemoryTool implements NumenTool {
     @Override
     public void invoke(ToolCall call) {
         JsonObject args = call.args();
-        UUID her = call.ctx().entityUuid();
+        NoteBook notes = call.ctx().notes();
         String command = text(args, "command");
         String result;
         try {
             result = switch (command == null ? "" : command) {
-                case REMEMBER -> remember(her, args);
-                case RECALL -> recall(her, args);
-                case FORGET -> forget(her, args);
+                case REMEMBER -> remember(notes, args);
+                case RECALL -> recall(notes, args);
+                case FORGET -> forget(notes, args);
                 default -> throw new IllegalArgumentException("command is remember, recall or forget; got "
                         + (command == null ? "nothing" : "\"" + command + "\""));
             };
@@ -91,10 +91,9 @@ public final class MemoryTool implements NumenTool {
     /**
      * 记一条。天数由札记本盖,结果只在条数到顶时多说一句——删哪条是她的事。不点名时用还没用过的 {@code note-N} 里最小的那个。
      */
-    private static String remember(UUID companion, JsonObject args) {
+    private static String remember(NoteBook book, JsonObject args) {
         String description = required(args, "description");
         String type = NoteBook.typeOrDefault(text(args, "type"));
-        NoteBook book = NoteBook.of(companion);
         NoteBook.Note note = book.write(text(args, "name"), description, type, text(args, "content"));
         int count = book.index().size();
         return ToolOutcome.success(count >= NoteBook.SOFT_MAX
@@ -103,8 +102,7 @@ public final class MemoryTool implements NumenTool {
     }
 
     /** 读一条的正文,按输出预算一页一页给。没有这条就把有的名字列出来——她记的名字自己最清楚,别让她瞎猜。 */
-    private static String recall(UUID companion, JsonObject args) {
-        NoteBook book = NoteBook.of(companion);
+    private static String recall(NoteBook book, JsonObject args) {
         if (text(args, "name") == null) {
             String index = book.formatXml();   // 不点名:交回索引——外部连进来的大脑没有每轮注入的那一份
             return ToolOutcome.success(index.isEmpty() ? "(you have no notes)" : index);
@@ -121,9 +119,8 @@ public final class MemoryTool implements NumenTool {
     }
 
     /** 忘掉一条。整理是她自己的事,我们不替她删,也不替她留。 */
-    private static String forget(UUID companion, JsonObject args) {
+    private static String forget(NoteBook book, JsonObject args) {
         String name = required(args, "name");
-        NoteBook book = NoteBook.of(companion);
         return book.forget(name) ? ToolOutcome.success("forgot " + name) : missing(book, name);
     }
 

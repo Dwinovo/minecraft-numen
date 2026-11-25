@@ -16,7 +16,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.function.IntSupplier;
 import java.util.stream.Stream;
 
@@ -64,18 +63,6 @@ public final class NoteBook {
     /** 一条记忆。{@code description} 是索引里那一行,{@code content} 要 recall 才读得到。 */
     public record Note(String name, String description, String type, int day, String content) {}
 
-    /** 每只同伴的记忆目录;由客户端注入,见 {@link #init}。 */
-    private static Function<UUID, Home> homes;
-
-    /** 现在是游戏第几天;由客户端注入,见 {@link #init}。 */
-    private static IntSupplier today;
-
-    /**
-     * 一只同伴一本,认 UUID。<b>必须是同一本</b>:{@code remember} 工具和注入那侧各拿各的实例的话,
-     * 工具写完只把自己那份的 {@link #revision} 加一,注入那侧永远看不见变化,索引就再也不重贴了。
-     */
-    private static final java.util.Map<UUID, NoteBook> OPEN = new java.util.concurrent.ConcurrentHashMap<>();
-
     private final Path dir;
     private final Io io;
     /**
@@ -87,28 +74,20 @@ public final class NoteBook {
     /** 写一次加一;注入那侧靠它判断"变过没有",不必比对正文。 */
     private int revision;
 
-    private NoteBook(Home home) {
-        this.dir = home.dir();
-        this.io = home.io();
-    }
+    /** 现在是游戏第几天。 */
+    private final IntSupplier today;
 
     /**
-     * 安家的位置与当前天数——{@code Homes} 独占目录布局的知识,这里只接受它给的落点,
-     * 不自己拼 {@code companions/<uuid>/}:布局写在两处,改一处就开始对不上。
+     * 一只同伴一本,由持有她大脑的一方造一次、一直用同一本:{@code remember} 工具和注入那侧各拿各的实例的话,工具写完只把自己那份的
+     * {@link #revision} 加一,注入那侧永远看不见变化,索引就再也不重贴了。
+     *
+     * @param home  札记的落点
+     * @param today 现在是游戏第几天(札记盖的日子)
      */
-    public static void init(Function<UUID, Home> companionMemoryHomes, IntSupplier gameDay) {
-        homes = companionMemoryHomes;
-        today = gameDay;
-        OPEN.clear();   // 换了落点,开着的那些本子指向的是上一处
-    }
-
-    /** 这只同伴的札记本,同一只同伴永远是同一本。{@link #init} 之前调用是编程错误。 */
-    public static NoteBook of(UUID entityUuid) {
-        if (homes == null || today == null) {
-            throw new IllegalStateException(
-                    "NoteBook.init(...) has not been called — the loader's entry point should inject the location and the day count at startup");
-        }
-        return OPEN.computeIfAbsent(entityUuid, uuid -> new NoteBook(homes.apply(uuid)));
+    public NoteBook(Home home, IntSupplier today) {
+        this.dir = home.dir();
+        this.io = home.io();
+        this.today = today;
     }
 
     // ---- 读 ----

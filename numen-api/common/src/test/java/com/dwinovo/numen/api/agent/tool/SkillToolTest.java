@@ -53,18 +53,34 @@ class SkillToolTest {
 
                 # Walls
                 """);
-        LibraryHub hub = LibraryHub.headless(home);
-        Library library = hub.library(SkillRegistry.KIND, UUID.randomUUID());
+        LibraryHub hub = LibraryHub.local(new com.dwinovo.numen.api.home.Home(home.resolve("server"),
+                com.dwinovo.numen.api.NumenIo.inline("test")), com.dwinovo.numen.api.library.Switches.inMemory(),
+                java.util.List.of(), java.util.Set.of());
+        Library library = hub.library(SkillRegistry.KIND);
         library.setEnabled(new EntryId("gt", "masonry"), false);   // 玩家在设置里把它关了
-        SkillRegistry.init(companion -> library);
-        skills = SkillRegistry.of(HER);
+        skills = SkillRegistry.at(library);
     }
 
     private static String call(String args) {
-        AtomicReference<String> result = new AtomicReference<>();
-        new SkillTool().invoke(new com.dwinovo.numen.api.agent.tool.ToolCall("t1", SkillTool.NAME, args, () -> HER,
-                result::set));
-        return result.get();
+        java.util.concurrent.CompletableFuture<String> result = new java.util.concurrent.CompletableFuture<>();
+        new SkillTool().invoke(new com.dwinovo.numen.api.agent.tool.ToolCall("t1", SkillTool.NAME, args,
+                new com.dwinovo.numen.api.agent.tool.ToolAnchor() {
+                    @Override
+                    public UUID entityUuid() {
+                        return HER;
+                    }
+
+                    @Override
+                    public com.dwinovo.numen.api.agent.memory.NoteBook notes() {
+                        throw new UnsupportedOperationException();
+                    }
+
+                    @Override
+                    public SkillRegistry skills() {
+                        return skills;
+                    }
+                }, result::complete));
+        return result.join();   // 技能的正文可能在服务端,工具在自己的线程上读完才交结果
     }
 
     @Test

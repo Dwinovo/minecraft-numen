@@ -23,8 +23,8 @@ public class CommonClass {
         registerApi();
         wireTaskMachine();
         wireRegistrationChanges();
-        com.dwinovo.numen.api.brain.ServerBrains.register();
         com.dwinovo.numen.api.seat.ServerSeats.register();
+        com.dwinovo.numen.api.brain.ServerSkins.register();
     }
 
     /**
@@ -42,8 +42,6 @@ public class CommonClass {
                     com.dwinovo.numen.api.task.CompanionTickDispatcher::onCompanionSpawned);
             numen.on(com.dwinovo.numen.api.CompanionEvent.REMOVE,
                     com.dwinovo.numen.api.task.CompanionTickDispatcher::onCompanionRemoved);
-            // 管理员查服主的 key 今天每个人用了多少
-            numen.command(com.dwinovo.numen.api.brain.UsageCommand.node());
         });
         // Numen API 自带姿态链的名册文书:提示词总览里的一行。
         com.dwinovo.numen.api.task.reflex.ReflexRegistry.register(

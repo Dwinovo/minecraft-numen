@@ -7,7 +7,6 @@ import com.dwinovo.numen.api.agent.skill.SkillRegistry;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.gear.GearSource;
 import com.dwinovo.numen.api.library.LibraryKind;
-import com.dwinovo.numen.api.script.Modules;
 import com.dwinovo.numen.api.sdk.Codec;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.commands.CommandSourceStack;
@@ -88,7 +87,7 @@ final class CountingApi implements NumenApi {
         door.bundleContent(root);
         if (root != null) {
             ledger.accept(PluginRoster.Kind.SKILL, entries(root, SkillRegistry.KIND));
-            ledger.accept(PluginRoster.Kind.MODULE, entries(root, Modules.KIND));
+            ledger.accept(PluginRoster.Kind.MODULE, entries(root, com.dwinovo.numen.api.script.HerModules.KIND));
         }
     }
 

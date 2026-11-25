@@ -2,16 +2,19 @@ package com.dwinovo.numen.api.seat;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.sdk.Dispatcher;
+import com.dwinovo.numen.mcp.rpc.RpcError;
 import com.dwinovo.numen.mcp.rpc.RpcException;
 import com.dwinovo.numen.mcp.rpc.RpcMessage;
 import com.dwinovo.numen.mcp.rpc.RpcPeer;
 import com.dwinovo.numen.script.ApiReply;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -19,6 +22,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * 座位的客户端一端:主人电脑上的大脑坐在这里。按座位上的方法({@link SeatMethods})向服务端要东西、发话,收服务端的通知(事件、目录变了),
@@ -39,6 +43,8 @@ public final class SeatClient {
     private final Map<UUID, Long> marks = new ConcurrentHashMap<>();
     private final List<Consumer<SeatEvent>> onEvent = new CopyOnWriteArrayList<>();
     private final List<BiConsumer<UUID, String>> onCatalogChanged = new CopyOnWriteArrayList<>();
+    /** 她的模块在这一头怎么按内容哈希取:哈希到正文。 */
+    private final Map<UUID, Function<String, String>> modules = new ConcurrentHashMap<>();
 
     /**
      * @param main     客户端函数在哪里执行(客户端主线程)
@@ -52,6 +58,7 @@ public final class SeatClient {
         peer.onRequest(SeatMethods.CLIENT_CALL, this::clientCall);
         peer.onNotification(SeatMethods.EVENTS_NEW, this::eventArrived);
         peer.onNotification(SeatMethods.CATALOG_CHANGED, this::catalogChanged);
+        peer.onRequest(SeatMethods.MODULES_GET, this::modulesGet);
     }
 
     /** 服务端发来一条消息。 */
@@ -69,6 +76,13 @@ public final class SeatClient {
     /** 听座位上的事件。 */
     public void onEvent(Consumer<SeatEvent> listener) {
         onEvent.add(listener);
+    }
+
+    /**
+     * 服务端来要她的模块时,按内容哈希取正文的人;没有这一份时给 {@code null}。每只同伴一个。
+     */
+    public void serveModules(UUID companion, Function<String, String> byHash) {
+        modules.put(companion, byHash);
     }
 
     /** 听目录变了:同伴、新的目录版本。 */
@@ -111,13 +125,58 @@ public final class SeatClient {
      *
      * @param generation 脑子以为的她的身体的代数;对不上服务端拒
      * @param program    这段程序的编号,在这只同伴的座位上不重
+     * @param modules    她的模块清单:名字到内容哈希;服务端缺哪份经 {@code modules/get} 来要({@link #serveModules})
+     * @param disabled   她对自己关掉的内置模块
      */
-    public CompletableFuture<ProgramResult> run(UUID companion, long generation, String program, String code) {
+    public CompletableFuture<ProgramResult> run(UUID companion, long generation, String program, String code,
+                                                Map<String, String> modules, Set<String> disabled) {
         JsonObject extra = new JsonObject();
         extra.addProperty("generation", generation);
         extra.addProperty("program", program);
         extra.addProperty("code", code);
+        JsonObject listed = new JsonObject();
+        modules.forEach(listed::addProperty);
+        extra.add("modules", listed);
+        JsonArray off = new JsonArray();
+        disabled.forEach(off::add);
+        extra.add("disabled", off);
         return call(SeatMethods.PROGRAM_RUN, companion, extra).thenApply(ProgramResult::fromJson);
+    }
+
+    /** 一个内置模块的原文;服务端没有这一份是 {@code null}。 */
+    public CompletableFuture<String> builtinModule(UUID companion, String name) {
+        JsonObject extra = new JsonObject();
+        extra.addProperty("name", name);
+        return call(SeatMethods.MODULES_BUILTIN, companion, extra)
+                .thenApply(o -> o.has("code") ? o.get("code").getAsString() : null);
+    }
+
+    /** 一份模块写得读不读得通、撞没撞第 ① 层;没事是 {@code null},有事是那句话。 */
+    public CompletableFuture<String> checkModule(UUID companion, String name, String code) {
+        JsonObject extra = new JsonObject();
+        extra.addProperty("name", name);
+        extra.addProperty("code", code);
+        return call(SeatMethods.MODULES_CHECK, companion, extra)
+                .thenApply(o -> o.has("problem") ? o.get("problem").getAsString() : null);
+    }
+
+    /** 一份随发布的技能:说明、正文与附属文件清单。 */
+    public CompletableFuture<SkillText> skill(UUID companion, String name) {
+        JsonObject extra = new JsonObject();
+        extra.addProperty("name", name);
+        return call(SeatMethods.SKILL_READ, companion, extra).thenApply(o -> {
+            java.util.List<String> files = new java.util.ArrayList<>();
+            o.getAsJsonArray("files").forEach(f -> files.add(f.getAsString()));
+            return new SkillText(o.get("description").getAsString(), o.get("content").getAsString(), files);
+        });
+    }
+
+    /** 一份随发布的技能的一个附属文件。 */
+    public CompletableFuture<String> skillFile(UUID companion, String name, String file) {
+        JsonObject extra = new JsonObject();
+        extra.addProperty("name", name);
+        extra.addProperty("file", file);
+        return call(SeatMethods.SKILL_READ, companion, extra).thenApply(o -> o.get("text").getAsString());
     }
 
     /** 叫程序停在调用之间。 */
@@ -161,6 +220,9 @@ public final class SeatClient {
         return call(SeatMethods.EVENTS_ACK, companion, extra).thenApply(o -> null);
     }
 
+    /** {@link #skill} 的答复。 */
+    public record SkillText(String description, String content, java.util.List<String> files) {}
+
     /** {@link #state} 的答复:她的身体此刻的代数,与她此刻的样子。 */
     public record Sitting(long generation, SeatState state) {}
 
@@ -181,6 +243,25 @@ public final class SeatClient {
         }
         marks.merge(event.companion(), event.seq(), Math::max);
         onEvent.forEach(listener -> listener.accept(event));
+    }
+
+    /** 服务端要她的几份模块:{@code hashes} 里每个哈希的正文;这里没有的哈希不在答复里。 */
+    private JsonElement modulesGet(RpcPeer.Incoming in) throws Exception {
+        UUID companion = Params.uuid(in.params(), "companion");
+        Function<String, String> byHash = modules.get(companion);
+        if (byHash == null) {
+            throw new RpcException(RpcError.INVALID_PARAMS, "no modules are served for " + companion);
+        }
+        JsonObject found = new JsonObject();
+        for (JsonElement hash : in.params().getAsJsonArray("hashes")) {
+            String code = byHash.apply(hash.getAsString());
+            if (code != null) {
+                found.addProperty(hash.getAsString(), code);
+            }
+        }
+        JsonObject answer = new JsonObject();
+        answer.add("modules", found);
+        return answer;
     }
 
     private void catalogChanged(JsonObject params) {

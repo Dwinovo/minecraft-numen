@@ -31,19 +31,21 @@ class NoteBookTest {
 
     private int day = 12;
 
+    private NoteBook notes;
+
     @BeforeEach
     void wire() {
-        NoteBook.init(uuid -> new com.dwinovo.numen.api.home.Home(tmp.resolve(uuid.toString()),
+        notes = new NoteBook(new com.dwinovo.numen.api.home.Home(tmp.resolve(SHE.toString()),
                 com.dwinovo.numen.api.NumenIo.inline("test")), () -> day);
     }
 
     @Test
     void aNoteSurvivesAndItsDescriptionIsTheIndexLine() {
-        NoteBook book = NoteBook.of(SHE);
+        NoteBook book = notes;
         book.write("main-base", "主基地 -340,68,120,门朝东", "world",
                 "门口两个箱子:左边放矿,右边放食物。");
 
-        List<NoteBook.Note> index = NoteBook.of(SHE).index();
+        List<NoteBook.Note> index = notes.index();
         assertEquals(1, index.size());
         NoteBook.Note n = index.get(0);
         assertEquals("main-base", n.name());
@@ -54,7 +56,7 @@ class NoteBookTest {
 
     @Test
     void theDayIsStampedByUsNotByHer() {
-        NoteBook book = NoteBook.of(SHE);
+        NoteBook book = notes;
         book.write("a", "第一条", "world", "");
         day = 40;
         book.write("b", "第二条", "lesson", "");
@@ -68,7 +70,7 @@ class NoteBookTest {
 
     @Test
     void theIndexBlockCarriesTheBalanceButNotTheBodies() {
-        NoteBook book = NoteBook.of(SHE);
+        NoteBook book = notes;
         book.write("swamp", "东边沼泽过不去,得绕北", "lesson", "试了三次,A* 每次都报无路。");
 
         String xml = book.formatXml();
@@ -81,12 +83,12 @@ class NoteBookTest {
 
     @Test
     void anEmptyBookInjectsNothing() {
-        assertEquals("", NoteBook.of(SHE).formatXml());
+        assertEquals("", notes.formatXml());
     }
 
     @Test
     void recallReadsTheBody() {
-        NoteBook book = NoteBook.of(SHE);
+        NoteBook book = notes;
         book.write("swamp", "东边沼泽过不去", "lesson", "试了三次,A* 每次都报无路。");
 
         assertEquals("试了三次,A* 每次都报无路。", book.read("swamp").content());
@@ -96,7 +98,7 @@ class NoteBookTest {
     /** 模型写的名字直接当路径用,这是唯一一道闸。 */
     @Test
     void aNameCannotEscapeTheDirectory() {
-        NoteBook book = NoteBook.of(SHE);
+        NoteBook book = notes;
         book.write("../../escaped", "想跑出去", "world", "");
 
         assertFalse(Files.exists(tmp.resolve("escaped.md")), "不能落到同伴目录外面");
@@ -105,13 +107,13 @@ class NoteBookTest {
 
     @Test
     void aNameWithNoLettersIsRefused() {
-        NoteBook book = NoteBook.of(SHE);
+        NoteBook book = notes;
         assertThrows(IllegalArgumentException.class, () -> book.write("///", "x", "world", ""));
     }
 
     @Test
     void aNoteWithoutADescriptionIsRefused() {
-        NoteBook book = NoteBook.of(SHE);
+        NoteBook book = notes;
         assertThrows(IllegalArgumentException.class,
                 () -> book.write("x", "  ", "world", "正文写了也没用"));
     }
@@ -119,7 +121,7 @@ class NoteBookTest {
     /** 索引行按定义是一行:她写成多行,frontmatter 会被截断,整条记忆就读不回来。 */
     @Test
     void aMultiLineDescriptionIsFoldedBackOntoOneLine() {
-        NoteBook book = NoteBook.of(SHE);
+        NoteBook book = notes;
         book.write("base", "主基地\n-340,68,120", "world", "");
 
         assertEquals("主基地 -340,68,120", book.index().get(0).description());
@@ -128,7 +130,7 @@ class NoteBookTest {
 
     @Test
     void writingTheSameNameReplacesIt() {
-        NoteBook book = NoteBook.of(SHE);
+        NoteBook book = notes;
         book.write("base", "旧的说法", "world", "");
         book.write("base", "新的说法", "world", "");
 
@@ -138,7 +140,7 @@ class NoteBookTest {
 
     @Test
     void anUnnamedNoteTakesTheSmallestFreeNoteNumber() {
-        NoteBook book = NoteBook.of(SHE);
+        NoteBook book = notes;
 
         assertEquals("note-1", book.write(null, "第一条", "world", "").name());
         assertEquals("note-2", book.write(null, "第二条", "world", "").name());
@@ -155,7 +157,7 @@ class NoteBookTest {
 
     @Test
     void forgettingRemovesIt() {
-        NoteBook book = NoteBook.of(SHE);
+        NoteBook book = notes;
         book.write("base", "主基地", "world", "");
 
         assertTrue(book.forget("base"));
@@ -165,7 +167,7 @@ class NoteBookTest {
 
     @Test
     void everyWriteBumpsTheRevisionSoTheInjectorKnowsToResend() {
-        NoteBook book = NoteBook.of(SHE);
+        NoteBook book = notes;
         int before = book.revision();
         book.write("a", "一", "world", "");
         book.forget("a");
@@ -178,10 +180,10 @@ class NoteBookTest {
      */
     @Test
     void theToolSideAndTheInjectorSideShareOneBook() {
-        NoteBook injector = NoteBook.of(SHE);
+        NoteBook injector = notes;
         int before = injector.revision();
 
-        NoteBook.of(SHE).write("base", "主基地", "world", "");
+        notes.write("base", "主基地", "world", "");
 
         assertEquals(before + 1, injector.revision(), "写在另一处,这一侧也得看得见");
     }
@@ -196,7 +198,7 @@ class NoteBookTest {
         Files.writeString(dir.resolve("broken.md"), "---\nname: broken\n---\n\n正文\n",
                 StandardCharsets.UTF_8);
 
-        NoteBook book = NoteBook.of(SHE);   // 第一次要用时才读目录
+        NoteBook book = notes;   // 第一次要用时才读目录
 
         assertEquals(List.of("good"), book.index().stream().map(NoteBook.Note::name).toList());
     }
@@ -205,9 +207,8 @@ class NoteBookTest {
     @Test
     void whatWasJustWrittenIsReadBackBeforeTheDiskWriteHappens() throws Exception {
         java.util.List<Runnable> queued = new java.util.ArrayList<>();
-        NoteBook.init(uuid -> new com.dwinovo.numen.api.home.Home(tmp.resolve(uuid.toString()),
+        NoteBook book = new NoteBook(new com.dwinovo.numen.api.home.Home(tmp.resolve(SHE.toString()),
                 new com.dwinovo.numen.api.store.Io(queued::add, e -> { })), () -> day);
-        NoteBook book = NoteBook.of(SHE);
 
         book.write("base", "主基地", "world", "门朝东");
 

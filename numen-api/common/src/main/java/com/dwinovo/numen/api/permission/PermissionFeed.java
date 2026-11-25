@@ -1,6 +1,5 @@
 package com.dwinovo.numen.api.permission;
 
-import com.dwinovo.numen.api.brain.Libraries;
 import com.dwinovo.numen.api.brain.Replies;
 import com.dwinovo.numen.api.platform.ServerLifecycle;
 
@@ -39,7 +38,7 @@ public final class PermissionFeed {
     /** 每个服务端刻调一次。 */
     public static void tick(MinecraftServer server) {
         for (UUID owner : due(server.getTickCount())) {
-            Replies.pushTo(server, owner, Libraries.PERMISSION);
+            Replies.permission(server, owner);
         }
     }
 

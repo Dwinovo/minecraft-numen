@@ -53,7 +53,7 @@ public final class OwnerSchedules {
     private final List<Schedule> items = new ArrayList<>();
 
     /** @param saved 落盘的内容;没有是 {@code null} */
-    OwnerSchedules(JsonDoc doc, JsonObject saved) {
+    public OwnerSchedules(JsonDoc doc, JsonObject saved) {
         this.doc = doc;
         if (saved != null && saved.has("schedules")) {
             for (var e : saved.getAsJsonArray("schedules")) {

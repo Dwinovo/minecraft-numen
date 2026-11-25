@@ -49,15 +49,13 @@ class ClientModsTest {
     @TempDir
     static Path home;
 
-    private static SkillRegistry skills;
-
     @BeforeAll
     static void install() throws IOException, ClassNotFoundException {
         Class.forName(SdkFixture.class.getName());   // 夹具的初始化:引擎自己的几组登记好、模块库接好
         ApiRegistry.register(NAMESPACE, "pad", "The pad of a client-only mod.", Pad.class);
         ClientMods.declare(NAMESPACE, "gt_pad_mod");
         ClientMods.bindOwners(companion -> OWNER);
-        Path skill = Files.createDirectories(home.resolve("server").resolve("skills").resolve(NAMESPACE).resolve("padwork"));
+        Path skill = Files.createDirectories(home.resolve("skills").resolve(NAMESPACE).resolve("padwork"));
         Files.writeString(skill.resolve(SkillRegistry.SKILL_FILENAME), """
                 ---
                 name: padwork
@@ -66,9 +64,14 @@ class ClientModsTest {
 
                 # Pad
                 """);
-        var library = LibraryHub.headless(home).library(SkillRegistry.KIND, UUID.randomUUID());
-        SkillRegistry.init(companion -> library);
-        skills = SkillRegistry.of(HER);
+        bundle = com.dwinovo.numen.api.library.Shipped.bundle("gtcm", home);   // 随发布的技能在服务端:目录给她的主人的客户端提供的那些
+    }
+
+    private static java.util.Optional<com.dwinovo.numen.api.agent.scope.Handle> bundle = java.util.Optional.empty();
+
+    @org.junit.jupiter.api.AfterAll
+    static void unbundle() {
+        bundle.ifPresent(com.dwinovo.numen.api.agent.scope.Handle::close);
     }
 
     @AfterEach
@@ -76,17 +79,20 @@ class ClientModsTest {
         Presence.left(OWNER);
     }
 
+    private static boolean skillListed() {
+        return com.dwinovo.numen.api.agent.skill.BundledSkills.list(HER).stream().anyMatch(s -> s.name().equals("padwork"));
+    }
+
     private static boolean listed() {
-        return ApiDocs.index(Modules.of(HER)).contains("gtcm.pad");
+        return ApiDocs.index(Modules.of(HER, java.util.Map.of(), Set.of())).contains("gtcm.pad");
     }
 
     @Test
     void anOwnerWhoHasNotReportedSeesNeitherTheGroupNorItsHelpNorItsSkill() {
         assertFalse(listed());
-        assertTrue(ApiDocs.help("gtcm.pad", Modules.of(HER)) == null && ApiDocs.help("gtcm.pad.read", Modules.of(HER)) == null
-                && ApiDocs.help(NAMESPACE, Modules.of(HER)) == null);
-        assertFalse(skills.formatXml().contains("padwork"), skills.formatXml());
-        assertTrue(skills.get("padwork").isEmpty());
+        assertTrue(ApiDocs.help("gtcm.pad", Modules.of(HER, java.util.Map.of(), Set.of())) == null && ApiDocs.help("gtcm.pad.read", Modules.of(HER, java.util.Map.of(), Set.of())) == null
+                && ApiDocs.help(NAMESPACE, Modules.of(HER, java.util.Map.of(), Set.of())) == null);
+        assertFalse(skillListed(), "the bundled skill of the client-only mod is not offered");
     }
 
     @Test
@@ -101,9 +107,8 @@ class ClientModsTest {
         Presence.reported(OWNER, Presence.PROTOCOL);
         assertTrue(Presence.ready(OWNER, Set.of(NAMESPACE)));
         assertTrue(Presence.hasClient(OWNER) && listed());
-        assertTrue(ApiDocs.help("gtcm.pad.read", Modules.of(HER)) != null);
-        assertTrue(skills.formatXml().contains("<name>padwork</name>"), skills.formatXml());
-        assertTrue(skills.get("padwork").isPresent());
+        assertTrue(ApiDocs.help("gtcm.pad.read", Modules.of(HER, java.util.Map.of(), Set.of())) != null);
+        assertTrue(skillListed());
     }
 
     @Test

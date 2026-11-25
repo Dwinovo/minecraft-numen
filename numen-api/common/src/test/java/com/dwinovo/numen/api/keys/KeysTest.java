@@ -65,19 +65,14 @@ class KeysTest {
     }
 
     @Test
-    void hisOwnKeyIsUsedBeforeTheServersAndTheSourceIsSaid() {
+    void theKeyIsFoundInTheKeychain() {
         Keychain mine = new Keychain(home("players/a"));
-        Keychain server = new Keychain(home("server"));
-        Keys keys = new Keys(mine, server);
+        Keys keys = new Keys(mine);
 
         assertNull(keys.find("deepseek"));
 
-        server.put("deepseek", "sk-server");
-        assertEquals(new Keys.Found("sk-server", Keys.Source.SERVER), keys.find("deepseek"));
-
         mine.put("deepseek", "sk-mine");
-        assertEquals(new Keys.Found("sk-mine", Keys.Source.OWNER), keys.find("deepseek"));
-        assertFalse(keys.find("deepseek").toString().contains("sk-mine"), "key 不会被打进日志");
+        assertEquals("sk-mine", keys.find("deepseek"));
     }
 
     @Test
@@ -88,55 +83,6 @@ class KeysTest {
 
         assertNull(other.get("deepseek"));
         assertNull(new Keychain(home("server")).get("deepseek"));
-    }
-
-    // ---- 服主的 key 的每人每天限额 ----
-
-    private ServerKeyQuota quota(long limit, AtomicReference<LocalDate> today) throws IOException {
-        Files.createDirectories(dir.resolve("server"));
-        Files.writeString(dir.resolve("server/server.json"), "{\"v\":1,\"dailyTokenLimit\":" + limit + "}");
-        return new ServerKeyQuota(new ServerSettings(home("server")), home("server"), today::get);
-    }
-
-    @Test
-    void withoutALimitNobodyIsEverCutOff() throws IOException {
-        ServerKeyQuota quota = quota(0, new AtomicReference<>(LocalDate.of(2026, 10, 18)));
-
-        quota.charge(HER_OWNER, 10_000_000);
-
-        assertFalse(quota.exceeded(HER_OWNER));
-        assertEquals(10_000_000, quota.used(HER_OWNER), "不限也记用量,服主查得到");
-    }
-
-    @Test
-    void aPlayerIsCutOffAfterTheLimitAndOthersAreNotAndTomorrowStartsOver() throws IOException {
-        AtomicReference<LocalDate> today = new AtomicReference<>(LocalDate.of(2026, 10, 18));
-        ServerKeyQuota quota = quota(1000, today);
-
-        quota.charge(HER_OWNER, 600);
-        assertFalse(quota.exceeded(HER_OWNER));
-        quota.charge(HER_OWNER, 500);
-
-        assertTrue(quota.exceeded(HER_OWNER));
-        assertFalse(quota.exceeded(OTHER), "额度是每人的");
-        assertEquals(1100, quota.usedToday().get(HER_OWNER));
-
-        today.set(LocalDate.of(2026, 10, 19));
-        assertFalse(quota.exceeded(HER_OWNER), "第二天重新记");
-        assertEquals(0, quota.used(HER_OWNER));
-    }
-
-    @Test
-    void theUsageSurvivesARestartButNotTheNextDay() throws IOException {
-        AtomicReference<LocalDate> today = new AtomicReference<>(LocalDate.of(2026, 10, 18));
-        quota(1000, today).charge(HER_OWNER, 700);
-
-        ServerKeyQuota restarted = new ServerKeyQuota(new ServerSettings(home("server")), home("server"), today::get);
-        assertEquals(700, restarted.used(HER_OWNER));
-
-        today.set(LocalDate.of(2026, 10, 19));
-        ServerKeyQuota nextDay = new ServerKeyQuota(new ServerSettings(home("server")), home("server"), today::get);
-        assertEquals(0, nextDay.used(HER_OWNER));
     }
 
     @Test

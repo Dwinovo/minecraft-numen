@@ -304,8 +304,13 @@ public final class AgentLoop {
         }
         run = new Run(++lastRunId, false, retried, ownerSpoke);
         emit(new LoopEvent.RunStarted(run.id));
-        // 重试接着回应失败那次的输入;闲时开的 run 是队里要她回应的条目引起的
-        turn(retried);
+        // 重试接着回应失败那次的输入;闲时开的 run 是队里要她回应的条目引起的。开头先取这一轮要用的外部事实,取到才往下走
+        long id = run.id;
+        model.prepare(id, run.cancel, () -> {
+            if (current(id)) {
+                turn(retried);
+            }
+        });
     }
 
     /**

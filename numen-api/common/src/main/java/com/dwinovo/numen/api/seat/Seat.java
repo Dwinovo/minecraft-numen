@@ -3,6 +3,8 @@ package com.dwinovo.numen.api.seat;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.loop.Program;
+import com.dwinovo.numen.api.library.Fingerprint;
+import com.dwinovo.numen.api.script.Modules;
 import com.dwinovo.numen.api.event.NumenEvents;
 import com.dwinovo.numen.mcp.rpc.RpcError;
 import com.dwinovo.numen.mcp.rpc.RpcException;
@@ -12,6 +14,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -51,6 +54,10 @@ final class Seat {
     /** 她的创建者:只有他的连接坐得上。 */
     final UUID owner;
     private final Outbox outbox;
+    /** 她的模块的正文,按内容哈希;每只同伴自己一份,别人的客户端塞不进来。 */
+    private final ModuleCache moduleCache = new ModuleCache(512);
+    /** 最近一段程序用的那一套模块:服务端自己起的程序({@code ServerPrograms#launch})借用它。 */
+    private volatile Modules lastModules;
     private final Map<String, Run> running = new HashMap<>();
     private SeatConnection attached;
     /** 最后一次告诉客户端的目录版本。 */
@@ -90,6 +97,7 @@ final class Seat {
             for (SeatEvent event : outbox.after(reset ? 0 : lastSeq)) {
                 connection.send(event);
             }
+            seats.occupancyChanged(companion);
             return new Opened(seats.generation(companion), version, outbox.last(), outbox.first(), reset);
         }
     }
@@ -104,6 +112,7 @@ final class Seat {
                 return;
             }
             attached = null;
+            seats.occupancyChanged(companion);
             for (Run run : running.values()) {
                 if (run.by == connection && !run.detached) {
                     run.detached = true;
@@ -177,7 +186,8 @@ final class Seat {
      *
      * @throws RpcException 这条连接没有坐着座位、程序编号已在跑、代数对不上
      */
-    ProgramResult run(SeatConnection by, String program, long believed, String code) throws Exception {
+    ProgramResult run(SeatConnection by, String program, long believed, String code, Map<String, String> manifest,
+                      Set<String> disabled) throws Exception {
         Run run = new Run(program, by);
         synchronized (this) {
             if (attached != by) {
@@ -188,7 +198,16 @@ final class Seat {
                         + " is already running on this seat");
             }
         }
-        seats.world().main().execute(() -> start(run, believed, code));
+        Modules modules;
+        try {
+            modules = modulesFor(by, manifest, disabled);
+        } catch (Exception failed) {
+            synchronized (this) {
+                running.remove(program, run);
+            }
+            throw failed;
+        }
+        seats.world().main().execute(() -> start(run, believed, code, modules));
         try {
             return run.answer.get();
         } catch (ExecutionException failed) {
@@ -199,7 +218,7 @@ final class Seat {
         }
     }
 
-    private void start(Run run, long believed, String code) {
+    private void start(Run run, long believed, String code, Modules modules) {
         long actual = seats.generation(companion);
         synchronized (this) {
             if (run.detached) {
@@ -212,7 +231,8 @@ final class Seat {
                 return;
             }
         }
-        seats.world().programs().run(companion, run.program, code, outcome -> finished(run, outcome));
+        lastModules = modules;
+        seats.world().programs().run(companion, run.program, code, modules, outcome -> finished(run, outcome));
     }
 
     private void finished(Run run, Program.Outcome outcome) {
@@ -229,6 +249,40 @@ final class Seat {
                     System.currentTimeMillis());
             add(SeatEvent.ofOutcome(companion, generation, entry, outcome, state.gameTime(), state.dayTime()));
         }
+    }
+
+    /**
+     * 这段程序能用的模块:内置的加清单里她自己的。清单里哈希不在缓存的,经这条连接向她的客户端要(在处理线程上等答复)。
+     *
+     * @throws RpcException 客户端没给齐、或给的正文对不上它报的哈希
+     */
+    private Modules modulesFor(SeatConnection by, Map<String, String> manifest, Set<String> disabled) throws Exception {
+        List<String> missing = manifest.values().stream().filter(hash -> moduleCache.get(hash) == null).distinct().toList();
+        if (!missing.isEmpty()) {
+            for (Map.Entry<String, String> got : by.requestModules(companion, missing).entrySet()) {
+                if (!Fingerprint.of(got.getValue()).equals(got.getKey())) {
+                    throw new RpcException(RpcError.INVALID_PARAMS, "a module sent for hash " + got.getKey()
+                            + " does not have that hash");
+                }
+                moduleCache.put(got.getKey(), got.getValue());
+            }
+        }
+        Map<String, String> hers = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : manifest.entrySet()) {
+            String code = moduleCache.get(entry.getValue());
+            if (code == null) {
+                throw new RpcException(RpcError.INVALID_PARAMS, "the client did not send the module " + entry.getKey()
+                        + " it listed");
+            }
+            hers.put(entry.getKey(), code);
+        }
+        return Modules.of(companion, hers, disabled);
+    }
+
+    /** 最近一段程序用的模块;还没有跑过程序是内置的那一套。 */
+    Modules modules() {
+        Modules last = lastModules;
+        return last == null ? Modules.factory() : last;
     }
 
     /** 叫程序停在调用之间。 */

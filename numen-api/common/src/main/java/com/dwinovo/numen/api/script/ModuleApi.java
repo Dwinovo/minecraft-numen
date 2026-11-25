@@ -4,7 +4,7 @@ import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.script.ScriptEngine;
-import com.dwinovo.numen.api.sdk.ApiRegistry;
+import com.dwinovo.numen.api.mind.ClientBrains;
 import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Example;
@@ -12,7 +12,7 @@ import com.dwinovo.numen.api.sdk.Flatten;
 import com.dwinovo.numen.api.sdk.Fn;
 import com.dwinovo.numen.api.sdk.Note;
 import com.dwinovo.numen.api.sdk.Omitted;
-import com.dwinovo.numen.api.sdk.ServerCall;
+import com.dwinovo.numen.api.sdk.ClientCall;
 import com.dwinovo.numen.api.sdk.SeeAlso;
 
 import java.util.ArrayList;
@@ -22,11 +22,11 @@ import java.util.Optional;
 
 /**
  * {@code numen.module}:Lua 模块({@link Modules})——每个返回一张函数表,程序里以模块名直接用。模块是文件,路径就是名字;
- * 她看到服务器上内置的(随模组发布)与主人目录里她自己的叠在一起,她能看、改、存、删任何一份:改一份内置的,是在主人目录里存一份
+ * 她看到服务端内置的(随模组发布)与主人客户端上她自己的叠在一起,她能看、改、存、删任何一份:改一份内置的,是在主人目录里存一份
  * 同名的盖着它(服务器上的原样不动),删一份内置的是对她自己关掉它,{@code reset} 都还原。当场回,不占身体;
  * 存、改、删不问主人,每一次写进回执与服务端日志。每份都记战绩:用到它的程序跑了几段、
  * 跑完几段、最近一次在什么时候、最近一段没跑完停在哪一行、为什么——只给事实,不替她评判。战绩由跑程序的大脑在程序结束时记
- * ({@link Modules#tally})。
+ * ({@link HerModules#tally})。
  */
 public final class ModuleApi {
 
@@ -51,10 +51,10 @@ public final class ModuleApi {
     @Example("for _, m in ipairs(numen.module.list()) do print(m.name, m.whose, m.finished .. \"/\" .. m.runs) end")
     @Note("Instant and read-only. numen.api.help(\"<module>\") lists a module's functions with their types.")
     @SeeAlso("numen.module.show")
-    public static List<ModuleInfo> list(ServerCall call) {
-        Modules modules = Modules.of(call.companion());
+    public static List<ModuleInfo> list(ClientCall call) {
+        HerModules modules = ClientBrains.of(call.companion()).modules();
         List<ModuleInfo> out = new ArrayList<>();
-        java.util.SortedSet<String> names = new java.util.TreeSet<>(modules.all().keySet());
+        java.util.SortedSet<String> names = new java.util.TreeSet<>(modules.names());
         names.addAll(modules.deletedFactory());
         for (String name : names) {
             Modules.Module m = modules.get(name);
@@ -64,7 +64,7 @@ public final class ModuleApi {
         return out;
     }
 
-    private static ModuleInfo listed(String name, String summary, String whose, Modules.Stats stats) {
+    private static ModuleInfo listed(String name, String summary, String whose, HerModules.Stats stats) {
         return new ModuleInfo(name, summary, whose, stats.runs(), stats.ok(),
                 stats.runs() == 0 ? Optional.empty() : Optional.of(stats.lastRun()),
                 stats.failedWhy() == null ? Optional.empty() : Optional.of(stats.failedLine()),
@@ -105,8 +105,8 @@ public final class ModuleApi {
     @Note("Instant and read-only. Read one before you change it or write your own: it shows how its functions are "
             + "put together.")
     @SeeAlso("numen.module.save")
-    public static Shown show(ServerCall call, Show args) {
-        Modules modules = Modules.of(call.companion());
+    public static Shown show(ClientCall call, Show args) {
+        HerModules modules = ClientBrains.of(call.companion()).modules();
         String name = args.name();
         boolean factory = args.factory().orElse(false);
         Modules.Module builtin = modules.builtin(name);
@@ -116,7 +116,7 @@ public final class ModuleApi {
         }
         Modules.Module m = modules.get(name);
         if (m == null && !factory) {
-            throw new ApiError(ErrorKind.NOT_FOUND, missing(name, modules), modules.deletedFactory(name)
+            throw new ApiError(ErrorKind.NOT_FOUND, missing(name, modules), modules.deletedFactory().contains(name)
                     ? Call.of("numen.module.reset", name) : Call.of("numen.module.list"));
         }
         String summary = factory ? builtin.summary() : m.summary();
@@ -135,7 +135,7 @@ public final class ModuleApi {
     /** 存下的那一份。 */
     public record Saved(@Doc("The name it is kept under.") String name,
                         @Doc("new, replaced (a file of that name was there; its record starts over), or changed (a "
-                                + "built-in module: numen.module.reset(name) puts it back).") Modules.Saved how) {}
+                                + "built-in module: numen.module.reset(name) puts it back).") HerModules.Saved how) {}
 
     @Fn("Keep a module under a name: programs then use its functions by that name. Saving under a built-in module's "
             + "name changes that module.")
@@ -149,8 +149,8 @@ public final class ModuleApi {
             + "under a name that has a file replaces it and resets its record. Your owner can edit the files too; "
             + "/reload makes the next program read them.")
     @SeeAlso({"numen.module.delete", "numen.module.reset"})
-    public static Saved save(ServerCall call, Save args) {
-        Modules modules = Modules.of(call.companion());
+    public static Saved save(ClientCall call, Save args) {
+        HerModules modules = ClientBrains.of(call.companion()).modules();
         String name = args.name().orElseGet(() -> freeName(modules));
         String code = args.code();
         String badName = Modules.problem(name);
@@ -161,7 +161,7 @@ public final class ModuleApi {
                             + own.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9_]", "_"))));
         }
         // 读不通、不返回表、撞第 ① 层:和运行时同一个解释器装它一次,规则只在沙箱里那一处
-        String problem = ScriptEngine.IN_USE.checkModule(name, code, ApiRegistry.catalog(Modules.factory()));
+        String problem = ClientBrains.of(call.companion()).checkModule(name, code);
         if (problem != null) {
             throw new ApiError(ErrorKind.BAD_ARGUMENT, "did not save " + name + ": " + problem,
                     "fix that line, then save it again");
@@ -170,7 +170,7 @@ public final class ModuleApi {
             throw new ApiError(ErrorKind.BAD_ARGUMENT, "did not save " + name + ": start it with a comment line "
                     + "saying what it does", ScriptEngine.IN_USE.comment("Dig every block given, nearest first."));
         }
-        Modules.Saved saved = modules.save(name, code);
+        HerModules.Saved saved = modules.save(name, code);
         Constants.LOG.info("[numen-script] {} {} in {}", saved, name, modules.dir());
         return new Saved(name, saved);
     }
@@ -179,8 +179,8 @@ public final class ModuleApi {
     @Example("numen.module.delete(\"my.pit\")")
     @Note("Instant.")
     @SeeAlso({"numen.module.list", "numen.module.reset"})
-    public static void delete(ServerCall call, Named args) {
-        Modules modules = Modules.of(call.companion());
+    public static void delete(ClientCall call, Named args) {
+        HerModules modules = ClientBrains.of(call.companion()).modules();
         if (modules.delete(args.name()) == null) {
             throw new ApiError(ErrorKind.NOT_FOUND, missing(args.name(), modules), Call.of("numen.module.list"));
         }
@@ -192,8 +192,8 @@ public final class ModuleApi {
     @Note("Instant. numen.module.list says which built-in ones you changed and which have a newer version you have "
             + "not taken because you changed yours.")
     @SeeAlso("numen.module.list")
-    public static void reset(ServerCall call, Named args) {
-        Modules modules = Modules.of(call.companion());
+    public static void reset(ClientCall call, Named args) {
+        HerModules modules = ClientBrains.of(call.companion()).modules();
         if (modules.reset(args.name()) == null) {
             throw new ApiError(ErrorKind.NOT_FOUND, "nothing named " + args.name() + " ships with this version; only "
                     + "a built-in module can be reset", Call.of("numen.module.list"));
@@ -202,7 +202,7 @@ public final class ModuleApi {
     }
 
     /** 下一个空着的 {@code my.module_N}。 */
-    private static String freeName(Modules modules) {
+    private static String freeName(HerModules modules) {
         for (int n = 1; ; n++) {
             String name = Modules.MINE + ".module_" + n;
             if (modules.get(name) == null) {
@@ -211,8 +211,8 @@ public final class ModuleApi {
         }
     }
 
-    private static String missing(String name, Modules modules) {
-        List<String> names = new ArrayList<>(modules.all().keySet());
+    private static String missing(String name, HerModules modules) {
+        List<String> names = new ArrayList<>(modules.names());
         return "there is no module named " + name + (names.isEmpty() ? "; there are none"
                 : "; there are: " + String.join(", ", names)) + ".";
     }

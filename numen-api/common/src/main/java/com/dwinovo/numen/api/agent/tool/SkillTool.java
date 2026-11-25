@@ -59,15 +59,21 @@ public final class SkillTool implements NumenTool {
                 .build();
     }
 
+    /**
+     * 随发布的技能的正文在服务端,读它要在座位上等一个答复,所以在自己的线程上读、读完再交结果(工具可以在任何线程上交结果)。
+     */
     @Override
     public void invoke(ToolCall call) {
-        String result;
-        try {
-            result = load(SkillRegistry.of(call.ctx().entityUuid()), call.args());
-        } catch (IllegalArgumentException bad) {
-            result = ToolOutcome.failure(bad.getMessage());
-        }
-        call.complete(result);
+        SkillRegistry registry = call.ctx().skills();
+        com.dwinovo.numen.api.mind.Background.run(() -> {
+            String result;
+            try {
+                result = load(registry, call.args());
+            } catch (IllegalArgumentException bad) {
+                result = ToolOutcome.failure(bad.getMessage());
+            }
+            call.complete(result);
+        });
     }
 
     /**

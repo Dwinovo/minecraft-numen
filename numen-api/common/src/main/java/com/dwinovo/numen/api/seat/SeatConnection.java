@@ -1,6 +1,13 @@
 package com.dwinovo.numen.api.seat;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.agent.skill.BundledSkills;
+import com.dwinovo.numen.api.agent.skill.SkillInfo;
+import com.dwinovo.numen.api.script.BuiltinModules;
+import com.dwinovo.numen.api.script.Modules;
+import com.dwinovo.numen.api.sdk.ApiRegistry;
+import com.dwinovo.numen.mcp.rpc.RpcError;
+import com.dwinovo.numen.script.ScriptEngine;
 import com.dwinovo.numen.api.program.ClientTransport;
 import com.dwinovo.numen.mcp.rpc.RpcException;
 import com.dwinovo.numen.mcp.rpc.RpcMessage;
@@ -9,7 +16,9 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -21,6 +30,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>线程:{@link #receive} 任何线程(产品里是网络线程);请求的处理在 {@link Seats} 给的执行体上,可以阻塞。
  */
 final class SeatConnection {
+
+    /** 向客户端要她的模块时最多等多久。 */
+    private static final java.time.Duration MODULES_TIMEOUT = java.time.Duration.ofSeconds(30);
 
     final UUID player;
     private final Seats seats;
@@ -60,6 +72,9 @@ final class SeatConnection {
         });
         peer.onRequest(SeatMethods.STATE_GET, this::state);
         peer.onRequest(SeatMethods.SAY, this::say);
+        peer.onRequest(SeatMethods.MODULES_BUILTIN, this::builtinModule);
+        peer.onRequest(SeatMethods.MODULES_CHECK, this::checkModule);
+        peer.onRequest(SeatMethods.SKILL_READ, this::readSkill);
         peer.onRequest(SeatMethods.EVENTS_ACK, in -> {
             seat(in).ack(Params.requiredInteger(in.params(), "seq"));
             return new JsonObject();
@@ -115,6 +130,25 @@ final class SeatConnection {
         return peer.request(SeatMethods.CLIENT_CALL, params, out);
     }
 
+    /**
+     * 向这条连接的客户端要她的模块:哈希到正文。在处理线程上等答复。
+     *
+     * @throws Exception 客户端没答、答错
+     */
+    Map<String, String> requestModules(UUID companion, List<String> hashes) throws Exception {
+        JsonObject params = new JsonObject();
+        params.addProperty("companion", companion.toString());
+        com.google.gson.JsonArray list = new com.google.gson.JsonArray();
+        hashes.forEach(list::add);
+        params.add("hashes", list);
+        JsonObject answer = peer.call(SeatMethods.MODULES_GET, params, out, MODULES_TIMEOUT).getAsJsonObject();
+        Map<String, String> got = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, JsonElement> module : answer.getAsJsonObject("modules").entrySet()) {
+            got.put(module.getKey(), module.getValue().getAsString());
+        }
+        return got;
+    }
+
     /** 不再等这次反向请求的答复:告诉客户端撤回,晚到的答复不理。 */
     void cancelCall(RpcPeer.Outgoing call, String why) {
         peer.cancel(call, why, out);
@@ -146,9 +180,62 @@ final class SeatConnection {
 
     private JsonElement run(RpcPeer.Incoming in) throws Exception {
         Seat seat = seat(in);
+        JsonObject listed = Params.object(in.params(), "modules");
+        Map<String, String> manifest = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, JsonElement> module : listed.entrySet()) {
+            manifest.put(module.getKey(), module.getValue().getAsString());
+        }
+        Set<String> disabled = new java.util.TreeSet<>();
+        if (in.params().get("disabled") instanceof com.google.gson.JsonArray names) {
+            names.forEach(n -> disabled.add(n.getAsString()));
+        }
         ProgramResult result = seat.run(this, Params.string(in.params(), "program"),
-                Params.requiredInteger(in.params(), "generation"), Params.string(in.params(), "code"));
+                Params.requiredInteger(in.params(), "generation"), Params.string(in.params(), "code"), manifest,
+                disabled);
         return result.toJson();
+    }
+
+    private JsonElement builtinModule(RpcPeer.Incoming in) throws Exception {
+        seat(in);
+        JsonObject o = new JsonObject();
+        BuiltinModules.Builtin builtin = BuiltinModules.get(Params.string(in.params(), "name"));
+        if (builtin != null) {
+            o.addProperty("code", builtin.code());
+        }
+        return o;
+    }
+
+    private JsonElement checkModule(RpcPeer.Incoming in) throws Exception {
+        seat(in);
+        JsonObject o = new JsonObject();
+        String problem = ScriptEngine.IN_USE.checkModule(Params.string(in.params(), "name"),
+                Params.string(in.params(), "code"), ApiRegistry.catalog(Modules.factory()));
+        if (problem != null) {
+            o.addProperty("problem", problem);
+        }
+        return o;
+    }
+
+    private JsonElement readSkill(RpcPeer.Incoming in) throws Exception {
+        Seat seat = seat(in);
+        String name = Params.string(in.params(), "name");
+        String file = Params.optionalString(in.params(), "file");
+        JsonObject o = new JsonObject();
+        try {
+            if (file == null) {
+                SkillInfo skill = BundledSkills.get(seat.companion, name);
+                o.addProperty("description", skill.description() == null ? "" : skill.description());
+                o.addProperty("content", skill.content());
+                com.google.gson.JsonArray files = new com.google.gson.JsonArray();
+                BundledSkills.files(seat.companion, name).forEach(files::add);
+                o.add("files", files);
+            } else {
+                o.addProperty("text", BundledSkills.file(seat.companion, name, file));
+            }
+        } catch (IllegalArgumentException refused) {
+            throw new RpcException(RpcError.INVALID_PARAMS, refused.getMessage());
+        }
+        return o;
     }
 
     private JsonElement state(RpcPeer.Incoming in) throws Exception {

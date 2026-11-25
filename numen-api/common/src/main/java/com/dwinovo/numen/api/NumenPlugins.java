@@ -333,7 +333,7 @@ public final class NumenPlugins {
         public void bundleContent(Path root) {
             if (root == null) return;
             Scope scope = open();
-            Path modules = root.resolve(com.dwinovo.numen.api.script.Modules.KIND.dir());
+            Path modules = root.resolve(com.dwinovo.numen.api.script.BuiltinModules.DIR);
             java.util.Optional<Handle> bundled = com.dwinovo.numen.api.library.Shipped.bundle(namespace, root);
             bundled.ifPresent(scope::add);
             if (bundled.isPresent() && java.nio.file.Files.isDirectory(modules)) {

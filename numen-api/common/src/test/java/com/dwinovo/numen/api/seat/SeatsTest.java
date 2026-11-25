@@ -111,7 +111,7 @@ class SeatsTest {
     @Test
     void aMethodOnASeatThatIsNotOpenOnThisConnectionIsRefused() throws Exception {
         assertEquals(SeatErrors.NO_SEAT, refusedWith(client.state(HER)));
-        assertEquals(SeatErrors.NO_SEAT, refusedWith(client.run(HER, 0, "p1", "return 1")));
+        assertEquals(SeatErrors.NO_SEAT, refusedWith(client.run(HER, 0, "p1", "return 1", java.util.Map.of(), java.util.Set.of())));
         assertTrue(world.programs.runs.isEmpty());
     }
 
@@ -141,7 +141,7 @@ class SeatsTest {
     void aProgramRunAnswersItsStructuredOutcomeWithHerStateAndTheGameTime() throws Exception {
         seats.bodyEntered(HER);
         get(client.open(HER, 0));
-        CompletableFuture<ProgramResult> run = client.run(HER, 1, "p1", "return 1");
+        CompletableFuture<ProgramResult> run = client.run(HER, 1, "p1", "return 1", java.util.Map.of(), java.util.Set.of());
         await(() -> world.programs.running.containsKey("p1"));
         assertEquals(List.of("p1: return 1"), world.programs.runs);
         world.gameTime = 250;
@@ -158,9 +158,9 @@ class SeatsTest {
     @Test
     void twoProgramsWithTheSameNameCannotRunAtOnceOnOneSeat() throws Exception {
         get(client.open(HER, 0));
-        CompletableFuture<ProgramResult> first = client.run(HER, 0, "p1", "return 1");
+        CompletableFuture<ProgramResult> first = client.run(HER, 0, "p1", "return 1", java.util.Map.of(), java.util.Set.of());
         await(() -> world.programs.running.containsKey("p1"));
-        assertEquals(com.dwinovo.numen.mcp.rpc.RpcError.INVALID_PARAMS, refusedWith(client.run(HER, 0, "p1", "return 2")));
+        assertEquals(com.dwinovo.numen.mcp.rpc.RpcError.INVALID_PARAMS, refusedWith(client.run(HER, 0, "p1", "return 2", java.util.Map.of(), java.util.Set.of())));
         world.programs.finish("p1", outcome("one"));
         assertEquals("one", get(first).outcome().message());
     }
@@ -172,10 +172,10 @@ class SeatsTest {
         seats.bodyEntered(HER);
         get(client.open(HER, 0));
         seats.bodyEntered(HER);   // 她重生了:代数 2
-        assertEquals(SeatErrors.STALE_GENERATION, refusedWith(client.run(HER, 1, "p1", "return 1")));
+        assertEquals(SeatErrors.STALE_GENERATION, refusedWith(client.run(HER, 1, "p1", "return 1", java.util.Map.of(), java.util.Set.of())));
         assertTrue(world.programs.runs.isEmpty(), "a program for a body that is gone was started");
 
-        CompletableFuture<ProgramResult> current = client.run(HER, 2, "p2", "return 1");
+        CompletableFuture<ProgramResult> current = client.run(HER, 2, "p2", "return 1", java.util.Map.of(), java.util.Set.of());
         await(() -> world.programs.running.containsKey("p2"));
         world.programs.finish("p2", outcome("fine"));
         assertEquals(2, get(current).generation());
@@ -185,7 +185,7 @@ class SeatsTest {
     void theErrorSaysWhichGenerationSheIsAtAndWhichYouBelieved() throws Exception {
         seats.bodyEntered(HER);
         get(client.open(HER, 0));
-        ExecutionException failed = assertThrows(ExecutionException.class, () -> get(client.run(HER, 7, "p1", "x")));
+        ExecutionException failed = assertThrows(ExecutionException.class, () -> get(client.run(HER, 7, "p1", "x", java.util.Map.of(), java.util.Set.of())));
         String message = ((RpcException) failed.getCause()).error().message();
         assertTrue(message.contains("generation 1") && message.contains("not 7"), message);
     }
@@ -289,7 +289,7 @@ class SeatsTest {
         seats.bodyEntered(HER);
         get(client.open(HER, 0));
         world.programs.onCut = outcome("this turn was cut off");
-        CompletableFuture<ProgramResult> run = client.run(HER, 1, "p1", "numen.move.walk()");
+        CompletableFuture<ProgramResult> run = client.run(HER, 1, "p1", "numen.move.walk()", java.util.Map.of(), java.util.Set.of());
         await(() -> world.programs.running.containsKey("p1"));
 
         pipe.disconnect();
@@ -311,7 +311,7 @@ class SeatsTest {
     @Test
     void aProgramThatEndsOnItsOwnAfterTheConnectionDroppedIsKeptTooNotLost() throws Exception {
         get(client.open(HER, 0));
-        CompletableFuture<ProgramResult> run = client.run(HER, 0, "p1", "x");
+        CompletableFuture<ProgramResult> run = client.run(HER, 0, "p1", "x", java.util.Map.of(), java.util.Set.of());
         await(() -> world.programs.running.containsKey("p1"));
         pipe.disconnect();   // 程序没被切断(这个世界的主机不理切断),照样跑完
         assertThrows(ExecutionException.class, () -> get(run));
@@ -328,7 +328,7 @@ class SeatsTest {
     @Test
     void aProgramThatEndedBeforeTheDisconnectIsNotDeliveredTwice() throws Exception {
         get(client.open(HER, 0));
-        CompletableFuture<ProgramResult> run = client.run(HER, 0, "p1", "x");
+        CompletableFuture<ProgramResult> run = client.run(HER, 0, "p1", "x", java.util.Map.of(), java.util.Set.of());
         await(() -> world.programs.running.containsKey("p1"));
         world.programs.finish("p1", outcome("done"));
         get(run);

@@ -359,7 +359,7 @@ public final class ConsentDesk {
 
         @Override
         public boolean ownerPresent() {
-            return OwnerPresence.present(body.getServer(), body.keepers());
+            return OwnerPresence.present(body.getUUID());
         }
 
         /** 问她的每一位主人:在游戏里的就在游戏里问;不在游戏里的(外部大脑连着、渠道在说话)交给游戏之外的场所。 */

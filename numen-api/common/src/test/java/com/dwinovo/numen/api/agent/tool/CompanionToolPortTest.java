@@ -82,7 +82,22 @@ class CompanionToolPortTest {
 
     private final Host host = new Host();
     private final List<String> afterCut = new ArrayList<>();
-    private final CompanionToolPort port = new CompanionToolPort(HER, () -> () -> HER, host, new ToolBook() {
+    private final CompanionToolPort port = new CompanionToolPort(HER, () -> new com.dwinovo.numen.api.agent.tool.ToolAnchor() {
+        @Override
+        public UUID entityUuid() {
+            return HER;
+        }
+
+        @Override
+        public com.dwinovo.numen.api.agent.memory.NoteBook notes() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public com.dwinovo.numen.api.agent.skill.SkillRegistry skills() {
+            throw new UnsupportedOperationException();
+        }
+    }, host, new ToolBook() {
         @Override
         public List<NumenTool> all() {
             return ToolRegistry.all();

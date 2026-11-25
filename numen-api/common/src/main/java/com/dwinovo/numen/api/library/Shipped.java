@@ -99,10 +99,21 @@ public final class Shipped {
 
     /** 同上,来源由调用方给(单测)。 */
     public static Manifest sync(Path serverRoot, List<Bundle> bundles) {
+        return sync(serverRoot, bundles, null);
+    }
+
+    /**
+     * 同上,只同步这几种库({@code kinds} 是库的目录名,如 {@code persona});{@code null} 是全部。
+     */
+    public static Manifest sync(Path serverRoot, List<Bundle> bundles, java.util.Set<String> kinds) {
         Manifest manifest = Manifest.open(serverRoot);
         Map<String, Shipment> shipped = new TreeMap<>();
         for (Bundle bundle : bundles) {
-            files(bundle.root()).forEach((path, file) -> shipped.put(path, new Shipment(bundle.source(), file)));
+            files(bundle.root()).forEach((path, file) -> {
+                if (kinds == null || kinds.contains(path.substring(0, Math.max(0, path.indexOf('/'))))) {
+                    shipped.put(path, new Shipment(bundle.source(), file));
+                }
+            });
         }
         manifest.jar = shipped;
         shipped.forEach((path, shipment) -> manifest.place(path, shipment));

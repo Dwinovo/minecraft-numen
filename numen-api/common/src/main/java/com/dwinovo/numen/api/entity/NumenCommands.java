@@ -44,7 +44,7 @@ import java.util.function.Predicate;
 /**
  * The server-side {@code /numen} command tree: the players' verbs that manage companions. Her own functions are
  * not here — they are the Lua API ({@code sdk.ApiRegistry}), off the MC command tree. The two
- * inherently client-local player verbs ({@code settings}, {@code reset}) act on the caller's own client by firing
+ * inherently client-local player verbs ({@code settings}) act on the caller's own client by firing
  * a {@link ClientUiActionPayload} back at them.
  *
  * <pre>
@@ -55,7 +55,6 @@ import java.util.function.Predicate;
  *   /numen player unshare &lt;name&gt; &lt;player&gt;  (her creator) take that back
  *   /numen player leave &lt;name&gt;     give back a companion that was shared with the caller
  *   /numen settings                  open the settings GUI on the caller's client
- *   /numen reset                     clear the caller's conversation loops
  *   /numen debug                     toggle debug mode (the caller's chat UI shows text unfiltered)
  *   /numen drive &lt;companion&gt; &lt;program&gt; (op) run a Lua program as her, through the same entry as her own;
  *                                    a name with spaces or non-ASCII letters goes in quotes
@@ -212,15 +211,11 @@ public final class NumenCommands {
                                 .executes(NumenCommands::leave))));
         graft(dispatcher, Commands.literal("settings")
                 .executes(ctx -> clientAction(ctx, ClientUiActionPayload.Action.OPEN_SETTINGS)));
-        graft(dispatcher, Commands.literal("reset").executes(NumenCommands::resetBrains));
         graft(dispatcher, Commands.literal("debug").executes(NumenCommands::toggleDebugText));
         graft(dispatcher, permissionCommand());
         graft(dispatcher, consentCommand());
-        graft(dispatcher, com.dwinovo.numen.api.brain.ConversationCommands.group());
-        graft(dispatcher, com.dwinovo.numen.api.brain.ConversationCommands.chat());
         graft(dispatcher, com.dwinovo.numen.api.mcp.server.TokenCommands.node());
         graft(dispatcher, com.dwinovo.numen.api.brain.BindingCommands.node());
-        graft(dispatcher, com.dwinovo.numen.api.brain.KeyCommand.node());
         graft(dispatcher, Commands.literal("drive").requires(source -> com.dwinovo.numen.api.platform.Services.permissions().isGameMaster(source))
                 .then(Commands.argument("companion", StringArgumentType.string())
                         .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(companionsHere(ctx.getSource())
@@ -421,13 +416,6 @@ public final class NumenCommands {
                 ? ClientUiActionPayload.Action.DEBUG_TEXT_ON
                 : ClientUiActionPayload.Action.DEBUG_TEXT_OFF));
         ctx.getSource().sendSuccess(() -> Component.translatable(on ? Keys.DEBUG_ON : Keys.DEBUG_OFF), false);
-        return 1;
-    }
-
-    /** 调试:把调用者名下各同伴的大脑放掉重建,从她们的家里重新读起;在飞的回合作废。 */
-    private static int resetBrains(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
-        ServerPlayer caller = ctx.getSource().getPlayerOrException();
-        com.dwinovo.numen.api.brain.CompanionBrains.reset(caller.server, caller.getUUID());
         return 1;
     }
 

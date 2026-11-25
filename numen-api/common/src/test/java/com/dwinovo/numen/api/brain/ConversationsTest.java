@@ -28,6 +28,13 @@ class ConversationsTest {
 
     private final Map<UUID, String> roster = new LinkedHashMap<>(Map.of(A, "阿岚", B, "小柚", C, "团子"));
 
+    /** 她们收到的"谁离开了"。 */
+    private final Map<UUID, List<String>> heard = new java.util.HashMap<>();
+
+    private void told(UUID companion, String text) {
+        heard.computeIfAbsent(companion, id -> new ArrayList<>()).add(text);
+    }
+
     private Conversations open(Path dir) {
         return new Conversations(dir.resolve("conversations.json"), Io.direct(e -> { }), new Conversations.Roster() {
             @Override
@@ -39,7 +46,7 @@ class ConversationsTest {
             public String name(UUID companion) {
                 return roster.get(companion);
             }
-        }, id -> Optional.empty(), () -> "主人");
+        }, () -> "主人", (companion, told) -> told(companion, told));
     }
 
     @Test
@@ -89,17 +96,6 @@ class ConversationsTest {
         rooms.left(C, "团子");
 
         assertTrue(rooms.get(group.id()) != null);
-    }
-
-    @Test
-    void whoIsListeningIsTheOthersByNameAndTheTurnNumber(@TempDir Path dir) {
-        Conversations rooms = open(dir);
-        Conversation group = rooms.pullIn(rooms.pullIn(rooms.of(A), B), C);
-
-        String line = rooms.audienceLine(A, group.id());
-
-        assertTrue(line.contains("小柚") && line.contains("团子") && !line.contains("阿岚"), line);
-        assertEquals("", rooms.audienceLine(A, null), "就他俩时没人听得见");
     }
 
     @Test

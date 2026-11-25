@@ -2,6 +2,7 @@ package com.dwinovo.numen.api.brain;
 
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
+import com.dwinovo.numen.api.seat.ServerSeats;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.entity.NumenPlayer;
@@ -66,8 +67,6 @@ public final class Sharing {
         Companions.syncRosterToKeepers(server, registry.find(companion).keepers());
         ServerPlayer added = server.getPlayerList().getPlayer(person);
         if (added != null) {
-            CompanionLoops.sendSnapshot(companion, Replies.link(server, person));
-            Replies.pushTo(server, person, Libraries.COMPANION_SKILLS);   // 她读的技能是创建者的那一份,给他看名单
             NumenPlayer body = NumenPlayer.findByUuid(server, companion);
             if (body != null) {
                 ConsentDesk.of(body).keeperJoined(added);
@@ -94,24 +93,16 @@ public final class Sharing {
         if (!registry.unshare(companion, person)) {
             return Outcome.UNCHANGED;
         }
-        // 他绑的那几项退回未绑定:她不该再用他的库、他的 key、记他的账
-        List<Slot> released = CompanionBinding.releaseBoundBy(server, companion, person);
-        // 她若还站在他的场面里(最后一句是他说的),先退出来:之后她的回话、她在哪个会话里都不再指向他
-        CompanionLoops.get(companion).ifPresent(loop -> loop.keeperLeft(person));
-        CompanionLoops.voicePlaying(companion, person, false);
         ServerPlayer removed = server.getPlayerList().getPlayer(person);
         NumenPlayer body = NumenPlayer.findByUuid(server, companion);
         if (removed != null && body != null) {
             ConsentDesk.of(body).keeperLeft(removed);   // 趁她还在世界里:她挂着的那条请求在他那边收起
         }
-        OwnerPresence.keepersChanged(server, companion);
         Companions.reconcileCompanion(server, companion);
         tellHer(server, companion, shown(server, person) + " is no longer one of your owners: " + (left
                 ? "they gave you back." : shown(server, by) + " stopped sharing you with them."));
-        tellReleased(server, registry.find(companion), person, released);
         Conversations.of(server, person).withdrawn(companion, entry.name());
         Replies.conversations(server, person);
-        ChatRoutes.refresh(server, person);
         Companions.syncRosterToKeepers(server, entry.keepers());   // 改表之前的那一份:还在的各位,加上少了她的那一位
         ServerPlayer told = server.getPlayerList().getPlayer(left ? entry.owner() : person);
         if (told != null) {
@@ -156,28 +147,9 @@ public final class Sharing {
                 .map(java.util.Map.Entry::getKey).toList();
     }
 
-    /** 少了哪几项绑定、因为谁不再是主人,告诉还在游戏里的每位主人:没绑档案她就发不了请求,得有人给她重新绑。 */
-    private static void tellReleased(MinecraftServer server, CompanionRegistry.Entry entry, UUID person,
-                                     List<Slot> released) {
-        if (released.isEmpty()) {
-            return;
-        }
-        MutableComponent slots = Component.empty();
-        for (Slot slot : released) {
-            slots.append(slots.getSiblings().isEmpty() ? "" : ", ").append(Component.translatable(slot.label()));
-        }
-        for (UUID keeper : entry.keepers()) {
-            ServerPlayer player = server.getPlayerList().getPlayer(keeper);
-            if (player != null) {
-                player.sendSystemMessage(Component.translatable(Keys.NOTICE_BINDINGS_RELEASED,
-                        NumenPlayer.playerName(server, person), entry.name(), slots));
-            }
-        }
-    }
-
     /** 关系变了要让她知道:进她的收件箱,捎带投递(她不在世界里也收得到)。 */
     private static void tellHer(MinecraftServer server, UUID companion, String text) {
-        CompanionLoops.get(companion).ifPresent(loop -> loop.submitEvent(EventTypes.KEEPERS, text));
+        ServerSeats.tell(companion, EventTypes.KEEPERS, text);
     }
 
     private static String shown(MinecraftServer server, UUID player) {

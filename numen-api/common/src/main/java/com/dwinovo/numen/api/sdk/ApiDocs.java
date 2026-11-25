@@ -43,50 +43,98 @@ public final class ApiDocs {
     // ---- 索引 ----
 
     /**
-     * 系统提示里的 API 索引:怎么往下要帮助,共用的类,每个组一行说明与函数名(和组同名的模块的函数也列在那一组下),再是模块:内置的在前、
-     * 她的在后,一个一行。按名字排好,字节稳定,不打碎 prompt 缓存。一个组都没有时是空串。
+     * 系统提示里的 API 索引,由服务端的目录({@link #catalog})与她自己的模块拼成:怎么往下要帮助,共用的类,每个组一行说明与函数名
+     * (和组同名的模块的函数也列在那一组下),再是模块:内置的在前、她的在后,一个一行。按名字排好,字节稳定,不打碎 prompt 缓存。
+     * 一个组都没有时是空串。主人的客户端上的大脑拼的和服务端读的是同一份。
      *
-     * @param modules 她能用的模块(主人那一份)
+     * @param modules 她能用的模块
      */
     public static String index(Modules modules) {
-        List<ApiRegistry.Group> groups = offered(modules);
+        return index(catalog(modules.companion()), modules.hers(), modules.disabled());
+    }
+
+    /**
+     * 同上,目录是座位上取来的那一份({@code api}),她自己的模块是名字到正文,{@code disabled} 是她对自己关掉的内置模块。
+     *
+     * @param api      {@link #catalog} 的答复
+     * @param hers     她自己的模块(含盖着内置的)
+     * @param disabled 她关掉的内置模块
+     */
+    public static String index(JsonObject api, Map<String, String> hers, Set<String> disabled) {
+        JsonArray groups = api.getAsJsonArray("groups");
         if (groups.isEmpty()) {
             return "";
         }
         ScriptEngine engine = ScriptEngine.IN_USE;
-        Map<String, Library> library = library(modules);
+        Map<String, List<String>> hersFunctions = new LinkedHashMap<>();
+        hers.forEach((name, code) -> {
+            List<String> names = new ArrayList<>();
+            for (ScriptEngine.Defined fn : engine.functions(name, code)) {
+                names.add(fn.name().substring(name.length() + 1));
+            }
+            hersFunctions.put(name, names);
+        });
         List<String> lines = new ArrayList<>();
         lines.add("Call these from the " + engine.toolName() + " tool, always written in full: "
                 + "namespace.group.function. `" + Call.of("numen.api.help", "numen.move") + "` lists a group's or a "
                 + "module's functions with their types; `" + Call.of("numen.api.help", "numen.move.walk")
                 + "` explains one in full (every argument, what it returns, examples).");
         lines.add("Values the groups share:");
-        for (String shared : LuaCodecs.SHARED) {
-            lines.add(classText(LuaCodecs.classNamed(shared), modules));
-        }
+        JsonObject classes = api.getAsJsonObject("classes");
+        api.getAsJsonArray("shared").forEach(shared -> lines.add(classes.get(shared.getAsString()).getAsString()));
         lines.add("Groups:");
         Set<String> groupNames = new LinkedHashSet<>();
-        for (ApiRegistry.Group group : groups) {
-            groupNames.add(group.fullName());
-            lines.add(groupLine(group, library));
+        for (var element : groups) {
+            JsonObject group = element.getAsJsonObject();
+            String name = group.get("name").getAsString();
+            groupNames.add(name);
+            Set<String> functions = new LinkedHashSet<>();
+            group.getAsJsonArray("functions").forEach(f -> functions.add(f.getAsString()));
+            functions.addAll(hersFunctions.getOrDefault(name, List.of()));
+            // 她的模块里和组同名的,它的函数已经并进上面的列;内置的同名模块的函数在目录里已经并进了组的函数
+            lines.add(name + " — " + group.get("summary").getAsString() + " " + String.join(", ", functions));
         }
+        Map<String, JsonObject> builtinModules = new java.util.TreeMap<>();
+        api.getAsJsonArray("modules").forEach(m -> builtinModules.put(m.getAsJsonObject().get("name").getAsString(),
+                m.getAsJsonObject()));
         List<String> builtin = new ArrayList<>();
-        List<String> hers = new ArrayList<>();
-        modules.all().forEach((name, m) -> {
-            String line = "- " + name + ": " + (m.summary() == null ? "" : m.summary()) + " ("
-                    + String.join(", ", functionsOf(name, library)) + ")"
+        List<String> mine = new ArrayList<>();
+        Set<String> names = new java.util.TreeSet<>(builtinModules.keySet());
+        names.removeAll(disabled);
+        names.addAll(hers.keySet());
+        for (String name : names) {
+            String code = hers.get(name);
+            boolean changed = code != null && builtinModules.containsKey(name);
+            String summary;
+            List<String> functions;
+            if (code == null) {
+                JsonObject m = builtinModules.get(name);
+                summary = m.get("summary").getAsString();
+                functions = new ArrayList<>();
+                m.getAsJsonArray("functions").forEach(f -> functions.add(f.getAsString()));
+            } else {
+                String found = engine.summary(code);
+                summary = found == null ? "" : found;
+                functions = hersFunctions.get(name);
+            }
+            String line = "- " + name + ": " + summary + " (" + String.join(", ", functions) + ")"
                     + (groupNames.contains(name) ? " — adds to the " + name + " group" : "");
-            (m.origin() == Modules.Origin.HERS ? hers : builtin).add(m.origin() == Modules.Origin.CHANGED
-                    ? line + " — changed by you" : line);
-        });
+            if (code == null) {
+                builtin.add(line);
+            } else if (changed) {
+                builtin.add(line + " — changed by you");
+            } else {
+                mine.add(line);
+            }
+        }
         lines.add(NO_REQUIRE);
         if (!builtin.isEmpty()) {
             lines.add("Built in, first: use these for common jobs before writing your own.");
             lines.addAll(builtin);
         }
-        if (!hers.isEmpty()) {
+        if (!mine.isEmpty()) {
             lines.add("Yours (" + Call.of("numen.module.list") + " shows how the programs that used them went):");
-            lines.addAll(hers);
+            lines.addAll(mine);
         }
         return "<api>\n" + String.join("\n", lines) + "\n</api>";
     }
@@ -431,7 +479,7 @@ public final class ApiDocs {
     private static JsonObject classesJson() {
         ScriptEngine engine = ScriptEngine.IN_USE;
         JsonObject classes = new JsonObject();
-        LuaCodecs.classes().forEach((name, c) -> classes.addProperty(name, engine.classText(c)));
+        LuaCodecs.classes().forEach((name, c) -> classes.addProperty(name, classText(c, Modules.factory())));
         return classes;
     }
 }

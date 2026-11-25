@@ -83,6 +83,8 @@ public final class EventTypes {
     public static final String RETURNED = "returned";
     /** 饿了 —— 她不会自己吃,得主人给或者叫她去弄。恒为急件。 */
     public static final String HUNGRY = "hungry";
+    /** 主人让她下线:她离开世界,东西与位置原样留着,等主人再召唤。不叫醒她(她下线了,没有谁在听)。 */
+    public static final String OFFLINE = "offline";
     /**
      * 背包一格空的都没有了,碰到的东西放不下、留在了地上。恒为急件:她不知道的话,接着挖、接着捡,东西都落在地上。
      * 一轮满只发一次,背包又有空格才复位。
@@ -357,6 +359,7 @@ public final class EventTypes {
         register(event(RESPAWNED, true));
         register(event(REMOVED, true));
         register(event(RETURNED, false));
+        register(event(OFFLINE, false));
         register(event(HUNGRY, true));
         register(event(INVENTORY_FULL, true));
         register(new Type(ADVANCEMENT_REWARD, s -> s, s -> null, false, false, Delivery.AMBIENT, false));

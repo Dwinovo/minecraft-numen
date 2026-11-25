@@ -2,7 +2,6 @@ package com.dwinovo.numen.api.mcp.server;
 
 import com.dwinovo.numen.api.agent.inbox.ExternalWait;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
-import com.dwinovo.numen.api.brain.Visits;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
 import com.dwinovo.numen.api.permission.ConsentDesk;
 
@@ -68,7 +67,7 @@ public interface ExternalHands {
      * 渠道上主人的话:渠道来访开始(她的回话与征询回到 {@code channel}),话和游戏里主人的话同走 {@code OwnerInputs}
      * 的一个入口。送不进去(不是他的同伴……)是 false,来访随之作废。
      */
-    CompletableFuture<Boolean> hear(UUID companion, String text, Visits.Channel channel);
+    CompletableFuture<Boolean> hear(UUID companion, String text, McpChannels.Channel channel);
 
     /**
      * 主人在游戏之外答了一条征询(外部大脑客户端上的人经 elicitation 答的),和游戏里的答复框、{@code /numen consent}

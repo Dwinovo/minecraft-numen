@@ -8,7 +8,6 @@ import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.script.ScriptCall;
 import com.dwinovo.numen.api.entity.CompanionEvents;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.brain.CompanionLoops;
 import com.dwinovo.numen.api.sdk.CompassUtil;
 import com.dwinovo.numen.api.sdk.EntityLabel;
 import com.dwinovo.numen.api.task.TaskResult;
@@ -124,6 +123,36 @@ public final class NumenEvents {
                         + Math.round(maxHp) + " HP, about " + distance
                         + " blocks from you) — they can likely handle it; your call";
         emit(companion, EventTypes.OWNER_HURT, attrs, text, urgent);
+    }
+
+    /**
+     * 她死了。她关于自己处境的认知几乎每一条都作废了(手上的任务没了、血量装备全变了),不分任务中死还是空闲死,所以恒为急件;
+     * 客户端的循环按这个种类停牌,再把这条交给她。
+     *
+     * @param cause 死因(原版死亡消息的原文)
+     * @param where 死在哪、身上的东西怎么处置了,说给她听
+     */
+    public static void died(NumenPlayer companion, String cause, String where) {
+        emit(companion, EventTypes.DEATH, null, "You just died (" + cause.replace('<', '(').replace('>', ')') + "). "
+                + where, true);
+    }
+
+    /**
+     * 她被外面的人或插件请出了服务器。恒为急件;客户端的循环按这个种类停牌,她再回来时第一眼看到这条事实。
+     */
+    public static void removed(NumenPlayer companion, String reason) {
+        emit(companion, EventTypes.REMOVED, null,
+                "Your body was removed from the server by an admin or a plugin (" + reason.replace('<', '(').replace('>', ')')
+                        + "). This was not your owner's decision and not something you did wrong; since then you have not been in the world, "
+                        + "and you only come back when your owner summons you again. Your inventory and position are as they were.",
+                true);
+    }
+
+    /** 主人让她下线:她离开世界,回来时由 {@link EventTypes#RETURNED} 说离开了多久。客户端的循环按这个种类停牌。 */
+    public static void orderedOffline(NumenPlayer companion) {
+        emit(companion, EventTypes.OFFLINE, null,
+                "Your owner sent you offline: you leave the world, with your inventory and position as they are, until your owner summons you again.",
+                false);
     }
 
     /**
@@ -344,19 +373,13 @@ public final class NumenEvents {
     }
 
     /**
-     * 一条造好的事件送进她的收件箱:她的大脑在服务端,主人在不在线都一样(离线只是攒着)。归了在跑的程序、之后程序却没能用上的
-     * 收尾也经这里。没有大脑的身体(还没配上大脑、已经遣散)没有收件箱,留一行日志。
+     * 一条造好的事件送去她的座位(发件箱,留到她的大脑确认收到):她的大脑在创建者的客户端上,座位上没人时事件攒着,他回来补上。归了在跑的
+     * 程序、之后程序却没能用上的收尾也经这里。
      */
     public static void deliver(NumenPlayer companion, EventQueue.Entry entry) {
         UUID uuid = companion.getUUID();
         DELIVERED.forEach(sink -> sink.accept(uuid, entry));
-        var brain = CompanionLoops.get(uuid);
-        if (brain.isEmpty()) {
-            Constants.LOG.warn("[numen-event] {} kind={} has no brain; nobody receives this event", uuid, entry.type());
-            return;
-        }
-        brain.get().push(List.of(entry));
-        Constants.LOG.info("[numen-event] {} kind={}{} → brain", uuid, entry.type(), entry.urgent() ? " URGENT" : "");
+        Constants.LOG.info("[numen-event] {} kind={}{}", uuid, entry.type(), entry.urgent() ? " URGENT" : "");
     }
 
     /**

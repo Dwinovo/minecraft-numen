@@ -1,7 +1,6 @@
 package com.dwinovo.numen.api.agent.request;
 
 import com.dwinovo.numen.api.agent.prompt.NumenPrompts;
-import com.dwinovo.numen.api.agent.skill.SkillRegistry;
 import com.dwinovo.numen.api.platform.Services;
 
 /**
@@ -9,7 +8,7 @@ import com.dwinovo.numen.api.platform.Services;
  * 好让它成为字节级稳定的缓存前缀。会变的东西不在这里:背包、效果、当前任务挂在每一轮的
  * {@link RuntimeState} 里,她一写就变的札记索引随注入的 user 消息进历史。
  *
- * <p>不碰客户端:主人客户端上的大脑与评测组装的是同一份。
+ * <p>不碰客户端类:主人客户端上的大脑与评测组装的是同一份。
  */
 public final class SystemPromptComposer {
 
@@ -17,17 +16,19 @@ public final class SystemPromptComposer {
 
     /**
      * @param personaText 这只同伴绑定的人设正文;没绑或条目没了为 {@code null}(退到全局配置,再退到内置默认人设)
-     * @param modules     她能用的模块(主人那一份):进 API 索引
-     * @param skills      她能用的技能(主人那一份):进技能表
+     * @param catalog     服务端的目录:API、本能名册
+     * @param hers        她自己的模块,名字到正文:进 API 索引
+     * @param disabled    她对自己关掉的内置模块
+     * @param skillsXml   她能用的技能的表({@code SkillRegistry#formatXml})
      */
-    public static String compose(String personaText, com.dwinovo.numen.api.script.Modules modules,
-                                 SkillRegistry skills) {
+    public static String compose(String personaText, com.dwinovo.numen.api.seat.Catalog catalog,
+                                 java.util.Map<String, String> hers, java.util.Set<String> disabled, String skillsXml) {
         // 人设层:同伴绑的人设 → 全局配置的人设 → 内置默认人设。空着的槽会让她退回通用助手的腔调,
         // 所以最后一档是一个具体的性格,不是"自由发挥"。
         String base = (personaText != null && !personaText.isBlank())
                 ? personaText : Services.config().getSystemPrompt();
         if (base == null || base.isBlank()) base = NumenPrompts.DEFAULT_PERSONA;
-        return "<persona>\n" + base.strip() + "\n</persona>" + core(modules, skills.formatXml());
+        return "<persona>\n" + base.strip() + "\n</persona>" + core(catalog, hers, disabled, skillsXml);
     }
 
     /**
@@ -38,21 +39,22 @@ public final class SystemPromptComposer {
      *
      * @param skillsXml 技能表({@link SkillRegistry#formatXml});没有技能表是空串
      */
-    public static String core(com.dwinovo.numen.api.script.Modules modules, String skillsXml) {
+    public static String core(com.dwinovo.numen.api.seat.Catalog catalog, java.util.Map<String, String> hers,
+                              java.util.Set<String> disabled, String skillsXml) {
         StringBuilder sb = new StringBuilder(NumenPrompts.ENTITY_PROMPT);
         if (!skillsXml.isEmpty()) {
             sb.append("\n\n").append(skillsXml);
         }
         // API 索引:装了哪些组,一组一句,再是模块(内置的在前,她的在后),她不必先 help 就知道去哪找。只随组与模块的增减变、
         // 按名字排好,是稳定前缀的一部分(她存一个模块,前缀变一次);各组的动作与语法只在帮助里。
-        String commands = com.dwinovo.numen.api.sdk.ApiDocs.index(modules);
+        String commands = com.dwinovo.numen.api.sdk.ApiDocs.index(catalog.api(), hers, disabled);
         if (!commands.isEmpty()) {
             sb.append("\n\n").append(commands);
         }
         // 本能名册:她得知道身体会自己做哪些事,不然既可能重复去做,也可能对"我怎么突然挪了二十格"
-        // 毫无头绪。名册是纯注册表内容、两端都注册,所以这里本地就算得出来,不需要任何网络。
+        // 毫无头绪。名册是服务端注册表的内容,随座位上取来的目录到这里。
         // 模型只从这里读到它——工具描述里不再另带一份。
-        String reflexes = com.dwinovo.numen.api.task.reflex.ReflexRegistry.overview();
+        String reflexes = com.dwinovo.numen.api.task.reflex.ReflexRegistry.overview(catalog.instincts());
         if (!reflexes.isEmpty()) {
             sb.append("\n\n<instincts>\n").append(reflexes).append("\n</instincts>");
         }

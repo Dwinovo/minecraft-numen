@@ -6,8 +6,8 @@ import com.dwinovo.numen.api.agent.conversation.Mentions;
 import com.dwinovo.numen.api.agent.conversation.Quote;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
-import com.dwinovo.numen.api.event.NumenEvents;
 import com.dwinovo.numen.api.home.Homes;
+import com.dwinovo.numen.api.seat.ServerSeats;
 import com.dwinovo.numen.api.library.JsonLibrary;
 import com.dwinovo.numen.api.platform.ServerLifecycle;
 import com.google.gson.JsonObject;
@@ -29,9 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * ({@code players/<主人>/conversations.json}),路由、旁听、停止都读这一份;选中谁、置顶、文件夹、草稿、已读是客户端自己的
  * 展示偏好,不在这里。群没有自己的对话历史:一个会话的记录是成员各自日志里盖着它印的那些行({@code History})。
  *
- * <p>循环读的"谁在场"({@link CompanionLoop.Rooms})也在这里答({@link #audienceLine}):她收到主人一句话那一刻得知道还有谁在听、这是第几句。
- *
- * <p>线程:服务端主线程。拨发言号、定场面、送话三步之间不许插进第二句,所以 {@link #say} 只在主线程上跑。
+ * <p>线程:服务端主线程。
  */
 public final class Conversations extends JsonLibrary<Conversation> {
 
@@ -47,20 +45,20 @@ public final class Conversations extends JsonLibrary<Conversation> {
     private static final int MAX_ID = 64;
 
     private final Roster roster;
-    private final java.util.function.Function<UUID, java.util.Optional<CompanionLoop>> loops;
     private final java.util.function.Supplier<String> ownerName;
+    /** 告诉一只同伴一件事(她的座位上收到,世界上没有哪个身体发出它)。 */
+    private final java.util.function.BiConsumer<UUID, String> tell;
 
     /**
-     * @param file  成员表落在哪、用哪条写车道
-     * @param loops 找某只同伴的大脑;没有大脑的同伴听不到话
+     * @param file 成员表落在哪、用哪条写车道
      */
     public Conversations(java.nio.file.Path file, com.dwinovo.numen.api.store.Io io, Roster roster,
-                         java.util.function.Function<UUID, java.util.Optional<CompanionLoop>> loops,
-                         java.util.function.Supplier<String> ownerName) {
+                         java.util.function.Supplier<String> ownerName,
+                         java.util.function.BiConsumer<UUID, String> tell) {
         super(file, io);
         this.roster = roster;
-        this.loops = loops;
         this.ownerName = ownerName;
+        this.tell = tell;
         load();
     }
 
@@ -88,10 +86,10 @@ public final class Conversations extends JsonLibrary<Conversation> {
                     CompanionRegistry.Entry entry = registry.find(companion);
                     return entry == null || !entry.usableBy(id) ? null : entry.name();
                 }
-            }, CompanionLoops::get, () -> {
+            }, () -> {
                 ServerPlayer player = server.getPlayerList().getPlayer(id);
                 return player == null ? "the owner" : player.getGameProfile().getName();
-            });
+            }, (companion, told) -> ServerSeats.tell(companion, EventTypes.LEFT, told));
         });
     }
 
@@ -276,78 +274,11 @@ public final class Conversations extends JsonLibrary<Conversation> {
      */
     public void dissolve(Conversation conv) {
         remove(conv.id());
-        for (UUID m : conv.members()) {
-            loops.apply(m).filter(l -> conv.id().equals(l.conversation())).ifPresent(l -> l.inConversation(null));
-        }
     }
 
     private Conversation save(Conversation conv) {
         putAndSave(conv);
         return conv;
-    }
-
-    // ---- 说 ----
-
-    /** 说完之后。{@code reached}:至少有一只收下了。 */
-    public record Said(Conversation conversation, boolean reached) {}
-
-    /**
-     * 在这个会话里说一句话——主人说话的唯一入口(面板输入框、快捷对话、语音转写、命令都经它)。点了名的醒,其余的旁听;
-     * 旁听走 {@link EventTypes#TALK},是捎带投递,不会把人叫醒——群聊唯一的那条不变量。
-     *
-     * @param spoken 是哪位主人(这份会话表的那一位)、在哪儿说的:被叫醒的那几只回话回给他、回到那里
-     */
-    public Said say(Conversation conv, String text, Spoken spoken) {
-        List<Mentions.Member> members = named(conv);
-        if (members.isEmpty() || text == null || text.isBlank()) {
-            return new Said(conv, false);
-        }
-        // 引的那句里可能有 @,那是别人当时的话,不算主人这次叫谁
-        Mentions.Routing routing = Mentions.route(Quote.parse(text).body(), members);
-        boolean persisted = get(conv.id()) != null;
-        // 先拨号落盘,再定场面,最后送话:被叫醒的那几只从此在这个场面里——接下来她说的话属于这里,记录盖这个印;
-        // 她收到这句话那一刻就得知道还有谁在听、这是第几句(audienceLine 读的就是落盘后的这份会话)。
-        Conversation next = persisted ? save(conv.spoken()) : conv;
-        String tag = tagOf(conv);
-        for (UUID m : routing.awake()) {
-            loops.apply(m).ifPresent(l -> l.inConversation(tag));
-        }
-        String heard = overheardLine(ownerName.get() + " → " + addressees(routing, members), text);
-        boolean reached = false;
-        for (Mentions.Member m : members) {
-            var loop = loops.apply(m.uuid());
-            if (loop.isEmpty()) {
-                continue;
-            }
-            if (routing.awake().contains(m.uuid())) {
-                loop.get().submitPrompt(text, spoken);
-            } else {
-                loop.get().submitEvent(EventTypes.TALK, heard);
-            }
-            reached = true;
-        }
-        return new Said(next, reached);
-    }
-
-    /**
-     * 她说出口的那一句,推给<b>叫醒她的那个会话</b>里的其他人。她自己不推——那已经在她日志里了。她同时在多个会话里时,
-     * 这句话只属于其中一个场面,不串台。
-     */
-    public void heard(UUID speaker, String said) {
-        if (said == null || said.isBlank()) {
-            return;
-        }
-        Conversation conv = loops.apply(speaker).map(CompanionLoop::conversation).map(this::get).orElse(null);
-        if (conv == null) {
-            return;   // 没人跟她说过话,或者那是个单成员会话:没人要告诉
-        }
-        String name = roster.name(speaker);
-        String line = overheardLine(name == null ? "?" : name, said);
-        for (UUID m : membersAlive(conv)) {
-            if (!m.equals(speaker)) {
-                loops.apply(m).ifPresent(l -> l.submitEvent(EventTypes.TALK, line));
-            }
-        }
     }
 
     /**
@@ -368,12 +299,12 @@ public final class Conversations extends JsonLibrary<Conversation> {
 
     private void gone(UUID gone, String told) {
         List<Conversation> hers = containing(gone);
-        Set<UUID> tell = new LinkedHashSet<>();
+        Set<UUID> toTell = new LinkedHashSet<>();
         for (Conversation c : hers) {
-            tell.addAll(membersAlive(c));
+            toTell.addAll(membersAlive(c));
         }
-        for (UUID m : tell) {
-            loops.apply(m).ifPresent(l -> l.submitEvent(EventTypes.LEFT, told));
+        for (UUID m : toTell) {
+            tell.accept(m, told);
         }
         for (Conversation c : hers) {
             if (dissolvesAfterLeaving(c, membersAlive(c).size())) {
@@ -385,53 +316,5 @@ public final class Conversations extends JsonLibrary<Conversation> {
     /** 群只剩一个人就不再是群。本来就只有一个成员的记录(落过盘的"就他俩")不在此列。 */
     static boolean dissolvesAfterLeaving(Conversation conv, int alive) {
         return conv.members().size() > 1 && alive <= 1;
-    }
-
-    // ---- 停 ----
-
-    /** 停止停全体:会话里每个成员的循环都停;单成员时就是她一个——同一条路。 */
-    public void abort(Conversation conv) {
-        for (UUID m : membersAlive(conv)) {
-            loops.apply(m).ifPresent(CompanionLoop::abort);
-        }
-    }
-
-    // ---- 循环读的"谁在场" ----
-
-    /** 见 {@link CompanionLoop.Rooms#audienceLine}:说话的是这份会话表的那位主人。 */
-    public String audienceLine(UUID companion, String conversation) {
-        if (conversation == null) {
-            return "";
-        }
-        Conversation conv = get(conversation);
-        if (conv == null) {
-            return "";
-        }
-        List<String> names = new ArrayList<>();
-        for (UUID m : membersAlive(conv)) {
-            if (!m.equals(companion)) {
-                names.add(roster.name(m));
-            }
-        }
-        return names.isEmpty() ? ""
-                : Audience.line(conv.turn(), NumenEvents.escape(String.join(", ", names)));
-    }
-
-    // ---- 拼 ----
-
-    /** 旁听到的那一行的<b>正文</b>:{@code [谁] 说了什么}。事件的壳由投递口盖。 */
-    static String overheardLine(String speaker, String text) {
-        return "[" + speaker + "] " + text;
-    }
-
-    /** 这句话喊的是谁——旁听的人得知道主人在跟谁说话。 */
-    private static String addressees(Mentions.Routing routing, List<Mentions.Member> members) {
-        List<String> names = new ArrayList<>();
-        for (Mentions.Member m : members) {
-            if (routing.awake().contains(m.uuid())) {
-                names.add(m.name());
-            }
-        }
-        return String.join(", ", names);
     }
 }

@@ -9,6 +9,14 @@ import java.util.function.Consumer;
  */
 public interface ModelPort {
 
+    /**
+     * 一次 run 开头、第一次调模型之前:取这一轮要用的、只在别处才知道的事实(她此刻的样子),取到了再 {@code ready}。默认没什么要取,当场 {@code ready}。
+     * {@code cancel} 取消之后(主人按停止、断线……)不必再 {@code ready},内核也不再往下走。
+     */
+    default void prepare(long runId, CancelToken cancel, Runnable ready) {
+        ready.run();
+    }
+
     /** 这只同伴现在发不了请求的理由(没绑档案、没填 key),结构化的原因;{@code null} = 能发。 */
     Cause unavailable();
 

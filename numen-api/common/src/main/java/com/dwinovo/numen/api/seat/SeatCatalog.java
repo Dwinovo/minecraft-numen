@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.seat;
 
 import com.dwinovo.numen.api.agent.skill.SkillInfo;
-import com.dwinovo.numen.api.agent.skill.SkillRegistry;
+import com.dwinovo.numen.api.agent.skill.BundledSkills;
 import com.dwinovo.numen.api.library.Fingerprint;
 import com.dwinovo.numen.api.sdk.ApiDocs;
 import com.dwinovo.numen.api.task.reflex.ReflexRegistry;
@@ -16,7 +16,7 @@ import java.util.UUID;
  *
  * <ul>
  *   <li>{@code api}:API 登记表({@link ApiDocs#catalog}):组、函数的元数据、声明了的类、内置模块;</li>
- *   <li>{@code skills}:随模组与插件发布的技能的名字与说明({@link SkillRegistry#bundled});正文要用时再取;</li>
+ *   <li>{@code skills}:随模组与插件发布的技能的名字与说明({@link BundledSkills#list});正文要用时再取;</li>
  *   <li>{@code instincts}:本能名册里每一条的自述({@link ReflexRegistry#descriptions});</li>
  *   <li>{@code version}:以上内容的指纹。插件装上或撤回、{@code /reload} 之后它变,座位通知客户端再取。</li>
  * </ul>
@@ -29,7 +29,7 @@ final class SeatCatalog {
         JsonObject body = new JsonObject();
         body.add("api", ApiDocs.catalog(companion));
         JsonArray skills = new JsonArray();
-        for (SkillInfo skill : SkillRegistry.of(companion).bundled()) {
+        for (SkillInfo skill : BundledSkills.list(companion)) {
             JsonObject s = new JsonObject();
             s.addProperty("name", skill.name());
             s.addProperty("description", skill.description());

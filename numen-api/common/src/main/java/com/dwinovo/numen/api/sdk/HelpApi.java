@@ -4,7 +4,6 @@ import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.api.knowledge.KnowledgeKind;
 import com.dwinovo.numen.api.knowledge.KnowledgeSources;
-import com.dwinovo.numen.api.script.Modules;
 
 import java.util.List;
 
@@ -26,7 +25,7 @@ public final class HelpApi {
     @Example("print(numen.api.help(\"numen.move\"))")
     @Note("Instant; it reads the API's own declarations and changes nothing.")
     public static String help(ServerCall call, Help args) {
-        String text = ApiDocs.help(args.name(), Modules.of(call.companion()));
+        String text = ApiDocs.help(args.name(), com.dwinovo.numen.api.program.ServerPrograms.modulesOf(call.companion()));
         if (text == null) {
             throw new ApiError(ErrorKind.NOT_FOUND, "there is no function, group or module named " + args.name(),
                     "the <api> index lists every group; " + Call.of("numen.api.help", "numen.move") + " lists one.");

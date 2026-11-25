@@ -2,7 +2,6 @@ package com.dwinovo.numen.api.mcp.server;
 
 import com.dwinovo.numen.api.agent.tool.NumenTool;
 import com.dwinovo.numen.api.agent.tool.ToolHints;
-import com.dwinovo.numen.api.brain.Visits;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
 import com.dwinovo.numen.api.permission.ConsentDesk;
 import com.dwinovo.numen.mcp.server.McpHost;
@@ -378,7 +377,7 @@ public final class ExternalHost implements McpHost {
         }
 
         /** 渠道:把主人的话送给她。 */
-        Result send(Visits.Channel channel) throws Exception {
+        Result send(McpChannels.Channel channel) throws Exception {
             UUID companion = resolve();
             String words = string("text").trim();
             if (companion == null || words.isEmpty()) {

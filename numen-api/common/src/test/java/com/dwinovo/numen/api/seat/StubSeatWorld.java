@@ -1,7 +1,8 @@
 package com.dwinovo.numen.api.seat;
 
 import com.dwinovo.numen.api.agent.loop.Program;
-import com.dwinovo.numen.api.program.ProgramHost;
+import com.dwinovo.numen.api.program.ProgramRunner;
+import com.dwinovo.numen.api.script.Modules;
 import com.google.gson.JsonObject;
 
 import java.util.List;
@@ -26,8 +27,9 @@ final class StubSeatWorld implements SeatWorld {
     final Programs programs = new Programs();
 
     /** 经座位起的程序:停在这里,测试决定什么时候给结局。 */
-    static final class Programs implements ProgramHost {
+    static final class Programs implements ProgramRunner {
         final Map<String, Consumer<Program.Outcome>> running = new ConcurrentHashMap<>();
+        final Map<String, Modules> modules = new ConcurrentHashMap<>();
         final List<String> runs = new CopyOnWriteArrayList<>();
         final List<String> interrupts = new CopyOnWriteArrayList<>();
         final List<String> cuts = new CopyOnWriteArrayList<>();
@@ -36,19 +38,15 @@ final class StubSeatWorld implements SeatWorld {
         volatile Program.Outcome onCut;
 
         @Override
-        public void run(UUID companion, String programId, String code, Consumer<Program.Outcome> done) {
+        public void run(UUID companion, String programId, String code, Modules with, Consumer<Program.Outcome> done) {
             runs.add(programId + ": " + code);
+            modules.put(programId, with);
             running.put(programId, done);
         }
 
-        @Override
-        public void afterwards(String programId, Consumer<Program.Outcome> late) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void forget(String programId) {
-            throw new UnsupportedOperationException();
+        /** 这段程序起跑时能用的模块。 */
+        Modules modulesOf(String programId) {
+            return modules.get(programId);
         }
 
         @Override
@@ -109,7 +107,7 @@ final class StubSeatWorld implements SeatWorld {
     }
 
     @Override
-    public ProgramHost programs() {
+    public ProgramRunner programs() {
         return programs;
     }
 
@@ -122,6 +120,14 @@ final class StubSeatWorld implements SeatWorld {
     public JsonObject catalog(UUID companion) {
         JsonObject catalog = new JsonObject();
         catalog.addProperty("version", catalogVersion.get());
+        JsonObject api = new JsonObject();
+        for (String key : java.util.List.of("groups", "functions", "shared", "modules")) {
+            api.add(key, new com.google.gson.JsonArray());
+        }
+        api.add("classes", new JsonObject());
+        catalog.add("api", api);
+        catalog.add("skills", new com.google.gson.JsonArray());
+        catalog.add("instincts", new com.google.gson.JsonArray());
         return catalog;
     }
 }

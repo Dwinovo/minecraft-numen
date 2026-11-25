@@ -241,27 +241,12 @@ public final class NumenNetwork {
         toServer(com.dwinovo.numen.api.network.payload.OwnerInputPayload.TYPE,
                 com.dwinovo.numen.api.network.payload.OwnerInputPayload.STREAM_CODEC,
                 com.dwinovo.numen.api.network.payload.OwnerInputPayload::handle, Execution.NETWORK);
-        toClient(com.dwinovo.numen.api.network.payload.FeedPayload.TYPE,
-                com.dwinovo.numen.api.network.payload.FeedPayload.STREAM_CODEC,
-                com.dwinovo.numen.api.network.payload.FeedPayload::handle);
-        toServer(com.dwinovo.numen.api.network.payload.HistoryRequestPayload.TYPE,
-                com.dwinovo.numen.api.network.payload.HistoryRequestPayload.STREAM_CODEC,
-                com.dwinovo.numen.api.network.payload.HistoryRequestPayload::handle);
-        toClient(com.dwinovo.numen.api.network.payload.HistoryPagePayload.TYPE,
-                com.dwinovo.numen.api.network.payload.HistoryPagePayload.STREAM_CODEC,
-                com.dwinovo.numen.api.network.payload.HistoryPagePayload::handle);
         toServer(com.dwinovo.numen.api.network.payload.LibraryRequestPayload.TYPE,
                 com.dwinovo.numen.api.network.payload.LibraryRequestPayload.STREAM_CODEC,
                 com.dwinovo.numen.api.network.payload.LibraryRequestPayload::handle);
         toClient(com.dwinovo.numen.api.network.payload.LibraryPayload.TYPE,
                 com.dwinovo.numen.api.network.payload.LibraryPayload.STREAM_CODEC,
                 com.dwinovo.numen.api.network.payload.LibraryPayload::handle);
-        toClient(com.dwinovo.numen.api.network.payload.ExportChunkPayload.TYPE,
-                com.dwinovo.numen.api.network.payload.ExportChunkPayload.STREAM_CODEC,
-                com.dwinovo.numen.api.network.payload.ExportChunkPayload::handle);
-        toClient(com.dwinovo.numen.api.network.payload.SkinHandoverPayload.TYPE,
-                com.dwinovo.numen.api.network.payload.SkinHandoverPayload.STREAM_CODEC,
-                com.dwinovo.numen.api.network.payload.SkinHandoverPayload::handle);
         toClient(com.dwinovo.numen.api.network.payload.ConversationsPayload.TYPE,
                 com.dwinovo.numen.api.network.payload.ConversationsPayload.STREAM_CODEC,
                 com.dwinovo.numen.api.network.payload.ConversationsPayload::handle);

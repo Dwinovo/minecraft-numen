@@ -20,7 +20,7 @@ import java.util.UUID;
  * 这台服务器上皮肤这一块的接线:签名缓存({@link SkinCache},服务器目录下)、签名队({@link SkinSigning})、给同伴换皮肤的流程
  * ({@link Wardrobe}),服务器起来时开,停时关。MineSkin 的 API key 每次发之前从服主的钥匙串里现取({@code mineskin} 这个服务),
  * 改了立即生效;队里的变化推给当事人的客户端(皮肤这张表里带着排队的几行)。穿上就是 {@link Companions#applySkin} 换身体,
- * 再把穿的是缓存里的哪一张记进她的绑定({@link CompanionLoop#wearSkin})。
+ * 
  *
  * <p>线程:服务端主线程。
  */
@@ -51,6 +51,11 @@ public final class ServerSkins {
         this.wardrobe = wardrobe;
     }
 
+    /** 由 {@code CommonClass.init} 调一次:服务器起来时开,停时关。 */
+    public static void register() {
+        ServerLifecycle.onStarted(server -> start(server, new SkinCache(Homes.of(server).server())));
+    }
+
     /** 服务器起来时调一次:签名走网上的 MineSkin 与 Mojang。 */
     public static void start(MinecraftServer server, SkinCache cache) {
         start(server, SkinSigning.Backend.NETWORK, cache);
@@ -66,8 +71,9 @@ public final class ServerSkins {
         if (current != null) {
             current.signer.close();
         }
-        ModelServices models = ModelServices.of(server);
-        SkinSigning signer = new SkinSigning(backend, () -> models.serverKeychain().get(MineSkinClient.KEY_SERVICE), server,
+        // MineSkin 的 API key 是服务器签皮肤用的,在服主的钥匙串里;每次发之前现取,改了立即生效
+        com.dwinovo.numen.api.keys.Keychain keys = new com.dwinovo.numen.api.keys.Keychain(Homes.of(server).server());
+        SkinSigning signer = new SkinSigning(backend, () -> keys.get(MineSkinClient.KEY_SERVICE), server,
                 owner -> Replies.pushTo(server, owner, Libraries.SKIN), cache, Thread::sleep);
         current = new ServerSkins(signer, cache, new Wardrobe(signer, cache, SkinFolder.here(), dress(server)));
         currentServer = server;
@@ -105,14 +111,12 @@ public final class ServerSkins {
                     return false;
                 }
                 Companions.applySkin(server, companion, new MojangSkins.Skin(skin.value(), skin.signature()));
-                CompanionLoops.get(companion).ifPresent(loop -> loop.wearSkin(ref.toString()));
                 return true;
             }
 
             @Override
             public void takeOff(UUID companion) {
                 Companions.applySkin(server, companion, null);
-                CompanionLoops.get(companion).ifPresent(loop -> loop.wearSkin(null));
             }
         };
     }

@@ -2,9 +2,7 @@ package com.dwinovo.numen.api.network;
 
 import com.dwinovo.numen.api.network.payload.ClientUiActionPayload;
 import com.dwinovo.numen.api.network.payload.ConversationsPayload;
-import com.dwinovo.numen.api.network.payload.FeedPayload;
 import com.dwinovo.numen.api.network.payload.HelloAckPayload;
-import com.dwinovo.numen.api.network.payload.HistoryPagePayload;
 import com.dwinovo.numen.api.network.payload.LibraryPayload;
 import com.dwinovo.numen.api.network.payload.CompanionListPayload;
 import com.dwinovo.numen.api.network.payload.NumenStatePayload;
@@ -30,11 +28,7 @@ public final class ClientPayloadSink {
     public static volatile Consumer<ClientUiActionPayload> uiAction = p -> {};
     public static volatile Consumer<com.dwinovo.numen.api.network.payload.ServerHelloPayload> serverHello = p -> {};
     public static volatile Consumer<HelloAckPayload> helloAck = p -> {};
-    public static volatile Consumer<FeedPayload> feed = p -> {};
-    public static volatile Consumer<HistoryPagePayload> historyPage = p -> {};
     public static volatile Consumer<ConversationsPayload> conversations = p -> {};
     public static volatile Consumer<LibraryPayload> library = p -> {};
-    public static volatile Consumer<com.dwinovo.numen.api.network.payload.ExportChunkPayload> export = p -> {};
-    public static volatile Consumer<com.dwinovo.numen.api.network.payload.SkinHandoverPayload> skinHandover = p -> {};
     public static volatile Consumer<com.dwinovo.numen.api.network.payload.SeatPayload> seat = p -> {};
 }

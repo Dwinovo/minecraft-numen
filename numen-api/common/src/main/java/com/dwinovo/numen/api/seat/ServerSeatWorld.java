@@ -5,9 +5,10 @@ import com.dwinovo.numen.api.brain.Venue;
 import com.dwinovo.numen.api.agent.request.TaskReport;
 import com.dwinovo.numen.api.brain.Voice;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
+import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.program.ClientTransport;
 import com.dwinovo.numen.api.program.LocalPrograms;
-import com.dwinovo.numen.api.program.ProgramHost;
+import com.dwinovo.numen.api.program.ProgramRunner;
 import com.google.gson.JsonObject;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -75,6 +76,14 @@ final class ServerSeatWorld implements SeatWorld {
     }
 
     @Override
+    public void occupancyChanged(UUID companion) {
+        CompanionRegistry.Entry entry = CompanionRegistry.get(running()).find(companion);
+        if (entry != null) {
+            Companions.reconcile(running(), entry.owner());
+        }
+    }
+
+    @Override
     public long gameTime() {
         return running().overworld().getGameTime();
     }
@@ -85,7 +94,7 @@ final class ServerSeatWorld implements SeatWorld {
     }
 
     @Override
-    public ProgramHost programs() {
+    public ProgramRunner programs() {
         return programs;
     }
 

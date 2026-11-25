@@ -20,10 +20,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * 主人经客户端做的事({@link OwnerInput})到服务端大脑的唯一入口。上行的东西在网络线程上读懂、验过形状就投进信箱
+ * 主人经客户端做的、服务端管的事({@link OwnerInput})的唯一入口。上行的东西在网络线程上读懂、验过形状就投进信箱
  * ({@link #offer}),主线程每刻取几条处理({@link #tick});这里对每一条先问"这只同伴、这个会话是不是你用得了的"(问的是她的主人表;
- * 清空记忆另问是不是创建者,改主人表由 {@link Sharing} 问),再交给
- * 聊天、命令共用的那些入口——客户端什么判断都不替服务端做。
+ * 改主人表由 {@link Sharing} 问),再交给命令共用的那些入口——客户端什么判断都不替服务端做。
  *
  * <p>线程:{@link #offer} 任何线程,其余服务端主线程。
  */
@@ -85,88 +84,28 @@ public final class OwnerInputs {
 
     /** 每个服务器刻一次:每位玩家的信箱里取几条,处理。 */
     public static void tick(MinecraftServer server) {
-        BOX.drain(PER_TICK, (player, input) -> handle(server, player, input, Venue.PANEL));
+        BOX.drain(PER_TICK, (player, input) -> handle(server, player, input));
     }
 
     /**
-     * 办一条,并把结果交代清楚:没办成的写进日志,会话变了的把新列表推回去(切进会话的聊天补全也跟着换)。客户端的信箱、
-     * 聊天里的 {@code /msg} 与会话指令都走这一处。
+     * 办一条,并把结果交代清楚:没办成的写进日志,会话变了的把新列表推回去。客户端的信箱走这一处。
      */
-    public static Applied handle(MinecraftServer server, UUID owner, OwnerInput input, Venue venue) {
-        Applied applied = apply(server, owner, input, venue);
+    public static Applied handle(MinecraftServer server, UUID owner, OwnerInput input) {
+        Applied applied = apply(server, owner, input);
         if (applied.problem() != null) {
             Constants.LOG.info("[numen-net] {}'s {} did not go through: {}", owner, input.getClass().getSimpleName(),
                     applied.problem());
         }
         if (applied.conversationsChanged()) {
             Replies.conversations(server, owner);
-            ChatRoutes.refresh(server, owner);
         }
         return applied;
     }
 
     /** 办一条。{@code owner} 是发这条的玩家,不是客户端自称的谁。 */
     public static Applied apply(MinecraftServer server, UUID owner, OwnerInput input) {
-        return apply(server, owner, input, Venue.PANEL);
-    }
-
-    /**
-     * 同上,{@code venue} 是主人说话的地方:{@link OwnerInput.Say} 的回话回到那里。别的输入里没有"说话的地方"。
-     */
-    public static Applied apply(MinecraftServer server, UUID owner, OwnerInput input, Venue venue) {
         Conversations rooms = Conversations.of(server, owner);
         return switch (input) {
-            case OwnerInput.Say say -> {
-                Conversation conv = conversation(rooms, owner, say.conversation(), server);
-                if (conv == null) {
-                    yield Applied.refused("no such conversation");
-                }
-                yield rooms.say(conv, say.text(), new Spoken(owner, venue)).reached()
-                        ? Applied.done() : Applied.refused("nobody heard it");
-            }
-            case OwnerInput.Command command -> loop(server, owner, command.companion(),
-                    brain -> brain.submitCommand(command.echo(), skillBody(command.companion(), command.echo()), owner));
-            case OwnerInput.Stop stop -> {
-                Conversation conv = conversation(rooms, owner, stop.conversation(), server);
-                if (conv == null) {
-                    yield Applied.refused("no such conversation");
-                }
-                rooms.abort(conv);
-                yield Applied.done();
-            }
-            case OwnerInput.Compact compact -> loop(server, owner, compact.companion(),
-                    brain -> brain.requestCompact(compact.focus()));
-            case OwnerInput.Clear clear -> loop(server, owner, clear.companion(), CompanionLoop::requestClearContext);
-            case OwnerInput.SetGoal goal -> loop(server, owner, goal.companion(), brain ->
-                    brain.setGoal(GoalState.of(goal.objective(), System.currentTimeMillis()), goal.echo(), owner));
-            case OwnerInput.ClearGoal goal -> loop(server, owner, goal.companion(), brain -> brain.clearGoal(null));
-            case OwnerInput.Bind bind -> {
-                // 她的主人都能改她的绑定;绑上的条目在动手的这个人的库里解析,记着是他绑的
-                if (!usable(server, owner, bind.companion())) {
-                    yield Applied.refused("not your companion");
-                }
-                String problem = CompanionBinding.apply(server, owner, bind.companion(), bind.slot(), bind.entry());
-                yield problem == null ? Applied.done() : Applied.refused(problem);
-            }
-            case OwnerInput.Export export -> loop(server, owner, export.companion(), brain ->
-                    brain.exportMemory().whenComplete((zip, failure) -> server.execute(() ->
-                            Replies.exported(server, owner, export.companion(), zip, failure))));
-            case OwnerInput.Wipe wipe -> {
-                // 清空她的记忆只有创建者能做
-                if (!Companions.owns(server, owner, wipe.companion())) {
-                    yield Applied.refused("only her creator may wipe her memory");
-                }
-                Optional<CompanionLoop> brain = CompanionLoops.get(wipe.companion());
-                if (brain.isEmpty()) {
-                    yield Applied.refused("she has no brain here");
-                }
-                String problem = brain.get().wipeMemory();
-                if (problem != null) {
-                    yield Applied.refused(problem);
-                }
-                CompanionLoops.wiped(wipe.companion());
-                yield Applied.done();
-            }
             case OwnerInput.Share share -> {
                 com.mojang.authlib.GameProfile profile = share.player() == null ? null
                         : NumenPlayer.profileNamed(server, share.player().strip());
@@ -181,28 +120,6 @@ public final class OwnerInputs {
                     owner.equals(unshare.person()) ? Sharing.Change.LEAVE : Sharing.Change.UNSHARE,
                     NumenPlayer.playerName(server, unshare.person()),
                     Sharing.unshare(server, owner, unshare.companion(), unshare.person()));
-            case OwnerInput.Emit emit -> {
-                // 上行的类型不可信:主人的话,或登记过的世界事件,别的不收
-                try {
-                    NumenEvents.requireClientInput(emit.type());
-                } catch (IllegalArgumentException notAnInput) {
-                    yield Applied.refused(notAnInput.getMessage());
-                }
-                yield loop(server, owner, emit.companion(), brain -> {
-                    if (EventTypes.QUERY.equals(emit.type())) {
-                        brain.submitPrompt(emit.text(), new Spoken(owner, venue));
-                    } else {
-                        brain.submitEvent(emit.type(), emit.text());
-                    }
-                });
-            }
-            case OwnerInput.Speaking s -> {
-                if (!usable(server, owner, s.companion())) {
-                    yield Applied.refused("not your companion");
-                }
-                CompanionLoops.voicePlaying(s.companion(), owner, s.playing());
-                yield Applied.done();
-            }
             case OwnerInput.Pull pull -> {
                 Conversation conv = conversation(rooms, owner, pull.conversation(), server);
                 if (conv == null || !usable(server, owner, pull.companion())) {
@@ -282,31 +199,5 @@ public final class OwnerInputs {
     private static boolean usable(MinecraftServer server, UUID owner, UUID companion) {
         CompanionRegistry.Entry entry = CompanionRegistry.get(server).find(companion);
         return entry != null && entry.usableBy(owner);
-    }
-
-    private static Applied loop(MinecraftServer server, UUID owner, UUID companion,
-                                java.util.function.Consumer<CompanionLoop> action) {
-        if (!usable(server, owner, companion)) {
-            return Applied.refused("not your companion");
-        }
-        Optional<CompanionLoop> loop = CompanionLoops.get(companion);
-        if (loop.isEmpty()) {
-            return Applied.refused("she has no brain here");
-        }
-        action.accept(loop.get());
-        return Applied.done();
-    }
-
-    /** 技能命令的正文:{@code /名字 要求} 里名字是个开着的技能就展开,否则没有。聊天流只画主人打的那行。 */
-    private static String skillBody(UUID companion, String echo) {
-        if (echo == null || !echo.startsWith(PREFIX)) {
-            return "";
-        }
-        String line = echo.substring(PREFIX.length()).strip();
-        int space = line.indexOf(' ');
-        String name = space < 0 ? line : line.substring(0, space);
-        String args = space < 0 ? "" : line.substring(space + 1).strip();
-        Optional<SkillInfo> info = SkillRegistry.of(companion).get(name);
-        return info.isPresent() ? SkillInjection.body(info.get(), args) : "";
     }
 }

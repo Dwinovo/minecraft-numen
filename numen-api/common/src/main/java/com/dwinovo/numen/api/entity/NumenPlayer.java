@@ -421,14 +421,11 @@ public final class NumenPlayer extends ServerPlayer {
     }
 
     /**
-     * 眼前的主人——<b>只在这一处算</b>:最后跟她说话、此刻在游戏里的那位主人;没有就是创建者(他不在游戏里是 {@code null})。
+     * 眼前的主人——<b>只在这一处算</b>:创建者(他不在游戏里是 {@code null})。她的脑子只在创建者的客户端上,服务端不知道最后是哪一位主人跟她说的话。
      * 跟随的默认对象、说话时看向谁、{@code numen.status.owner} 报的是谁,都问这里。
      */
     public ServerPlayer keeperAtHand() {
-        UUID spoke = com.dwinovo.numen.api.brain.CompanionLoops.get(getUUID())
-                .map(com.dwinovo.numen.api.brain.CompanionLoop::speaker).orElse(null);
-        ServerPlayer last = spoke == null ? null : getServer().getPlayerList().getPlayer(spoke);
-        return last != null ? last : resolveOwnerPlayer();
+        return resolveOwnerPlayer();
     }
 
     /**

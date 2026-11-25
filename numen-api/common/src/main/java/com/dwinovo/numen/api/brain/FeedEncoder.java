@@ -3,6 +3,7 @@ package com.dwinovo.numen.api.brain;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.loop.Hold;
 import com.dwinovo.numen.api.agent.loop.LoopEvent;
+import com.dwinovo.numen.api.mind.LoopHost;
 import com.dwinovo.numen.api.agent.loop.Phase;
 import com.dwinovo.numen.api.agent.loop.RunEnd;
 
@@ -20,7 +21,7 @@ import java.util.function.Consumer;
  */
 public final class FeedEncoder {
 
-    private final CompanionLoop loop;
+    private final LoopHost loop;
     private final Consumer<List<Feed>> out;
     private final List<Feed> events = new ArrayList<>();
     /** 在飞回复已长出的正文与思考;回复落库、失败或被切断时清空。 */
@@ -30,7 +31,7 @@ public final class FeedEncoder {
     private List<EventQueue.Preview> sentPending;
 
     /** @param out 一刻攒下的事件;没有事件不会调 */
-    public FeedEncoder(CompanionLoop loop, Consumer<List<Feed>> out) {
+    public FeedEncoder(LoopHost loop, Consumer<List<Feed>> out) {
         this.loop = loop;
         this.out = out;
         loop.subscribe(this::on);

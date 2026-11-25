@@ -3,7 +3,6 @@ package com.dwinovo.numen.api.entity;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.agent.inbox.JsonlJournal;
-import com.dwinovo.numen.api.brain.LegacyMigration;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtIo;
@@ -59,27 +58,6 @@ class LegacyEventEntriesTest {
         e.putLong("ts", ts);
         e.putBoolean("urgent", urgent);
         return e;
-    }
-
-    @Test
-    void anOldOutboxIsReplayedAsTheWorldFactsItHeld() throws IOException {
-        Path file = dir.resolve("data").resolve("numen_event_outbox.dat");
-        Files.createDirectories(file.getParent());
-        NbtIo.writeCompressed(oldOutboxSave(), file);
-
-        List<EventQueue.Entry> taken = LegacyMigration.outbox(file).get(A);
-        assertFalse(Files.exists(file), "读过的文件改了名,只做一次");
-        assertTrue(Files.exists(file.resolveSibling("numen_event_outbox.dat.migrated")));
-        assertTrue(LegacyMigration.outbox(file).isEmpty(), "再读什么也没有");
-
-        assertEquals(List.of("event", "event"), taken.stream().map(EventQueue.Entry::type).toList(),
-                "条目原样读回,不改写");
-        assertTrue(taken.get(0).urgent(), "当初是急件,读回来还是急件");
-        assertFalse(taken.get(1).urgent(), "当初不急,读回来也不会变急");
-        assertEquals(List.of("<events>\n"
-                        + "<event kind=\"task_finished\" day=\"3\" t=\"12:00\" id=\"t1\">矿挖完了</event>\n"
-                        + "<event kind=\"body_log\" day=\"3\" t=\"12:01\">nearly drowned</event>\n</events>"),
-                EventQueue.render(taken), "和从前一样按时间排进 <events>,文本一字不改");
     }
 
     @Test

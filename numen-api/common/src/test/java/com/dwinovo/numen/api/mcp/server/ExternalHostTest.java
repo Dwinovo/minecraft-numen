@@ -5,7 +5,6 @@ import com.dwinovo.numen.api.agent.llm.ToolOutcome;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
 import com.dwinovo.numen.api.agent.tool.ToolCall;
 import com.dwinovo.numen.api.agent.tool.ToolHints;
-import com.dwinovo.numen.api.brain.Visits;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
 import com.dwinovo.numen.api.permission.ConsentDesk;
 import com.dwinovo.numen.mcp.server.McpHost;
@@ -90,7 +89,7 @@ class ExternalHostTest {
         }
 
         @Override
-        public CompletableFuture<Boolean> hear(UUID companion, String text, Visits.Channel channel) {
+        public CompletableFuture<Boolean> hear(UUID companion, String text, McpChannels.Channel channel) {
             heard.add(companion + ":" + text);
             channel.said(companion, "heard: " + text);
             return CompletableFuture.completedFuture(true);

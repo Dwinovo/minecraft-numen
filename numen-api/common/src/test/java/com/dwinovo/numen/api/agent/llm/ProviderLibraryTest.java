@@ -33,18 +33,17 @@ class ProviderLibraryTest {
     Path dir;
 
     private LibraryHub hub;
-    private Keychain ownerKeys;
-    private Keychain serverKeys;
+    private Keychain keys;
 
     private ProviderLibrary fresh() {
-        hub = LibraryHub.headless(dir);
         Io io = Io.direct(e -> {
             throw e;
         });
-        ownerKeys = new Keychain(new Home(dir.resolve("players").resolve(OWNER.toString()), io));
-        serverKeys = new Keychain(new Home(dir.resolve("server"), io));
-        return new ProviderLibrary(hub.library(ProviderLibrary.KIND, OWNER), new Keys(ownerKeys, serverKeys),
-                new ModelCatalog(dir.resolve("server").resolve("cache").resolve("models-dev.json"), () -> ""));
+        hub = LibraryHub.local(new Home(dir.resolve("client"), io), com.dwinovo.numen.api.library.Switches.inMemory(),
+                java.util.List.of(), java.util.Set.of());
+        keys = new Keychain(new Home(dir.resolve("client").resolve("keys"), io));
+        return new ProviderLibrary(hub.library(ProviderLibrary.KIND), new Keys(keys),
+                new ModelCatalog(dir.resolve("client").resolve("cache").resolve("models-dev.json"), () -> ""));
     }
 
     @Test
@@ -70,14 +69,14 @@ class ProviderLibraryTest {
         assertEquals(compat, back.profile().compat());
         assertEquals(30_000, back.profile().reserveTokens());
         assertEquals(5_000, back.profile().keepRecentTokens());
-        Path file = dir.resolve("players").resolve(OWNER.toString()).resolve("provider").resolve("my")
+        Path file = dir.resolve("client").resolve("provider").resolve("my")
                 .resolve("我的 DeepSeek.json");
         assertFalse(Files.readString(file).contains("sk-1"), "磁盘上的档案文件里没有 key");
     }
 
     @Test
     void anOldStyleEntryFileReadsWithTheNewFieldsUnset() throws IOException {
-        Path file = dir.resolve("server").resolve("provider").resolve("server").resolve("旧档案.json");
+        Path file = dir.resolve("client").resolve("provider").resolve("server").resolve("旧档案.json");
         Files.createDirectories(file.getParent());
         Files.writeString(file, """
                 {"provider":"deepseek","model":"deepseek-chat","reasoning_effort":"off","ctx":64000}""");
@@ -92,7 +91,7 @@ class ProviderLibraryTest {
     }
 
     @Test
-    void theRequestUsesHisOwnKeyFirstThenTheServersAndNoKeyMeansNoKey() {
+    void theRequestUsesTheKeyInTheKeychainAndNoKeyMeansNoKey() {
         ProviderLibrary library = fresh();
         ProviderLibrary.Entry e = library.create("x", new ConnectionProfile("deepseek", null, "deepseek-chat", null,
                 null, null, null, 0, null, 0, null, 0, 0));
@@ -100,12 +99,9 @@ class ProviderLibraryTest {
         assertFalse(library.resolve(e.id()).hasApiKey());
         assertNull(library.key(e.id()));
 
-        serverKeys.put("deepseek", "sk-server");
-        assertEquals(new Keys.Found("sk-server", Keys.Source.SERVER), library.key(e.id()));
+        keys.put("deepseek", "sk-mine");
+        assertEquals("sk-mine", library.key(e.id()));
         assertTrue(library.resolve(e.id()).hasApiKey());
-
-        ownerKeys.put("deepseek", "sk-mine");
-        assertEquals(new Keys.Found("sk-mine", Keys.Source.OWNER), library.key(e.id()), "主人自己的先");
     }
 
     @Test
@@ -125,7 +121,7 @@ class ProviderLibraryTest {
 
     @Test
     void aFileThatCannotBeReadIsSkippedAndTheOthersStay() throws IOException {
-        Path bad = dir.resolve("server").resolve("provider").resolve("server").resolve("坏的.json");
+        Path bad = dir.resolve("client").resolve("provider").resolve("server").resolve("坏的.json");
         Files.createDirectories(bad.getParent());
         Files.writeString(bad, "{not json");
         Files.writeString(bad.resolveSibling("好的.json"), "{\"provider\":\"openai\"}");
@@ -139,12 +135,12 @@ class ProviderLibraryTest {
 
     @Test
     void aSwitchedOffBuiltinProfileIsNotOfferedButStillThere() throws IOException {
-        Path file = dir.resolve("server").resolve("provider").resolve("server").resolve("推荐.json");
+        Path file = dir.resolve("client").resolve("provider").resolve("server").resolve("推荐.json");
         Files.createDirectories(file.getParent());
         Files.writeString(file, "{\"provider\":\"openai\"}");
         ProviderLibrary library = fresh();
 
-        hub.library(ProviderLibrary.KIND, OWNER).setEnabled(new EntryId("server", "推荐"), false);
+        hub.library(ProviderLibrary.KIND).setEnabled(new EntryId("server", "推荐"), false);
 
         assertNull(library.get("server:推荐"));
         assertTrue(library.list().isEmpty());

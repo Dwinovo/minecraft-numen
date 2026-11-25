@@ -26,16 +26,38 @@ class MemoryToolTest {
 
     private static final UUID HER = UUID.randomUUID();
 
+    private static NoteBook notes;
+
     @BeforeAll
     static void books() {
-        NoteBook.init(uuid -> new com.dwinovo.numen.api.home.Home(homes.resolve(uuid.toString()),
+        notes = new NoteBook(new com.dwinovo.numen.api.home.Home(homes.resolve(HER.toString()),
                 com.dwinovo.numen.api.NumenIo.inline("test")), () -> 7);
+    }
+
+    /** 她的札记在手的锚点;技能这里用不上。 */
+    private static com.dwinovo.numen.api.agent.tool.ToolAnchor anchor() {
+        return new com.dwinovo.numen.api.agent.tool.ToolAnchor() {
+            @Override
+            public UUID entityUuid() {
+                return HER;
+            }
+
+            @Override
+            public NoteBook notes() {
+                return notes;
+            }
+
+            @Override
+            public com.dwinovo.numen.api.agent.skill.SkillRegistry skills() {
+                throw new UnsupportedOperationException();
+            }
+        };
     }
 
     /** 调一次:参数是那段 JSON 文本,交回这次调用的结果。 */
     private static JsonObject call(String args) {
         AtomicReference<String> result = new AtomicReference<>();
-        new MemoryTool().invoke(new ToolCall("m1", MemoryTool.NAME, args, () -> HER, result::set));
+        new MemoryTool().invoke(new ToolCall("m1", MemoryTool.NAME, args, anchor(), result::set));
         return JsonParser.parseString(result.get()).getAsJsonObject();
     }
 
@@ -44,14 +66,14 @@ class MemoryToolTest {
         JsonObject wrote = call("{\"command\": \"remember\", \"name\": \"main-base\", \"description\": "
                 + "\"main base -340,68,120\", \"content\": \"door faces east\"}");
         assertTrue(wrote.get("success").getAsBoolean(), wrote.toString());
-        assertTrue(NoteBook.of(HER).formatXml().contains("main base -340,68,120"),
-                "the description is the line in <memory>: " + NoteBook.of(HER).formatXml());
+        assertTrue(notes.formatXml().contains("main base -340,68,120"),
+                "the description is the line in <memory>: " + notes.formatXml());
 
         JsonObject read = call("{\"command\": \"recall\", \"name\": \"main-base\"}");
         assertTrue(read.get("message").getAsString().contains("door faces east"), read.toString());
 
         assertTrue(call("{\"command\": \"forget\", \"name\": \"main-base\"}").get("success").getAsBoolean());
-        assertNull(NoteBook.of(HER).read("main-base"));
+        assertNull(notes.read("main-base"));
         JsonObject gone = call("{\"command\": \"recall\", \"name\": \"main-base\"}");
         assertFalse(gone.get("success").getAsBoolean());
         assertTrue(gone.get("message").getAsString().startsWith("no note named main-base"), gone.toString());
@@ -75,6 +97,6 @@ class MemoryToolTest {
                 + "\"type\": \"todo\"}");
         assertFalse(wrote.get("success").getAsBoolean());
         assertTrue(wrote.get("message").getAsString().contains("owner, world, lesson"), wrote.toString());
-        assertNull(NoteBook.of(HER).read("chores"));
+        assertNull(notes.read("chores"));
     }
 }

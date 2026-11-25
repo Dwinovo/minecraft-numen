@@ -47,7 +47,6 @@ public final class Companions {
             reg.markReturned(existing);
             NumenPlayer back = respawn(server, existing);
             if (back != null) {
-                com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, existing);
                 welcomeBack(server, back, was);
                 return back;
             }
@@ -62,7 +61,6 @@ public final class Companions {
         reg.put(companionUuid, fresh);
         NumenPlayer body = CompanionFactory.spawn(server, companionUuid, name, ownerUuid, level, pos);
         reg.put(companionUuid, fresh.movedTo(level.dimension(), body.blockPosition()));
-        com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, companionUuid);
         return body;
     }
 
@@ -102,7 +100,7 @@ public final class Companions {
             return new Summoned(null, net.minecraft.network.chat.Component.translatable(
                     com.dwinovo.numen.api.data.ModLanguageData.Keys.NOTICE_NAME_TAKEN, name));
         }
-        int limit = com.dwinovo.numen.api.brain.ModelServices.of(server).settings().maxCompanions();
+        int limit = new com.dwinovo.numen.api.config.ServerSettings(com.dwinovo.numen.api.home.Homes.of(server).server()).maxCompanions();
         if (overLimit(limit, findByOwnerName(server, owner.getUUID(), name) != null,
                 CompanionRegistry.get(server).ownedBy(owner.getUUID()).size())) {
             return new Summoned(null, net.minecraft.network.chat.Component.translatable(
@@ -219,8 +217,6 @@ public final class Companions {
                         returnedText(body, was, server.overworld().getGameTime() - leftAt), false);
             }
         }
-        com.dwinovo.numen.api.brain.CompanionLoops.get(uuid)
-                .ifPresent(com.dwinovo.numen.api.brain.CompanionLoop::onReturned);
     }
 
     /** 回来那条事件的话:为什么离开、过了多久、落在哪;背包与位置都是离开时的样子。 */
@@ -342,9 +338,8 @@ public final class Companions {
         if (entry == null) {
             return;
         }
-        com.dwinovo.numen.api.brain.CompanionBrains.ensure(server, companionUuid);
         NumenPlayer body = NumenPlayer.findByUuid(server, companionUuid);
-        boolean ownerPresent = com.dwinovo.numen.api.brain.OwnerPresence.present(server, entry.keepers());
+        boolean ownerPresent = com.dwinovo.numen.api.brain.OwnerPresence.present(companionUuid);
         switch (Attendance.move(entry.outside(), ownerPresent, body != null)) {
             case BRING -> bringBack(server, companionUuid);
             case LOG_OUT -> logOut(server, body);
@@ -367,7 +362,7 @@ public final class Companions {
      * <p>平台挂点契约:由 {@code MixinServerCommonPacketListener} 在断开落到她的假连接上那一步调(关服时不调)。调用时她的身体还在世界里;
      * <b>身体本身由平台移除</b>,这里只管之后的一切:
      * <ul>
-     *   <li>大脑停牌、收件箱留下一条事实({@link com.dwinovo.numen.api.brain.CompanionLoop#onRemoved}),她手上的活和程序经
+     *   <li>她的大脑收到一条"被请出去了"的事实({@link com.dwinovo.numen.api.event.NumenEvents#removed}),她手上的活和程序经
      *       {@link com.dwinovo.numen.api.CompanionEvent#REMOVE} 收掉——和她被登出、被删除走同一条收拾的路;</li>
      *   <li>名册记下她被请出去了和理由,在主人再召唤({@link #summon})之前不重建;</li>
      *   <li>她的主人里在线的就告诉他,不在线的等他下次上线({@link #reconcilePending})。</li>
@@ -383,7 +378,7 @@ public final class Companions {
             return;
         }
         String why = reason.getString();
-        com.dwinovo.numen.api.brain.CompanionLoops.get(body.getUUID()).ifPresent(brain -> brain.onRemoved(why));
+        com.dwinovo.numen.api.event.NumenEvents.removed(body, why);
         if (entry != null) {
             reg.markOutside(body.getUUID(), Outside.byServer(why));
         }
@@ -434,7 +429,7 @@ public final class Companions {
                 ? "This world has keepInventory on, so everything in your inventory is still on you."
                 : "What was in your inventory dropped where you died, by the vanilla rules.");
         String diedOf = cause;
-        com.dwinovo.numen.api.brain.CompanionLoops.get(uuid).ifPresent(brain -> brain.onDied(diedOf, where));
+        com.dwinovo.numen.api.event.NumenEvents.died(body, diedOf, where);
         CompanionEvents.fire(CompanionEvent.DEATH, body);   // 不发工具结果:那条 tool_call 已由死因结算
         AWAITING_RESPAWN.add(body);
     }
@@ -483,8 +478,6 @@ public final class Companions {
         com.dwinovo.numen.api.event.NumenEvents.emit(body, com.dwinovo.numen.api.agent.inbox.EventTypes.RESPAWNED,
                 java.util.Map.of("spawn", body.getRespawnPosition() != null ? "respawn_point" : "world_spawn"),
                 respawnedText(body, hadRespawnPoint), true);
-        com.dwinovo.numen.api.brain.CompanionLoops.get(uuid)
-                .ifPresent(com.dwinovo.numen.api.brain.CompanionLoop::onRespawned);
     }
 
     /** 重生那条事件的话:落在哪、凭什么落在这儿、离主人多远。 */
@@ -635,8 +628,10 @@ public final class Companions {
             }
             if (!entry.outside().isOutside()) {
                 reg.markOutside(uuid, Outside.byOwner());
-                com.dwinovo.numen.api.brain.CompanionLoops.get(uuid)
-                        .ifPresent(com.dwinovo.numen.api.brain.CompanionLoop::onOrderedOffline);
+                NumenPlayer body = NumenPlayer.findByUuid(server, uuid);
+                if (body != null) {
+                    com.dwinovo.numen.api.event.NumenEvents.orderedOffline(body);
+                }
             }
             reconcileCompanion(server, uuid);
             syncRosterToKeepers(server, entry.keepers());   // 面板据此把她显示成下线了的样子
@@ -700,12 +695,10 @@ public final class Companions {
                 for (UUID keeper : gone.keepers()) {
                     // 和她同过会话的告诉一声她走了;名册上已经没有她,成员表按名册过滤
                     com.dwinovo.numen.api.brain.Conversations.of(server, keeper).left(uuid, gone.name());
-                    com.dwinovo.numen.api.brain.ChatRoutes.refresh(server, keeper);   // 他聊天栏切进的会话少了她
                 }
                 tell.addAll(gone.keepers());
             }
             CompanionStateWatch.forget(uuid);   // 背包镜像同理:这个 UUID 不会再回来了
-            com.dwinovo.numen.api.brain.CompanionLoops.dismissed(server, uuid);   // 大脑收掉,她的家删掉
             com.dwinovo.numen.api.seat.ServerSeats.dismissed(uuid);   // 座位收掉,发件箱不再留
         }
         syncRosterToKeepers(server, tell);

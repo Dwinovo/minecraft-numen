@@ -14,7 +14,7 @@ import java.util.List;
  * "内置"(服务器目录里,Numen 或插件随包带来的推荐配置,管理员可改)与"我的"两组,同名时我的优先,存储、开关、同步都是
  * {@link Library} 这一套;一位同伴选定其中一条,她的请求就跑在那条档案的后端上。
  *
- * <p>档案<b>不含 key</b>:只写用哪个服务商、哪个型号这些。key 按服务商存在钥匙串里({@link Keys}),用时先找主人的、再找服主的,
+ * <p>档案<b>不含 key</b>:只写用哪个服务商、哪个型号这些。key 按服务商存在钥匙串里({@link Keys}),
  * 所以一条内置档案填上对应服务商的 key 就能用,jar 里永远没有 key。没填 key 的档案在第一次请求时给出一条诚实的错误
  * ({@code Mind.unavailable}),不退到别的档案。
  *
@@ -45,7 +45,7 @@ public final class ProviderLibrary {
         return catalog;
     }
 
-    /** 这位玩家的 key 的出处。 */
+    /** 找 key 用的钥匙串。 */
     public Keys keys() {
         return keys;
     }
@@ -61,8 +61,8 @@ public final class ProviderLibrary {
         return entry == null ? null : entry(entry);
     }
 
-    /** 这份档案用的 key 与它的出处;档案不在或没填 key 是 {@code null}。 */
-    public Keys.Found key(String id) {
+    /** 这份档案用的 key;档案不在或没填 key 是 {@code null}。 */
+    public String key(String id) {
         Entry entry = get(id);
         return entry == null ? null : keys.find(entry.profile().provider());
     }
@@ -76,8 +76,7 @@ public final class ProviderLibrary {
         if (entry == null) {
             return catalog.unresolved();
         }
-        Keys.Found found = keys.find(entry.profile().provider());
-        return catalog.resolve(entry.profile().withApiKey(found == null ? null : found.key()));
+        return catalog.resolve(entry.profile().withApiKey(keys.find(entry.profile().provider())));
     }
 
     /** 新建我的档案:只有名字必填,其余可以空。重名自动加 _2 后缀。 */

@@ -59,7 +59,7 @@ class SeatCatalogTest {
     @BeforeAll
     static void register(@TempDir Path home) throws Exception {
         SdkFixture.register("gt_catalog", Fns.class);
-        Path skill = Files.createDirectories(home.resolve("server").resolve("skills").resolve("gt").resolve("masonry"));
+        Path skill = Files.createDirectories(home.resolve("skills").resolve("gt").resolve("masonry"));
         Files.writeString(skill.resolve(SkillRegistry.SKILL_FILENAME), """
                 ---
                 name: masonry
@@ -68,7 +68,7 @@ class SeatCatalogTest {
 
                 # Walls
                 """);
-        Path mute = Files.createDirectories(home.resolve("server").resolve("skills").resolve("gt").resolve("mute"));
+        Path mute = Files.createDirectories(home.resolve("skills").resolve("gt").resolve("mute"));
         Files.writeString(mute.resolve(SkillRegistry.SKILL_FILENAME), """
                 ---
                 name: mute
@@ -76,9 +76,14 @@ class SeatCatalogTest {
 
                 # No description, so the model cannot pick it
                 """);
-        var library = LibraryHub.headless(home).library(SkillRegistry.KIND, UUID.randomUUID());
-        library.setEnabled(new EntryId("gt", "masonry"), false);   // 玩家的开关是持有大脑的一方的事,目录不看
-        SkillRegistry.init(companion -> library);
+        bundle = com.dwinovo.numen.api.library.Shipped.bundle("gt_catalog", home);   // 随发布的技能:目录读的是登记过的来源
+    }
+
+    private static java.util.Optional<com.dwinovo.numen.api.agent.scope.Handle> bundle = java.util.Optional.empty();
+
+    @org.junit.jupiter.api.AfterAll
+    static void unbundle() {
+        bundle.ifPresent(com.dwinovo.numen.api.agent.scope.Handle::close);
     }
 
     private static List<String> names(JsonElement array, String field) {

@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.seat;
 
-import com.dwinovo.numen.api.program.ProgramHost;
+import com.dwinovo.numen.api.program.ProgramRunner;
 import com.google.gson.JsonObject;
 
 import java.util.UUID;
@@ -29,8 +29,14 @@ public interface SeatWorld {
     /** 主世界的时刻({@code dayTime}),事件盖时间戳用。 */
     long dayTime();
 
-    /** 程序、叫停与切断交给谁。 */
-    ProgramHost programs();
+    /** 程序、叫停与切断交给谁:身体所在的这一端。 */
+    ProgramRunner programs();
+
+    /**
+     * 她的座位上有没有人坐变了(客户端坐上、断线、被顶替):世界据此让她的身体回来或登出。在 {@link #main} 上调。
+     */
+    default void occupancyChanged(UUID companion) {
+    }
 
     /** 她的话在聊天里说出来。 */
     void say(UUID companion, String text);
