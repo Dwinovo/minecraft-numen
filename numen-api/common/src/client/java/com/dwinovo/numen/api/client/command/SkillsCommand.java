@@ -22,7 +22,7 @@ import java.util.List;
  * 只有管理员拨得动。没有第二份状态,也就没有要对齐的东西。
  *
  * <p>对着一只分享来的同伴时,列的是她用得了的技能——她创建者的那一份({@link ClientLibraries#skillsOf}),只看不能拨:
- * 她的技能由创建者管理,标题上写明。
+ * 她的技能由创建者管理、在他的电脑上,这里看不到,面板只说这一件事。
  */
 final class SkillsCommand implements PopupCommand {
 
@@ -43,7 +43,7 @@ final class SkillsCommand implements PopupCommand {
                 ? new CreatorsSkillsPage(her) : new SkillsPage());
     }
 
-    /** 分享来的她用得了的技能:创建者的那一份,只读。 */
+    /** 分享来的她:技能在创建者的电脑上,这里列不出来,只说明这一点(不能写成"没有技能")。 */
     private record CreatorsSkillsPage(NumenRoster.Entry her) implements SelectPanel.Page {
 
         @Override
@@ -53,14 +53,7 @@ final class SkillsCommand implements PopupCommand {
 
         @Override
         public List<SelectPanel.Row> rows() {
-            List<SelectPanel.Row> out = new ArrayList<>();
-            for (ClientLibraries.HerSkill skill : ClientLibraries.skillsOf(her.uuid(), ClientCompanions.viewer())) {
-                out.add(new SelectPanel.Row(skill.name(), skill.description() == null ? "" : skill.description(), null));
-            }
-            if (out.isEmpty()) {
-                out.add(new SelectPanel.Row(I18n.get(Keys.CMD_SKILLS_EMPTY), "", null));
-            }
-            return out;
+            return List.of(new SelectPanel.Row(I18n.get(Keys.CMD_SKILLS_ELSEWHERE, her.creator().shown()), "", null));
         }
 
         @Override

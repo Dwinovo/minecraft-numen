@@ -14,7 +14,7 @@ import java.util.List;
  *
  * <p>按服务器上当前的技能表现算(技能目录是服务器全局的)——往 {@code config/numen/server/skills} 里丢个目录、或者管理员在面板里
  * 把某个技能关掉,命令表跟着变,不用重启也不用去哪儿登记。列的是<b>这只同伴</b>用得了的({@link ClientLibraries#skillsOf}):
- * 分享来的她读的是创建者的技能,命令表就是创建者的那一份,和服务端展开时认的同一份。
+ * 分享来的她的技能在创建者的电脑上,这里一条也列不出,命令表里没有它们。
  */
 final class SkillCommandSource implements CommandSource {
 

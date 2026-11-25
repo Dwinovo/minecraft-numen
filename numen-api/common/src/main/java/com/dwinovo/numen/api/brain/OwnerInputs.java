@@ -98,6 +98,7 @@ public final class OwnerInputs {
         }
         if (applied.conversationsChanged()) {
             Replies.conversations(server, owner);
+            ChatBar.refresh(server, owner);
         }
         return applied;
     }
@@ -120,6 +121,15 @@ public final class OwnerInputs {
                     owner.equals(unshare.person()) ? Sharing.Change.LEAVE : Sharing.Change.UNSHARE,
                     NumenPlayer.playerName(server, unshare.person()),
                     Sharing.unshare(server, owner, unshare.companion(), unshare.person()));
+            case OwnerInput.Say say -> {
+                ServerPlayer speaker = server.getPlayerList().getPlayer(owner);
+                Conversation conv = conversation(rooms, owner, say.conversation(), server);
+                if (speaker == null || conv == null) {
+                    yield Applied.refused("no such conversation");
+                }
+                String problem = Hearing.say(server, speaker, conv, say.text());
+                yield problem == null ? Applied.done() : Applied.refused(problem);
+            }
             case OwnerInput.Pull pull -> {
                 Conversation conv = conversation(rooms, owner, pull.conversation(), server);
                 if (conv == null || !usable(server, owner, pull.companion())) {

@@ -180,7 +180,7 @@ public final class PermissionApi {
     }
 
     private static PermissionStore requiredStore(NumenPlayer her) {
-        UUID owner = her.getOwnerUuid();
+        UUID owner = her.keeperUuid();
         if (owner == null) {
             throw new ApiError(ErrorKind.FAILED, "you have no owner whose settings these could be", null);
         }

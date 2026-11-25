@@ -24,12 +24,18 @@ final class StubSeatWorld implements SeatWorld {
     volatile BodyTask task;
     volatile long gameTime = 100;
     final List<String> said = new CopyOnWriteArrayList<>();
+    /** 她说话时带的是谁、在哪儿说的。 */
+    final List<com.dwinovo.numen.api.brain.Spoken> spokenTo = new CopyOnWriteArrayList<>();
+    /** 创建者之外、在她主人表上的人。 */
+    final Map<UUID, java.util.Set<UUID>> sharedWith = new ConcurrentHashMap<>();
     final Programs programs = new Programs();
 
     /** 经座位起的程序:停在这里,测试决定什么时候给结局。 */
     static final class Programs implements ProgramRunner {
         final Map<String, Consumer<Program.Outcome>> running = new ConcurrentHashMap<>();
         final Map<String, Modules> modules = new ConcurrentHashMap<>();
+        /** 每段程序替哪一位 keeper 做事。 */
+        final Map<String, UUID> keepers = new ConcurrentHashMap<>();
         final List<String> runs = new CopyOnWriteArrayList<>();
         final List<String> interrupts = new CopyOnWriteArrayList<>();
         final List<String> cuts = new CopyOnWriteArrayList<>();
@@ -38,8 +44,10 @@ final class StubSeatWorld implements SeatWorld {
         volatile Program.Outcome onCut;
 
         @Override
-        public void run(UUID companion, String programId, String code, Modules with, Consumer<Program.Outcome> done) {
+        public void run(UUID companion, String programId, String code, Modules with, UUID keeper,
+                        Consumer<Program.Outcome> done) {
             runs.add(programId + ": " + code);
+            keepers.put(programId, keeper);
             modules.put(programId, with);
             running.put(programId, done);
         }
@@ -112,8 +120,14 @@ final class StubSeatWorld implements SeatWorld {
     }
 
     @Override
-    public void say(UUID companion, String text) {
+    public boolean keeps(UUID companion, UUID person) {
+        return person.equals(creators.get(companion)) || sharedWith.getOrDefault(companion, java.util.Set.of()).contains(person);
+    }
+
+    @Override
+    public void say(UUID companion, String text, com.dwinovo.numen.api.brain.Spoken spoken) {
         said.add(text);
+        spokenTo.add(spoken);
     }
 
     @Override

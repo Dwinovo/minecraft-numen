@@ -31,23 +31,26 @@ final class SeatPrograms implements ProgramHost {
     private final Executor main;
     private final LongSupplier generation;
     private final Consumer<SeatState> states;
+    /** 她此刻在答的那句话是谁说的:程序替他做事。 */
+    private final java.util.function.Supplier<UUID> keeper;
     /** 等答复的程序;切断后晚到的结局换一个收件人({@link #afterwards}),不等了的摘掉。 */
     private final Map<String, Consumer<Program.Outcome>> waiting = new ConcurrentHashMap<>();
 
     SeatPrograms(SeatClient seat, UUID companion, HerModules modules, Executor main, LongSupplier generation,
-                 Consumer<SeatState> states) {
+                 Consumer<SeatState> states, java.util.function.Supplier<UUID> keeper) {
         this.seat = seat;
         this.companion = companion;
         this.modules = modules;
         this.main = main;
         this.generation = generation;
         this.states = states;
+        this.keeper = keeper;
     }
 
     @Override
     public void run(UUID who, String programId, String code, Consumer<Program.Outcome> done) {
         waiting.put(programId, done);
-        seat.run(companion, generation.getAsLong(), programId, code, modules.manifest(), modules.disabled())
+        seat.run(companion, generation.getAsLong(), programId, code, modules.manifest(), modules.disabled(), keeper.get())
                 .whenComplete((result, failed) -> main.execute(() -> answered(programId, result, failed)));
     }
 

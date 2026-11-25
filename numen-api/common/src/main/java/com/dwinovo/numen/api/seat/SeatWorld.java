@@ -3,6 +3,8 @@ package com.dwinovo.numen.api.seat;
 import com.dwinovo.numen.api.program.ProgramRunner;
 import com.google.gson.JsonObject;
 
+import com.dwinovo.numen.api.brain.Spoken;
+
 import java.util.UUID;
 import java.util.concurrent.Executor;
 
@@ -38,8 +40,11 @@ public interface SeatWorld {
     default void occupancyChanged(UUID companion) {
     }
 
-    /** 她的话在聊天里说出来。 */
-    void say(UUID companion, String text);
+    /** {@code person} 在不在她的主人表上(创建者,或分享给了他的人)。 */
+    boolean keeps(UUID companion, UUID person);
+
+    /** 她的话在聊天里说出来:{@code spoken} 说的是她在答谁、在哪儿说的,话回到那里。 */
+    void say(UUID companion, String text, Spoken spoken);
 
     /** 她能做什么:注册表里服务端拥有的那些,含 {@code version}。任何线程。 */
     JsonObject catalog(UUID companion);

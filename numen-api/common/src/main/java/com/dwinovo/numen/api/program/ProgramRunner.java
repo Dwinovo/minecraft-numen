@@ -19,8 +19,11 @@ public interface ProgramRunner {
      * 跑一段程序。结局经 {@code done} 恰好交回一次。
      *
      * @param modules 这段程序能用的模块:内置的加她自己的(客户端报来的)
+     * @param keeper  这段程序替哪一位 keeper 做事(她此刻在答的那句话是谁说的):座位验过他在她的主人表上;
+     *                权限与归属都按他
      */
-    void run(UUID companion, String programId, String code, Modules modules, Consumer<Program.Outcome> done);
+    void run(UUID companion, String programId, String code, Modules modules, UUID keeper,
+             Consumer<Program.Outcome> done);
 
     /** 叫这段程序停在调用之间:{@code why} 是给模型的原因(主人开口、来了急件)。 */
     void interrupt(UUID companion, String programId, String why);

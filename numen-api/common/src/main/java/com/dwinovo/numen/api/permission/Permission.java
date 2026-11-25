@@ -28,7 +28,7 @@ public final class Permission {
      */
     public static Gate gateFor(NumenPlayer companion) {
         ServerLevel level = (ServerLevel) companion.level();
-        UUID owner = companion.getOwnerUuid();
+        UUID owner = companion.keeperUuid();
         Actor actor = new Actor(companion.getUUID(), companion.getName().getString(), owner, siblingsOf(companion));
         return new Gate(actor, settingsOf(companion), Owners.around(level, companion.blockPosition(), OWNER_RADIUS_CHUNKS),
                 ConsentDesk.of(companion).granted());
@@ -39,7 +39,7 @@ public final class Permission {
 
     /** 主人名下此刻在游戏里的别的同伴;还没有主人是空集。 */
     private static Set<UUID> siblingsOf(NumenPlayer companion) {
-        UUID owner = companion.getOwnerUuid();
+        UUID owner = companion.keeperUuid();
         Set<UUID> siblings = new HashSet<>();
         if (owner != null) {
             for (ServerPlayer body : companion.getServer().getPlayerList().getPlayers()) {
@@ -58,7 +58,7 @@ public final class Permission {
 
     /** 主人给这只同伴定的设置;还没有主人时是出厂的。 */
     public static Settings settingsOf(NumenPlayer companion) {
-        UUID owner = companion.getOwnerUuid();
+        UUID owner = companion.keeperUuid();
         if (owner == null) {
             return Settings.FACTORY;
         }

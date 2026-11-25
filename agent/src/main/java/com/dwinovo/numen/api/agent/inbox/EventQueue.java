@@ -317,6 +317,17 @@ public final class EventQueue {
                 + words + "</query>";
     }
 
+    /**
+     * 同 {@link #query(String, long, String)},另带这句话是在哪儿说的({@link ConvoLog#venueAttr});她的回话回到那里。
+     *
+     * @param venue  {@code whisper} 或 {@code group}
+     * @param others 群里除她以外在场的人;不是群是 {@code null}
+     */
+    public static String query(String words, long dayTime, String speaker, String venue, String others) {
+        return "<query" + EventClock.stamp(dayTime) + ConvoLog.speakerAttr(speaker) + ConvoLog.venueAttr(venue, others) + ">"
+                + words + "</query>";
+    }
+
     /** 同 {@link #query},这句话是主人给她定的定时到点说的:开标签上带 {@link ConvoLog#SCHEDULED_ATTR},面板据此标"定时"。 */
     public static String scheduledQuery(String words, long dayTime) {
         return "<query" + EventClock.stamp(dayTime) + ConvoLog.SCHEDULED_ATTR + ">" + words + "</query>";

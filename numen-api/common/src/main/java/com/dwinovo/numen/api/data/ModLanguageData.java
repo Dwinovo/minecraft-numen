@@ -548,6 +548,11 @@ public final class ModLanguageData {
         public static final String COMMAND_TOKEN_REVOKED = "numen.command.token_revoked";
         public static final String COMMAND_TOKEN_NOT_FOUND = "numen.command.token_not_found";
         public static final String COMMAND_TOKEN_NO_COMPANION = "numen.command.token_no_companion";
+        public static final String COMMAND_CHAT_ENTERED     = "numen.command.chat.entered";
+        public static final String COMMAND_CHAT_LEFT        = "numen.command.chat.left";
+        public static final String COMMAND_CHAT_GONE        = "numen.command.chat.gone";
+        public static final String COMMAND_CHAT_GONE_UNSENT = "numen.command.chat.gone_unsent";
+        public static final String COMMAND_CHAT_NOT_SENT    = "numen.command.chat.not_sent";
         public static final String COMMAND_TOKEN_COPIED = "numen.command.token_copied";
         public static final String COMMAND_TOKEN_USAGE = "numen.command.token_usage";
         public static final String DEBUG_ON          = "numen.debug.on";
@@ -605,6 +610,7 @@ public final class ModLanguageData {
         public static final String CMD_SKILLS = "numen.cmd.skills";
         public static final String CMD_SKILLS_TITLE = "numen.cmd.skills_title";
         public static final String CMD_SKILLS_BY_CREATOR = "numen.cmd.skills_by_creator";
+        public static final String CMD_SKILLS_ELSEWHERE = "numen.cmd.skills_elsewhere";
         public static final String CMD_SKILLS_EMPTY = "numen.cmd.skills_empty";
         public static final String CMD_SKILLS_EMPTY_HINT = "numen.cmd.skills_empty_hint";
         public static final String CMD_USAGE = "numen.cmd.usage";
@@ -1297,6 +1303,11 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_TOKEN_REVOKED, "Revoked token %s; sessions using it are disconnected.");
         adder.add(Keys.COMMAND_TOKEN_NOT_FOUND, "You have no token %s");
         adder.add(Keys.COMMAND_TOKEN_NO_COMPANION, "You have no companion named '%s'");
+        adder.add(Keys.COMMAND_CHAT_ENTERED,      "Your chat now goes to %s and only you see it. /numen chat takes you back to public chat");
+        adder.add(Keys.COMMAND_CHAT_LEFT,         "Back to public chat");
+        adder.add(Keys.COMMAND_CHAT_GONE,         "The conversation you were chatting in is gone, so you are back in public chat");
+        adder.add(Keys.COMMAND_CHAT_GONE_UNSENT,  "The conversation you were chatting in is gone, so you are back in public chat. That line was not sent");
+        adder.add(Keys.COMMAND_CHAT_NOT_SENT,     "Nobody got that: %s");
         adder.add(Keys.COMMAND_TOKEN_COPIED, "%s… (copied to the clipboard)");
         adder.add(Keys.COMMAND_TOKEN_USAGE, "/token create <brain|channel> [all|<companion>] [days] | list | revoke <id>");
         adder.add(Keys.DEBUG_ON,          "Debug mode on: UI text shown unfiltered");
@@ -1380,6 +1391,7 @@ public final class ModLanguageData {
         adder.add(Keys.CMD_SKILLS, "Turn skills on and off");
         adder.add(Keys.CMD_SKILLS_TITLE, "Skills   ↑↓ select · Enter toggles · Esc back");
         adder.add(Keys.CMD_SKILLS_BY_CREATOR, "Her skills   managed by her creator %s · Esc back");
+        adder.add(Keys.CMD_SKILLS_ELSEWHERE, "Her skills are on %s's computer; they cannot be listed here");
         adder.add(Keys.CMD_SKILLS_EMPTY, "(no skills yet)");
         adder.add(Keys.CMD_SKILLS_EMPTY_HINT, "Put a folder with a SKILL.md into config/numen/server/skills/<namespace>/");
         adder.add(Keys.CMD_USAGE, "Token usage");
@@ -2070,6 +2082,11 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_TOKEN_REVOKED, "已作废令牌 %s,用它的会话已断开。");
         adder.add(Keys.COMMAND_TOKEN_NOT_FOUND, "你没有令牌 %s");
         adder.add(Keys.COMMAND_TOKEN_NO_COMPANION, "你没有叫「%s」的同伴");
+        adder.add(Keys.COMMAND_CHAT_ENTERED,      "你的聊天现在进「%s」,只有你自己看得到。/numen chat 切回公屏");
+        adder.add(Keys.COMMAND_CHAT_LEFT,         "已切回公屏");
+        adder.add(Keys.COMMAND_CHAT_GONE,         "你聊天的那个会话没有了,已切回公屏");
+        adder.add(Keys.COMMAND_CHAT_GONE_UNSENT,  "你聊天的那个会话没有了,已切回公屏。刚才那句没有发出去");
+        adder.add(Keys.COMMAND_CHAT_NOT_SENT,     "没有人收到:%s");
         adder.add(Keys.COMMAND_TOKEN_COPIED, "%s…(已复制到剪贴板)");
         adder.add(Keys.COMMAND_TOKEN_USAGE, "/token create <brain|channel> [all|<同伴>] [天数] | list | revoke <编号>");
         adder.add(Keys.DEBUG_ON,          "调试模式已开:UI 文本不过滤直出");
@@ -2153,6 +2170,7 @@ public final class ModLanguageData {
         adder.add(Keys.CMD_SKILLS, "技能开关");
         adder.add(Keys.CMD_SKILLS_TITLE, "技能   ↑↓ 选择 · 回车开关 · Esc 返回");
         adder.add(Keys.CMD_SKILLS_BY_CREATOR, "她的技能   由创建者 %s 管理 · Esc 返回");
+        adder.add(Keys.CMD_SKILLS_ELSEWHERE, "她的技能在 %s 的电脑上,这里列不出来");
         adder.add(Keys.CMD_SKILLS_EMPTY, "(还没有技能)");
         adder.add(Keys.CMD_SKILLS_EMPTY_HINT, "往 config/numen/server/skills/<命名空间>/ 放一个带 SKILL.md 的目录");
         adder.add(Keys.CMD_USAGE, "看 token 账");

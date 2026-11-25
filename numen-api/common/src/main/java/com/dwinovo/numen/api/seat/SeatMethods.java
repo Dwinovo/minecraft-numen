@@ -32,8 +32,12 @@ public final class SeatMethods {
     public static final String MODULES_BUILTIN = "modules/builtin";
     /** 读一份随模组与插件发布的技能:{@code companion}、{@code name}、可选 {@code file}(附属文件的相对路径);答复见 {@code SkillText}。 */
     public static final String SKILL_READ = "skill/read";
-    /** 她要说的话,由服务端在聊天里说出来:{@code companion}、{@code text}。 */
+    /** 她要说的话,由服务端在 {@code spoken} 说的地方说出来:{@code companion}、{@code text}、{@code spoken}(见 {@code Spoken#toJson})。 */
     public static final String SAY = "say";
+    /** 通知:一次 run 开始了:{@code companion}、{@code run}(这一次的编号,同一只同伴内递增)。 */
+    public static final String RUN_STARTED = "run/started";
+    /** 通知:一次 run 收了:{@code companion}、{@code run}、{@code outcome}({@code DONE}、{@code FAILED}、{@code HALTED})、{@code reason}。 */
+    public static final String RUN_ENDED = "run/ended";
     /** 收到第几号了:{@code companion}、{@code seq};之前的事件服务端不再留。 */
     public static final String EVENTS_ACK = "events/ack";
 

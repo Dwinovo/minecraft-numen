@@ -1,8 +1,11 @@
 package com.dwinovo.numen.api.seat;
 
 import com.dwinovo.numen.api.brain.Presence;
-import com.dwinovo.numen.api.brain.Venue;
 import com.dwinovo.numen.api.agent.request.TaskReport;
+import com.dwinovo.numen.api.brain.Conversations;
+import com.dwinovo.numen.api.brain.Hearing;
+import com.dwinovo.numen.api.agent.conversation.Conversation;
+import com.dwinovo.numen.api.brain.Spoken;
 import com.dwinovo.numen.api.brain.Voice;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.Companions;
@@ -99,11 +102,33 @@ final class ServerSeatWorld implements SeatWorld {
     }
 
     @Override
-    public void say(UUID companion, String text) {
+    public boolean keeps(UUID companion, UUID person) {
         CompanionRegistry.Entry entry = CompanionRegistry.get(running()).find(companion);
-        ServerPlayer owner = entry == null ? null : running().getPlayerList().getPlayer(entry.owner());
-        if (owner != null) {
-            owner.sendSystemMessage(Voice.line(Venue.PANEL, entry.name(), null, text));
+        return entry != null && entry.usableBy(person);
+    }
+
+    /**
+     * 她的话说出口:{@code spoken} 是她在答谁、他在哪儿问的,话回到那里——面板里问的是他自己的聊天行,私聊回私信,群里回带会话名的聊天行、
+     * 同会话的其他成员旁听到一份。服务端唯一说话的一处,客户端从不碰聊天。
+     */
+    @Override
+    public void say(UUID companion, String text, Spoken spoken) {
+        MinecraftServer server = running();
+        CompanionRegistry.Entry entry = CompanionRegistry.get(server).find(companion);
+        if (entry == null) {
+            return;
+        }
+        ServerPlayer to = server.getPlayerList().getPlayer(spoken.who());
+        if (to != null) {
+            Conversations rooms = Conversations.of(server, spoken.who());
+            String title = spoken.conversation() == null ? null : rooms.titleFor(companion, spoken.conversation());
+            to.sendSystemMessage(Voice.line(spoken.venue(), entry.name(), title, text));
+        }
+        if (spoken.conversation() != null) {
+            Conversation conv = Conversations.of(server, spoken.who()).get(spoken.conversation());
+            if (conv != null) {
+                Hearing.heard(server, spoken.who(), conv, companion, text);
+            }
         }
     }
 

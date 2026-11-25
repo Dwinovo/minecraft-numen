@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.seat;
 
+import com.dwinovo.numen.api.brain.Spoken;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.skill.BundledSkills;
 import com.dwinovo.numen.api.agent.skill.SkillInfo;
@@ -71,6 +72,8 @@ final class SeatConnection {
         peer.onRequest(SeatMethods.SAY, this::say);
         peer.onRequest(SeatMethods.MODULES_BUILTIN, this::builtinModule);
         peer.onRequest(SeatMethods.SKILL_READ, this::readSkill);
+        peer.onNotification(SeatMethods.RUN_STARTED, this::runStarted);
+        peer.onNotification(SeatMethods.RUN_ENDED, this::runEnded);
         peer.onRequest(SeatMethods.EVENTS_ACK, in -> {
             seat(in).ack(Params.requiredInteger(in.params(), "seq"));
             return new JsonObject();
@@ -185,9 +188,14 @@ final class SeatConnection {
         if (in.params().get("disabled") instanceof com.google.gson.JsonArray names) {
             names.forEach(n -> disabled.add(n.getAsString()));
         }
+        String named = Params.optionalString(in.params(), "keeper");
+        UUID keeper = named == null ? null : Params.uuid(in.params(), "keeper");
+        if (keeper != null && !seats.onMain(() -> seats.world().keeps(seat.companion, keeper))) {
+            throw new RpcException(RpcError.INVALID_PARAMS, "params.keeper is not one of her keepers");
+        }
         ProgramResult result = seat.run(this, Params.string(in.params(), "program"),
                 Params.requiredInteger(in.params(), "generation"), Params.string(in.params(), "code"), manifest,
-                disabled);
+                disabled, keeper);
         return result.toJson();
     }
 
@@ -234,13 +242,64 @@ final class SeatConnection {
         return o;
     }
 
+    /** 客户端报:一次 run 开始了。服务端主线程上,按报来的先后,告诉插件({@code RUN_STARTED})。 */
+    private void runStarted(JsonObject params) {
+        UUID companion = seatedCompanion(params);
+        if (companion != null) {
+            long run = params.get("run").getAsLong();
+            seats.world().main().execute(() -> com.dwinovo.numen.api.entity.CompanionEvents.fire(
+                    com.dwinovo.numen.api.CompanionEvent.RUN_STARTED,
+                    new com.dwinovo.numen.api.CompanionEvent.RunStarted(companion, run)));
+        }
+    }
+
+    /** 客户端报:一次 run 收了。同 {@link #runStarted}。 */
+    private void runEnded(JsonObject params) {
+        UUID companion = seatedCompanion(params);
+        if (companion != null) {
+            long run = params.get("run").getAsLong();
+            com.dwinovo.numen.api.CompanionEvent.Outcome outcome;
+            try {
+                outcome = com.dwinovo.numen.api.CompanionEvent.Outcome.valueOf(params.get("outcome").getAsString());
+            } catch (IllegalArgumentException unknown) {
+                Constants.LOG.warn("[numen-seat] {} reported an unknown run outcome {}", player, params.get("outcome"));
+                return;
+            }
+            String reason = params.has("reason") ? params.get("reason").getAsString() : "";
+            seats.world().main().execute(() -> com.dwinovo.numen.api.entity.CompanionEvents.fire(
+                    com.dwinovo.numen.api.CompanionEvent.RUN_ENDED,
+                    new com.dwinovo.numen.api.CompanionEvent.RunEnded(companion, run, outcome, reason)));
+        }
+    }
+
+    /** 通知里的那只同伴,如果这条连接坐着她的座位;不是就记一行、不理。 */
+    private UUID seatedCompanion(JsonObject params) {
+        try {
+            UUID companion = UUID.fromString(params.get("companion").getAsString());
+            if (opened.containsKey(companion)) {
+                return companion;
+            }
+            Constants.LOG.debug("[numen-seat] {} reported a run of {}, whose seat it does not sit at", player, companion);
+        } catch (RuntimeException unreadable) {
+            Constants.LOG.warn("[numen-seat] dropped an unreadable run report from {}: {}", player, unreadable.toString());
+        }
+        return null;
+    }
+
     private JsonElement say(RpcPeer.Incoming in) throws Exception {
         Seat seat = seat(in);
         String text = Params.string(in.params(), "text");
-        seats.onMain(() -> {
-            seats.world().say(seat.companion, text);
-            return null;
+        Spoken spoken = Spoken.fromJson(Params.object(in.params(), "spoken"));
+        boolean kept = seats.onMain(() -> {
+            if (!seats.world().keeps(seat.companion, spoken.who())) {
+                return false;
+            }
+            seats.world().say(seat.companion, text, spoken);
+            return true;
         });
+        if (!kept) {
+            throw new RpcException(RpcError.INVALID_PARAMS, "params.spoken.who is not one of her keepers");
+        }
         return new JsonObject();
     }
 }

@@ -211,6 +211,7 @@ public final class NumenCommands {
         graft(dispatcher, Commands.literal("settings")
                 .executes(ctx -> clientAction(ctx, ClientUiActionPayload.Action.OPEN_SETTINGS)));
         graft(dispatcher, Commands.literal("debug").executes(NumenCommands::toggleDebugText));
+        graft(dispatcher, com.dwinovo.numen.api.brain.ChatBar.node());
         graft(dispatcher, permissionCommand());
         graft(dispatcher, consentCommand());
         graft(dispatcher, com.dwinovo.numen.api.brain.BindingCommands.node());

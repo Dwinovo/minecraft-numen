@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.seat;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.brain.Spoken;
 import com.dwinovo.numen.api.sdk.ClientContext;
 import com.dwinovo.numen.api.sdk.Dispatcher;
 import com.dwinovo.numen.mcp.rpc.RpcError;
@@ -135,10 +136,12 @@ public final class SeatClient {
      * @param program    这段程序的编号,在这只同伴的座位上不重
      * @param modules    她的模块清单:名字到内容哈希;服务端缺哪份经 {@code modules/get} 来要({@link #serveModules})
      * @param disabled   她对自己关掉的内置模块
+     * @param keeper     这段程序替哪一位 keeper 做事(她此刻在答的那句话是谁说的);服务端核他在不在她的主人表上
      */
     public CompletableFuture<ProgramResult> run(UUID companion, long generation, String program, String code,
-                                                Map<String, String> modules, Set<String> disabled) {
+                                                Map<String, String> modules, Set<String> disabled, UUID keeper) {
         JsonObject extra = new JsonObject();
+        extra.addProperty("keeper", keeper.toString());
         extra.addProperty("generation", generation);
         extra.addProperty("program", program);
         extra.addProperty("code", code);
@@ -205,11 +208,38 @@ public final class SeatClient {
                 o.get("generation").getAsLong(), SeatState.fromJson(o)));
     }
 
-    /** 她要说的话,服务端在聊天里说出来。 */
-    public CompletableFuture<Void> say(UUID companion, String text) {
+    /** 她要说的话,服务端在 {@code spoken} 说的地方、对那一位说出来。 */
+    public CompletableFuture<Void> say(UUID companion, String text, Spoken spoken) {
         JsonObject extra = new JsonObject();
         extra.addProperty("text", text);
+        extra.add("spoken", spoken.toJson());
         return call(SeatMethods.SAY, companion, extra).thenApply(o -> null);
+    }
+
+    /** 报告一次 run 开始了:服务端把它告诉插件。通知,不等答复。 */
+    public void runStarted(UUID companion, long run) {
+        JsonObject params = new JsonObject();
+        params.addProperty("companion", companion.toString());
+        params.addProperty("run", run);
+        notifyServer(SeatMethods.RUN_STARTED, params);
+    }
+
+    /** 报告一次 run 收了:{@code outcome} 是 {@code DONE}、{@code FAILED}、{@code HALTED},{@code reason} 是原因码(完成时空串)。 */
+    public void runEnded(UUID companion, long run, String outcome, String reason) {
+        JsonObject params = new JsonObject();
+        params.addProperty("companion", companion.toString());
+        params.addProperty("run", run);
+        params.addProperty("outcome", outcome);
+        params.addProperty("reason", reason);
+        notifyServer(SeatMethods.RUN_ENDED, params);
+    }
+
+    private void notifyServer(String method, JsonObject params) {
+        try {
+            peer.notify(method, params, out);
+        } catch (java.io.IOException gone) {
+            Constants.LOG.debug("[numen-seat] {} not delivered: {}", method, gone.toString());
+        }
     }
 
     /** 收到 {@code seq} 号及以前的事件了:服务端不再留。 */

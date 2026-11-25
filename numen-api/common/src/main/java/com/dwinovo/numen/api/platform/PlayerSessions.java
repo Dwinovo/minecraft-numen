@@ -64,6 +64,7 @@ public final class PlayerSessions {
             OwnerPresence.playerLeft(player.server, player.getUUID());
             Companions.scheduleReconcile(player.getUUID());
             ANNOUNCED.remove(player.getUUID());
+            com.dwinovo.numen.api.brain.ChatBar.forget(player.getUUID());
         }
     }
 

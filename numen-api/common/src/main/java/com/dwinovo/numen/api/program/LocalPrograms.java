@@ -29,7 +29,8 @@ public final class LocalPrograms implements ProgramRunner {
     }
 
     @Override
-    public void run(UUID companion, String programId, String code, Modules modules, Consumer<Program.Outcome> done) {
+    public void run(UUID companion, String programId, String code, Modules modules, UUID keeper,
+                    Consumer<Program.Outcome> done) {
         CompanionRegistry.Entry entry = CompanionRegistry.get(server).find(companion);
         if (entry == null) {
             done.accept(Program.Outcome.refused("companion not found (never summoned, or its data is gone)"));
@@ -41,7 +42,7 @@ public final class LocalPrograms implements ProgramRunner {
             return;
         }
         ServerPrograms.run(her, companion, entry.owner(),
-                new ServerPrograms.Request(programId, code, modules, true),
+                new ServerPrograms.Request(programId, code, modules, true, keeper),
                 transport, CallObserver.NONE, done);
     }
 

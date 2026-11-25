@@ -398,7 +398,7 @@ public final class ConsentDesk {
 
         @Override
         public void remember(List<Settings.Entry> entries) {
-            PermissionStore.of(body.getServer(), body.getOwnerUuid()).remember(body.getUUID(), entries);
+            PermissionStore.of(body.getServer(), body.keeperUuid()).remember(body.getUUID(), entries);
         }
 
     }

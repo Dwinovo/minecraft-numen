@@ -75,10 +75,17 @@ public final class ServerPrograms {
      * 一次跑程序的请求。
      *
      * @param modules        她的模块;程序结束时用到的每个模块在这里记一次战绩
+     * @param keeper         这段程序替哪一位 keeper 做事;没有({@code null})是创建者
      * @param reportsToModel 回执是给模型看的(她的大脑、GameTest 与单测里扮大脑的):程序等着的那件活的收尾就写进回执,
      *                       不再作为事件另送。管理员的 drive、重启后再跑的那一行没有模型读回执,它们派的活的收尾照常作为事件送到她手里
      */
-    public record Request(String programId, String code, Modules modules, boolean reportsToModel) {}
+    public record Request(String programId, String code, Modules modules, boolean reportsToModel, UUID keeper) {
+
+        /** 替创建者做事。 */
+        public Request(String programId, String code, Modules modules, boolean reportsToModel) {
+            this(programId, code, modules, reportsToModel, null);
+        }
+    }
 
     private static final MainQueue QUEUE = new MainQueue();
     /** 在跑的程序,按同伴:一只同伴同一时刻至多一段。 */
@@ -124,6 +131,9 @@ public final class ServerPrograms {
             running.lane.close();
             done.accept(Program.Outcome.refused(refused));
             return;
+        }
+        if (her != null) {
+            her.actFor(request.keeper());
         }
         ProgramCalls calls = new ObservedCalls(new RoutedCalls(
                 new ServerCalls(her, companion, running.lane,

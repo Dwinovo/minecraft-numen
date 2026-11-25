@@ -134,6 +134,12 @@ final class Seat {
         add(SeatEvent.of(companion, seats.generation(companion), entry, world.gameTime(), world.dayTime()));
     }
 
+    /** 别人对她说的话到了(主线程):和别的事件同一个发件箱,多带着谁说的、在哪儿说的。 */
+    void publish(EventQueue.Entry entry, com.dwinovo.numen.api.brain.Spoken spoken) {
+        SeatWorld world = seats.world();
+        add(SeatEvent.ofSpoken(companion, seats.generation(companion), entry, spoken, world.gameTime(), world.dayTime()));
+    }
+
     private synchronized void add(SeatEvent event) {
         SeatEvent stamped = outbox.add(event);
         if (attached != null) {
@@ -187,7 +193,7 @@ final class Seat {
      * @throws RpcException 这条连接没有坐着座位、程序编号已在跑、代数对不上
      */
     ProgramResult run(SeatConnection by, String program, long believed, String code, Map<String, String> manifest,
-                      Set<String> disabled) throws Exception {
+                      Set<String> disabled, UUID keeper) throws Exception {
         Run run = new Run(program, by);
         synchronized (this) {
             if (attached != by) {
@@ -207,7 +213,7 @@ final class Seat {
             }
             throw failed;
         }
-        seats.world().main().execute(() -> start(run, believed, code, modules));
+        seats.world().main().execute(() -> start(run, believed, code, modules, keeper));
         try {
             return run.answer.get();
         } catch (ExecutionException failed) {
@@ -218,7 +224,7 @@ final class Seat {
         }
     }
 
-    private void start(Run run, long believed, String code, Modules modules) {
+    private void start(Run run, long believed, String code, Modules modules, UUID keeper) {
         long actual = seats.generation(companion);
         synchronized (this) {
             if (run.detached) {
@@ -232,7 +238,7 @@ final class Seat {
             }
         }
         lastModules = modules;
-        seats.world().programs().run(companion, run.program, code, modules, outcome -> finished(run, outcome));
+        seats.world().programs().run(companion, run.program, code, modules, keeper, outcome -> finished(run, outcome));
     }
 
     private void finished(Run run, Program.Outcome outcome) {

@@ -420,12 +420,30 @@ public final class NumenPlayer extends ServerPlayer {
         return out;
     }
 
+    /** 这一刻她在替哪一位 keeper 做事;没有({@code null})是创建者。程序起跑时由它带来的 keeper 定({@link #actFor})。 */
+    private volatile UUID acting;
+
     /**
-     * 眼前的主人——<b>只在这一处算</b>:创建者(他不在游戏里是 {@code null})。她的脑子只在创建者的客户端上,服务端不知道最后是哪一位主人跟她说的话。
+     * 她接下来替这位 keeper 做事:她的大脑在创建者的客户端上,每段程序带着它此刻在答的那句话是谁说的({@code program/run} 的 keeper),
+     * 座位验过他在她的主人表上。服务端从不自己猜最后是谁说的话。{@code null} 是创建者。
+     */
+    public void actFor(UUID keeper) {
+        this.acting = keeper;
+    }
+
+    /** 她此刻替哪一位 keeper 做事:权限与归属都按他。没有人带来的就是创建者。 */
+    public UUID keeperUuid() {
+        UUID keeper = acting;
+        return keeper != null ? keeper : ownerUuid;
+    }
+
+    /**
+     * 眼前的主人——<b>只在这一处算</b>:她此刻替他做事的那位 keeper({@link #keeperUuid};他不在游戏里是 {@code null})。
      * 跟随的默认对象、说话时看向谁、{@code numen.status.owner} 报的是谁,都问这里。
      */
     public ServerPlayer keeperAtHand() {
-        return resolveOwnerPlayer();
+        UUID keeper = keeperUuid();
+        return keeper == null ? null : getServer().getPlayerList().getPlayer(keeper);
     }
 
     /**

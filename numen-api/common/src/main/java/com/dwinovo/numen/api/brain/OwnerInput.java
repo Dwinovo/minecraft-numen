@@ -29,6 +29,12 @@ public sealed interface OwnerInput {
 
     record Dissolve(String conversation) implements OwnerInput {}
 
+    /**
+     * 在会话里说一句话:点了名的醒,其余的旁听,由服务端按会话成员表送到各成员的座位({@code Hearing})。她们的大脑在各自创建者的
+     * 客户端上,她们在不在这台电脑上服务端才分得清。
+     */
+    record Say(String conversation, String text) implements OwnerInput {}
+
     // ---- 上线的样子 ----
 
     default JsonObject toJson() {
@@ -41,6 +47,7 @@ public sealed interface OwnerInput {
             case Drop d -> put(o, "drop", "conversation", d.conversation(), "companion", d.companion().toString());
             case Rename r -> put(o, "rename", "conversation", r.conversation(), "name", r.name());
             case Dissolve d -> put(o, "dissolve", "conversation", d.conversation());
+            case Say s -> put(o, "say", "conversation", s.conversation(), "text", s.text());
         }
         return o;
     }
@@ -61,6 +68,7 @@ public sealed interface OwnerInput {
                 case "drop" -> new Drop(text(o, "conversation"), uuid(o, "companion"));
                 case "rename" -> new Rename(text(o, "conversation"), text(o, "name"));
                 case "dissolve" -> new Dissolve(text(o, "conversation"));
+                case "say" -> new Say(text(o, "conversation"), text(o, "text"));
                 default -> null;
             };
         } catch (RuntimeException unreadable) {

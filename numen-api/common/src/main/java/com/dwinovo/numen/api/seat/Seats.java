@@ -130,6 +130,14 @@ public final class Seats {
         }
     }
 
+    /** 别人对她说的话到了(主线程):她的座位在,它就进发件箱,带着谁说的、在哪儿说的。 */
+    public void publish(UUID companion, EventQueue.Entry entry, com.dwinovo.numen.api.brain.Spoken spoken) {
+        Seat seat = seats.get(companion);
+        if (seat != null) {
+            seat.publish(entry, spoken);
+        }
+    }
+
     /** 她最近一段程序用的那一套模块(服务端自己起的程序借用);座位没有或还没跑过程序是内置的那一套。 */
     public com.dwinovo.numen.api.script.Modules modules(UUID companion) {
         Seat seat = seats.get(companion);

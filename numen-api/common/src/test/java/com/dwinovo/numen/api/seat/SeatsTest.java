@@ -111,7 +111,7 @@ class SeatsTest {
     @Test
     void aMethodOnASeatThatIsNotOpenOnThisConnectionIsRefused() throws Exception {
         assertEquals(SeatErrors.NO_SEAT, refusedWith(client.state(HER)));
-        assertEquals(SeatErrors.NO_SEAT, refusedWith(client.run(HER, 0, "p1", "return 1", java.util.Map.of(), java.util.Set.of())));
+        assertEquals(SeatErrors.NO_SEAT, refusedWith(client.run(HER, 0, "p1", "return 1", java.util.Map.of(), java.util.Set.of(), OWNER)));
         assertTrue(world.programs.runs.isEmpty());
     }
 
@@ -130,7 +130,7 @@ class SeatsTest {
         get(client.interrupt(HER, "p1", "your owner spoke"));
         get(client.cut(HER, "p1", true));
         get(client.stopBody(HER));
-        get(client.say(HER, "hello there"));
+        get(client.say(HER, "hello there", com.dwinovo.numen.api.brain.Spoken.panel(OWNER)));
         assertEquals(List.of("p1: your owner spoke"), world.programs.interrupts);
         assertEquals(List.of("p1: true"), world.programs.cuts);
         assertEquals(List.of(HER), world.programs.bodyStops);
@@ -141,7 +141,7 @@ class SeatsTest {
     void aProgramRunAnswersItsStructuredOutcomeWithHerStateAndTheGameTime() throws Exception {
         seats.bodyEntered(HER);
         get(client.open(HER, 0));
-        CompletableFuture<ProgramResult> run = client.run(HER, 1, "p1", "return 1", java.util.Map.of(), java.util.Set.of());
+        CompletableFuture<ProgramResult> run = client.run(HER, 1, "p1", "return 1", java.util.Map.of(), java.util.Set.of(), OWNER);
         await(() -> world.programs.running.containsKey("p1"));
         assertEquals(List.of("p1: return 1"), world.programs.runs);
         world.gameTime = 250;
@@ -158,9 +158,9 @@ class SeatsTest {
     @Test
     void twoProgramsWithTheSameNameCannotRunAtOnceOnOneSeat() throws Exception {
         get(client.open(HER, 0));
-        CompletableFuture<ProgramResult> first = client.run(HER, 0, "p1", "return 1", java.util.Map.of(), java.util.Set.of());
+        CompletableFuture<ProgramResult> first = client.run(HER, 0, "p1", "return 1", java.util.Map.of(), java.util.Set.of(), OWNER);
         await(() -> world.programs.running.containsKey("p1"));
-        assertEquals(com.dwinovo.numen.mcp.rpc.RpcError.INVALID_PARAMS, refusedWith(client.run(HER, 0, "p1", "return 2", java.util.Map.of(), java.util.Set.of())));
+        assertEquals(com.dwinovo.numen.mcp.rpc.RpcError.INVALID_PARAMS, refusedWith(client.run(HER, 0, "p1", "return 2", java.util.Map.of(), java.util.Set.of(), OWNER)));
         world.programs.finish("p1", outcome("one"));
         assertEquals("one", get(first).outcome().message());
     }
@@ -172,10 +172,10 @@ class SeatsTest {
         seats.bodyEntered(HER);
         get(client.open(HER, 0));
         seats.bodyEntered(HER);   // 她重生了:代数 2
-        assertEquals(SeatErrors.STALE_GENERATION, refusedWith(client.run(HER, 1, "p1", "return 1", java.util.Map.of(), java.util.Set.of())));
+        assertEquals(SeatErrors.STALE_GENERATION, refusedWith(client.run(HER, 1, "p1", "return 1", java.util.Map.of(), java.util.Set.of(), OWNER)));
         assertTrue(world.programs.runs.isEmpty(), "a program for a body that is gone was started");
 
-        CompletableFuture<ProgramResult> current = client.run(HER, 2, "p2", "return 1", java.util.Map.of(), java.util.Set.of());
+        CompletableFuture<ProgramResult> current = client.run(HER, 2, "p2", "return 1", java.util.Map.of(), java.util.Set.of(), OWNER);
         await(() -> world.programs.running.containsKey("p2"));
         world.programs.finish("p2", outcome("fine"));
         assertEquals(2, get(current).generation());
@@ -185,7 +185,7 @@ class SeatsTest {
     void theErrorSaysWhichGenerationSheIsAtAndWhichYouBelieved() throws Exception {
         seats.bodyEntered(HER);
         get(client.open(HER, 0));
-        ExecutionException failed = assertThrows(ExecutionException.class, () -> get(client.run(HER, 7, "p1", "x", java.util.Map.of(), java.util.Set.of())));
+        ExecutionException failed = assertThrows(ExecutionException.class, () -> get(client.run(HER, 7, "p1", "x", java.util.Map.of(), java.util.Set.of(), OWNER)));
         String message = ((RpcException) failed.getCause()).error().message();
         assertTrue(message.contains("generation 1") && message.contains("not 7"), message);
     }
@@ -289,7 +289,7 @@ class SeatsTest {
         seats.bodyEntered(HER);
         get(client.open(HER, 0));
         world.programs.onCut = outcome("this turn was cut off");
-        CompletableFuture<ProgramResult> run = client.run(HER, 1, "p1", "numen.move.walk()", java.util.Map.of(), java.util.Set.of());
+        CompletableFuture<ProgramResult> run = client.run(HER, 1, "p1", "numen.move.walk()", java.util.Map.of(), java.util.Set.of(), OWNER);
         await(() -> world.programs.running.containsKey("p1"));
 
         pipe.disconnect();
@@ -311,7 +311,7 @@ class SeatsTest {
     @Test
     void aProgramThatEndsOnItsOwnAfterTheConnectionDroppedIsKeptTooNotLost() throws Exception {
         get(client.open(HER, 0));
-        CompletableFuture<ProgramResult> run = client.run(HER, 0, "p1", "x", java.util.Map.of(), java.util.Set.of());
+        CompletableFuture<ProgramResult> run = client.run(HER, 0, "p1", "x", java.util.Map.of(), java.util.Set.of(), OWNER);
         await(() -> world.programs.running.containsKey("p1"));
         pipe.disconnect();   // 程序没被切断(这个世界的主机不理切断),照样跑完
         assertThrows(ExecutionException.class, () -> get(run));
@@ -328,7 +328,7 @@ class SeatsTest {
     @Test
     void aProgramThatEndedBeforeTheDisconnectIsNotDeliveredTwice() throws Exception {
         get(client.open(HER, 0));
-        CompletableFuture<ProgramResult> run = client.run(HER, 0, "p1", "x", java.util.Map.of(), java.util.Set.of());
+        CompletableFuture<ProgramResult> run = client.run(HER, 0, "p1", "x", java.util.Map.of(), java.util.Set.of(), OWNER);
         await(() -> world.programs.running.containsKey("p1"));
         world.programs.finish("p1", outcome("done"));
         get(run);
@@ -360,5 +360,59 @@ class SeatsTest {
         seat.catalogMayHaveChanged();
         assertEquals(List.of(HER + "=v2"), announced);
         assertEquals("v2", get(client.catalog(HER)).get("version").getAsString());
+    }
+
+    private static final UUID FRIEND = UUID.fromString("00000000-0000-0000-0000-0000000000f1");
+
+    @Test
+    void aProgramRunsForTheKeeperItNamesAndAnyoneNotOnHerTableIsRefused() throws Exception {
+        get(client.open(HER, 0));
+        seats.bodyEntered(HER);
+        world.sharedWith.put(HER, java.util.Set.of(FRIEND));
+
+        CompletableFuture<ProgramResult> his = client.run(HER, 1, "p1", "return 1", java.util.Map.of(), java.util.Set.of(), FRIEND);
+        await(() -> world.programs.keepers.containsKey("p1"));
+        assertEquals(FRIEND, world.programs.keepers.get("p1"), "the runner is told who the program acts for");
+        world.programs.finish("p1", Program.Outcome.refused("done"));
+        get(his);
+
+        UUID stranger = UUID.fromString("00000000-0000-0000-0000-0000000000f2");
+        assertEquals(com.dwinovo.numen.mcp.rpc.RpcError.INVALID_PARAMS, refusedWith(client.run(HER, 1, "p2", "return 1",
+                java.util.Map.of(), java.util.Set.of(), stranger)));
+        assertTrue(world.programs.keepers.get("p2") == null, "a stranger's program never reached the body");
+    }
+
+    @Test
+    void herWordsGoToTheSpeakerShePointsAtOnlyIfHeIsOneOfHerKeepers() throws Exception {
+        get(client.open(HER, 0));
+        world.sharedWith.put(HER, java.util.Set.of(FRIEND));
+        com.dwinovo.numen.api.brain.Spoken whisper = new com.dwinovo.numen.api.brain.Spoken(FRIEND,
+                com.dwinovo.numen.api.brain.Venue.WHISPER, null);
+
+        get(client.say(HER, "你好", whisper));
+
+        assertEquals(List.of(whisper), world.spokenTo);
+        assertEquals(com.dwinovo.numen.mcp.rpc.RpcError.INVALID_PARAMS, refusedWith(client.say(HER, "x",
+                new com.dwinovo.numen.api.brain.Spoken(UUID.randomUUID(), com.dwinovo.numen.api.brain.Venue.WHISPER, null))));
+    }
+
+    @Test
+    void theRunsTheBrainReportsAreFiredToPluginsFromThisOnePlaceInOrder() throws Exception {
+        get(client.open(HER, 0));
+        List<String> heard = new java.util.concurrent.CopyOnWriteArrayList<>();
+        var started = com.dwinovo.numen.api.entity.CompanionEvents.subscribe(com.dwinovo.numen.api.CompanionEvent.RUN_STARTED,
+                e -> heard.add("started " + e.companion() + " " + e.runId()));
+        var ended = com.dwinovo.numen.api.entity.CompanionEvents.subscribe(com.dwinovo.numen.api.CompanionEvent.RUN_ENDED,
+                e -> heard.add("ended " + e.runId() + " " + e.outcome() + " " + e.reason()));
+        try {
+            client.runStarted(HER, 3);
+            client.runEnded(HER, 3, "HALTED", "halt.owner_stop");
+            client.runEnded(UUID.randomUUID(), 4, "DONE", "");   // 没坐着座位的同伴:不理
+
+            assertEquals(List.of("started " + HER + " 3", "ended 3 HALTED halt.owner_stop"), heard);
+        } finally {
+            started.close();
+            ended.close();
+        }
     }
 }

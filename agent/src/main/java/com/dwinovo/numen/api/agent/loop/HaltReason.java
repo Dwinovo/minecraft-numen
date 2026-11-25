@@ -42,6 +42,11 @@ public enum HaltReason {
         this.enters = enters;
     }
 
+    /** 原因码({@code halt.owner_stop} 等):插件事件 {@code RUN_ENDED} 的 reason 就是它。 */
+    public String code() {
+        return code;
+    }
+
     /** 结构化的原因:码 + 现场的话(死因等,没有就空),界面按当前语言说。 */
     public Cause cause(String detail) {
         return detail == null || detail.isBlank() ? Cause.of(code) : Cause.of(code, detail);

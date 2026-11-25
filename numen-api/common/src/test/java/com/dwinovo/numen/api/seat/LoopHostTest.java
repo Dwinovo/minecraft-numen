@@ -216,4 +216,59 @@ class LoopHostTest {
                 new ScriptCall.Ending(ScriptCall.Status.OK, null), List.of(), List.of(), null, 0, java.util.Map.of()));
         until("the receipt woke the second request", () -> model.asked.size() == 2);
     }
+
+    private static final UUID FRIEND = UUID.fromString("00000000-0000-0000-0000-0000000000f1");
+
+    @Test
+    void aFriendsWhisperIsAnsweredAsAWhisperToHimAndTheProgramsThatFollowAreHis() throws Exception {
+        world.sharedWith.put(HER, Set.of(FRIEND));
+        model.program("call-2", "return 1").say("在的");
+        com.dwinovo.numen.api.brain.Spoken whisper = new com.dwinovo.numen.api.brain.Spoken(FRIEND,
+                com.dwinovo.numen.api.brain.Venue.WHISPER, null);
+
+        seats.publish(HER, new EventQueue.Entry(EventTypes.QUERY,
+                EventQueue.query("你好", 6000, "player@abcdef (Friend)", "whisper", null), 5L, false), whisper);
+
+        until("her program reached the body", () -> world.programs.running.containsKey("call-2"));
+        assertEquals(FRIEND, world.programs.keepers.get("call-2"), "the program acts for the one she is answering");
+        world.programs.finish("call-2", new Program.Outcome("{\"success\":true,\"message\":\"done\"}",
+                new ScriptCall.Ending(ScriptCall.Status.OK, null), List.of(), List.of(), null, 0, java.util.Map.of()));
+        until("she answered in his venue", () -> !world.spokenTo.isEmpty());
+        assertEquals(List.of(whisper), world.spokenTo, "her words go back as the whisper they answer");
+        assertEquals(List.of("在的"), world.said);
+    }
+
+    @Test
+    void theOwnersOwnWordsInThePanelAreNotSaidAloudAndHisProgramsAreHis() throws Exception {
+        model.program("call-3", "return 1").say("好的");
+
+        host.submitPrompt("你好");
+
+        until("her program reached the body", () -> world.programs.running.containsKey("call-3"));
+        assertEquals(OWNER, world.programs.keepers.get("call-3"));
+        world.programs.finish("call-3", new Program.Outcome("{\"success\":true,\"message\":\"done\"}",
+                new ScriptCall.Ending(ScriptCall.Status.OK, null), List.of(), List.of(), null, 0, java.util.Map.of()));
+        until("she answered", () -> model.asked.size() == 2);
+        assertTrue(world.said.isEmpty(), "the panel shows her reply itself; the server says nothing aloud: " + world.said);
+    }
+
+    @Test
+    void aRunsStartAndEndAreReportedToTheServerOnce() throws Exception {
+        List<String> heard = new java.util.concurrent.CopyOnWriteArrayList<>();
+        var started = com.dwinovo.numen.api.entity.CompanionEvents.subscribe(com.dwinovo.numen.api.CompanionEvent.RUN_STARTED,
+                e -> heard.add("started"));
+        var ended = com.dwinovo.numen.api.entity.CompanionEvents.subscribe(com.dwinovo.numen.api.CompanionEvent.RUN_ENDED,
+                e -> heard.add("ended " + e.outcome()));
+        try {
+            model.say("好的");
+
+            host.submitPrompt("你好");
+
+            until("the run was reported", () -> heard.size() >= 2);
+            assertEquals(List.of("started", "ended DONE"), heard);
+        } finally {
+            started.close();
+            ended.close();
+        }
+    }
 }

@@ -46,6 +46,8 @@ import com.dwinovo.numen.api.brain.Mind;
 import com.dwinovo.numen.api.brain.OwnerSchedules;
 import com.dwinovo.numen.api.brain.Slot;
 import com.dwinovo.numen.api.brain.TokenLedger;
+import com.dwinovo.numen.api.brain.Spoken;
+import com.dwinovo.numen.api.agent.loop.RunEnd;
 import com.dwinovo.numen.api.brain.Venue;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.event.NumenEvents;
@@ -151,8 +153,8 @@ public final class LoopHost implements ClientContext {
     private volatile Catalog catalog = Catalog.EMPTY;
     private volatile long generation;
     private volatile boolean seated;
-    /** 主人最后一句话是在哪儿说的:她的回话回到那里。会话态,不落盘。 */
-    private Venue venue = Venue.PANEL;
+    /** 她此刻在答的那句话是谁、在哪儿说的:回话回到那里,程序替他做事,日志盖那个会话的印。会话态,不落盘。 */
+    private volatile Spoken spoken;
     /** 上一刻驾驶席在不在外接大脑手里,只用来找翻转的那一下。 */
     private boolean wasDriving;
     /** 外接大脑正在跑的那个调用要收的进展;没有在跑的是 {@code null}。 */
@@ -180,7 +182,7 @@ public final class LoopHost implements ClientContext {
         this.companion = parts.companion();
         Home home = parts.home();
         this.log = ConvoLog.atFile(home.file(CHAT), home.io());
-        this.convo = new ConvoState(msg -> log.append(msg, null));
+        this.convo = new ConvoState(msg -> log.append(msg, spoken.conversation()));
         this.notes = new NoteBook(new Home(home.file(MEMORY), home.io()), () -> (int) (clock.dayTime / 24000L));
         this.memory = new MemoryPreamble(notes);
         this.queue = new EventQueue(JsonlJournal.atFile(home.file(INBOX), home.io()));
@@ -192,7 +194,7 @@ public final class LoopHost implements ClientContext {
         this.modules = parts.modules().apply(sources.builtins);
         this.skills = parts.skills().apply(sources.skills);
         this.programs = new SeatPrograms(parts.seat(), companion, modules, parts.main(), () -> generation,
-                this::stateArrived);
+                this::stateArrived, () -> spoken.who());
         ToolAnchor anchor = new ToolAnchor() {
             @Override
             public UUID entityUuid() {
@@ -216,7 +218,10 @@ public final class LoopHost implements ClientContext {
         this.loop = new AgentLoop(companion.toString(), new Model(), tools, convo, queue, compactor, new Host());
         this.goals = new GoalSteward(companion.toString(), loop, convo, queue, body::xml, body::bodyOnFiniteTask,
                 this::persistGoal, readGoal());
+        this.spoken = Spoken.panel(parts.creator());
         loop.subscribe(tokens::on);
+        loop.subscribe(this::voice);
+        loop.subscribe(this::reportRun);
         loop.subscribe(compactor::on);
         loop.subscribe(goals::on);
         loop.subscribe(memory::on);
@@ -329,6 +334,9 @@ public final class LoopHost implements ClientContext {
         clock.set(event.gameTime(), event.dayTime());
         generation = Math.max(generation, event.generation());
         EventQueue.Entry entry = event.entry();
+        if (event.spoken() != null && EventTypes.QUERY.equals(event.type())) {
+            this.spoken = event.spoken();   // 她接下来答的是这句话:回话回给他、程序替他做事
+        }
         switch (event.type()) {
             case EventTypes.DEATH -> {
                 loop.halt(HaltReason.DEATH, entry.text());
@@ -477,8 +485,8 @@ public final class LoopHost implements ClientContext {
     }
 
     /** 主人最后一句话是在哪儿说的。 */
-    public Venue venue() {
-        return venue;
+    public Spoken spoken() {
+        return spoken;
     }
 
     /** 与自动整理同一口径的上下文窗口,取自她绑定的档案解析出的端点;没绑是 0。 */
@@ -499,12 +507,7 @@ public final class LoopHost implements ClientContext {
      * @return 这句话有没有被压着(内脑没能当场把请求发出去);只是观察,不是预测
      */
     public boolean submitPrompt(String text) {
-        return submitPrompt(text, Venue.PANEL);
-    }
-
-    /** 同上,指明是在哪儿说的:她的回话回到那里。 */
-    public boolean submitPrompt(String text, Venue spokenAt) {
-        this.venue = spokenAt;
+        this.spoken = Spoken.panel(parts.creator());
         return deliver(new EventQueue.Entry(EventTypes.QUERY, EventQueue.query(text, clock.dayTime, null),
                 System.currentTimeMillis(), false));
     }
@@ -514,14 +517,14 @@ public final class LoopHost implements ClientContext {
      * 跟在标记外面:模型看得到,聊天流不画。
      */
     public boolean submitCommand(String echo, String expanded) {
-        this.venue = Venue.PANEL;
+        this.spoken = Spoken.panel(parts.creator());
         return deliver(new EventQueue.Entry(EventTypes.QUERY, EventQueue.query(echo, clock.dayTime, null)
                 + (expanded == null || expanded.isBlank() ? "" : "\n" + expanded), System.currentTimeMillis(), false));
     }
 
     /** 主人给她定的定时到点了,说那句话:和主人的话同一条路进收件箱,开标签上带来源,面板据此标"定时"。 */
     private boolean submitScheduled(String text) {
-        this.venue = Venue.PANEL;
+        this.spoken = Spoken.panel(parts.creator());
         return deliver(new EventQueue.Entry(EventTypes.QUERY, EventQueue.scheduledQuery(text, clock.dayTime),
                 System.currentTimeMillis(), false));
     }
@@ -835,6 +838,41 @@ public final class LoopHost implements ClientContext {
     private String personaText() {
         Bound persona = bound(Slot.PERSONA);
         return persona == null ? null : parts.persona().apply(persona);
+    }
+
+    // ---- 说出口与报告 ----
+
+    /**
+     * 她说的一句话,交给服务端在他问的地方说出来({@code say}):面板里创建者亲口问的,面板自己看得到,不经服务端;别的(私聊、群里、
+     * 分享来的 keeper 的话)回给那一位。客户端从不碰聊天。
+     */
+    private void voice(LoopEvent event) {
+        if (!(event instanceof LoopEvent.AssistantMessage message)) {
+            return;
+        }
+        String said = message.turn().content() == null ? "" : message.turn().content().strip();
+        Spoken to = spoken;
+        if (said.isEmpty() || to.venue() == Venue.PANEL && to.who().equals(parts.creator())) {
+            return;
+        }
+        parts.seat().say(companion, said, to).whenComplete((done, failed) -> {
+            if (failed != null) {
+                Constants.LOG.warn("[numen-mind#{}] could not say her words aloud: {}", companion, failed.toString());
+            }
+        });
+    }
+
+    /** 一次 run 的开收报给服务端,它把它告诉插件({@code RUN_STARTED}、{@code RUN_ENDED})。 */
+    private void reportRun(LoopEvent event) {
+        if (event instanceof LoopEvent.RunStarted started) {
+            parts.seat().runStarted(companion, started.runId());
+        } else if (event instanceof LoopEvent.RunEnded ended) {
+            switch (ended.end()) {
+                case RunEnd.Done done -> parts.seat().runEnded(companion, ended.runId(), "DONE", "");
+                case RunEnd.Failed failed -> parts.seat().runEnded(companion, ended.runId(), "FAILED", failed.cause().code());
+                case RunEnd.Halted halted -> parts.seat().runEnded(companion, ended.runId(), "HALTED", halted.reason().code());
+            }
+        }
     }
 
     // ---- 轨迹 ----

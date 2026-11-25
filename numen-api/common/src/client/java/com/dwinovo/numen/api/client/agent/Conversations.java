@@ -402,18 +402,22 @@ public final class Conversations {
     // ---- 说 ----
 
     /**
-     * 在这个会话里说一句话——Y 键、面板输入框、语音转写共用的唯一一个入口:交给她的大脑。群聊(要点名、旁听、给日志盖会话的印)
-     * 还没有搬到客户端,群里说的话不送出去。
+     * 在这个会话里说一句话——Y 键、面板输入框、语音转写共用的唯一一个入口。跟我自己的一只单聊,话直接交给她的大脑;别的(群里、
+     * 分享来的同伴)交给服务端,由它按会话成员表送到各成员的座位({@link OwnerInput.Say}):点了名的醒,其余的旁听。
      *
-     * @return 说完之后的会话,以及这句话有没有送出去(她的大脑在这台电脑上、话不空)
+     * @return 说完之后的会话,以及这句话有没有送出去(话不空)
      */
     public Said say(Conversation conv, String text) {
-        UUID solo = soloOf(conv);
-        LoopHost brain = solo == null ? null : ClientSeats.brain(solo);
-        if (brain == null || text == null || text.isBlank()) {
+        if (text == null || text.isBlank()) {
             return new Said(conv, false);
         }
-        brain.submitPrompt(text);
+        UUID solo = soloOf(conv);
+        LoopHost brain = solo == null ? null : ClientSeats.brain(solo);
+        if (brain != null) {
+            brain.submitPrompt(text);
+        } else {
+            ClientCompanions.send(new OwnerInput.Say(conv.id(), text));
+        }
         return new Said(conv, true);
     }
 

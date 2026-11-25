@@ -3,6 +3,7 @@ package com.dwinovo.numen.api.seat;
 import com.dwinovo.numen.api.CompanionEvent;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.entity.CompanionEvents;
+import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.event.NumenEvents;
 import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.Wire;
@@ -105,6 +106,19 @@ public final class ServerSeats {
     /** 世界上没有哪一个身体发出、却要告诉她的一件事(别的成员离开了会话……):盖上此刻的时刻,送进她的座位。 */
     public static void tell(UUID companion, String type, String text) {
         SEATS.publish(companion, NumenEvents.entry(WORLD.dayTime(), type, null, text, System.currentTimeMillis(), false));
+    }
+
+    /**
+     * 别人对她说的话送到她的座位(主线程):{@code entry} 是给模型看的那一条,{@code spoken} 是谁说的、在哪儿说的。
+     * 座位上没人时攒在发件箱里,创建者回来补上。
+     */
+    public static void hear(UUID companion, EventQueue.Entry entry, com.dwinovo.numen.api.brain.Spoken spoken) {
+        SEATS.publish(companion, entry, spoken);
+    }
+
+    /** 此刻的游戏里的时刻:造事件条目盖的那一个。 */
+    public static long dayTime() {
+        return WORLD.dayTime();
     }
 
     /** 任务槽说她在做什么:她的样子里手上那件活照它写。 */
