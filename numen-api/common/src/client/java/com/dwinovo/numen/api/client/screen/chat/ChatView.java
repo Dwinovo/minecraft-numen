@@ -11,6 +11,8 @@ import com.dwinovo.numen.api.client.agent.CauseWords;
 import com.dwinovo.numen.api.client.agent.ToolWords;
 import com.dwinovo.numen.api.agent.provider.AssistantTurn;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
+import com.dwinovo.numen.api.agent.tool.NumenTool;
+import com.dwinovo.numen.api.agent.tool.ToolRegistry;
 import com.dwinovo.numen.api.client.agent.Conversations;
 import com.dwinovo.numen.api.client.agent.CompanionView;
 import com.dwinovo.numen.api.client.agent.KnownSkins;
@@ -26,6 +28,7 @@ import com.dwinovo.numen.api.client.ui.markdown.Markdown;
 import com.dwinovo.numen.api.client.ui.richtext.Doc;
 import com.dwinovo.numen.api.client.ui.richtext.RichLayout;
 import com.dwinovo.numen.api.entity.Keeper;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
@@ -88,7 +91,6 @@ public final class ChatView {
     private static final int EDGE = 2;          // left inset so the avatar FRAME (-2px) clears the scissor
     private static final int OPP_MARGIN = 24;   // kept clear on the far side of a bubble
     private static final int ICON_W = 11;       // chip status-icon column
-    private static final int TOOL_ARG_CHARS = 44;
     private static final float SCROLL_RATE = 14f;
     /** Typewriter reveal speed (chars/s) and the max lag before it jumps to catch up. */
     private static final float REVEAL_CPS = 80f;
@@ -1727,62 +1729,11 @@ public final class ChatView {
         return group ? AV + AV_GAP : TAIL;
     }
 
+    /** 一次调用的一行:工具的名字,加上这个工具说这次调用读作什么(工具没登记,旧日志里的调用,只有名字)。 */
     private static String toolLine(LlmToolCall tc) {
-        String args = humanArgs(tc.arguments());
-        return args.isEmpty() ? ToolWords.label(tc.name()) : ToolWords.label(tc.name()) + "  " + args;
-    }
-
-    /** 参数 JSON → 人读摘要:抓最能说明这一步的名词(物品/方块/目标)、坐标、数量,
-     *  最多三段;拿不出名词或解析不了就回落到压平截断的原文。 */
-    private static String humanArgs(String json) {
-        if (json == null || json.isBlank() || json.replaceAll("\\s+", "").equals("{}")) return "";
-        com.google.gson.JsonObject o;
-        try {
-            o = com.google.gson.JsonParser.parseString(json).getAsJsonObject();
-        } catch (RuntimeException e) {
-            return compactRaw(json);
-        }
-        List<String> parts = new ArrayList<>();
-        try {
-            for (String k : new String[]{"item", "item_id", "block", "block_id", "entity", "target",
-                    "name", "skill", "structure", "biome", "recipe", "query", "text", "button", "slot"}) {
-                if (parts.size() >= 2) break;
-                var v = o.get(k);
-                if (v != null && v.isJsonPrimitive()) parts.add(stripNs(v.getAsString()));
-            }
-            for (String k : new String[]{"block_ids", "items"}) {
-                if (!parts.isEmpty()) break;
-                var v = o.get(k);
-                if (v != null && v.isJsonArray() && !v.getAsJsonArray().isEmpty()) {
-                    var a = v.getAsJsonArray();
-                    StringBuilder b = new StringBuilder();
-                    for (int i = 0; i < a.size() && i < 2; i++) {
-                        if (i > 0) b.append(I18n.get(com.dwinovo.numen.api.data.ModLanguageData.Keys.LIST_SEPARATOR));
-                        b.append(stripNs(a.get(i).getAsString()));
-                    }
-                    if (a.size() > 2) b.append('…');
-                    parts.add(b.toString());
-                }
-            }
-            var count = o.get("count");
-            if (count != null && count.isJsonPrimitive()) parts.add("×" + count.getAsString());
-            if (o.has("x") && o.has("y") && o.has("z")) {
-                parts.add("(" + o.get("x").getAsInt() + ", " + o.get("y").getAsInt()
-                        + ", " + o.get("z").getAsInt() + ")");
-            }
-        } catch (RuntimeException ignored) { /* 结构不合预期:能抓多少是多少 */ }
-        if (parts.isEmpty()) return compactRaw(json);
-        return String.join(" · ", parts.subList(0, Math.min(3, parts.size())));
-    }
-
-    private static String stripNs(String s) {
-        return s != null && s.startsWith("minecraft:") ? s.substring(10) : s;
-    }
-
-    private static String compactRaw(String json) {
-        String args = json.replaceAll("\\s+", " ").trim();
-        if (args.length() > TOOL_ARG_CHARS) args = args.substring(0, TOOL_ARG_CHARS) + "…";
-        return args;
+        NumenTool tool = ToolRegistry.resolve(Minecraft.getInstance().getUser().getProfileId(), tc.name());
+        String summary = NumenTool.summaryOf(tool, tc.arguments());
+        return summary.isEmpty() ? ToolWords.label(tc.name()) : ToolWords.label(tc.name()) + "  " + summary;
     }
 
 }

@@ -68,6 +68,14 @@ public final class MemoryTool implements NumenTool {
         return schema.build();
     }
 
+    /** 做哪件事、哪一条札记。 */
+    @Override
+    public String summary(JsonObject args) {
+        String command = text(args, "command");
+        String name = text(args, "name");
+        return command == null ? "" : name == null ? command : command + " " + name;
+    }
+
     @Override
     public void invoke(ToolCall call) {
         JsonObject args = call.args();

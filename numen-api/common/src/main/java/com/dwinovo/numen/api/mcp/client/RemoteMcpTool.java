@@ -34,6 +34,9 @@ import java.util.concurrent.Executor;
  */
 public final class RemoteMcpTool implements NumenTool {
 
+    /** {@link #summary} 的最大字数。 */
+    private static final int SUMMARY_CHARS = 44;
+
     private final String entryId;
     private final McpCaller link;
     private final String remoteName;
@@ -84,6 +87,13 @@ public final class RemoteMcpTool implements NumenTool {
     @Override
     public ToolHints hints() {
         return hints;
+    }
+
+    /** 对方的工具我们只知道它的参数:压成一行,截短。 */
+    @Override
+    public String summary(JsonObject args) {
+        String flat = args.toString();
+        return flat.length() > SUMMARY_CHARS ? flat.substring(0, SUMMARY_CHARS) + "…" : flat.equals("{}") ? "" : flat;
     }
 
     private static ToolHints hintsOf(Tool tool) {

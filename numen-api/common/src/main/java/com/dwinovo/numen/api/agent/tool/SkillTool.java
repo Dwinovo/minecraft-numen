@@ -59,6 +59,14 @@ public final class SkillTool implements NumenTool {
                 .build();
     }
 
+    /** 读的是哪个技能(与附属文件)。 */
+    @Override
+    public String summary(JsonObject args) {
+        String name = text(args, "skill");
+        String file = text(args, "file");
+        return name == null ? "" : file == null ? name : name + " " + file;
+    }
+
     /**
      * 随发布的技能的正文在服务端,读它要等座位上的答复,所以结果在答复到了的那一刻才交(工具可以在任何线程上交结果,内核等着)。
      */

@@ -21,7 +21,8 @@ public record LoopStatus(Phase phase, Hold hold, Cause holdReason, boolean bodyT
 
     /**
      * 她此刻在干什么:语言键加现场的词。任务有自己的说法(键由所属模组的语言文件给);没有任务、只有手上这个工具调用时,
-     * 键是 {@code numen.tool.<工具名>},没有译文的(接进来的外部工具)界面退回 {@code args[0]} 的工具名。
+     * 键是 {@code numen.tool.<工具名>},没有译文的(接进来的外部工具)界面退回 {@code args[0]} 的工具名;工具自己说了这次调用读作什么时,
+     * 键是 {@code numen.activity.default},{@code args[0]} 就是那一句。
      */
     public record Doing(String key, List<String> args) {
 

@@ -80,6 +80,13 @@ public final class ScriptTool implements NumenTool {
                 .build();
     }
 
+    /** 面板上这次调用读作什么:它自己写的那一句。 */
+    @Override
+    public String summary(JsonObject args) {
+        JsonElement line = args.get(DESCRIPTION);
+        return line != null && line.isJsonPrimitive() ? line.getAsString().replaceAll("\\s+", " ").strip() : "";
+    }
+
     /** 程序只由派发器跑(见类注释),调到这里是接线错了。 */
     @Override
     public void invoke(ToolCall call) {

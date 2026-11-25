@@ -996,7 +996,7 @@ public final class LoopHost implements ClientContext {
 
         @Override
         public LoopStatus.Doing activity() {
-            return body.doing(tools.currentToolName());
+            return body.doing(tools.currentToolName(), tools.currentSummary());
         }
     }
 }

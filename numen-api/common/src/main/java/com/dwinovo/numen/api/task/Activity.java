@@ -17,7 +17,7 @@ import java.util.List;
  */
 public record Activity(String key, List<String> args) {
 
-    /** 没有自己的说法的任务:只说工具名({@code args[0]})。 */
+    /** 没有自己的说法的任务:只说 {@code args[0]} 这一句(工具名,或工具自己说的这次调用读作什么)。 */
     public static final String DEFAULT_KEY = "numen.activity.default";
 
     public Activity {

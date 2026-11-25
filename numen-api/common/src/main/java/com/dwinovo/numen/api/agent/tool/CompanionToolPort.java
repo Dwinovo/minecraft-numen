@@ -117,6 +117,12 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
         return call == null ? null : call.name();
     }
 
+    /** 手上这一件在主人面板上读作什么({@link NumenTool#summary});空闲或没有可说的是空串。 */
+    public String currentSummary() {
+        LlmToolCall call = calls.current();
+        return call == null ? "" : NumenTool.summaryOf(tools.resolve(call.name()), call.arguments());
+    }
+
     /** 在飞的那一个就此以一条失败结算,{@code why} 是给模型的原因;没有在飞的什么都不做。在飞的是程序的话,它一并叫停。 */
     public void failInFlight(String why) {
         LlmToolCall call = calls.inFlight();

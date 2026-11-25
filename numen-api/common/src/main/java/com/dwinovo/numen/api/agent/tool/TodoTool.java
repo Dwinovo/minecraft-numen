@@ -88,6 +88,21 @@ public final class TodoTool implements NumenTool {
                 + "its mark: [ ] to do, [>] doing now, [x] done, [-] dropped.", 1).build();
     }
 
+    /** 在做的那一步({@code [>]});整份计划里没有在做的就没有可说的。 */
+    @Override
+    public String summary(JsonObject args) {
+        try {
+            for (Item item : items(args)) {
+                if (item.status() == Status.IN_PROGRESS) {
+                    return item.content();
+                }
+            }
+        } catch (IllegalArgumentException notAPlan) {
+            // 参数读不成计划:这次调用没有可说的
+        }
+        return "";
+    }
+
     @Override
     public void invoke(ToolCall call) {
         try {
