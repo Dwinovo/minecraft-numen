@@ -1,6 +1,6 @@
 # 0005 皮肤是文件夹里的 png,用时才签
 
-- 状态:已接受,已落地;修订 `docs/input-pipeline.md` §六原先的"皮肤是一种库"
+- 状态:已接受,已落地;修订 `docs/input-pipeline.md` §六原先的"皮肤是一种库";"签名只在服务端"与服务端签名缓存被 [0009](0009-skins-signed-by-the-chooser.md) 修订(挑的人的客户端签)
 - 日期:2026-10-21
 - 另见:[0004](0004-host-library-is-the-server-directory.md)、`docs/input-pipeline.md` §六
 
