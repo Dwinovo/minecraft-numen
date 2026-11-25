@@ -499,7 +499,7 @@ public final class NumenPlayer extends ServerPlayer {
     /**
      * 上船那一刻把身体朝向对齐船头。真客户端在 {@code handleSetEntityPassengersPacket}
      * 里做这件事,服务端身体没有那个包——不补的话她背对船头坐下,而船的转向又从
-     * 她"现在朝哪"没有任何约束,画面立刻穿帮。与 Carpet 假玩家同一处理。
+     * 她"现在朝哪"没有任何约束,画面立刻穿帮。
      */
     @Override
     public boolean startRiding(net.minecraft.world.entity.Entity vehicle, boolean force) {

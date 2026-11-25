@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Companion skin lookup, done the way vanilla TAB does it: skins live in the
  * connection's player-info table, NOT on the entity — companions are placed via
- * {@code PlayerList.placeNewPlayer} (same mechanism as Carpet bots), so their info
+ * {@code PlayerList.placeNewPlayer} (the same path a real player joins by), so their info
  * entry persists at ANY distance while the entity itself is only synced within
  * tracking range. Resolving through the entity was the old bug: past tracking
  * range the avatar snapped back to the default Steve/Alex.
