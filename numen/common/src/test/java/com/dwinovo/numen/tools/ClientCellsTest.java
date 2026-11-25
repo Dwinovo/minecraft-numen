@@ -1,11 +1,13 @@
 package com.dwinovo.numen.tools;
 
 import com.dwinovo.numen.NumenApiFixture;
+import com.dwinovo.numen.api.program.ClientTransport;
 import com.dwinovo.numen.api.script.Modules;
 import com.dwinovo.numen.api.sdk.ApiRegistry;
 import com.dwinovo.numen.api.sdk.ApiTester;
 import com.dwinovo.numen.api.sdk.BlockAt;
 import com.dwinovo.numen.api.sdk.ClientCall;
+import com.dwinovo.numen.api.sdk.Dispatcher;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Example;
 import com.dwinovo.numen.api.sdk.Fn;
@@ -21,8 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 一次客户端函数返回一整份格({@link LuaCodecs#MAX_CELLS} 是单次上限),程序用她真实的模块库({@link Modules#of},每读一次模块要过库)
- * 跑:答复里每个带方法的值(Block 的位置是 numen.shape 的 Pos)取元表时不重复向库要模块,一次读满不触发整段的字符串上限。
+ * 一次客户端函数返回一整份格({@link LuaCodecs#MAX_CELLS} 是单次上限),程序带着她的模块({@link Modules#of})跑:答复里每个带方法的值(Block 的位置是 numen.shape 的 Pos)
+ * 取元表时不重复读模块,一次读满不触发整段的字符串上限。
  */
 class ClientCellsTest {
 
@@ -44,6 +46,17 @@ class ClientCellsTest {
         }
     }
 
+    /** 主人客户端的样子:客户端函数就在这个进程里执行,答复照原样交回。 */
+    private static final ClientTransport CLIENT = new ClientTransport() {
+        @Override
+        public void request(Request request, java.util.function.Consumer<String> done) {
+            Dispatcher.client(request.function(), request.arguments(), request.companion(), null, done);
+        }
+
+        @Override
+        public void cancel(String callId) { }
+    };
+
     @BeforeAll
     static void register() {
         NumenApiFixture.install();
@@ -55,7 +68,7 @@ class ClientCellsTest {
         for (int count : new int[] {5844, LuaCodecs.MAX_CELLS}) {
             UUID her = UUID.randomUUID();
             ApiTester.Run run = ApiTester.run(null, her, "local c = gt.gt_cells.cells(" + count + ") return #c",
-                    Modules.of(her, java.util.Map.of(), java.util.Set.of()));
+                    Modules.of(her, java.util.Map.of(), java.util.Set.of()), CLIENT);
             assertTrue(run.ok(), count + ": " + run.message());
             assertEquals(count, run.returned().getAsInt());
         }
