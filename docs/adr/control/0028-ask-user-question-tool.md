@@ -1,6 +1,6 @@
 # 0028 她的提问工具 AskUserQuestion:照 Claude Code 的同名工具,参数、名字、说明、结局一字对齐
 
-- 状态:已接受,在落地
+- 状态:已接受,已落地(面板待真机看)
 - 日期:2026-11-26
 - 另见:[0027](0027-permission-by-action-answered-by-many.md)(权限审批,另一回事)、[runtime 0008](../runtime/0008-brain-on-owners-client.md)
   (大脑在主人客户端)、[0008](0008-lua-only-tool.md)(她的工具)
