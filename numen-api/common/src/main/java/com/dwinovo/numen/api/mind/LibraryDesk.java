@@ -106,6 +106,9 @@ public final class LibraryDesk {
         }
     }
 
+    /** 外部大脑的端点只在连着服务器时有:没连着时问它得到的说法。 */
+    private static final String NOT_CONNECTED = "not connected to a server";
+
     /** 这台电脑上各样东西的出处;测试给临时目录里的。 */
     public interface Sources {
 
@@ -127,10 +130,10 @@ public final class LibraryDesk {
         /** 主人的钥匙串。 */
         Keychain keys();
 
-        /** 接进来的 MCP 服务器的连接。 */
+        /** 接进来的 MCP 服务器的连接;没连着服务器是 {@code null}。 */
         ClientMcp mcp();
 
-        /** 外部大脑的端点。 */
+        /** 外部大脑的端点;没连着服务器是 {@code null}。 */
         McpMode external();
     }
 
@@ -544,7 +547,7 @@ public final class LibraryDesk {
                 row.addProperty("unreadable", true);
                 return;
             }
-            McpConnections manager = sources.mcp().connections();
+            McpConnections manager = sources.mcp() == null ? null : sources.mcp().connections();
             McpConnections.ServerHandle handle = manager == null ? null : manager.handle(entry.id().toString());
             McpConnections.Status status = handle == null ? McpConnections.Status.DISABLED : handle.status();
             row.addProperty("type", spec.type());
@@ -570,6 +573,12 @@ public final class LibraryDesk {
     /** 外部大脑端点的整份状态:配置、谁连着、起服失败的原因。令牌不在这里:它们是主人在聊天里用 /token 发的。 */
     private JsonObject mcpServerView() {
         McpMode mode = sources.external();
+        if (mode == null) {
+            JsonObject offline = new JsonObject();
+            offline.addProperty("enabled", false);
+            offline.addProperty("lastError", NOT_CONNECTED);
+            return offline;
+        }
         var cfg = mode.config();
         JsonObject o = new JsonObject();
         o.addProperty("enabled", mode.enabled());
@@ -600,6 +609,9 @@ public final class LibraryDesk {
             return "unknown operation";
         }
         McpMode mode = sources.external();
+        if (mode == null) {
+            return NOT_CONNECTED;
+        }
         var cfg = mode.config();
         if (body.has("host") || body.has("port") || body.has("callTimeoutSeconds") || body.has("hiddenTools")) {
             List<String> hidden = new ArrayList<>(cfg.hiddenTools());
@@ -651,7 +663,7 @@ public final class LibraryDesk {
                 }
             }, (from, to) -> { });
         }
-        if (!LIST.equals(op)) {
+        if (!LIST.equals(op) && sources.mcp() != null) {
             sources.mcp().reconcile();
         }
         return done;

@@ -10,6 +10,7 @@ import com.dwinovo.numen.api.owner.Presence;
 import com.dwinovo.numen.api.client.seat.ClientSeats;
 import com.dwinovo.numen.api.library.Library;
 import com.dwinovo.numen.api.library.LibraryKind;
+import com.dwinovo.numen.api.client.ClientMachines;
 import com.dwinovo.numen.api.mind.ClientServices;
 import com.dwinovo.numen.api.mind.History;
 import com.dwinovo.numen.api.mind.LibraryDesk;
@@ -144,7 +145,7 @@ public final class ClientCompanions {
 
     /** 主人这台电脑上的一种库。 */
     public static Library library(LibraryKind kind) {
-        return ClientSeats.services().library(kind);
+        return ClientMachines.get().library(kind);
     }
 
     public static List<Conversation> savedConversations() {
@@ -164,7 +165,7 @@ public final class ClientCompanions {
             NumenNetwork.sendToServer(request);
             return;
         }
-        LibraryDesk.Result result = ClientSeats.services().desk().handle(viewer(), true, request.kind(), request.op(),
+        LibraryDesk.Result result = ClientMachines.get().desk().handle(viewer(), true, request.kind(), request.op(),
                 com.google.gson.JsonParser.parseString(request.json()).getAsJsonObject());
         long answerNow = result.later() == null ? request.request() : 0;
         LIBRARY.onPayload(new LibraryPayload(request.kind(), result.entries(),

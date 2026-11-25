@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.client.screen.settings;
 
 import net.minecraft.client.resources.language.I18n;
-import com.dwinovo.numen.api.client.ClientKeys;
+import com.dwinovo.numen.api.client.ClientMachines;
 import com.dwinovo.numen.api.client.stt.MicrophoneManager;
 import com.dwinovo.numen.api.client.stt.SttProviders;
 import com.dwinovo.numen.api.client.ui.IDrawSurface;
@@ -236,14 +236,14 @@ public final class SttPanel {
 
     /** 这家识别服务在这台电脑钥匙串里的 key;没存过是空串。 */
     private static String savedKey(String provider) {
-        String saved = ClientKeys.keychain().get(ClientKeys.stt(provider));
+        String saved = ClientMachines.get().keychain().get(SttProviders.keyService(provider));
         return saved == null ? "" : saved;
     }
 
     private void save() {
         ISttSettings cfg = ClientServices.STT;
         cfg.setSttProvider(provider);
-        ClientKeys.keychain().put(ClientKeys.stt(provider), key.trim());
+        ClientMachines.get().keychain().put(SttProviders.keyService(provider), key.trim());
         cfg.setSttModel(model.trim());
         cfg.setSttBaseUrl(baseUrl.trim());
         cfg.setSttMicrophone(mic);

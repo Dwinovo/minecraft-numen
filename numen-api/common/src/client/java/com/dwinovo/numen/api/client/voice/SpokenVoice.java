@@ -2,7 +2,7 @@ package com.dwinovo.numen.api.client.voice;
 
 import com.dwinovo.numen.api.mind.CompanionState;
 import com.dwinovo.numen.api.mind.Slot;
-import com.dwinovo.numen.api.client.ClientKeys;
+import com.dwinovo.numen.api.client.ClientMachines;
 import com.dwinovo.numen.api.client.agent.ClientCompanions;
 import com.dwinovo.numen.api.client.agent.ClientLibraries;
 import com.dwinovo.numen.api.client.data.ClientPrefs;
@@ -32,7 +32,7 @@ public record SpokenVoice(VoiceProfile profile, String apiKey) {
         }
         CompanionState.Binding bound = ClientCompanions.getOrCreate(companion).binding(Slot.VOICE);
         ClientLibraries.Voice voice = bound == null ? null : ClientLibraries.voice(bound.bound(), me);
-        return voice == null ? null : new SpokenVoice(voice.profile(), ClientKeys.keychain().get(voice.profile().keyService()));
+        return voice == null ? null : new SpokenVoice(voice.profile(), ClientMachines.get().keychain().get(voice.profile().keyService()));
     }
 
     public float volume() {

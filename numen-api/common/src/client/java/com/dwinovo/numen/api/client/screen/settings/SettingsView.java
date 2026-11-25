@@ -5,7 +5,7 @@ import com.dwinovo.numen.api.mind.LibraryDesk;
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
 import com.dwinovo.numen.api.owner.Libraries;
 import com.dwinovo.numen.api.mind.Slot;
-import com.dwinovo.numen.api.client.ClientKeys;
+import com.dwinovo.numen.api.client.ClientMachines;
 import com.dwinovo.numen.api.client.data.ClientPrefs;
 import com.dwinovo.numen.api.voice.VoiceProfile;
 import com.dwinovo.numen.api.client.agent.McpAuthPrompt;
@@ -254,7 +254,7 @@ public final class SettingsView {
                         String line = I18n.get(ModLanguageData.Keys.VOICE_LIST_META, voice.backend(), detail,
                                 Math.round(voice.volume() * 5.0f));
                         boolean noKey = !VoiceProfile.BACKEND_SOVITS.equals(voice.backend())
-                                && ClientKeys.keychain().get(voice.keyService()) == null;
+                                && ClientMachines.get().keychain().get(voice.keyService()) == null;
                         if (noKey) line += " · " + I18n.get(ModLanguageData.Keys.VOICE_NO_KEY, voice.keyService());
                         // 行尾勾 = 本同伴正在用的声线;右键菜单里换绑,或不再使用(闭嘴)。
                         Boolean marked = bound(Slot.VOICE, e.id());
@@ -768,8 +768,8 @@ public final class SettingsView {
         }
         String service = VoiceFormPanel.profileOf(d).keyService();
         String typed = d.apiKey.strip();
-        if (!typed.equals(nv(ClientKeys.keychain().get(service)))) {
-            ClientKeys.keychain().put(service, typed);
+        if (!typed.equals(nv(ClientMachines.get().keychain().get(service)))) {
+            ClientMachines.get().keychain().put(service, typed);
         }
         addingVoice = false;
         voiceEditId = null;
@@ -804,7 +804,7 @@ public final class SettingsView {
         d.name = nv(e.name());
         d.service = voice.service();
         d.url = voice.url();
-        d.apiKey = nv(ClientKeys.keychain().get(voice.keyService()));
+        d.apiKey = nv(ClientMachines.get().keychain().get(voice.keyService()));
         d.groupId = voice.groupId();
         d.model = voice.model();
         d.voice = voice.voice();

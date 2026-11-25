@@ -96,13 +96,18 @@ public final class SttProviders {
                 : PROVIDERS.get(0);
     }
 
+    /** 语音识别服务商({@code SttProviders} 的 id)的 key 在钥匙串里叫什么:与合成用的服务名分开,各存各的。 */
+    public static String keyService(String provider) {
+        return "stt-" + provider;
+    }
+
     /**
      * 据全局配置实例化后端;key 取这台电脑钥匙串里这家服务的。无 API key 时返回 {@code null}(=语音输入未启用)。
      * baseUrl / model 留空时回落到所选预设的默认值。
      */
     public static SttBackend fromConfig(ISttSettings cfg) {
         Option opt = byId(cfg.getSttProvider());
-        String saved = com.dwinovo.numen.api.client.ClientKeys.keychain().get(com.dwinovo.numen.api.client.ClientKeys.stt(opt.id()));
+        String saved = com.dwinovo.numen.api.client.ClientMachines.get().keychain().get(keyService(opt.id()));
         String key = saved == null ? "" : saved;
         // 密钥必填与否由后端定:云端流式(doubao/dashscope)缺钥握手必败;
         // whisper-http 兼容端点常见自建无鉴权,空钥放行(请求侧空钥不带 Authorization)。

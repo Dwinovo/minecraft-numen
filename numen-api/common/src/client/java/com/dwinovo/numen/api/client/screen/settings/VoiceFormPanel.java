@@ -27,7 +27,7 @@ import java.util.function.Consumer;
  * 内联在字段上。编辑的是 {@link Draft} 草稿,保存才落库。
  *
  * <p>声线条目(服务端的库)是服务商、音色、参数,不含 key;表单上的 key 是这台电脑钥匙串里那个"服务"的 key,
- * 由宿主存进本机({@code ClientKeys}),试听用的就是这里填的。
+ * 由宿主存进本机(这台电脑的钥匙串,{@code ClientMachine}),试听用的就是这里填的。
  */
 public final class VoiceFormPanel {
 

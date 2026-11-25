@@ -5,7 +5,7 @@ import com.dwinovo.numen.api.mind.Bound;
 import com.dwinovo.numen.api.mind.Slot;
 import com.dwinovo.numen.api.client.agent.NumenRoster;
 import com.dwinovo.numen.api.library.EntryId;
-import com.dwinovo.numen.api.home.Homes;
+import com.dwinovo.numen.api.client.ClientMachines;
 import com.dwinovo.numen.api.mind.ClientServices;
 import com.dwinovo.numen.api.entity.SummonSetup;
 import com.dwinovo.numen.api.mcp.server.ExternalHands;
@@ -55,7 +55,7 @@ public final class ClientSeats {
         client = new SeatClient(Minecraft.getInstance(), Executors.newVirtualThreadPerTaskExecutor(),
                 message -> NumenNetwork.sendToServer(SeatPayload.frame(Wire.TO_SERVER, message)));
         Minecraft game = Minecraft.getInstance();
-        services = new ClientServices(me, Homes.clientDir(), client, game, new ClientServices.Game(game::isSameThread,
+        services = new ClientServices(me, ClientMachines.get(), client, game, new ClientServices.Game(game::isSameThread,
                 ClientSeats::liveCompanions, new LoopHands.Actions() {
                     @Override
                     public boolean summon(String name) {
