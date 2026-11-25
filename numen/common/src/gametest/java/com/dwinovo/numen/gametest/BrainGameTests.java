@@ -414,37 +414,13 @@ public class BrainGameTests {
 
         com.dwinovo.numen.api.network.payload.SummonRequestPayload.handle(
                 new com.dwinovo.numen.api.network.payload.SummonRequestPayload("gametest_setup",
-                        new com.dwinovo.numen.api.entity.SummonSetup(true, null)), owner);
+                        new com.dwinovo.numen.api.entity.SummonSetup(true)), owner);
 
         var born = server.getPlayerList().getPlayerByName("gametest_setup");
         helper.assertTrue(born instanceof NumenPlayer, "the companion was not summoned");
         helper.assertTrue(born.isCreative(), "she did not arrive in the mode picked on the card");
 
         com.dwinovo.numen.api.entity.Companions.dismiss(server, owner.getUUID(), List.of(born.getUUID()));
-        GameTestKit.leave(owner);
-        helper.succeed();
-    }
-
-    /** 召唤请求带的配置有一项不过门(服务器皮肤文件夹里没有这张):整次不召唤,告诉主人是哪一项。 */
-    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_brain")
-    public static void a_setup_item_that_fails_its_check_refuses_the_summon_and_says_why(GameTestHelper helper) {
-        var server = helper.getLevel().getServer();
-        var owner = GameTestKit.presentPlayer(helper, null, "gametest_refused_owner");
-        GameTestKit.said(owner);
-
-        com.dwinovo.numen.api.network.payload.SummonRequestPayload.handle(
-                new com.dwinovo.numen.api.network.payload.SummonRequestPayload("gametest_refused",
-                        new com.dwinovo.numen.api.entity.SummonSetup(null,
-                                new com.dwinovo.numen.api.entity.SummonSetup.Skin("nowhere", true, null, null))),
-                owner);
-
-        helper.assertTrue(server.getPlayerList().getPlayerByName("gametest_refused") == null, "she was summoned anyway");
-        helper.assertTrue(CompanionRegistry.get(server).ownedBy(owner.getUUID()).isEmpty(), "a refused summon left an entry");
-        var said = GameTestKit.said(owner);
-        // 服务端按主人的语言翻好再发:看说没说是哪一只、哪一项
-        helper.assertTrue(said.stream().map(s -> s.text().getString())
-                        .anyMatch(text -> text.contains("gametest_refused") && text.contains("nowhere")),
-                "the owner was not told which item failed: " + said);
         GameTestKit.leave(owner);
         helper.succeed();
     }

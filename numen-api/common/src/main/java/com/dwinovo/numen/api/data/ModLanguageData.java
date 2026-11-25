@@ -291,11 +291,11 @@ public final class ModLanguageData {
         public static final String SKIN_JOB_QUEUED      = "numen.skin.job_queued";
         public static final String SKIN_JOB_WAITING     = "numen.skin.job_waiting";
         public static final String SKIN_FAILED          = "numen.skin.failed";
+        public static final String SKIN_QUEUE_FULL      = "numen.skin.queue_full";
+        public static final String SKIN_NOT_WORN        = "numen.skin.not_worn";
         public static final String SKIN_MINESKIN_KEY    = "numen.skin.mineskin_key";
         public static final String SKIN_MINESKIN_KEY_HINT = "numen.skin.mineskin_key_hint";
         public static final String SKIN_HANDOVER        = "numen.skin.handover";
-        public static final String COMMAND_SKIN_OFF     = "numen.command.skin.off";
-        public static final String COMMAND_SKIN_DONE    = "numen.command.skin.done";
         /** 皮肤导入的唯一入口:原生文件对话框(FCL 端翻译成安卓文件选择器)。 */
         /** 原生选文件对话框的标题。 */
         public static final String SUMMON_CREATE           = "numen.summon.create";
@@ -525,7 +525,6 @@ public final class ModLanguageData {
         public static final String NOTICE_SUMMON_LIMIT    = "numen.notice.summon_limit";
         public static final String NOTICE_SUMMON_ENTRY_MISSING  = "numen.notice.summon_entry_missing";
         public static final String NOTICE_SUMMON_CREATIVE_DENIED = "numen.notice.summon_creative_denied";
-        public static final String NOTICE_SUMMON_SKIN_REFUSED   = "numen.notice.summon_skin_refused";
         public static final String NOTICE_COMPANION_REMOVED = "numen.notice.companion_removed";
         public static final String NOTICE_SHARED_WITH_YOU   = "numen.notice.shared_with_you";
         public static final String NOTICE_UNSHARED_FROM_YOU = "numen.notice.unshared_from_you";
@@ -536,10 +535,6 @@ public final class ModLanguageData {
         public static final String COMMAND_BIND_FAILED    = "numen.command.bind_failed";
         public static final String COMMAND_KEY_USAGE      = "numen.command.key.usage";
         public static final String COMMAND_KEY_SAVED      = "numen.command.key.saved";
-        public static final String COMMAND_SKIN_QUEUED    = "numen.command.skin.queued";
-        public static final String COMMAND_SKIN_WAITING   = "numen.command.skin.waiting";
-        public static final String COMMAND_SKIN_FAILED    = "numen.command.skin.failed";
-        public static final String COMMAND_SKIN_FULL      = "numen.command.skin.full";
         public static final String COMMAND_TOKEN_ISSUED = "numen.command.token_issued";
         public static final String COMMAND_TOKEN_UNAVAILABLE = "numen.command.token_unavailable";
         public static final String COMMAND_TOKEN_ENDPOINT_OFF = "numen.command.token_endpoint_off";
@@ -905,11 +900,11 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_JOB_QUEUED,      "Getting the skin ready… number %s in line");
         adder.add(Keys.SKIN_JOB_WAITING,     "Getting the skin ready… the service is busy, trying again shortly");
         adder.add(Keys.SKIN_FAILED,          "The skin could not be used: %s");
-        adder.add(Keys.SKIN_MINESKIN_KEY,    "MineSkin API key (server's, optional)");
+        adder.add(Keys.SKIN_QUEUE_FULL,      "%s skins are already being prepared; wait for one to finish");
+        adder.add(Keys.SKIN_NOT_WORN,        "[Numen] Skin '%1$s' could not be worn: %2$s");
+        adder.add(Keys.SKIN_MINESKIN_KEY,    "MineSkin API key (optional)");
         adder.add(Keys.SKIN_MINESKIN_KEY_HINT, "Empty = anonymous, lower rate limit");
         adder.add(Keys.SKIN_HANDOVER,        "Your skin '%s' that the server kept is now in your skins folder");
-        adder.add(Keys.COMMAND_SKIN_OFF,     "%s is back in the default skin");
-        adder.add(Keys.COMMAND_SKIN_DONE,    "%2$s now wears skin '%1$s'");
         adder.add("numen.summon.mode",       "Mode");
         adder.add("numen.bubble.thinking",   "✦ Thinking");
         adder.add("numen.bubble.asking",     "⌛ Waiting for your OK");
@@ -1276,7 +1271,6 @@ public final class ModLanguageData {
         adder.add(Keys.NOTICE_SUMMON_LIMIT,    "[Numen] This server lets you have %s companions; dismiss one to summon another");
         adder.add(Keys.NOTICE_SUMMON_ENTRY_MISSING,  "[Numen] %1$s was not summoned: %2$s \"%3$s\" is missing or turned off");
         adder.add(Keys.NOTICE_SUMMON_CREATIVE_DENIED, "[Numen] %s was not summoned: Creative requires cheats, or you in Creative mode");
-        adder.add(Keys.NOTICE_SUMMON_SKIN_REFUSED,   "[Numen] %1$s was not summoned: skin \"%2$s\" is unusable (%3$s)");
         adder.add(Keys.NOTICE_COMPANION_REMOVED, "[Numen] %1$s was removed from the server (%2$s). Summon her again to bring her back");
         adder.add(Keys.NOTICE_SHARED_WITH_YOU,   "[Numen] %1$s shared the companion %2$s with you: talk to her like your own. /numen player leave %2$s gives her back");
         adder.add(Keys.NOTICE_UNSHARED_FROM_YOU, "[Numen] %1$s no longer shares the companion %2$s with you");
@@ -1287,10 +1281,6 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_BIND_FAILED,    "That did not work: %s");
         adder.add(Keys.COMMAND_KEY_USAGE,      "Usage: /numen key <service> <key>");
         adder.add(Keys.COMMAND_KEY_SAVED,      "Saved your %1$s key (%2$s)");
-        adder.add(Keys.COMMAND_SKIN_QUEUED,    "Getting skin '%1$s' ready, number %2$s in line");
-        adder.add(Keys.COMMAND_SKIN_WAITING,   "Skin '%1$s': the skin service is busy, trying again in %2$s s");
-        adder.add(Keys.COMMAND_SKIN_FAILED,    "Skin '%1$s' could not be prepared: %2$s");
-        adder.add(Keys.COMMAND_SKIN_FULL,      "You already have %s skins being prepared; wait for one to finish");
         adder.add("numen.skin.error.bad_image", "The image cannot be used: %s");
         adder.add(Keys.COMMAND_TOKEN_ISSUED, "Issued token %s (%s, %s). It is shown only once; the full secret is now on your clipboard:");
         adder.add(Keys.COMMAND_TOKEN_UNAVAILABLE,
@@ -1423,6 +1413,11 @@ public final class ModLanguageData {
         adder.add("numen.skin.error.network", "Cannot reach %s (check your network or proxy)");
         adder.add("numen.skin.error.no_skin", "The profile has no skin data");
         adder.add("numen.skin.error.interrupted", "The lookup was interrupted");
+        adder.add("numen.skin.error.not_signed", "The skin carries no Mojang signature");
+        adder.add("numen.skin.error.signature_rejected", "The server could not verify the skin's signature (it is not Mojang's, or the server has no keys to check it)");
+        adder.add("numen.skin.error.bad_ref", "The server could not read the skin's name");
+        adder.add("numen.skin.error.not_yours", "You may not change this companion's skin");
+        adder.add("numen.skin.error.gone", "She is no longer here");
         adder.add("numen.skin.error.unknown", "Unexpected error (%s): %s");
         adder.add("numen.skin.error.detail", "%s: %s");
     }
@@ -1685,11 +1680,11 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_JOB_QUEUED,      "正在准备皮肤…排第 %s 位");
         adder.add(Keys.SKIN_JOB_WAITING,     "正在准备皮肤…服务繁忙,稍后再试");
         adder.add(Keys.SKIN_FAILED,          "这张皮肤没能用上:%s");
-        adder.add(Keys.SKIN_MINESKIN_KEY,    "MineSkin API key(服务器的,可不填)");
+        adder.add(Keys.SKIN_QUEUE_FULL,      "已经有 %s 张皮肤在准备中,等一张好了再加");
+        adder.add(Keys.SKIN_NOT_WORN,        "[Numen] 皮肤「%1$s」没能穿上:%2$s");
+        adder.add(Keys.SKIN_MINESKIN_KEY,    "MineSkin API key(可不填)");
         adder.add(Keys.SKIN_MINESKIN_KEY_HINT, "留空 = 匿名档,限流更紧");
         adder.add(Keys.SKIN_HANDOVER,        "服务器上替你存着的皮肤「%s」已放进你本机的皮肤文件夹");
-        adder.add(Keys.COMMAND_SKIN_OFF,     "%s 回到默认皮肤了");
-        adder.add(Keys.COMMAND_SKIN_DONE,    "%2$s 穿上皮肤「%1$s」了");
         adder.add("numen.summon.mode",       "模式");
         adder.add("numen.bubble.thinking",   "✦ 正在思考");
         adder.add("numen.bubble.asking",     "⌛ 等你点头");
@@ -2057,7 +2052,6 @@ public final class ModLanguageData {
         adder.add(Keys.NOTICE_SUMMON_LIMIT,    "[Numen] 这个服务器每人最多 %s 只同伴,先遣散一只再召唤吧");
         adder.add(Keys.NOTICE_SUMMON_ENTRY_MISSING,  "[Numen] 未召唤 %1$s：%2$s「%3$s」不存在或已停用");
         adder.add(Keys.NOTICE_SUMMON_CREATIVE_DENIED, "[Numen] 未召唤 %s：创造模式需要作弊权限，或你本人处于创造模式");
-        adder.add(Keys.NOTICE_SUMMON_SKIN_REFUSED,   "[Numen] 未召唤 %1$s：皮肤「%2$s」不可用（%3$s）");
         adder.add(Keys.NOTICE_COMPANION_REMOVED, "[Numen] %1$s 被请出了服务器(%2$s)。再召唤她一次就能回来");
         adder.add(Keys.NOTICE_SHARED_WITH_YOU,   "[Numen] %1$s 把同伴 %2$s 分享给了你:像对自己的同伴一样跟她说话就行。不想要可以 /numen player leave %2$s");
         adder.add(Keys.NOTICE_UNSHARED_FROM_YOU, "[Numen] %1$s 不再把同伴 %2$s 分享给你");
@@ -2068,10 +2062,6 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_BIND_FAILED,    "没办成:%s");
         adder.add(Keys.COMMAND_KEY_USAGE,      "用法:/numen key <服务商> <key>");
         adder.add(Keys.COMMAND_KEY_SAVED,      "存好了你的 %1$s key(%2$s)");
-        adder.add(Keys.COMMAND_SKIN_QUEUED,    "正在准备皮肤「%1$s」,排第 %2$s 位");
-        adder.add(Keys.COMMAND_SKIN_WAITING,   "皮肤「%1$s」:皮肤服务正忙,%2$s 秒后再试");
-        adder.add(Keys.COMMAND_SKIN_FAILED,    "皮肤「%1$s」没准备好:%2$s");
-        adder.add(Keys.COMMAND_SKIN_FULL,      "你已经有 %s 张皮肤在准备中,等一张好了再加");
         adder.add("numen.skin.error.bad_image", "这张图用不了:%s");
         adder.add(Keys.COMMAND_TOKEN_ISSUED, "已发令牌 %s(%s,%s)。只显示这一次,完整令牌已复制到剪贴板:");
         adder.add(Keys.COMMAND_TOKEN_UNAVAILABLE,
@@ -2202,6 +2192,11 @@ public final class ModLanguageData {
         adder.add("numen.skin.error.network", "连不上 %s(检查网络或代理)");
         adder.add("numen.skin.error.no_skin", "档案里没有皮肤数据");
         adder.add("numen.skin.error.interrupted", "查询被中断");
+        adder.add("numen.skin.error.not_signed", "这张皮肤没有 Mojang 签名");
+        adder.add("numen.skin.error.signature_rejected", "服务器验不了这张皮肤的签名(不是 Mojang 签的,或服务器取不到验签用的公钥)");
+        adder.add("numen.skin.error.bad_ref", "服务器读不懂这张皮肤的名字");
+        adder.add("numen.skin.error.not_yours", "你不能换这只同伴的皮肤");
+        adder.add("numen.skin.error.gone", "她已经不在了");
         adder.add("numen.skin.error.unknown", "意外错误(%s):%s");
         adder.add("numen.skin.error.detail", "%s:%s");
     }

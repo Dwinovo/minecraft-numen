@@ -4,8 +4,8 @@ package com.dwinovo.numen.api.entity;
 /**
  * 皮肤数据的形状与命名规则——Mojang 签名的 textures 与合法的正版玩家名。
  *
- * <p>签名只在服务端做({@code SkinSigning}:MineSkin 代签,或向 Mojang 借正版玩家的),结果存进皮肤库的条目;
- * 绑定时从条目取出来挂到身体上。Mojang 的签名自验证,伪造不了。
+ * <p>签名由挑皮肤的人的客户端做({@code SkinSigning}:MineSkin 代签,或向 Mojang 借正版玩家的),服务端用 Mojang 的服务公钥验过
+ * ({@code SkinDresser})才挂到身体上。Mojang 的签名自验证,伪造不了。
  */
 public final class MojangSkins {
 

@@ -4,6 +4,8 @@ import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.mind.Bound;
 import com.dwinovo.numen.api.mind.Slot;
 import com.dwinovo.numen.api.client.agent.NumenRoster;
+import com.dwinovo.numen.api.client.skin.ClientSkins;
+import com.dwinovo.numen.api.client.skin.SkinChoices;
 import com.dwinovo.numen.api.library.EntryId;
 import com.dwinovo.numen.api.client.ClientMachines;
 import com.dwinovo.numen.api.mind.ClientServices;
@@ -40,8 +42,11 @@ public final class ClientSeats {
 
     /** 每只同伴上一次连接里收到的最后一个序号:重连时 {@code seat/open} 报上它,服务端从下一号补。 */
     private static final Map<UUID, Long> LAST = new ConcurrentHashMap<>();
-    /** 召唤卡上改过的库绑定,按她的名字等着她到达。 */
-    private static final java.util.Map<String, Map<Slot, String>> SETUPS = new ConcurrentHashMap<>();
+    /** 召唤卡上改过的库绑定与选的皮肤,按她的名字等着她到达。 */
+    private static final java.util.Map<String, Setup> SETUPS = new ConcurrentHashMap<>();
+
+    /** 召唤卡上留在这台电脑上办的几项:库绑定(她的大脑里)与皮肤(经服务端穿上)。 */
+    private record Setup(Map<Slot, String> bindings, SkinChoices.Pick skin) {}
     private static SeatClient client;
     private static ClientServices services;
 
@@ -132,18 +137,24 @@ public final class ClientSeats {
         mine.forEach(companion -> services.brains().resume(companion, LAST.getOrDefault(companion, 0L)));
         services.brains().sit(mine);
         for (UUID companion : arriving) {
-            Map<Slot, String> entries = SETUPS.remove(roster.name(companion));
+            Setup setup = SETUPS.remove(roster.name(companion));
+            if (setup == null) {
+                continue;
+            }
             LoopHost brain = services.brains().get(companion);
-            if (entries != null && brain != null) {
-                entries.forEach((slot, entry) -> brain.bind(slot, new Bound(me, EntryId.parse(entry))));
+            if (brain != null) {
+                setup.bindings().forEach((slot, entry) -> brain.bind(slot, new Bound(me, EntryId.parse(entry))));
+            }
+            if (setup.skin() != null) {
+                ClientSkins.wearOnArrival(companion, setup.skin());
             }
         }
     }
 
-    /** 召唤卡上改过的库绑定:她到达、大脑建起来时落下。 */
-    public static void expect(String name, Map<Slot, String> bindings) {
-        if (!bindings.isEmpty()) {
-            SETUPS.put(name, bindings);
+    /** 召唤卡上改过的库绑定与选的皮肤({@code null} 是没选):她到达、大脑建起来时落下。 */
+    public static void expect(String name, Map<Slot, String> bindings, SkinChoices.Pick skin) {
+        if (!bindings.isEmpty() || skin != null) {
+            SETUPS.put(name, new Setup(bindings, skin));
         }
     }
 

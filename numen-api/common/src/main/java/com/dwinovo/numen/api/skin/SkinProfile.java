@@ -7,11 +7,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 /**
- * 一张签好的皮肤:手臂模型、Mojang 签名的皮肤数据({@code value} 与 {@code signature},签一次存永久,召唤和换肤时直接取用)和原图
- * (png 的字节,换手臂模型时用它重签;借来的正版皮肤取到的是图床上的图)。存在签名缓存里({@link SkinCache},键是 {@link SkinRef});
- * 旧版本的皮肤库条目也是这个形状,{@code SkinMigration} 读它。
+ * 一张签好的皮肤:手臂模型、Mojang 签名的皮肤数据({@code value} 与 {@code signature},签一次存永久,换肤时直接取用)和原图
+ * (png 的字节,换手臂模型时用它重签;借来的正版皮肤取到的是图床上的图)。存在客户端的签名缓存里({@link SkinCache},键是 {@link SkinRef})。
  *
- * <p>{@code png} 是原图的字节;空数组 = 没有(只有旧版本借来的正版皮肤取不到图时才会没有)。
+ * <p>{@code png} 是原图的字节;空数组 = 没有。
  */
 public record SkinProfile(String variant, String value, String signature, byte[] png) {
 

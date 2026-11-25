@@ -13,10 +13,10 @@ import java.time.Duration;
 
 /**
  * MineSkin 代签:把任意皮肤 png 换成 Mojang 签名的 textures(value+signature)。原版客户端只认 Mojang 签过名的
- * 皮肤数据,MineSkin 用正版账号池"代穿一次抠下签名"。免费匿名档按调用方 IP 限流,所以整台服务器的签名请求在服务端排成一队
- * 一个一个发({@link SkinSigning}),服主可以在服务器钥匙串里填 MineSkin 的 API key 提高额度。
+ * 皮肤数据,MineSkin 用正版账号池"代穿一次抠下签名"。免费匿名档按调用方 IP 限流,所以这台电脑的签名请求排成一队
+ * 一个一个发({@link SkinSigning}),玩家可以在自己的钥匙串里填 MineSkin 的 API key 提高额度。
  *
- * <p>同步:调用的一方是签名队的工作线程。走服务器的代理设置(见 {@link ProxiedHttp});失败抛带原因码的 {@link SkinError}
+ * <p>同步:调用的一方是签名队的工作线程。走这台电脑的代理设置(见 {@link ProxiedHttp});失败抛带原因码的 {@link SkinError}
  * (限流带着对方说的等待秒数)。
  */
 public final class MineSkinClient {

@@ -67,8 +67,6 @@ import java.util.function.Predicate;
  *
  *   /numen group invite|remove|rename|dissolve …          the panel's conversation actions (see ConversationCommands)
  *   /numen chat [&lt;conversation&gt; [&lt;text&gt;]]                  route the caller's chat bar into a conversation, or say one line
- *   /numen companion &lt;her&gt; profile|persona|voice [&lt;entry&gt;]  bind one of her library entries (see BindingCommands)
- *   /numen companion &lt;her&gt; skin [player &lt;name&gt;|url &lt;address&gt;|server &lt;file&gt;]  give her a skin, signed in the server's queue when needed (see SkinCommand)
  * </pre>
  *
  * <h2>只给玩家</h2>
@@ -213,7 +211,6 @@ public final class NumenCommands {
         graft(dispatcher, com.dwinovo.numen.api.talk.ChatBar.node());
         graft(dispatcher, permissionCommand());
         graft(dispatcher, consentCommand());
-        graft(dispatcher, com.dwinovo.numen.api.owner.BindingCommands.node());
         graft(dispatcher, Commands.literal("drive").requires(source -> com.dwinovo.numen.api.platform.Services.permissions().isGameMaster(source))
                 .then(Commands.argument("companion", StringArgumentType.string())
                         .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(companionsHere(ctx.getSource())

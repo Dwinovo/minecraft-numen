@@ -12,12 +12,11 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 签名缓存:服务端内部的一份按内容寻址的存储,玩家看不见也不管理。键是 {@link SkinRef}(图片内容的哈希加手臂模型),值是签好的皮肤
- * ({@link SkinProfile}:Mojang 签名的 textures 数据加原图)。同一张图同一个手臂模型签过一次,谁再要都直接取用,不再联网;
- * 同伴身上记的是对它的引用,换手臂模型时用这里存着的原图重签。
+ * 签名缓存:这台电脑上的一份按内容寻址的存储,玩家看不见也不管理。键是 {@link SkinRef}(图片内容的哈希加手臂模型),值是签好的皮肤
+ * ({@link SkinProfile}:Mojang 签名的 textures 数据加原图)。同一张图同一个手臂模型签过一次,再要都直接取用,不再联网;换服务器也照用。
  *
  * <p>一个键一个文件 {@code <键>.json}。内存里一份,写落盘交 {@link Home#io 车道}。读可以在任何线程(签名队的工作线程在签之前先问它),
- * 写在服务端主线程。
+ * 写在客户端主线程。
  */
 public final class SkinCache {
 

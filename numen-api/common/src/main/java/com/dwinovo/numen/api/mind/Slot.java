@@ -10,7 +10,7 @@ import com.dwinovo.numen.api.voice.VoiceProfile;
  * 她身上绑定的三项库条目:模型档案、人设、声线。每一项是一种库({@link #kind})里的一条,她的绑定({@code binding.json},
  * {@link Bindings})记的是谁绑的、条目的名字({@code 命名空间:名字})——{@link Bound}。面板的编辑卡和召唤卡上
  * 一并选的绑定都在主人的客户端上办。皮肤不是库条目——它是文件夹里的 png,
- * 换皮肤走 {@code Wardrobe}。
+ * 换皮肤走客户端的 {@code Wardrobe}。
  */
 public enum Slot {
     PROVIDER("profile", "provider", ProviderLibrary.KIND, Keys.SETUP_PROVIDER_LABEL),

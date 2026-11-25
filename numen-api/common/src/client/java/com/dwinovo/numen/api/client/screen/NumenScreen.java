@@ -749,10 +749,11 @@ public final class NumenScreen extends Screen {
     /** 召唤卡的宿主面:发包与开选皮肤卡留在屏幕这边。 */
     private final class SummonHost implements SummonPanel.Host {
         @Override public void onCreate(String name, com.dwinovo.numen.api.entity.SummonSetup setup,
-                                       java.util.Map<com.dwinovo.numen.api.mind.Slot, String> bindings) {
-            // 名字与模式、皮肤一包发出,服务端在她到达时落下;库绑定留在这台电脑上,她的大脑建起来时落下;
+                                       java.util.Map<com.dwinovo.numen.api.mind.Slot, String> bindings,
+                                       com.dwinovo.numen.api.client.skin.SkinChoices.Pick skin) {
+            // 名字与模式一包发出,服务端在她到达时落下;库绑定与皮肤留在这台电脑上,她到达、她的大脑建起来时落下;
             // 新同伴经 CompanionListPayload 到达——点它的头像即可开工
-            com.dwinovo.numen.api.client.seat.ClientSeats.expect(name, bindings);
+            com.dwinovo.numen.api.client.seat.ClientSeats.expect(name, bindings, skin);
             NumenNetwork.sendToServer(new com.dwinovo.numen.api.network.payload.SummonRequestPayload(name, setup));
             closeCard();
         }

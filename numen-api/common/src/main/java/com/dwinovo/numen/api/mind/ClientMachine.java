@@ -13,17 +13,22 @@ import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.api.mcp.server.McpMode;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
 import com.dwinovo.numen.api.platform.Services;
+import com.dwinovo.numen.api.skin.MineSkinClient;
+import com.dwinovo.numen.api.skin.SkinCache;
+import com.dwinovo.numen.api.skin.SkinSigning;
+import com.dwinovo.numen.api.skin.Wardrobe;
 import com.dwinovo.numen.api.store.Io;
 import com.dwinovo.numen.api.voice.VoiceProfile;
 
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 这台电脑自己的东西:钥匙串、主人的各库(人设、模型档案、声线、技能、接进来的 MCP 服务器的配置)、偏好、型号目录,以及界面读写它们的口
- * ({@link LibraryDesk})。它们属于这台机器,不属于哪一条连接:设置页与语音在主菜单里、没连服务器时也要用,所以一个客户端进程只建一份,
+ * ({@link LibraryDesk});还有换皮肤的流程({@link Wardrobe}:签名队与签名缓存,MineSkin 的 key 取自这个钥匙串)。它们属于这台机器,不属于哪一条连接:设置页与语音在主菜单里、没连服务器时也要用,所以一个客户端进程只建一份,
  * 连接({@link ClientServices})来了用它、走了不带走它。钥匙串只此一个,语音与模型档案读同一个。
  *
  * <p>只有跟着连接才有的几样(大脑、接进来的 MCP 工具的连接、外部大脑的端点)由当前连接挂上来({@link #attach}),没连着时界面读到的是空的与"没连服务器"。
@@ -58,13 +63,15 @@ public final class ClientMachine {
     private final ModelCatalog models;
     private final ProviderLibrary providers;
     private final LibraryDesk desk;
+    private final Wardrobe wardrobe;
     private final AtomicReference<Connection> connection = new AtomicReference<>();
 
     /**
      * @param root 这台电脑上她的东西放哪({@code config/numen/client/})
      * @param io   读写放哪个线程
+     * @param main 客户端主线程:皮肤签名的结局在它上面交出
      */
-    public ClientMachine(Path root, Io io) {
+    public ClientMachine(Path root, Io io, Executor main) {
         this.root = root;
         this.home = new Home(root, io);
         this.library = new Home(root.resolve("library"), io);
@@ -119,6 +126,9 @@ public final class ClientMachine {
                 return live == null ? null : live.external();
             }
         }, models);
+        SkinCache skins = new SkinCache(home);
+        this.wardrobe = new Wardrobe(new SkinSigning(SkinSigning.Backend.NETWORK,
+                () -> keychain.get(MineSkinClient.KEY_SERVICE), main, skins, Thread::sleep), skins);
     }
 
     /** 当前连接来了。 */
@@ -174,5 +184,10 @@ public final class ClientMachine {
     /** 界面读写配置走这里。 */
     public LibraryDesk desk() {
         return desk;
+    }
+
+    /** 给同伴换皮肤的流程:拿到原图、查缓存、没签过就签、交给服务端穿上。 */
+    public Wardrobe wardrobe() {
+        return wardrobe;
     }
 }

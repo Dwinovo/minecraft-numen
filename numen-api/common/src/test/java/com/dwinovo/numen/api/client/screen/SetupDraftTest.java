@@ -91,30 +91,29 @@ class SetupDraftTest {
     }
 
     @Test
-    void theSummonRequestCarriesOnlyWhatChanged() {
+    void theSummonRequestCarriesOnlyWhatTheServerDoes() {
         SetupDraft draft = SetupDraft.summonDefaults();
         draft.set(Item.PROVIDER, mine("server:deepseek"));
         draft.set(Item.MODE, true);
+        draft.set(Item.SKIN, pick(SkinChoices.Where.MINE, "blue"));
         SummonSetup setup = draft.summonSetup();
         assertEquals(Map.of(Slot.PROVIDER, "server:deepseek"), draft.bindings());
         assertEquals(Boolean.TRUE, setup.creative());
-        assertNull(setup.skin());
     }
 
     @Test
-    void aSkinFromThisMachineGoesWithItsImageAServerOneByName() {
+    void theSkinIsNotSentToTheServerButWornByThisMachineAfterSheArrives() {
         SetupDraft draft = SetupDraft.summonDefaults();
-        draft.set(Item.SKIN, pick(SkinChoices.Where.MINE, "blue"));
-        SummonSetup.Skin mine = draft.summonSetup().skin();
-        assertFalse(mine.serverFile());
-        assertEquals("blue", mine.name());
-        assertArrayEquals(PNG, mine.png());
-        assertEquals("slim", mine.variant(), "手臂是选皮肤卡上定的那一种");
+        assertNull(draft.summonSkin(), "没选就是默认皮肤");
 
-        draft.set(Item.SKIN, pick(SkinChoices.Where.SERVER, "knight"));
-        SummonSetup.Skin server = draft.summonSetup().skin();
-        assertTrue(server.serverFile());
-        assertEquals("knight", server.name());
-        assertEquals(0, server.png().length, "服务器上的图不用再传回去");
+        SkinChoices.Pick picked = pick(SkinChoices.Where.SERVER, "knight");
+        draft.set(Item.SKIN, picked);
+        assertEquals(picked, draft.summonSkin());
+        assertEquals("slim", draft.summonSkin().variant(), "手臂是选皮肤卡上定的那一种");
+        assertArrayEquals(PNG, draft.summonSkin().choice().png(), "服务器文件夹里的图客户端已经拿着");
+        assertNull(draft.summonSetup().creative());
+
+        draft.reset(Item.SKIN);
+        assertNull(draft.summonSkin());
     }
 }

@@ -135,8 +135,8 @@ QQ、Discord、弹幕(渠道桥)─┤  (每只一个)        └─ 外部大�
 |---|---|---|
 | 同伴(身体) | 世界 `<存档>/numen/companions/<她的 uuid>/` | 身体的旁路轨迹(`trace/`,开了才写,寻路为什么放弃);她的身体与名册、主人表在存档的 `SavedData` 里 |
 | 玩家 × 世界 | 世界 `<存档>/numen/players/<玩家 uuid>/` | 会话成员表 `conversations.json`;权限规则在存档的 `SavedData`,不动 |
-| 服务器 | `config/numen/server/` | `server.json`(总开关、各种上限、每人同伴数 `maxCompanions`)、服务器的钥匙串(只有 MineSkin 的 key)、签名皮肤缓存 `skin-cache/`、插件开关 |
-| 本机(主人的电脑) | `config/numen/client/` | **她的家** `companions/<uuid>/`:对话日志 `chat.jsonl`、收件箱、札记 `memory/`、长期目标、token 台账 `stats.json`、绑定 `binding.json`(人设、模型档案、声线各是谁绑的与条目名;皮肤是对签名缓存的引用)、定时 `schedules.json`、旁路轨迹(开了才写);**库** `library/`(人设、模型档案、声线、技能、她的 Lua 模块、接进来的 MCP 工具,同一布局 `<库>/<命名空间>/<名字>`);钥匙串 `keys/`;`mcp/`(外部大脑的配置、令牌哈希、审计);`cache/models-dev.json`;界面偏好、置顶、文件夹、草稿、已读、语音服务的 key |
+| 服务器 | `config/numen/server/` | `server.json`(总开关、各种上限、每人同伴数 `maxCompanions`)、插件开关(服务器上没有任何 key) |
+| 本机(主人的电脑) | `config/numen/client/` | **她的家** `companions/<uuid>/`:对话日志 `chat.jsonl`、收件箱、札记 `memory/`、长期目标、token 台账 `stats.json`、绑定 `binding.json`(人设、模型档案、声线各是谁绑的与条目名;皮肤是对签名缓存的引用)、定时 `schedules.json`、旁路轨迹(开了才写);**库** `library/`(人设、模型档案、声线、技能、她的 Lua 模块、接进来的 MCP 工具,同一布局 `<库>/<命名空间>/<名字>`);钥匙串 `keys/`;`mcp/`(外部大脑的配置、令牌哈希、审计);`cache/models-dev.json`;签名皮肤缓存 `skin-cache/`;界面偏好、置顶、文件夹、草稿、已读、语音服务的 key |
 | 外部大脑 | 外部 agent 那边 | 它自己的 key 与上下文;上下文从客户端日志派生 |
 
 - **脑子的东西不在服务器上,也不会因为换服务器而不见;换一台电脑才会不见**:配置与记忆不跟着人换电脑;存档拷给别人,身体过去了,她不记得以前的事(ADR 0008)。服主看不到她的对话与札记,也不替谁出模型的钱。
@@ -150,9 +150,13 @@ QQ、Discord、弹幕(渠道桥)─┤  (每只一个)        └─ 外部大�
 - **日志不写对话内容。** 服主与托管商看得到 `latest.log`,玩家求助时又常把日志传到公开网站;INFO 级只记编号与摘要,对话原文、程序源码、事件正文不进日志。
 - **key 在钥匙串,不在条目里**:档案、声线、MCP 条目只写"用哪个服务商",key 按服务商存在主人电脑的 `keys/`;她的主人不止一位时,每项绑定在绑它的那个人看到的库里解析、用他的钥匙串
   ([ADR runtime 0006](adr/runtime/0006-keepers-ownership-use-provenance.md));别人绑的档案,其余主人只看得到名字。jar 里永远没有 key。
-- **皮肤不是库**([ADR runtime 0005](adr/runtime/0005-skins-are-pngs-in-a-folder-signed-on-use.md)):皮肤就是文件夹里的 png,文件名就是皮肤名,每台机器一个 `config/numen/skins/`。选中"我的"一张,客户端把 png 与粗细交给服务端
-  (库协议 `skin` 的 `put`,可分片);**签名只在服务端、用时才签**:按"图片内容哈希 + 粗细"(`SkinRef`)查签名缓存(`SkinCache`),命中当场穿上,没有就进签名队(`SkinSigning`:被 MineSkin 限流按 `Retry-After` 等,每人最多同时 5 张在排)。
-  MineSkin 的 API key 是服务器钥匙串里的 `mineskin`,管理员在选皮肤卡里填。同伴身上记的是对缓存的引用(绑定里的 `skin`:`<哈希>-<粗细>`)。整条流程是 `Wardrobe`。
+- **皮肤不是库**([ADR runtime 0005](adr/runtime/0005-skins-are-pngs-in-a-folder-signed-on-use.md)、[0009](adr/runtime/0009-skins-signed-by-the-chooser.md)):
+  皮肤就是文件夹里的 png,文件名就是皮肤名,每台机器一个 `config/numen/skins/`。**签名是挑皮肤的人的客户端做的**:拿到原图(本机或服务器皮肤文件夹、网址、正版玩家名)
+  → 按"图片内容哈希 + 粗细"(`SkinRef`)查这台电脑的签名缓存(`SkinCache`,`config/numen/client/skin-cache/`)→ 没签过就进这台电脑的签名队
+  (`SkinSigning`:MineSkin,key 是这台电脑钥匙串里的 `mineskin`,没填走匿名额度;被限流按 `Retry-After` 等,最多同时 5 张在排;借正版玩家的皮肤本来就是 Mojang 签好的,不经 MineSkin)
+  → 交给服务端穿上。整条流程是客户端的 `Wardrobe`(`ClientMachine` 持有)。**服务端只验签和穿上**:库协议 `skin` 的 `put`(她、引用、value、signature)是唯一入口,
+  `SkinDresser` 用原版服务器已有的 Mojang 服务公钥(会话服务验 profile property 签名)验过才换身体,验不过或没有公钥就拒绝;`delete` 是脱掉。
+  `skin-files` 是服务器皮肤文件夹的列表与原图。同伴身上记的是引用(`<哈希>-<粗细>`)。
 - **库协议只剩服务端管的几样**(`Libraries`,包 `LibraryRequestPayload`/`LibraryPayload`):皮肤(`skin`、`skin-files`)、权限(主人的"不用问"名单与档位,`permission`)、插件花名册(`plugin`,开关只有管理员与房主能改)。
   她的大脑的配置(模型档案、key、人设、声线、技能、札记、定时、接进来的 MCP)都是主人客户端上的,不经这里。
 - **绑定**:库条目的绑定(人设、模型档案、声线)是主人客户端的事,存在她家里的 `binding.json`,形状只在 `Bindings` 一处(`{"by": 绑的人, "id": "命名空间:名字"}`);服务端只在主人表变了时让被移出的人绑的几项退回未绑定(`CompanionBinding.releaseBoundBy`)。
@@ -269,6 +273,6 @@ her.hotbar()    // 快捷栏:hold(格)、grip(东西),每次换了都交回 Body
 - 已定:别人的话只经服务端 `Hearing` 一处送到创建者的座位;她的话带说话的地方回到服务端、由服务端在聊天里说出来。
 - 已定:存储按归属分根目录;存法用文件,不用数据库;日志不写对话内容。
 - 已定:没装客户端的玩家用原版的交互——`/msg`、`/numen group`、`/numen chat`,不读公屏;召唤只要名字。
-- 已定:皮肤签名统一在服务端;key 在钥匙串。
+- 已定:皮肤签名在挑皮肤的人的客户端,服务端只验 Mojang 的签名;key 在客户端的钥匙串。
 - 已定:多模态的画面交给客户端画,服务端只出清单;暂缓(§九)。
 - 没有定:单人存档里世界存档内旧的她的记忆要不要搬到客户端(默认不搬);记忆放进物品、交给别人接着用(先不考虑)。

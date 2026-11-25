@@ -18,7 +18,8 @@ public final class ClientMachines {
     /** 这台电脑的钥匙串、各库与偏好。 */
     public static ClientMachine get() {
         if (machine == null) {
-            machine = new ClientMachine(Homes.clientDir(), NumenIo.lanes().io("client"));
+            machine = new ClientMachine(Homes.clientDir(), NumenIo.lanes().io("client"),
+                    net.minecraft.client.Minecraft.getInstance());
         }
         return machine;
     }

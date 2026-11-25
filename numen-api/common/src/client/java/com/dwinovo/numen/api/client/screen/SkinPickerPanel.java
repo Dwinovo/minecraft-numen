@@ -3,6 +3,7 @@ package com.dwinovo.numen.api.client.screen;
 import com.dwinovo.numen.api.owner.Libraries;
 import com.dwinovo.numen.api.client.agent.ClientCompanions;
 import com.dwinovo.numen.api.client.agent.ClientLibraries;
+import com.dwinovo.numen.api.client.skin.ClientSkins;
 import com.dwinovo.numen.api.client.skin.FolderOpener;
 import com.dwinovo.numen.api.client.skin.SkinChoices;
 import com.dwinovo.numen.api.client.skin.SkinTextures;
@@ -17,10 +18,11 @@ import com.dwinovo.numen.api.client.ui.widget.Label;
 import com.dwinovo.numen.api.client.ui.widget.TextField;
 import com.dwinovo.numen.api.data.ModLanguageData;
 import com.dwinovo.numen.api.skin.MineSkinClient;
+import com.dwinovo.numen.api.skin.SkinError;
 import com.dwinovo.numen.api.skin.SkinFolder;
 import com.dwinovo.numen.api.skin.SkinProfile;
 import com.dwinovo.numen.api.skin.SkinRef;
-import com.google.gson.JsonObject;
+import com.dwinovo.numen.api.skin.SkinSigning;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
 import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.client.resources.language.I18n;
@@ -34,10 +36,10 @@ import java.util.UUID;
  * 选皮肤卡:皮肤就是文件夹里的 png,文件名就是皮肤名。按文件名列出,带小脸,分"我的"(这台机器的皮肤文件夹)与"服务器提供"
  * (服务器的;房主两个文件夹是同一个,只有"我的"一节)两节。列表上方有"打开文件夹"(系统文件管理器;手机上打不开,就显示路径请玩家
  * 用手机自带的文件管理器放图)和"刷新",文件夹空着给一句说明。选一张,手臂粗细按图自动判断({@code SkinVariants}),玩家可以改;
- * "穿上"之后她的皮肤由服务端用时才签({@code Wardrobe}):这里只显示"正在准备皮肤…"和失败的原因,签名这回事玩家看不见。
- * 管理员另有一行 MineSkin 的 API key(服务器钥匙串里的,提高签名额度)。
+ * "穿上"之后皮肤由这台电脑用时才签({@code Wardrobe}):这里只显示"正在准备皮肤…"和失败的原因,签名这回事玩家看不见。
+ * 另有一行这台电脑钥匙串里的 MineSkin API key(可不填,提高签名额度)。
  *
- * <p>召唤卡上点头像也开这张卡,那时她还不存在:选定的那张进召唤卡的草稿({@link Host#draft}),随召唤请求发出,这里不发请求;
+ * <p>召唤卡上点头像也开这张卡,那时她还不存在:选定的那张进召唤卡的草稿({@link Host#draft}),她到了以后由这台电脑穿上,这里不换;
  * 主按钮叫"选择"。
  *
  * <p>脸是 MC 独有的东西,在这一层直接画;几何与状态色走 NumenStyle。
@@ -89,6 +91,7 @@ public final class SkinPickerPanel extends ModalCard {
     /** 刚发出去的"穿上",等她身上的皮肤变成这一张;{@code null} 是没在等。 */
     private SkinRef expected;
     private boolean takingOff;
+    /** 没办成的原因,已经是玩家的语言。 */
     private String problem;
 
     private Button wear;
@@ -110,18 +113,11 @@ public final class SkinPickerPanel extends ModalCard {
         mineSkinKey = storedKey();
         ask();
         refresh();
-        // 上一回没成的留在服务端的队里,这一回不再带着:看过了就撤掉
-        for (ClientLibraries.SkinJob job : ClientLibraries.skinJobs()) {
-            if (job.failed()) {
-                cancel(job.job());
-            }
-        }
     }
 
-    /** 向服务端要它的皮肤文件夹此刻的样子,和我在队里的几行。 */
+    /** 向服务端要它的皮肤文件夹此刻的样子。 */
     private static void ask() {
         ClientCompanions.library().ask(Libraries.SKIN_FILES);
-        ClientCompanions.library().ask(Libraries.SKIN);
     }
 
     /** 重列两个文件夹。 */
@@ -180,10 +176,6 @@ public final class SkinPickerPanel extends ModalCard {
         return SkinRef.parse(ClientCompanions.getOrCreate(host.uuid()).skinId());
     }
 
-    private boolean admin() {
-        return ClientCompanions.admin();
-    }
-
     /** 这台电脑钥匙串里 MineSkin 的 key。 */
     private static String storedKey() {
         return ClientLibraries.mineKey(MineSkinClient.KEY_SERVICE);
@@ -204,9 +196,9 @@ public final class SkinPickerPanel extends ModalCard {
         return heightFor(headH() + LIST_H + belowList());
     }
 
-    /** 列表下面的几样:手臂行、管理员的 key 行、状态行。 */
+    /** 列表下面的几样:手臂行、key 行、状态行。 */
     private int belowList() {
-        return 4 + ROW_H + (admin() ? FIELD_H + 2 : 0) + LINE_H + 2;
+        return 4 + ROW_H + FIELD_H + 2 + LINE_H + 2;
     }
 
     @Override
@@ -247,11 +239,9 @@ public final class SkinPickerPanel extends ModalCard {
                 t(ModLanguageData.Keys.SKIN_VARIANT_SLIM)), Math.max(0, ARMS.indexOf(arm)),
                 i -> arm = ARMS.get(Math.clamp(i, 0, ARMS.size() - 1)));
         ry += ROW_H;
-        if (admin()) {
-            field(px, ry, pw, t(ModLanguageData.Keys.SKIN_MINESKIN_KEY), new TextField(mineSkinKey, v -> mineSkinKey = v)
-                    .masked(true).placeholder(t(ModLanguageData.Keys.SKIN_MINESKIN_KEY_HINT)));
-            ry += FIELD_H + 2;
-        }
+        field(px, ry, pw, t(ModLanguageData.Keys.SKIN_MINESKIN_KEY), new TextField(mineSkinKey, v -> mineSkinKey = v)
+                .masked(true).placeholder(t(ModLanguageData.Keys.SKIN_MINESKIN_KEY_HINT)));
+        ry += FIELD_H + 2;
         statusY = ry;
         wear = buttons(t(ModLanguageData.Keys.GUI_SETTINGS_CANCEL), host::onClose,
                 t(host.draft() != null ? ModLanguageData.Keys.SKIN_PICK : ModLanguageData.Keys.SKIN_WEAR), this::wear);
@@ -274,9 +264,7 @@ public final class SkinPickerPanel extends ModalCard {
         if (selected < 0 || waiting()) {
             return;
         }
-        if (admin()) {
-            ClientLibraries.saveKey(MineSkinClient.KEY_SERVICE, mineSkinKey);
-        }
+        ClientLibraries.saveKey(MineSkinClient.KEY_SERVICE, mineSkinKey);
         SetupDraft draft = host.draft();
         if (draft != null) {
             draft.set(SetupDraft.Item.SKIN, rows.get(selected) instanceof Row.Item item
@@ -284,39 +272,41 @@ public final class SkinPickerPanel extends ModalCard {
             host.onClose();
             return;
         }
-        JsonObject body = new JsonObject();
-        body.addProperty("companion", host.uuid().toString());
+        problem = null;
         if (rows.get(selected) instanceof Row.Default) {
             takingOff = true;
-            ClientCompanions.library().request(Libraries.SKIN, Libraries.DELETE, body, this::answered);
+            ClientSkins.takeOff(host.uuid(), reason -> {
+                if (reason != null) {
+                    failed(SkinError.ofCode(reason));
+                }
+            });
             return;
         }
         SkinChoices.Choice choice = ((Row.Item) rows.get(selected)).choice();
-        body.addProperty("name", choice.name());
-        body.addProperty("variant", arm);
-        if (choice.where() == SkinChoices.Where.MINE) {
-            body.addProperty("png", java.util.Base64.getEncoder().encodeToString(choice.png()));
-        } else {
-            body.addProperty("file", choice.name());
-        }
         expected = choice.ref(arm);
-        problem = null;
-        ClientCompanions.library().request(Libraries.SKIN, Libraries.PUT, body, this::answered);
-    }
-
-    /** 服务端答了这一次请求:没办成就把原因摆出来。 */
-    private void answered(com.dwinovo.numen.api.client.agent.LibraryTables.Reply reply) {
-        if (!reply.ok()) {
-            expected = null;
-            takingOff = false;
-            problem = reply.problem();
+        try {
+            long ticket = ClientSkins.wear(host.uuid(), choice, arm, new SkinSigning.Listener() {
+                @Override
+                public void done(SkinSigning.Outcome outcome) {
+                    if (!outcome.ok()) {
+                        failed(outcome.problem());
+                    }
+                }
+            });
+            if (ticket < 0) {
+                expected = null;
+                problem = I18n.get(ModLanguageData.Keys.SKIN_QUEUE_FULL, SkinSigning.MAX_PENDING);
+            }
+        } catch (SkinError unusable) {
+            failed(unusable);
         }
     }
 
-    private static void cancel(long job) {
-        JsonObject body = new JsonObject();
-        body.addProperty("job", job);
-        ClientCompanions.library().request(Libraries.SKIN, Libraries.CANCEL, body);
+    /** 这一次没办成:不再等她穿上,把原因摆出来。 */
+    private void failed(SkinError why) {
+        expected = null;
+        takingOff = false;
+        problem = why.message().getString();
     }
 
     /** 等着她穿上(或脱掉)。 */
@@ -326,27 +316,17 @@ public final class SkinPickerPanel extends ModalCard {
 
     /** 这一刻该画在状态行上的话和颜色;没什么可说是 {@code null}。 */
     private String status(NumenTheme.Colors c, int[] color) {
-        for (ClientLibraries.SkinJob job : ClientLibraries.skinJobs()) {
-            if (job.failed()) {
-                if (waiting()) {
-                    expected = null;
-                    takingOff = false;
-                }
-                color[0] = c.danger();
-                return I18n.get(ModLanguageData.Keys.SKIN_FAILED, job.failure().message().getString());
-            }
-        }
         if (problem != null) {
             color[0] = c.danger();
             return I18n.get(ModLanguageData.Keys.SKIN_FAILED, problem);
         }
         if (waiting()) {
             color[0] = c.textSecondary();
-            for (ClientLibraries.SkinJob job : ClientLibraries.skinJobs()) {
-                if ("WAITING".equals(job.state())) {
+            for (SkinSigning.Pending job : ClientSkins.pending()) {
+                if (job.state() == SkinSigning.State.WAITING) {
                     return t(ModLanguageData.Keys.SKIN_JOB_WAITING);
                 }
-                if ("QUEUED".equals(job.state()) && job.position() > 1) {
+                if (job.state() == SkinSigning.State.QUEUED && job.position() > 1) {
                     return I18n.get(ModLanguageData.Keys.SKIN_JOB_QUEUED, job.position());
                 }
             }

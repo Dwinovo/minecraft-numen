@@ -538,14 +538,6 @@ public final class ClientLibraries {
     /** 服务器皮肤文件夹里的一张图;图不能当皮肤用时 {@code png} 是空数组、{@code problem} 说为什么。 */
     public record ServerSkin(String name, byte[] png, SkinError problem) {}
 
-    /** 一张在服务端队里等签的,或刚失败的;失败的 {@code failure} 非空,排着的 {@code position} 是排第几。 */
-    public record SkinJob(long job, String name, String state, int position, SkinError failure) {
-
-        public boolean failed() {
-            return failure != null;
-        }
-    }
-
     /** 服务器皮肤文件夹里的全部(服务端推来的最近一张表);房主没有这一节。 */
     public static List<ServerSkin> serverSkins() {
         List<ServerSkin> out = new ArrayList<>();
@@ -554,17 +546,6 @@ public final class ClientLibraries {
             out.add(new ServerSkin(text(o, "name"),
                     o.has("png") ? java.util.Base64.getDecoder().decode(text(o, "png")) : new byte[0],
                     o.has("problem") ? skinError(o.getAsJsonObject("problem")) : null));
-        }
-        return out;
-    }
-
-    /** 这位玩家在服务端队里的与刚失败的。 */
-    public static List<SkinJob> skinJobs() {
-        List<SkinJob> out = new ArrayList<>();
-        for (JsonElement e : entries(Libraries.SKIN)) {
-            JsonObject o = e.getAsJsonObject();
-            out.add(new SkinJob(o.get("job").getAsLong(), text(o, "name"), text(o, "state"),
-                    o.get("position").getAsInt(), o.has("problem") ? skinError(o.getAsJsonObject("problem")) : null));
         }
         return out;
     }

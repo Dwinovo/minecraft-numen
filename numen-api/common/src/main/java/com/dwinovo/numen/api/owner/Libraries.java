@@ -8,8 +8,7 @@ import com.dwinovo.numen.api.permission.PermissionStore;
 import com.dwinovo.numen.api.plugin.PluginRoster;
 import com.dwinovo.numen.api.skin.SkinError;
 import com.dwinovo.numen.api.skin.SkinFolder;
-import com.dwinovo.numen.api.skin.SkinSigning;
-import com.dwinovo.numen.api.skin.Wardrobe;
+import com.dwinovo.numen.api.skin.SkinDresser;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -20,7 +19,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * 玩家的面板向服务端要的、服务端管的几样东西的读写:皮肤(排队签名的行、服务器皮肤文件夹里的图,给同伴换皮肤)、权限(他名下每只同伴的八个档位与
+ * 玩家的面板向服务端要的、服务端管的几样东西的读写:皮肤(服务器皮肤文件夹里的图,客户端签好的皮肤穿到同伴身上)、权限(他名下每只同伴的八个档位与
  * "不用问"名单)、插件花名册。包是 {@code LibraryRequestPayload} 与 {@code LibraryPayload},一问一答,答复是这位玩家此刻看得到的整表。
  * 她的大脑的配置(模型档案、key、人设、声线、技能、札记、定时)是主人客户端上的,不经这里。
  *
@@ -30,9 +29,9 @@ import java.util.UUID;
  */
 public final class Libraries {
 
-    /** 皮肤:他在签名队里的行(排队的、刚失败的),与给同伴换皮肤、脱掉、撤掉排着的。 */
+    /** 皮肤:把客户端签好的皮肤穿到他名下的同伴身上,或脱掉;服务端只验 Mojang 的签名。 */
     public static final String SKIN = "skin";
-    /** 服务器皮肤文件夹里的图:只读,客户端要看时才问(带着每张图,不随排队的进度一起推)。 */
+    /** 服务器皮肤文件夹里的图:只读,客户端要看时才问(带着每张图)。 */
     public static final String SKIN_FILES = "skin-files";
     /** 权限:他名下每只同伴的八个档位与每种动作的"不用问"名单,只有他读写他那一份(管理员也一样)。 */
     public static final String PERMISSION = "permission";
@@ -46,8 +45,6 @@ public final class Libraries {
     /** 权限专有:设一只同伴的一个档位;套一个预设。从名单里删一项用 {@link #DELETE}。 */
     public static final String TIER = PermissionLibrary.TIER;
     public static final String PRESET = PermissionLibrary.PRESET;
-    /** 皮肤专有:撤掉一张排着的签名(或不再显示一条失败)。 */
-    public static final String CANCEL = "cancel";
 
     /** 这台服务器上各样东西的出处;测试给假的。 */
     public interface Sources {
@@ -61,11 +58,8 @@ public final class Libraries {
         /** 这位玩家是不是房主:他的"我的"皮肤文件夹就是服务器那一个。 */
         boolean host(UUID owner);
 
-        /** 这台服务器上的皮肤签名队(排队的状态、撤掉)。 */
-        SkinSigning signer();
-
-        /** 给同伴换皮肤的流程,连同服务器上的皮肤文件夹。 */
-        Wardrobe wardrobe();
+        /** 给同伴穿皮肤的入口,连同服务器上的皮肤文件夹。 */
+        SkinDresser dresser();
 
         /** 这台服务器上的插件花名册。 */
         PluginRoster plugins();
@@ -82,6 +76,11 @@ public final class Libraries {
 
     /** 这台服务器上的那一份。 */
     public static Libraries of(net.minecraft.server.MinecraftServer server) {
+        return of(server, SkinDresser.of(server));
+    }
+
+    /** 同上,穿皮肤的入口由调用方给(GameTest 换成验另一把公钥的)。 */
+    public static Libraries of(net.minecraft.server.MinecraftServer server, SkinDresser dresser) {
         return new Libraries(new Sources() {
             @Override
             public List<UUID> companions(UUID owner) {
@@ -111,13 +110,8 @@ public final class Libraries {
             }
 
             @Override
-            public SkinSigning signer() {
-                return ServerSkins.of(server).signer();
-            }
-
-            @Override
-            public Wardrobe wardrobe() {
-                return ServerSkins.of(server).wardrobe();
+            public SkinDresser dresser() {
+                return dresser;
             }
 
             @Override
@@ -165,7 +159,7 @@ public final class Libraries {
     public String view(UUID owner, boolean admin, String kind) {
         JsonArray out = new JsonArray();
         switch (kind) {
-            case SKIN -> pendingRows(owner, out);
+            case SKIN -> { }
             case SKIN_FILES -> fileRows(owner, out);
             case PLUGIN -> pluginRows(admin || sources.host(owner), out);
             case PERMISSION -> out.addAll(PermissionLibrary.view(sources.permission(owner)));
@@ -182,7 +176,7 @@ public final class Libraries {
         if (sources.host(owner)) {
             return;
         }
-        SkinFolder folder = sources.wardrobe().folder();
+        SkinFolder folder = sources.dresser().folder();
         for (SkinFolder.Entry file : folder.list()) {
             JsonObject row = new JsonObject();
             row.addProperty("row", "file");
@@ -191,22 +185,6 @@ public final class Libraries {
                 row.addProperty("png", java.util.Base64.getEncoder().encodeToString(folder.read(file.name())));
             } catch (SkinError unusable) {
                 row.add("problem", skinProblem(unusable));
-            }
-            out.add(row);
-        }
-    }
-
-    /** 这位玩家在签名队里的与刚失败的({@code row: "pending"},带排到第几、在等限流、失败的原因码与原话)。 */
-    private void pendingRows(UUID owner, JsonArray out) {
-        for (SkinSigning.Pending pending : sources.signer().pendingOf(owner)) {
-            JsonObject row = new JsonObject();
-            row.addProperty("row", "pending");
-            row.addProperty("name", pending.name());
-            row.addProperty("job", pending.id());
-            row.addProperty("state", pending.failure() != null ? "FAILED" : pending.state().name());
-            row.addProperty("position", pending.position());
-            if (pending.failure() != null) {
-                row.add("problem", skinProblem(pending.failure()));
             }
             out.add(row);
         }
@@ -222,60 +200,29 @@ public final class Libraries {
     }
 
     /**
-     * 皮肤的操作,都对他名下的一只同伴({@code companion})。存({@link #PUT})是给她换上这张皮肤,图是 {@code png}(base64,他本机文件夹里的)、
-     * {@code file}(服务器文件夹里的文件名)、{@code url} 或 {@code player} 之一,{@code variant} 是手臂模型(不写是看图判断):签过的当场穿上,
-     * 没签过的排上队,排到第几、被限流在等、失败的原因都在表里({@link #pendingRows})。删({@link #DELETE})是脱掉,回到默认皮肤。
-     * 撤({@link #CANCEL})撤掉自己排着的或不再显示失败的。皮肤不是库里的条目,没有"复制到我的"这类操作。
+     * 皮肤的操作,都对他名下的一只同伴({@code companion})。存({@link #PUT})是把客户端签好的皮肤穿上:{@code ref}(缓存里的名字)、
+     * {@code value} 与 {@code signature}(Mojang 签名的 textures 数据),服务端验过签名才穿({@link SkinDresser#wear});验不过,{@code problem} 是原因码({@link SkinError},客户端按码翻成玩家的话)。
+     * 删({@link #DELETE})是脱掉,回到默认皮肤。皮肤不是库里的条目,没有"复制到我的"这类操作。
      */
     private Done skin(UUID owner, String op, JsonObject body) {
-        switch (op) {
-            case LIST:
-                return Done.ok();
-            case CANCEL:
-                JsonElement job = body.get("job");
-                return job != null && job.isJsonPrimitive() && sources.signer().cancel(owner, job.getAsLong())
-                        ? Done.ok() : Done.problem("no such pending skin");
-            case PUT:
-            case DELETE:
-                break;
-            default:
-                return Done.problem("unknown operation");
+        if (!PUT.equals(op) && !DELETE.equals(op)) {
+            return Done.problem(SkinError.UNKNOWN);
         }
         UUID companion = ownedCompanion(owner, body);
         if (companion == null) {
-            return Done.problem("not your companion");
+            return Done.problem(SkinError.NOT_YOURS);
         }
         if (DELETE.equals(op)) {
-            sources.wardrobe().takeOff(companion);
+            sources.dresser().takeOff(companion);
             return Done.ok();
         }
-        String variant = string(body, "variant");
-        String name = string(body, "name") != null ? string(body, "name") : "skin";
         try {
-            long ticket;
-            if (string(body, "png") != null) {
-                byte[] png;
-                try {
-                    png = java.util.Base64.getDecoder().decode(string(body, "png"));
-                } catch (IllegalArgumentException notBase64) {
-                    return Done.problem("unreadable image");
-                }
-                ticket = sources.wardrobe().wear(owner, companion, name, new SkinSigning.Source.Image(png), variant,
-                        outcome -> { });
-            } else if (string(body, "file") != null) {
-                ticket = sources.wardrobe().wearFile(owner, companion, string(body, "file"), variant, outcome -> { });
-            } else if (string(body, "url") != null) {
-                ticket = sources.wardrobe().wear(owner, companion, name, new SkinSigning.Source.Url(string(body, "url")),
-                        variant, outcome -> { });
-            } else if (string(body, "player") != null) {
-                ticket = sources.wardrobe().wear(owner, companion, string(body, "player"),
-                        new SkinSigning.Source.Player(string(body, "player")), variant, outcome -> { });
-            } else {
-                return Done.problem("a skin needs an image, a file, a url or a player name");
-            }
-            return ticket < 0 ? Done.problem("too many skins are waiting to be signed") : Done.ok();
+            sources.dresser().wear(companion, string(body, "ref"), string(body, "value"), string(body, "signature"));
+            return Done.ok();
         } catch (SkinError refused) {
-            return Done.problem(refused.getMessage());
+            com.dwinovo.numen.api.Constants.LOG.warn("[numen-skin] refused the skin of {} for {}: {}", companion, owner,
+                    refused.getMessage());
+            return Done.problem(refused.code());
         }
     }
 

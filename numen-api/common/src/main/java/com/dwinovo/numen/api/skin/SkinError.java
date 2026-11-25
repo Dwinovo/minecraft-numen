@@ -5,8 +5,8 @@ import net.minecraft.network.chat.Component;
 import java.util.List;
 
 /**
- * 皮肤这一块(查正版档案、MineSkin 代签)的失败:原因码 + 现场的原话。产生错误的那一层只说"是哪一种、对方说了什么",
- * 不写给人看的话;{@link #message()} 把码按收话人的语言翻出来再接上原话(服务端发给玩家的话、客户端画在列表上的话是同一个)。
+ * 皮肤这一块(查正版档案、MineSkin 代签、服务端验签)的失败:原因码 + 现场的原话。产生错误的那一层只说"是哪一种、对方说了什么",
+ * 不写给人看的话;{@link #message()} 把码按收话人的语言翻出来再接上原话。
  * {@link #getMessage()} 是给日志的诊断(码 + 原话,不分语言)。
  *
  * <p>{@code args} 按码约定的顺序:
@@ -15,6 +15,8 @@ import java.util.List;
  *   <li>{@link #RATE_LIMITED}:{@code [服务, 对方说多少秒后再来]},秒数可为空;</li>
  *   <li>{@link #REPLY_BAD}、{@link #REPLY_MISSING}、{@link #NETWORK}:{@code [服务]};</li>
  *   <li>{@link #BAD_IMAGE}:{@code [原因]},图片本身不能用(不是 png、尺寸不对、太大、网址不让取);</li>
+ *   <li>服务端不肯穿(每个码一条翻译,{@code [英文诊断]} 只写进日志、不给玩家看):{@link #NOT_SIGNED} 没有签名、{@link #SIGNATURE_REJECTED}
+ *       签名不是 Mojang 的或服务器取不到公钥验、{@link #BAD_REF} 引用写法不对、{@link #NOT_YOURS} 不是你能换的同伴、{@link #GONE} 她已不在名册上;</li>
  *   <li>{@link #NO_SKIN}、{@link #INTERRUPTED}:没有;</li>
  *   <li>{@link #UNKNOWN}:{@code [异常类型, 异常信息]},不是我们认得的错。</li>
  * </ul>
@@ -30,6 +32,11 @@ public final class SkinError extends IllegalStateException {
     public static final String NO_SKIN = "no_skin";
     public static final String INTERRUPTED = "interrupted";
     public static final String BAD_IMAGE = "bad_image";
+    public static final String NOT_SIGNED = "not_signed";
+    public static final String SIGNATURE_REJECTED = "signature_rejected";
+    public static final String BAD_REF = "bad_ref";
+    public static final String NOT_YOURS = "not_yours";
+    public static final String GONE = "gone";
     public static final String UNKNOWN = "unknown";
 
     private final String code;
@@ -59,7 +66,12 @@ public final class SkinError extends IllegalStateException {
         return of(RATE_LIMITED, service, retryAfterSeconds > 0 ? String.valueOf(retryAfterSeconds) : "");
     }
 
-    /** 按码和原话重建(服务端把失败推给客户端时只推码和原话,客户端用它翻成当前语言)。 */
+    /** 服务端拒绝时回的原因码重建成错误(玩家看的话由码翻出来)。 */
+    public static SkinError ofCode(String code) {
+        return new SkinError(code, List.of(), null);
+    }
+
+    /** 按码和原话重建(服务端列文件夹时把读不了的图的原因码和原话推给客户端,客户端用它翻成当前语言)。 */
     public static SkinError of(String code, List<String> args) {
         return new SkinError(code, List.copyOf(args), null);
     }

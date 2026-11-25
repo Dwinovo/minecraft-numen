@@ -15,8 +15,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 借正版玩家皮肤——在服务端查,走服务器的代理设置({@link ProxiedHttp}),失败原因能当场告诉玩家。
- * 拿到的是 Mojang 签名的 textures(自验证,伪造不了),与 MineSkin 代签出来的是同一种东西,存进皮肤库同一种条目。
+ * 借正版玩家皮肤——在客户端查,走这台电脑的代理设置({@link ProxiedHttp}),失败原因能当场告诉玩家。
+ * 拿到的是 Mojang 签名的 textures(自验证,伪造不了),与 MineSkin 代签出来的是同一种东西,存进同一份签名缓存。
  *
  * <p>同步:调用的一方是签名队的工作线程({@link SkinSigning})。结果按名字缓存(含"查无此人"),同一个名字不重复联网。
  */

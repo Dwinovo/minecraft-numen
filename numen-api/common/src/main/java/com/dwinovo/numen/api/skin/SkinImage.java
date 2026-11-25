@@ -13,7 +13,7 @@ import java.util.function.Predicate;
 
 /**
  * 皮肤图:一张 png 能不能当皮肤用({@link #check}),以及按网址把它取回来({@link #fetch}、{@link #fetchTexture})。
- * 玩家给的网址由服务端去取,所以只收公网上的 http(s) 地址,不跟重定向,大小有上限——否则这条路就成了借服务器的手探内网。
+ * 玩家给的网址只收公网上的 http(s) 地址,不跟重定向,大小有上限——否则这条路就成了借玩家的手探内网。
  * 不合格一律抛 {@link SkinError#BAD_IMAGE}。
  */
 public final class SkinImage {
