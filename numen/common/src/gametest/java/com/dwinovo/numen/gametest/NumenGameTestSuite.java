@@ -40,6 +40,7 @@ public class NumenGameTestSuite extends CompanionGameTestSuite {
                 FlyGameTests.class,
                 FloatGameTests.class,
                 GearGameTests.class,
+                HearingGameTests.class,
                 InteractGameTests.class,
                 ItemComponentsGameTests.class,
                 InventoryGameTests.class,

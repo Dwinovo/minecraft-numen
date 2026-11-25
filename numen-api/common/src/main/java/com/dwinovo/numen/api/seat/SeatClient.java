@@ -40,6 +40,7 @@ public final class SeatClient {
 
     private final Executor main;
     private final RpcPeer peer;
+    private final java.util.concurrent.atomic.AtomicInteger quick = new java.util.concurrent.atomic.AtomicInteger();
     private final RpcPeer.Outbound out;
     /** 每只同伴收到的最大序号:断线重连时 {@link SeatMethods#SEAT_OPEN} 报上它。 */
     private final Map<UUID, Long> marks = new ConcurrentHashMap<>();
@@ -216,6 +217,11 @@ public final class SeatClient {
         return call(SeatMethods.SAY, companion, extra).thenApply(o -> null);
     }
 
+    /** 发出去、还没有答复的请求有几条,不算一段程序的 {@code program/run}(它要等游戏往前走才有结局):GameTest 每刻据此等座位上的往返落定。 */
+    public int pending() {
+        return quick.get();
+    }
+
     /** 报告一次 run 开始了:服务端把它告诉插件。通知,不等答复。 */
     public void runStarted(UUID companion, long run) {
         JsonObject params = new JsonObject();
@@ -257,7 +263,12 @@ public final class SeatClient {
 
     private CompletableFuture<JsonObject> call(String method, UUID companion, JsonObject params) {
         params.addProperty("companion", companion.toString());
-        return peer.request(method, params, out).result().thenApply(JsonElement::getAsJsonObject);
+        CompletableFuture<JsonObject> answer = peer.request(method, params, out).result().thenApply(JsonElement::getAsJsonObject);
+        if (!SeatMethods.PROGRAM_RUN.equals(method)) {
+            quick.incrementAndGet();
+            answer.whenComplete((done, failed) -> quick.decrementAndGet());
+        }
+        return answer;
     }
 
     // ---- 服务端发来的 ----
