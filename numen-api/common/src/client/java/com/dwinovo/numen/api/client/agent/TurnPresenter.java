@@ -191,6 +191,16 @@ final class TurnPresenter {
     }
 
     /**
+     * 她向主人提了问题:主人不一定盯着这个会话,所以走她说话的那两处出口——聊天框一行,主人没在看这个会话时再弹消息通知,
+     * 文字是她的问句。不另造提醒。
+     */
+    void asked(com.dwinovo.numen.api.agent.tool.Asking asking) {
+        String question = asking.questions().stream().map(q -> q.question()).collect(java.util.stream.Collectors.joining(" "));
+        ChatLines.companion(speakerName(), question);
+        com.dwinovo.numen.api.client.notify.MessageNotices.spoke(entityUuid, question);
+    }
+
+    /**
      * 头顶气泡、聊天框、通知这些寸土寸金的地方:段落间的空行折成单换行(空行只是模型的排版习惯)。
      * 对话面板不折——它要靠空行认出 Markdown 的块。
      */

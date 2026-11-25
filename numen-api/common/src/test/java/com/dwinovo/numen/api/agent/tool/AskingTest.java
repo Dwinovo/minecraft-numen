@@ -145,4 +145,13 @@ class AskingTest {
         assertTrue(replies.isEmpty());
         assertNull(desk.pending());
     }
+
+    @Test
+    void theDeskTellsItsListenerWhenAQuestionIsHung() {
+        QuestionDesk desk = new QuestionDesk();
+        List<Asking> heard = new ArrayList<>();
+        desk.onAsked(heard::add);
+        Asking asking = desk.ask(List.of(single("Q?")), replies::add);
+        assertEquals(List.of(asking), heard);
+    }
 }

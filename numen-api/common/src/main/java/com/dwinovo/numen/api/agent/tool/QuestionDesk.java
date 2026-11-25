@@ -15,6 +15,13 @@ import java.util.function.Consumer;
 public final class QuestionDesk {
 
     private Asking pending;
+    /** 有新的提问挂上时通知谁(主人的界面据此提醒他,免得她白等);没有人听就什么也不做。 */
+    private Consumer<Asking> onAsked = asking -> { };
+
+    /** 听新挂上的提问。 */
+    public void onAsked(Consumer<Asking> listener) {
+        this.onAsked = listener;
+    }
 
     /** 挂上一次提问;答复交回之前一直挂着。 */
     public Asking ask(List<Question> questions, Consumer<Reply> replied) {
@@ -23,6 +30,7 @@ public final class QuestionDesk {
         }
         Asking asking = new Asking(questions, replied);
         pending = asking;
+        onAsked.accept(asking);
         return asking;
     }
 

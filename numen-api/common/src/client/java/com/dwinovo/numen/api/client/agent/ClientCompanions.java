@@ -87,6 +87,9 @@ public final class ClientCompanions {
             }
             presenter.on(feed);
         }, line -> TRANSCRIPTS.live(line.conv() == null ? companion.toString() : line.conv(), companion, line));
+        if (brain != null) {
+            brain.questions().onAsked(presenter::asked);
+        }
         FeedEncoder encoder = brain == null ? null : new FeedEncoder(brain, events -> self[0].apply(events));
         return new Entry(self[0], presenter, encoder);
     }
