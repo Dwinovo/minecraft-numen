@@ -53,3 +53,12 @@ issue #137 要插件可订阅的 Agent 生命周期钩子,外加用户可配的�
 - **测试**:`OwnerSchedulesTest`(到期只交一次、错过不补、重载不重发、不在场合成一次、限制);`NumenPluginScopeTest`(大脑事件顺序、隔离、撤回);`AgentLoopTest`(一个订阅者抛了其余照收);
   `EventQueueTest`(定时的话带来源、`ConvoLog.scheduled`);GameTest:`BrainGameTests` 里插件听 run 开收与结局、外接大脑驾驶时不发 `RUN_*`、`PluginGameTests` 里听 `TASK_FINISHED`、
   定时到点只送一次且重载不重发、主人不在时到期的回来只收一句、只有主人能增删改(批 `numen_schedule` 要等满一个最短间隔,时限放宽)。
+
+## 修订(2026-11-25)
+
+[runtime 0008](../runtime/0008-brain-on-owners-client.md) 之后,上面提到的东西换了位置与做法,意图不变:
+
+- 大脑在主人的客户端上,没有 `CompanionLoops`/`CompanionLoop`:插件仍只经门听大脑,`RUN_STARTED`/`RUN_ENDED` 由客户端上的宿主 `LoopHost` 经座位的通知 `run/started`、`run/ended`
+  报回服务端,服务端在 `SeatConnection` 一处派成 `CompanionEvent`;`BrainEventBridge` 不再有。
+- `OwnerSchedules` 在包 `api.mind`(不是 `api.brain`,该包已拆为 `mind`、`owner`、`talk`),账存在主人客户端上她的家里;到点的话经 `LoopHost.submitScheduled` 进本机收件箱,
+  不再经服务端的 `CompanionLoop.submitScheduled`。

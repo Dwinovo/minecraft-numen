@@ -60,17 +60,17 @@ GameTest 服务器(runs/bench)
      └─ 考题源码集        numen/common/src/bench(Numen 的,套件 vanilla)、plugins/<联动>/src/bench(联动的)
 ```
 
-- **大脑**:就是产品里服务端的大脑 `CompanionLoop`(经 `CompanionBrains.create` 建),只注入三样:模型(`Mind`,真实的或基线)、
+- **大脑**:就是产品里主人客户端上的大脑 `LoopHost`(经 `ClientBrains` 建,和 GameTest 夹具 `GameBrain` 同一套接法,座位用进程内的管道),只注入三样:模型(`Mind`,真实的或基线)、
   人设(内置默认人设)、主动性(默认档位)。请求由产品的 `AgentRequestContext.turn` 组装——系统提示(`SystemPromptComposer`)、
   运行期状态(`RuntimeState`)、工具表只有那一份;札记索引是 `MemoryPreamble`,整理记忆是 `Compactor`,派工具的顺序是 `SerialCalls`,
-  程序整段交给 `LocalPrograms` 在服务端跑。评测不另接一遍端口。
+  程序整段经座位交给服务端的 `LocalPrograms` 跑。评测不另接一遍端口。
 - **模拟主人**:一个在线的 `ServerPlayer`,连接是 Numen API 测试夹具里的 `OwnerLine`(GameTest 的模拟主人也是它)。发给主人的
   模组载荷停在它的队列里,每刻开头取走,按网络的样子编解码一遍,照主人客户端的做法处理:服务端要客户端执行的函数交给 `ClientEndpoint`
   (答复照网络上的样子上行),征询按剧本经 `ConsentDesk.reply` 答复。世界上的事直接进她的收件箱,死亡与复活走产品的路(停牌 `DEAD`);
   落进她日志的世界事件(`<events>`)记进这次的记录。
   下行包过得了 NeoForge 的频道检查,是因为 `OwnerLine` 经 `MockConnection`(加载器的开发期实现,NeoForge 的是
   `NetworkRegistry.configureMockConnection`)写上了协商好的频道表(同伴的 `FakeConnection` 不需要:numen 的 mixin 在检查之前就把发给它的包丢了)。
-- **技能**:服务器起来时(`ServerBrains`)把自带技能接进技能表,评测的进程也是服务端,走同一处。
+- **技能**:自带技能在服务端的目录登记里,大脑经座位的 `catalog/get` 取,评测的进程也是服务端,走同一处。
 - **每次运行从白纸开始**:新的场地(彼此隔 512 格,任何扫描都看不见上一块)、新的她(新 UUID)、新的主人、
   临时目录里的札记、会话日志与她的 Lua 模块目录(只用内置原版,不读主人目录里的覆盖;收场后整个删掉,评测从不读它们)。
 

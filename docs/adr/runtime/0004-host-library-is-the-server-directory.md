@@ -29,3 +29,8 @@
 - `Library` 多一种状态 `merged()`(`mine()` 与 `server()` 是同一个货架);条目的 `group` 说它住在哪一处,界面上叫什么由读它的一方按 `merged()` 定。
 - 线上"组"从 `builtin` 改叫 `server`,行里多一个 `shipped`;`HelloAck` 多一位 `host`;`PROTOCOL` 加到 4。
 - 串门的玩家看得到房主放进服务器目录的所有东西(含他"我的"里的人设)——这是规则本身的意思,不是漏。
+
+## 修订(2026-11-25)
+
+[0008](0008-brain-on-owners-client.md) 之后各库与钥匙串都在主人自己电脑上(`config/numen/client/`),服务器不再有"服务器提供"的库与房主合并(`HostMerge` 已删);
+服务器目录里只剩服主的设置、皮肤签名缓存与服主的钥匙串里的 MineSkin key。上文"房主的我的就是服务器目录"不再成立,`Homes.isHost` 只剩判皮肤文件夹与插件开关的归属。
