@@ -63,7 +63,7 @@ public class CommonClass {
     }
 
     /**
-     * Numen API 自己登记她的四个工具:跑一段程序(名字随脚本语言)、装技能、记计划、记札记。作用于世界的是程序里的 API 函数,不加工具;只管
+     * Numen API 自己登记她的五个工具:跑一段程序(名字随脚本语言)、装技能、记计划、记札记、问主人。作用于世界的是程序里的 API 函数,不加工具;只管
      * 大脑自己的事、不碰世界的才是工具。
      */
     public static void registerTools() {
@@ -71,6 +71,7 @@ public class CommonClass {
         ToolRegistry.register(new com.dwinovo.numen.api.agent.tool.SkillTool());
         ToolRegistry.register(new com.dwinovo.numen.api.agent.tool.TodoTool());
         ToolRegistry.register(new com.dwinovo.numen.api.agent.tool.MemoryTool());
+        ToolRegistry.register(new com.dwinovo.numen.api.agent.tool.AskUserQuestionTool());
         Constants.LOG.info("[numen] registered {} tool(s)", ToolRegistry.size());
     }
 

@@ -45,6 +45,13 @@ class ToolSummaryTest {
     }
 
     @Test
+    void aQuestionReadsAsTheHeaderOfItsFirstQuestion() {
+        assertEquals("Furnace", summary(new AskUserQuestionTool(),
+                "{\"questions\":[{\"question\":\"Which?\",\"header\":\"Furnace\",\"options\":[]}]}"));
+        assertEquals("", summary(new AskUserQuestionTool(), "{}"));
+    }
+
+    @Test
     void aNoteCallReadsAsItsCommandAndNote() {
         assertEquals("remember main-base", summary(new MemoryTool(), "{\"command\":\"remember\",\"name\":\"main-base\"}"));
         assertEquals("recall", summary(new MemoryTool(), "{\"command\":\"recall\"}"));

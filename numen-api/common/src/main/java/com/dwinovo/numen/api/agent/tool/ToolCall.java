@@ -3,6 +3,8 @@ package com.dwinovo.numen.api.agent.tool;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 
 /**
@@ -38,6 +40,7 @@ public final class ToolCall {
     private final String rawArgs;
     private final ToolAnchor ctx;
     private final Consumer<String> completion;   // the single "done" sink
+    private final List<Runnable> onAbandon = new ArrayList<>();
 
     public ToolCall(String id, String toolName, String rawArgs, ToolAnchor ctx,
                     Consumer<String> completion) {
@@ -71,6 +74,21 @@ public final class ToolCall {
         } catch (RuntimeException ex) {
             throw new IllegalArgumentException("invalid arguments JSON: " + ex.getMessage());
         }
+    }
+
+    /**
+     * 一个会等很久的工具在这里登记收尾:这个调用被放弃(停止、急件打断、她离开世界,结果不会再被收下)时调一次。
+     * 当场做完的工具用不着。
+     */
+    public void onAbandon(Runnable cleanup) {
+        onAbandon.add(cleanup);
+    }
+
+    /** 内核放弃了这个调用:登记过的收尾各跑一次。 */
+    void abandon() {
+        List<Runnable> cleanups = List.copyOf(onAbandon);
+        onAbandon.clear();
+        cleanups.forEach(Runnable::run);
     }
 
     /** The one verb: deliver the result, whenever and from wherever the tool is ready. */

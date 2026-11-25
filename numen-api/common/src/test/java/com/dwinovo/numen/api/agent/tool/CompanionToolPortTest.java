@@ -17,6 +17,8 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -31,6 +33,9 @@ class CompanionToolPortTest {
     static void tools() {
         if (ToolRegistry.resolve("lua") == null) {
             ToolRegistry.register(new ScriptTool());
+        }
+        if (ToolRegistry.resolve(AskUserQuestionTool.NAME) == null) {
+            ToolRegistry.register(new AskUserQuestionTool());
         }
     }
 
@@ -81,6 +86,7 @@ class CompanionToolPortTest {
     }
 
     private final Host host = new Host();
+    private final QuestionDesk desk = new QuestionDesk();
     private final List<String> afterCut = new ArrayList<>();
     private final CompanionToolPort port = new CompanionToolPort(HER, () -> new com.dwinovo.numen.api.agent.tool.ToolAnchor() {
         @Override
@@ -96,6 +102,11 @@ class CompanionToolPortTest {
         @Override
         public com.dwinovo.numen.api.agent.skill.SkillRegistry skills() {
             throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public QuestionDesk questions() {
+            return desk;
         }
     }, host, new ToolBook() {
         @Override
@@ -163,5 +174,58 @@ class CompanionToolPortTest {
         port.run(List.of(program("c1")), sink);
         port.cancel(false);
         assertTrue(host.did.stream().noneMatch(did -> did.equals("stopBody")), host.did.toString());
+    }
+
+    private static LlmToolCall question(String id) {
+        return new LlmToolCall(id, AskUserQuestionTool.NAME, "{\"questions\":[{\"question\":\"Which?\",\"header\":\"h\","
+                + "\"options\":[{\"label\":\"a\",\"description\":\"\"},{\"label\":\"b\",\"description\":\"\"}]}]}");
+    }
+
+    @Test
+    void aQuestionStaysPendingUntilTheOwnerAnswersAndThenItsAnswerIsTheCallsResult() {
+        port.run(List.of(question("q1")), sink);
+        assertNotNull(desk.pending());
+        assertTrue(finished.isEmpty(), "the call waits for the owner");
+
+        desk.pending().pick(1);
+        assertEquals(1, finished.size());
+        assertTrue(finished.get(0).startsWith("q1 "), finished.get(0));
+        assertTrue(ToolOutcome.modelText(finished.get(0).substring(3)).contains("\"Which?\"=\"b\""), finished.get(0));
+        assertNull(desk.pending());
+    }
+
+    @Test
+    void theStopButtonEndsAPendingQuestionLikeAnyOtherCallAndTheLateAnswerGoesNowhere() {
+        port.run(List.of(question("q1")), sink);
+        Asking asking = desk.pending();
+
+        assertEquals(List.of("q1"), port.cancel(true));
+        assertNull(desk.pending(), "the panel is taken down");
+        asking.pick(0);
+        assertTrue(finished.isEmpty(), "the batch is void: no result is handed to the model");
+        assertEquals(List.of("forget q1", "stopBody"), host.did);
+    }
+
+    @Test
+    void anUrgentInputSettlesAPendingQuestionWithWhatInterruptedIt() {
+        port.run(List.of(question("q1"), question("q2")), sink);
+        assertEquals(List.of(), finished);
+
+        port.arrived(new com.dwinovo.numen.api.agent.inbox.EventQueue.Entry(
+                com.dwinovo.numen.api.agent.inbox.EventTypes.OWNER_HURT, "<event>x</event>", 0, true), true);
+
+        assertEquals(2, finished.size(), "the question is settled and the rest of the batch is not run");
+        assertTrue(finished.get(0).contains("Stopped before your owner answered (an urgent owner_hurt event arrived)"),
+                finished.get(0));
+        assertTrue(finished.get(1).contains("Not run"), finished.get(1));
+        assertNull(desk.pending());
+    }
+
+    @Test
+    void aLeavingCompanionCutsAPendingQuestionOffThroughTheSamePath() {
+        port.run(List.of(question("q1")), sink);
+        port.cancel(false);
+        assertNull(desk.pending());
+        assertTrue(host.did.stream().noneMatch(did -> did.equals("stopBody")));
     }
 }

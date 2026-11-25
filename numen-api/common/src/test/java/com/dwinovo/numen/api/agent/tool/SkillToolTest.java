@@ -79,6 +79,11 @@ class SkillToolTest {
                     public SkillRegistry skills() {
                         return skills;
                     }
+
+                    @Override
+                    public QuestionDesk questions() {
+                        throw new UnsupportedOperationException();
+                    }
                 }, result::complete));
         return result.join();   // 技能的正文可能在服务端,工具在自己的线程上读完才交结果
     }

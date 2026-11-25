@@ -35,6 +35,8 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
 
     /** 在飞的那一个的回报口,供 {@link #failInFlight} 用;没有在飞的是 null。 */
     private java.util.function.Consumer<SerialCalls.Settled> inFlightDone;
+    /** 在飞的那一个若是个工具(不是程序)就是它的调用:被放弃时它登记的收尾在这里跑。 */
+    private ToolCall inFlightTool;
 
     /**
      * 被切断的程序交出回执之后,这里把它转给收件的人:程序编号与回执的文字。切断时这一批已经作废,模型读不到这份回执,
@@ -82,6 +84,7 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
         String program = flying != null && isProgram(flying) ? flying.id() : null;
         List<String> ids = calls.cancel(stopBody);
         inFlightDone = null;
+        abandonTool();
         for (String id : ids) {
             if (id.equals(program)) {
                 // 这一批作废了,程序照常停下并交出回执:晚到的那份作为一条事件交给她
@@ -131,7 +134,17 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
             programs.cutOff(companion, call.id(), false);
         }
         if (inFlightDone != null) {
+            abandonTool();
             inFlightDone.accept(SerialCalls.Settled.of(ToolOutcome.failure(why)));
+        }
+    }
+
+    /** 在飞的是个工具:它登记的收尾跑一遍(等主人作答的提问就此摘下面板)。 */
+    private void abandonTool() {
+        ToolCall tool = inFlightTool;
+        inFlightTool = null;
+        if (tool != null) {
+            tool.abandon();
         }
     }
 
@@ -142,9 +155,24 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
         return tools.resolve(call.name()) instanceof ScriptTool;
     }
 
+    /** 在飞的是程序或一个等主人作答的工具。 */
     @Override
-    public void interrupt(LlmToolCall program, String why) {
-        programs.interrupt(companion, program.id(), why);
+    public boolean interruptible(LlmToolCall call) {
+        NumenTool tool = tools.resolve(call.name());
+        return isProgram(call) || tool != null && tool.waitsForOwner();
+    }
+
+    /** 程序停在调用之间;等主人作答的工具当场了结,她读到的是被什么打断了。 */
+    @Override
+    public void interrupt(LlmToolCall call, String why) {
+        if (isProgram(call)) {
+            programs.interrupt(companion, call.id(), why);
+            return;
+        }
+        abandonTool();
+        String result = ToolOutcome.failure("Stopped before your owner answered (" + why
+                + "); read what came in, then decide what to do next.");
+        inFlightDone.accept(new SerialCalls.Settled(result, null, List.of(), why));
     }
 
     @Override
@@ -176,8 +204,10 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
                 return;
             }
             // 带规范名(tool.name())而不是 LLM 写的那个:大小写宽松只在 resolve 这一步
-            tool.invoke(new ToolCall(call.id(), tool.name(), call.arguments(), anchor.get(),
-                    json -> landed.accept(SerialCalls.Settled.of(json))));
+            ToolCall toolCall = new ToolCall(call.id(), tool.name(), call.arguments(), anchor.get(),
+                    json -> landed.accept(SerialCalls.Settled.of(json)));
+            inFlightTool = toolCall;
+            tool.invoke(toolCall);
         } catch (IllegalArgumentException invalid) {
             landed.accept(SerialCalls.Settled.of(ToolOutcome.failure("invalid arguments: " + invalid.getMessage())));
         } catch (RuntimeException ex) {
@@ -198,6 +228,7 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
         java.util.function.Consumer<SerialCalls.Settled> landed = settled -> {
             if (inFlightDone != null && call == calls.inFlight()) {
                 inFlightDone = null;
+                inFlightTool = null;
             }
             Constants.LOG.info("[numen-dispatch#{}] result id={} {} → {}, {} chars",
                     companion, call.id(), call.name(), ToolOutcome.failed(settled.result()) ? "failed" : "ok",

@@ -108,7 +108,7 @@ public final class LoopHands implements ExternalHands {
 
     @Override
     public CompletableFuture<List<NumenTool>> tools() {
-        return onMain(tools::all);
+        return onMain(() -> tools.all().stream().filter(tool -> !tool.waitsForOwner()).toList());
     }
 
     @Override
@@ -195,6 +195,7 @@ public final class LoopHands implements ExternalHands {
             }
             // 先开来访再送话:话一进收件箱内核就可能开轮
             visits.put(companion, channel);
+            host.visited(true);
             if (listening.add(companion)) {
                 host.subscribe(event -> heard(companion, event));
             }
@@ -216,6 +217,10 @@ public final class LoopHands implements ExternalHands {
             }
         } else if (event instanceof LoopEvent.RunEnded ended && ended.end() instanceof RunEnd.Done) {
             visits.remove(companion, channel);
+            LoopHost host = brains.get(companion);
+            if (host != null) {
+                host.visited(visits.containsKey(companion));
+            }
         }
     }
 
@@ -234,7 +239,7 @@ public final class LoopHands implements ExternalHands {
         main.execute(() -> {
             try {
                 NumenTool tool = tools.resolve(toolName);
-                if (tool == null) {
+                if (tool == null || tool.waitsForOwner()) {
                     f.complete(ToolOutcome.failure("unknown tool: " + toolName));
                     return;
                 }

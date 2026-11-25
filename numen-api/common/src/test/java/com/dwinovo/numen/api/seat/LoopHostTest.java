@@ -15,6 +15,7 @@ import com.dwinovo.numen.api.agent.provider.AssistantTurn;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.agent.provider.Usage;
 import com.dwinovo.numen.api.agent.skill.SkillRegistry;
+import com.dwinovo.numen.api.agent.tool.AskUserQuestionTool;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
 import com.dwinovo.numen.api.agent.tool.ScriptTool;
 import com.dwinovo.numen.api.agent.tool.ToolBook;
@@ -63,6 +64,12 @@ class LoopHostTest {
             return this;
         }
 
+        Scripted ask(String id, String args) {
+            replies.add(new ModelOutcome.Answered(new AssistantTurn("", List.of(new LlmToolCall(id,
+                    AskUserQuestionTool.NAME, args)), null), Usage.ZERO));
+            return this;
+        }
+
         Scripted program(String id, String code) {
             replies.add(new ModelOutcome.Answered(new AssistantTurn("", List.of(new LlmToolCall(id, new ScriptTool().name(),
                     "{\"code\":\"" + code + "\",\"description\":\"Run it\"}")), null), Usage.ZERO));
@@ -89,15 +96,16 @@ class LoopHostTest {
 
     private static final ToolBook SCRIPT_ONLY = new ToolBook() {
         private final NumenTool script = new ScriptTool();
+        private final NumenTool ask = new AskUserQuestionTool();
 
         @Override
         public List<NumenTool> all() {
-            return List.of(script);
+            return List.of(script, ask);
         }
 
         @Override
         public NumenTool resolve(String name) {
-            return script.name().equals(name) ? script : null;
+            return script.name().equals(name) ? script : ask.name().equals(name) ? ask : null;
         }
     };
 
@@ -270,5 +278,55 @@ class LoopHostTest {
             started.close();
             ended.close();
         }
+    }
+
+    private static final String QUESTION = "{\"questions\":[{\"question\":\"Which furnace?\",\"header\":\"Furnace\","
+            + "\"options\":[{\"label\":\"Blast\",\"description\":\"fast\"},{\"label\":\"Smoker\",\"description\":\"food\"}]}]}";
+
+    @Test
+    void aQuestionHangsUntilTheOwnerAnswersHerLineReadsWaitingAndTheAnswerIsTheCallsResult() throws Exception {
+        model.ask("ask-1", QUESTION).say("好的");
+
+        host.submitPrompt("烧点东西");
+        until("the question is waiting for the owner", () -> host.questions().pending() != null);
+        assertEquals(new com.dwinovo.numen.api.agent.loop.LoopStatus.Doing(
+                com.dwinovo.numen.api.data.ModLanguageData.Keys.ACTIVITY_AWAITING_ANSWER, List.of()), host.activity());
+        assertEquals(1, model.asked.size(), "she does not ask the model again while she waits");
+
+        host.questions().pending().pick(0);
+        until("the answer woke the next request", () -> model.asked.size() == 2);
+        String result = model.asked.get(1).messages().stream()
+                .filter(m -> m instanceof com.dwinovo.numen.api.agent.llm.ConvoState.Msg.Tool)
+                .map(m -> ((com.dwinovo.numen.api.agent.llm.ConvoState.Msg.Tool) m).content()).findFirst().orElse("");
+        assertTrue(com.dwinovo.numen.api.agent.llm.ToolOutcome.modelText(result).contains("\"Which furnace?\"=\"Blast\""),
+                "the answer is in the call's result: " + result);
+    }
+
+    @Test
+    void theStopButtonTakesAPendingQuestionDownThroughTheCutOffAndTheModelIsToldOfTheCutOffNotAnAnswer() throws Exception {
+        model.ask("ask-2", QUESTION).say("好的");
+
+        host.submitPrompt("烧点东西");
+        until("the question is waiting for the owner", () -> host.questions().pending() != null);
+
+        host.abort();
+        assertEquals(null, host.questions().pending(), "the panel is gone");
+        assertEquals(null, host.activity(), "she is no longer waiting");
+        assertEquals(1, model.asked.size());
+    }
+
+    @Test
+    void aChannelVisitDoesNotOfferTheToolThatNeedsTheOwnerAtThePanel() throws Exception {
+        model.say("好的").say("好的");
+        host.submitPrompt("你好");
+        until("first request", () -> model.asked.size() == 1);
+        assertTrue(model.asked.get(0).tools().stream().anyMatch(t -> t.name().equals(AskUserQuestionTool.NAME)));
+
+        host.visited(true);
+        host.submitPrompt("在吗");
+        until("second request", () -> model.asked.size() == 2);
+        assertTrue(model.asked.get(1).tools().stream().noneMatch(t -> t.name().equals(AskUserQuestionTool.NAME)),
+                "nobody sits at the panel during a channel visit");
+        assertTrue(model.asked.get(1).tools().stream().anyMatch(t -> t.name().equals(new ScriptTool().name())));
     }
 }

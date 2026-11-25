@@ -49,8 +49,13 @@ public final class SerialCalls {
         /** 这个调用是不是一段在服务端跑的程序(可以叫它停)。 */
         boolean isProgram(LlmToolCall call);
 
-        /** 让服务端上的这段程序停在调用之间,{@code why} 是给模型的原因。 */
-        void interrupt(LlmToolCall program, String why);
+        /** 这个调用在飞时,急件到了能不能打断它:程序在调用之间停下,等主人作答的工具当场了结。 */
+        default boolean interruptible(LlmToolCall call) {
+            return isProgram(call);
+        }
+
+        /** 打断这个在飞的调用({@link #interruptible}),{@code why} 是给模型的原因;结局照常经 {@link #invoke} 的回报口交回。 */
+        void interrupt(LlmToolCall call, String why);
 
         /**
          * 这一轮被切断,让服务端上的这段程序当场停下。
@@ -85,10 +90,11 @@ public final class SerialCalls {
     }
 
     /**
-     * 一条输入到了,{@code urgent} 是它要不要立刻叫醒她(队列的急件规则算出来的)。一段程序在服务端跑着:是急件就让它停在调用之间。
+     * 一条输入到了,{@code urgent} 是它要不要立刻叫醒她(队列的急件规则算出来的)。一段程序在服务端跑着、或一次提问等着主人作答:
+     * 是急件就打断它(程序停在调用之间)。
      */
     public void arrived(EventQueue.Entry entry, boolean urgent) {
-        if (urgent && inFlight != null && !interrupted && port.isProgram(inFlight)) {
+        if (urgent && inFlight != null && !interrupted && port.interruptible(inFlight)) {
             interrupted = true;
             port.interrupt(inFlight, Program.what(entry));
         }
@@ -194,7 +200,7 @@ public final class SerialCalls {
     private void dropRest(String stoppedFor) {
         List<LlmToolCall> dropped = new ArrayList<>(queue);
         queue.clear();
-        String why = ToolOutcome.failure("Not run: the program before it was stopped (" + stoppedFor
+        String why = ToolOutcome.failure("Not run: the call before it was stopped (" + stoppedFor
                 + "); read what came in, then decide what to do next.");
         for (LlmToolCall call : dropped) {
             sink.finished(call, why);

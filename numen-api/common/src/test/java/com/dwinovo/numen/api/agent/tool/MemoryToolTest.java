@@ -51,6 +51,11 @@ class MemoryToolTest {
             public com.dwinovo.numen.api.agent.skill.SkillRegistry skills() {
                 throw new UnsupportedOperationException();
             }
+
+            @Override
+            public QuestionDesk questions() {
+                throw new UnsupportedOperationException();
+            }
         };
     }
 

@@ -125,6 +125,15 @@ public final class ModLanguageData {
         public static final String HEADER_REMOVED = "numen.header.removed";
         public static final String HEADER_OFFLINE = "numen.header.offline";
 
+        // 提问:她用 AskUserQuestion 问主人时输入框上方的面板(QuestionPanel)、她等答复时的那一句、答完在对话流里的一行。
+        public static final String ACTIVITY_AWAITING_ANSWER = "numen.activity.awaiting_answer";
+        public static final String QUESTION_OTHER    = "numen.question.other";
+        public static final String QUESTION_CHAT     = "numen.question.chat";
+        public static final String QUESTION_NEXT     = "numen.question.next";
+        public static final String QUESTION_REVIEW   = "numen.question.review";
+        public static final String QUESTION_SUBMIT   = "numen.question.submit";
+        public static final String QUESTION_ANSWERED = "numen.question.answered";
+
         // 征询:同伴等主人点头时对话流里那条带内联按钮的消息(ConsentMessage)与右上角的 toast。
         public static final String CONSENT_ALLOW          = "numen.consent.allow";
         public static final String CONSENT_ALLOW_REMEMBER = "numen.consent.allow_remember";
@@ -754,6 +763,14 @@ public final class ModLanguageData {
         adder.add("numen.tool.skill", "Skill");
         adder.add("numen.tool.todo", "To-do");
         adder.add("numen.tool.memory", "Memory");
+        adder.add("numen.tool.AskUserQuestion", "Ask");
+        adder.add(Keys.ACTIVITY_AWAITING_ANSWER, "waiting for an answer");
+        adder.add(Keys.QUESTION_OTHER, "Other answer…");
+        adder.add(Keys.QUESTION_CHAT, "Chat about this");
+        adder.add(Keys.QUESTION_NEXT, "Next");
+        adder.add(Keys.QUESTION_REVIEW, "Review your answers");
+        adder.add(Keys.QUESTION_SUBMIT, "Submit answers");
+        adder.add(Keys.QUESTION_ANSWERED, "You answered %s");
         // 没有自己说法的任务:头顶只说工具名(Activity.DEFAULT_KEY)
         adder.add("numen.activity.default", "%s");
         adder.add("numen.mcp.title", "Tool Extensions (MCP)");
@@ -1519,6 +1536,14 @@ public final class ModLanguageData {
         adder.add("numen.tool.skill", "技能");
         adder.add("numen.tool.todo", "待办");
         adder.add("numen.tool.memory", "记忆");
+        adder.add("numen.tool.AskUserQuestion", "提问");
+        adder.add(Keys.ACTIVITY_AWAITING_ANSWER, "等待回答");
+        adder.add(Keys.QUESTION_OTHER, "其他回答…");
+        adder.add(Keys.QUESTION_CHAT, "聊聊这个");
+        adder.add(Keys.QUESTION_NEXT, "下一步");
+        adder.add(Keys.QUESTION_REVIEW, "确认你的答案");
+        adder.add(Keys.QUESTION_SUBMIT, "提交答案");
+        adder.add(Keys.QUESTION_ANSWERED, "你答%s");
         // 没有自己说法的任务:头顶只说工具名(Activity.DEFAULT_KEY)
         adder.add("numen.activity.default", "%s");
         adder.add("numen.mcp.title", "工具扩展 (MCP)");
