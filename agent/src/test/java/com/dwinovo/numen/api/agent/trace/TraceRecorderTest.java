@@ -37,19 +37,6 @@ class TraceRecorderTest {
         return new AppendLog(file, TraceRecorder.FORMAT, Io.direct(e -> { })).read().records();
     }
 
-    /** 一条只有位置不同的身体记录。 */
-    private static JsonObject body(int tick, double x) {
-        JsonObject o = new JsonObject();
-        o.addProperty("tick", tick);
-        JsonArray pos = new JsonArray();
-        pos.add(x);
-        pos.add(64.0);
-        pos.add(0.0);
-        o.add("pos", pos);
-        o.addProperty("yaw", 0.0);
-        return o;
-    }
-
     @Test
     void aTurnLandsInASegmentFileUnderTrace(@TempDir Path dir) {
         TraceRecorder trace = new TraceRecorder(dir, io(), UUID.randomUUID());
@@ -105,7 +92,7 @@ class TraceRecorderTest {
     void everyRecordInOneFileCarriesTheSameSession(@TempDir Path dir) {
         TraceRecorder trace = new TraceRecorder(dir, io(), UUID.randomUUID());
         trace.turn(1, 1, new JsonObject());
-        trace.event("body", new JsonObject());
+        trace.event("path", new JsonObject());
 
         List<AppendLog.Record> records = segment(dir, trace.session(), 1);
         assertEquals(2, records.size());
@@ -116,7 +103,7 @@ class TraceRecorderTest {
 
     @Test
     void theFileRollsOverOnceASegmentIsFull(@TempDir Path dir) {
-        TraceRecorder trace = new TraceRecorder(dir, io(), UUID.randomUUID(), 3, 100);
+        TraceRecorder trace = new TraceRecorder(dir, io(), UUID.randomUUID(), 3);
 
         for (int i = 1; i <= 4; i++) {
             trace.turn(1, i, new JsonObject());
@@ -126,64 +113,6 @@ class TraceRecorderTest {
         assertEquals(1, segment(dir, trace.session(), 2).size(), "第四条滚到下一段");
         assertEquals(dir.resolve("trace").resolve(trace.session() + "-2.jsonl"), trace.file(),
                 "file() 说的是正在写的那一段");
-    }
-
-    @Test
-    void anUnchangedBodyIsNotWrittenTwice(@TempDir Path dir) {
-        TraceRecorder trace = new TraceRecorder(dir, io(), UUID.randomUUID(), 100, 20);
-
-        trace.body(body(1, 5.5));
-        trace.body(body(2, 5.5));
-        trace.body(body(3, 5.5));
-
-        // 前三条只有 tick 不同：同一份内容不写第二遍
-        List<AppendLog.Record> records = segment(dir, trace.session(), 1);
-        assertEquals(1, records.size(), "没动的那些刻不该各占一条: " + records);
-        assertEquals(1, records.get(0).json().get("tick").getAsInt());
-    }
-
-    @Test
-    void aBodyThatChangedInAnyFieldIsWritten(@TempDir Path dir) {
-        TraceRecorder trace = new TraceRecorder(dir, io(), UUID.randomUUID(), 100, 20);
-
-        trace.body(body(1, 5.5));
-        trace.body(body(2, 5.6));
-        trace.body(body(3, 5.6));
-        trace.body(body(4, 5.5));
-
-        assertEquals(3, segment(dir, trace.session(), 1).size(), "动了就写");
-    }
-
-    @Test
-    void aBodyThatStaysPutLongEnoughLeavesAHeartbeat(@TempDir Path dir) {
-        TraceRecorder trace = new TraceRecorder(dir, io(), UUID.randomUUID(), 100, 20);
-
-        for (int tick = 1; tick <= 45; tick++) {
-            trace.body(body(tick, 5.5));
-        }
-
-        assertEquals(List.of(1, 21, 41),
-                segment(dir, trace.session(), 1).stream()
-                        .map(r -> r.json().get("tick").getAsInt()).toList(),
-                "不动也要留心跳：否则读者只知道'上次动过'，不知道她还在");
-    }
-
-    @Test
-    void theHeartbeatStartsOverOnceSheMovesAgain(@TempDir Path dir) {
-        TraceRecorder trace = new TraceRecorder(dir, io(), UUID.randomUUID(), 100, 20);
-
-        for (int tick = 1; tick <= 25; tick++) {
-            trace.body(body(tick, 5.5));
-        }
-        trace.body(body(26, 6.0));
-        for (int tick = 27; tick <= 45; tick++) {
-            trace.body(body(tick, 6.0));
-        }
-
-        assertEquals(List.of(1, 21, 26),
-                segment(dir, trace.session(), 1).stream()
-                        .map(r -> r.json().get("tick").getAsInt()).toList(),
-                "动过之后重新起算：26 那条是新的内容，之后到 45 还没再满 20 刻");
     }
 
     /** 文件里最后那条 turn。 */
@@ -246,7 +175,7 @@ class TraceRecorderTest {
 
     @Test
     void aRolledOverSegmentStillBelongsToTheSameSession(@TempDir Path dir) {
-        TraceRecorder trace = new TraceRecorder(dir, io(), UUID.randomUUID(), 2, 100);
+        TraceRecorder trace = new TraceRecorder(dir, io(), UUID.randomUUID(), 2);
         for (int i = 1; i <= 5; i++) {
             trace.turn(1, i, new JsonObject());
         }

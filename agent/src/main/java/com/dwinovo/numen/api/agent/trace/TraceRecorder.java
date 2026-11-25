@@ -12,7 +12,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * 一本旁路的轨迹:她每一轮看到了什么({@code turn})、每一刻在哪({@code body})、寻路为什么放弃({@code path})。
+ * 一本旁路的轨迹:她每一轮看到了什么({@code turn},身体的样子就在发出去的那份运行期状态里)、寻路为什么放弃({@code path})。
+ * 写在她的大脑所在的那台电脑上;寻路的 {@code path} 来自同一个进程里的服务端({@link TraceRecorders}),所以只在服务端与大脑同一进程时(单人、评测、GameTest)才有。
  *
  * <p><b>它绝不进会话历史。</b>{@code <runtime_state>} 现算、一个字都不入历史是有意为之——
  * 那些都会变,进了历史就是理直气壮的旧数。这里把每一轮现算的那一份写到旁边的文件里,读者是人和工具,不是模型。
@@ -25,11 +26,6 @@ import java.util.concurrent.ThreadLocalRandom;
  * 会把"开服要读多少"交给"这次开了多久";再切一刀之后,这个量被钉成一个常数,
  * 与开了多久、历史有多少都无关。读取侧多一步"列目录、按 ts 拼",数据一条不少。
  *
- * <h2>为什么要去重</h2>
- * 她站着不动时,相邻两刻的身体记录只差一个 {@code tick}——内容一个字没变,写第二遍不产生任何信息,
- * 而这样的刻占的是体积的全部。所以 {@link #body} 与上一条逐字段相同时不写;不变太久才补一条心跳,
- * 让读的人分得清"她一直站着"与"记录在那之后断了"。
- *
  * <p>线程:任何线程。写走宿主给的那条车道({@link Io})。
  */
 public final class TraceRecorder {
@@ -38,23 +34,16 @@ public final class TraceRecorder {
     public static final AppendLog.Format FORMAT = AppendLog.Format.of(1);
 
     /**
-     * 一段写多少条就换下一个文件。65536 条按 {@code body} 一条 300 字节上下算是 20 MB,
-     * 开一次文件最多读这么多。按条数而不是字节数:字节数要问磁盘,而这里在服务端主线程上。
+     * 一段写多少条就换下一个文件。65536 条按一条 300 字节上下算是 20 MB,
+     * 开一次文件最多读这么多。按条数而不是字节数:字节数要问磁盘,而这里在客户端主线程上。
      */
     static final int PER_SEGMENT = 65_536;
-
-    /**
-     * 她一直不动时,每隔这么多刻补一条心跳。不补的话文件里就只剩"上次动过是哪一刻",
-     * 读的人分不清"她一直站着"与"记录在那之后断了"。
-     */
-    static final int STILL_TICKS = 20 * 60;
 
     /** 一次服务端运行里每只同伴的 session:重建大脑不换文件,重启才换。 */
     private static final Map<UUID, Long> SESSIONS = new ConcurrentHashMap<>();
 
     private final long session;
     private final int perSegment;
-    private final int stillTicks;
     /** 她的家(写{@code trace/}的那一层)。 */
     private final Path home;
     private final Io io;
@@ -64,11 +53,6 @@ public final class TraceRecorder {
     /** 这一段已经写了多少条。 */
     private int written;
     private AppendLog log;
-
-    /** 上一条写下去的身体,除 {@code tick} 外逐字段拼成的字符串;{@code null} = 还没写过。 */
-    private String lastBody;
-    /** 上一条身体写下去时的刻。 */
-    private int lastBodyTick;
 
     /** 上一轮对话的账;{@code null} = 这个 run 还没有上一轮。 */
     private Bill lastBill;
@@ -93,17 +77,15 @@ public final class TraceRecorder {
      * @param io   她那一条写车道
      */
     public TraceRecorder(Path home, Io io, UUID companion) {
-        this(home, io, companion, PER_SEGMENT, STILL_TICKS);
+        this(home, io, companion, PER_SEGMENT);
     }
 
     /**
      * @param perSegment 一段写多少条换下一个文件
-     * @param stillTicks 身体一直不变时,多久补一条心跳
      */
-    TraceRecorder(Path home, Io io, UUID companion, int perSegment, int stillTicks) {
+    TraceRecorder(Path home, Io io, UUID companion, int perSegment) {
         this.session = SESSIONS.computeIfAbsent(companion, id -> ThreadLocalRandom.current().nextLong());
         this.perSegment = perSegment;
-        this.stillTicks = stillTicks;
         this.home = home;
         this.io = io;
         this.log = at(1);
@@ -181,33 +163,9 @@ public final class TraceRecorder {
         }
     }
 
-    /**
-     * 这一刻的身体。<b>与上一条相同时不写</b>——内容一个字没变,写第二遍不产生任何信息。
-     * 不变超过 {@link #stillTicks} 刻补一条心跳。
-     *
-     * <p>{@code tick} 不参与比较:它每刻都变,是这条记录的身份,不是内容。
-     */
-    public void body(JsonObject body) {
-        int tick = body.has("tick") && body.get("tick").isJsonPrimitive() ? body.get("tick").getAsInt() : 0;
-        String content = contentOf(body);
-        if (content.equals(lastBody) && tick - lastBodyTick < stillTicks) {
-            return;
-        }
-        lastBody = content;
-        lastBodyTick = tick;
-        write("body", body);
-    }
-
     /** 通用口:{@code path} 走这里,调用点在寻路那一侧。 */
     public void event(String type, JsonObject body) {
         write(type, body);
-    }
-
-    /** 除 {@code tick} 之外的整份内容,用来比"这条与上一条一不一样"。 */
-    private static String contentOf(JsonObject body) {
-        JsonObject copy = body.deepCopy();
-        copy.remove("tick");
-        return copy.toString();
     }
 
     private void write(String type, JsonObject body) {
