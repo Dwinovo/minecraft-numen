@@ -110,13 +110,13 @@ public final class ServerSkins {
                 if (CompanionRegistry.get(server).find(companion) == null) {
                     return false;
                 }
-                Companions.applySkin(server, companion, new MojangSkins.Skin(skin.value(), skin.signature()));
+                Companions.applySkin(server, companion, new MojangSkins.Skin(skin.value(), skin.signature()), ref.toString());
                 return true;
             }
 
             @Override
             public void takeOff(UUID companion) {
-                Companions.applySkin(server, companion, null);
+                Companions.applySkin(server, companion, null, null);
             }
         };
     }

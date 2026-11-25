@@ -47,8 +47,7 @@ public record Cause(String code, List<String> args) {
     public static final String UNBOUND = "endpoint.unbound";
     public static final String NO_KEY = "endpoint.no_key";
     public static final String NO_URL = "endpoint.no_url";
-    /** 档案用的是服主的 key,而这位玩家今天用服主的 key 的额度用完了。 */
-    public static final String QUOTA = "endpoint.quota";
+
 
     /**
      * 一次模型调用抛出来的错归成哪个码:有 HTTP 回话的按状态码分,没有回话(连不上、超时)是 {@link #NETWORK}。
@@ -115,7 +114,6 @@ public record Cause(String code, List<String> args) {
             case UNBOUND -> "no model profile is bound";
             case NO_KEY -> "the model profile has no API key";
             case NO_URL -> "the model profile has no address";
-            case QUOTA -> "the server-provided model quota is used up for today";
             default -> code;
         };
         if (code.startsWith("llm.") && !arg(2).isEmpty()) {

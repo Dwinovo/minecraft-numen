@@ -132,6 +132,11 @@ class LoopHostTest {
             }
 
             @Override
+            public boolean loaded() {
+                return true;
+            }
+
+            @Override
             public String code(String name) {
                 return null;
             }

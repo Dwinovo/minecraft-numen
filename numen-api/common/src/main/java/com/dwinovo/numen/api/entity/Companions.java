@@ -123,15 +123,20 @@ public final class Companions {
      * 给所有在线玩家发玩家信息的移除与重新加入,再让追踪她的客户端重新生成她的实体,别人看到的皮肤就刷新了。
      * 穿的本来就是这一副就什么也不做。
      */
-    public static void applySkin(MinecraftServer server, UUID companion, MojangSkins.Skin skin) {
+    public static void applySkin(MinecraftServer server, UUID companion, MojangSkins.Skin skin, String ref) {
         CompanionRegistry reg = CompanionRegistry.get(server);
         CompanionRegistry.Entry entry = reg.find(companion);
         String value = skin == null ? "" : skin.value();
-        if (entry == null || entry.skinValue().equals(value)) {
+        if (entry == null) {
             return;
         }
         String signature = skin == null ? "" : skin.signature();
-        reg.put(companion, entry.withSkin(value, signature));
+        boolean sameLook = entry.skinValue().equals(value);
+        reg.put(companion, entry.withSkin(value, signature, ref));
+        if (sameLook) {
+            syncRosterToKeepers(server, entry.keepers());   // 穿的是哪一张变了,面板据此标出
+            return;
+        }
         NumenPlayer body = NumenPlayer.findByUuid(server, companion);
         if (body != null) {
             refreshSkin(server, body, value, signature);
@@ -511,7 +516,7 @@ public final class Companions {
             NumenPlayer body = NumenPlayer.findByUuid(server, row.uuid());
             CompanionRegistry.Entry entry = reg.find(row.uuid());
             list.add(new CompanionListPayload.Entry(row.uuid(), row.name(),
-                    body != null && body.isCreative(), entry.outside(),
+                    body != null && body.isCreative(), entry.outside(), entry.skinRef(),
                     entry.keepers().stream().map(k -> new Keeper(k, NumenPlayer.playerName(server, k))).toList()));
         }
         NumenNetwork.sendToPlayer(owner, new CompanionListPayload(reg.worldId(), list));

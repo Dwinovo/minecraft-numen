@@ -7,7 +7,6 @@ import com.dwinovo.numen.api.agent.loop.SerialCalls;
 import com.dwinovo.numen.api.agent.loop.ToolPort;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.CompanionEvent;
-import com.dwinovo.numen.api.entity.CompanionEvents;
 import com.dwinovo.numen.api.agent.loop.Program;
 import com.dwinovo.numen.api.program.ProgramHost;
 
@@ -93,7 +92,6 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
         }
         if (stopBody) {
             programs.stopBody(companion);
-            CompanionEvents.fire(CompanionEvent.ABORT, companion);   // 内容包据此停掉自己那边的活
         }
         return ids;
     }

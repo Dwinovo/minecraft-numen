@@ -24,14 +24,12 @@ public final class SeatMethods {
     public static final String PROGRAM_INTERRUPT = "program/interrupt";
     /** 当场切断程序:{@code companion}、{@code program}、{@code stop_body}。 */
     public static final String PROGRAM_CUT = "program/cut";
-    /** 叫停身体上在跑的活:{@code companion}。 */
+    /** 叫停身体上在跑的活:{@code companion};答复是停下之后她的样子({@link SeatState})。 */
     public static final String BODY_STOP = "body/stop";
     /** 她此刻的样子({@code <runtime_state>})与游戏刻:{@code companion}。 */
     public static final String STATE_GET = "state/get";
     /** 一个内置模块的原文:{@code companion}、{@code name};答复 {@code {code}},没有这一份是 {@code null}。 */
     public static final String MODULES_BUILTIN = "modules/builtin";
-    /** 一份模块写得读不读得通、撞没撞第 ① 层:{@code companion}、{@code name}、{@code code};答复 {@code {problem}},没事是 {@code null}。 */
-    public static final String MODULES_CHECK = "modules/check";
     /** 读一份随模组与插件发布的技能:{@code companion}、{@code name}、可选 {@code file}(附属文件的相对路径);答复见 {@code SkillText}。 */
     public static final String SKILL_READ = "skill/read";
     /** 她要说的话,由服务端在聊天里说出来:{@code companion}、{@code text}。 */

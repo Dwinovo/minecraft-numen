@@ -66,14 +66,10 @@ final class SeatConnection {
             seat(in).cut(Params.string(in.params(), "program"), Params.bool(in.params(), "stop_body", false));
             return new JsonObject();
         });
-        peer.onRequest(SeatMethods.BODY_STOP, in -> {
-            seat(in).stopBody();
-            return new JsonObject();
-        });
+        peer.onRequest(SeatMethods.BODY_STOP, in -> seat(in).stopBody().toJson());
         peer.onRequest(SeatMethods.STATE_GET, this::state);
         peer.onRequest(SeatMethods.SAY, this::say);
         peer.onRequest(SeatMethods.MODULES_BUILTIN, this::builtinModule);
-        peer.onRequest(SeatMethods.MODULES_CHECK, this::checkModule);
         peer.onRequest(SeatMethods.SKILL_READ, this::readSkill);
         peer.onRequest(SeatMethods.EVENTS_ACK, in -> {
             seat(in).ack(Params.requiredInteger(in.params(), "seq"));
@@ -201,17 +197,6 @@ final class SeatConnection {
         BuiltinModules.Builtin builtin = BuiltinModules.get(Params.string(in.params(), "name"));
         if (builtin != null) {
             o.addProperty("code", builtin.code());
-        }
-        return o;
-    }
-
-    private JsonElement checkModule(RpcPeer.Incoming in) throws Exception {
-        seat(in);
-        JsonObject o = new JsonObject();
-        String problem = ScriptEngine.IN_USE.checkModule(Params.string(in.params(), "name"),
-                Params.string(in.params(), "code"), ApiRegistry.catalog(Modules.factory()));
-        if (problem != null) {
-            o.addProperty("problem", problem);
         }
         return o;
     }

@@ -61,6 +61,7 @@ public final class LocalPrograms implements ProgramRunner {
         NumenPlayer her = NumenPlayer.findByUuid(server, companion);
         if (her != null) {
             CompanionTickDispatcher.cancelFor(her);
+            com.dwinovo.numen.api.entity.CompanionEvents.fire(com.dwinovo.numen.api.CompanionEvent.ABORT, companion);   // 内容包据此停掉自己那边的活
         }
     }
 }

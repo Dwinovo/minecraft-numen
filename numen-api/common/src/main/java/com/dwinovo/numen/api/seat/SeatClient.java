@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.seat;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.sdk.ClientContext;
 import com.dwinovo.numen.api.sdk.Dispatcher;
 import com.dwinovo.numen.mcp.rpc.RpcError;
 import com.dwinovo.numen.mcp.rpc.RpcException;
@@ -45,6 +46,8 @@ public final class SeatClient {
     private final List<BiConsumer<UUID, String>> onCatalogChanged = new CopyOnWriteArrayList<>();
     /** 她的模块在这一头怎么按内容哈希取:哈希到正文。 */
     private final Map<UUID, Function<String, String>> modules = new ConcurrentHashMap<>();
+    /** 她的大脑里客户端函数能碰到的东西,每只同伴一份。 */
+    private final Map<UUID, ClientContext> contexts = new ConcurrentHashMap<>();
 
     /**
      * @param main     客户端函数在哪里执行(客户端主线程)
@@ -83,6 +86,11 @@ public final class SeatClient {
      */
     public void serveModules(UUID companion, Function<String, String> byHash) {
         modules.put(companion, byHash);
+    }
+
+    /** 她的大脑里客户端函数能碰到的东西,{@code client/call} 来了就交给函数。 */
+    public void serveContext(UUID companion, ClientContext context) {
+        contexts.put(companion, context);
     }
 
     /** 听目录变了:同伴、新的目录版本。 */
@@ -151,15 +159,6 @@ public final class SeatClient {
                 .thenApply(o -> o.has("code") ? o.get("code").getAsString() : null);
     }
 
-    /** 一份模块写得读不读得通、撞没撞第 ① 层;没事是 {@code null},有事是那句话。 */
-    public CompletableFuture<String> checkModule(UUID companion, String name, String code) {
-        JsonObject extra = new JsonObject();
-        extra.addProperty("name", name);
-        extra.addProperty("code", code);
-        return call(SeatMethods.MODULES_CHECK, companion, extra)
-                .thenApply(o -> o.has("problem") ? o.get("problem").getAsString() : null);
-    }
-
     /** 一份随发布的技能:说明、正文与附属文件清单。 */
     public CompletableFuture<SkillText> skill(UUID companion, String name) {
         JsonObject extra = new JsonObject();
@@ -195,9 +194,9 @@ public final class SeatClient {
         return call(SeatMethods.PROGRAM_CUT, companion, extra).thenApply(o -> null);
     }
 
-    /** 叫停身体上在跑的活。 */
-    public CompletableFuture<Void> stopBody(UUID companion) {
-        return call(SeatMethods.BODY_STOP, companion, new JsonObject()).thenApply(o -> null);
+    /** 叫停身体上在跑的活;答复是停下之后她的样子。 */
+    public CompletableFuture<SeatState> stopBody(UUID companion) {
+        return call(SeatMethods.BODY_STOP, companion, new JsonObject()).thenApply(SeatState::fromJson);
     }
 
     /** 她此刻的样子。 */
@@ -283,7 +282,8 @@ public final class SeatClient {
         String function = Params.string(in.params(), "function");
         JsonObject args = Params.object(in.params(), "args");
         CompletableFuture<String> reply = new CompletableFuture<>();
-        main.execute(() -> Dispatcher.client(function, args, companion, reply::complete));
+        ClientContext context = contexts.get(companion);
+        main.execute(() -> Dispatcher.client(function, args, companion, context, reply::complete));
         return JsonParser.parseString(reply.get());
     }
 }

@@ -305,7 +305,6 @@ public final class ModLanguageData {
         public static final String ENDPOINT_UNBOUND = "numen.endpoint.unbound";
         public static final String ENDPOINT_NO_KEY  = "numen.endpoint.no_key";
         public static final String ENDPOINT_NO_URL  = "numen.endpoint.no_url";
-        public static final String ENDPOINT_QUOTA   = "numen.endpoint.quota";
         // Notes: the owner adds, edits and deletes her notes from the profile page's memory section.
         public static final String NOTE_ADD = "numen.note.add";
         public static final String NOTE_TITLE_NEW = "numen.note.title_new";
@@ -982,7 +981,6 @@ public final class ModLanguageData {
         adder.add(Keys.USAGE_NOBODY,     "Nobody has used the server's keys today.");
         adder.add(Keys.USAGE_LINE,       "%s: %s"); 
         adder.add(Keys.CAUSE_CONTEXT_OVERFLOW, "The context is still too long for the model even after compacting — reduce the context or switch to a model with a larger window");
-        adder.add(Keys.ENDPOINT_QUOTA,   "The server's shared key has hit today's token limit for you — put your own key in Settings → Model Configs, or try again tomorrow");
 
         // Voice (TTS) section
         adder.add(Keys.VOICE_TITLE,          "Voice");
@@ -1758,7 +1756,6 @@ public final class ModLanguageData {
         adder.add(Keys.USAGE_NOBODY,     "今天还没有人用过服主的 key。");
         adder.add(Keys.USAGE_LINE,       "%s:%s");
         adder.add(Keys.CAUSE_CONTEXT_OVERFLOW, "整理过记忆之后上下文对这个模型还是太长了——减少上下文,或换一个窗口更大的模型");
-        adder.add(Keys.ENDPOINT_QUOTA,   "服主提供的 key 今天给你的 token 额度用完了——到 设置 → 模型配置 填上你自己的 key,或明天再来");
 
         // Voice (TTS) section
         adder.add(Keys.VOICE_TITLE,          "语音");

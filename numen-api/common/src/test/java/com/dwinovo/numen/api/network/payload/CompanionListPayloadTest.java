@@ -24,9 +24,9 @@ class CompanionListPayloadTest {
     @Test
     void everyRowCarriesHerWholeOwnerTableCreatorFirst() {
         CompanionListPayload sent = new CompanionListPayload("world-1", List.of(
-                new CompanionListPayload.Entry(HER, "小焰", true, Attendance.Outside.byServer("挂机"),
+                new CompanionListPayload.Entry(HER, "小焰", true, Attendance.Outside.byServer("挂机"), "skin:steve",
                         List.of(new Keeper(CREATOR, "Steve"), new Keeper(FRIEND, ""))),
-                new CompanionListPayload.Entry(UUID.randomUUID(), "阿岩", false, Attendance.Outside.NONE,
+                new CompanionListPayload.Entry(UUID.randomUUID(), "阿岩", false, Attendance.Outside.NONE, "",
                         List.of(new Keeper(CREATOR, "Steve")))));
 
         RegistryFriendlyByteBuf wire = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);

@@ -8,8 +8,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -60,50 +60,46 @@ public final class SkillTool implements NumenTool {
     }
 
     /**
-     * 随发布的技能的正文在服务端,读它要在座位上等一个答复,所以在自己的线程上读、读完再交结果(工具可以在任何线程上交结果)。
+     * 随发布的技能的正文在服务端,读它要等座位上的答复,所以结果在答复到了的那一刻才交(工具可以在任何线程上交结果,内核等着)。
      */
     @Override
     public void invoke(ToolCall call) {
         SkillRegistry registry = call.ctx().skills();
-        com.dwinovo.numen.api.mind.Background.run(() -> {
-            String result;
-            try {
-                result = load(registry, call.args());
-            } catch (IllegalArgumentException bad) {
-                result = ToolOutcome.failure(bad.getMessage());
-            }
-            call.complete(result);
-        });
-    }
-
-    /**
-     * 技能正文(或它的一个附属文件)要的那一页,原文交给模型;没有这份技能、没有这个文件、没有这一页时是一条失败,说清有什么。
-     */
-    private static String load(SkillRegistry registry, JsonObject args) {
+        JsonObject args;
+        try {
+            args = call.args();
+        } catch (IllegalArgumentException bad) {
+            call.complete(ToolOutcome.failure(bad.getMessage()));
+            return;
+        }
         String name = text(args, "skill");
         if (name == null) {
-            throw new IllegalArgumentException("argument 'skill' is missing: the skill's name");
+            call.complete(ToolOutcome.failure("argument 'skill' is missing: the skill's name"));
+            return;
         }
         String file = text(args, "file");
-        String text;
+        CompletableFuture<String> shown;
         if (file != null) {
-            try {
-                text = SkillInjection.supportFile(name, file, registry.readSupportFile(name, file));
-            } catch (IllegalArgumentException missing) {
-                return ToolOutcome.failure(missing.getMessage());
-            }
+            shown = registry.readSupportFile(name, file).thenApply(text -> SkillInjection.supportFile(name, file, text));
+        } else if (registry.get(name).isEmpty()) {
+            String known = registry.available().stream().map(SkillInfo::name).collect(Collectors.joining(", "));
+            call.complete(ToolOutcome.failure("unknown skill: " + name + "; the skills are: "
+                    + (known.isEmpty() ? "(none available)" : known)));
+            return;
         } else {
-            Optional<SkillInfo> skill = registry.get(name);
-            if (skill.isEmpty()) {
-                String known = registry.available().stream().map(SkillInfo::name)
-                        .collect(Collectors.joining(", "));
-                return ToolOutcome.failure("unknown skill: " + name + "; the skills are: "
-                        + (known.isEmpty() ? "(none available)" : known));
-            }
-            text = SkillInjection.body(skill.get(), null);
+            shown = registry.read(name).thenApply(skill -> SkillInjection.body(skill, null));
         }
         JsonElement page = args.get("page");
-        return new Listing(List.of(text.split("\n", -1))).page(page == null || page.isJsonNull() ? 1 : page.getAsInt());
+        int wanted = page == null || page.isJsonNull() ? 1 : page.getAsInt();
+        shown.whenComplete((text, failed) -> {
+            if (failed == null) {
+                call.complete(new Listing(List.of(text.split("\n", -1))).page(wanted));
+            } else {
+                Throwable cause = failed instanceof java.util.concurrent.CompletionException && failed.getCause() != null
+                        ? failed.getCause() : failed;
+                call.complete(ToolOutcome.failure(cause.getMessage()));
+            }
+        });
     }
 
     private static String text(JsonObject args, String key) {

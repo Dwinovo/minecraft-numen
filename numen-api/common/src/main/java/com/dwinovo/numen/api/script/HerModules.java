@@ -49,7 +49,10 @@ public final class HerModules {
         /** 内置的模块名。 */
         Set<String> names();
 
-        /** 这一份内置的正文;没有这一份是 null。可能要等服务端答复。 */
+        /** 内置的原文有没有取齐(座位刚坐上、目录刚变的时候还没有)。 */
+        boolean loaded();
+
+        /** 这一份内置的正文;没有这一份是 null。只在 {@link #loaded} 之后读。 */
         String code(String name);
     }
 
@@ -84,6 +87,18 @@ public final class HerModules {
     /** 她的模块在磁盘上的目录(回执里告诉她文件在哪)。 */
     public Path dir() {
         return shelf.dir();
+    }
+
+    /**
+     * 这一份内置的正文。
+     *
+     * @throws IllegalStateException 内置模块的原文还没从服务端取齐
+     */
+    private String builtinCode(String name) {
+        if (!builtins.loaded()) {
+            throw new IllegalStateException("the built-in modules have not arrived from the server yet; try again in a moment");
+        }
+        return builtins.code(name);
     }
 
     // ==================== 名字 ====================
@@ -151,7 +166,7 @@ public final class HerModules {
         boolean newer = false;
         if (origin == Modules.Origin.CHANGED) {
             JsonObject recorded = entry(ledger(), name);
-            String code = builtins.code(name);
+            String code = builtinCode(name);
             newer = recorded.has(FACTORY) && code != null
                     && !recorded.get(FACTORY).getAsString().equals(Fingerprint.of(code));
         }
@@ -164,7 +179,7 @@ public final class HerModules {
         if (idOf(name) == null || !builtins.names().contains(name)) {
             return null;
         }
-        String code = builtins.code(name);
+        String code = builtinCode(name);
         return code == null ? null : new Modules.Module(name, code, ScriptEngine.IN_USE.summary(code),
                 Modules.Origin.FACTORY, false, ScriptEngine.IN_USE.check(name, code));
     }
@@ -198,7 +213,7 @@ public final class HerModules {
         EntryId id = idOf(name);
         synchronized (lock) {
             boolean existed = shelf.get(id) != null;
-            String builtin = builtins.names().contains(name) ? builtins.code(name) : null;
+            String builtin = builtins.names().contains(name) ? builtinCode(name) : null;
             shelf.write(id, code);
             setDisabled(name, false);   // 她关掉的内置,自己存一份同名的就是又要它了
             JsonObject ledger = ledger();
@@ -225,7 +240,7 @@ public final class HerModules {
         }
         synchronized (lock) {
             String mine = code(name);
-            String text = mine != null ? mine : disabled().contains(name) ? null : builtins.code(name);
+            String text = mine != null ? mine : disabled().contains(name) ? null : builtinCode(name);
             if (text == null) {
                 return null;
             }
@@ -252,7 +267,7 @@ public final class HerModules {
         if (id == null || !builtins.names().contains(name)) {
             return null;
         }
-        String code = builtins.code(name);
+        String code = builtinCode(name);
         if (code == null) {
             return null;
         }

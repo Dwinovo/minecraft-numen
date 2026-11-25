@@ -4,7 +4,7 @@ import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.script.ApiError;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.script.ScriptEngine;
-import com.dwinovo.numen.api.mind.ClientBrains;
+import com.dwinovo.numen.api.sdk.ApiRegistry;
 import com.dwinovo.numen.api.sdk.Call;
 import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Example;
@@ -52,7 +52,7 @@ public final class ModuleApi {
     @Note("Instant and read-only. numen.api.help(\"<module>\") lists a module's functions with their types.")
     @SeeAlso("numen.module.show")
     public static List<ModuleInfo> list(ClientCall call) {
-        HerModules modules = ClientBrains.of(call.companion()).modules();
+        HerModules modules = call.context().of(HerModules.class);
         List<ModuleInfo> out = new ArrayList<>();
         java.util.SortedSet<String> names = new java.util.TreeSet<>(modules.names());
         names.addAll(modules.deletedFactory());
@@ -106,7 +106,7 @@ public final class ModuleApi {
             + "put together.")
     @SeeAlso("numen.module.save")
     public static Shown show(ClientCall call, Show args) {
-        HerModules modules = ClientBrains.of(call.companion()).modules();
+        HerModules modules = call.context().of(HerModules.class);
         String name = args.name();
         boolean factory = args.factory().orElse(false);
         Modules.Module builtin = modules.builtin(name);
@@ -150,7 +150,7 @@ public final class ModuleApi {
             + "/reload makes the next program read them.")
     @SeeAlso({"numen.module.delete", "numen.module.reset"})
     public static Saved save(ClientCall call, Save args) {
-        HerModules modules = ClientBrains.of(call.companion()).modules();
+        HerModules modules = call.context().of(HerModules.class);
         String name = args.name().orElseGet(() -> freeName(modules));
         String code = args.code();
         String badName = Modules.problem(name);
@@ -161,7 +161,7 @@ public final class ModuleApi {
                             + own.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9_]", "_"))));
         }
         // 读不通、不返回表、撞第 ① 层:和运行时同一个解释器装它一次,规则只在沙箱里那一处
-        String problem = ClientBrains.of(call.companion()).checkModule(name, code);
+        String problem = ScriptEngine.IN_USE.checkModule(name, code, ApiRegistry.catalog(Modules.factory()));
         if (problem != null) {
             throw new ApiError(ErrorKind.BAD_ARGUMENT, "did not save " + name + ": " + problem,
                     "fix that line, then save it again");
@@ -180,7 +180,7 @@ public final class ModuleApi {
     @Note("Instant.")
     @SeeAlso({"numen.module.list", "numen.module.reset"})
     public static void delete(ClientCall call, Named args) {
-        HerModules modules = ClientBrains.of(call.companion()).modules();
+        HerModules modules = call.context().of(HerModules.class);
         if (modules.delete(args.name()) == null) {
             throw new ApiError(ErrorKind.NOT_FOUND, missing(args.name(), modules), Call.of("numen.module.list"));
         }
@@ -193,7 +193,7 @@ public final class ModuleApi {
             + "not taken because you changed yours.")
     @SeeAlso("numen.module.list")
     public static void reset(ClientCall call, Named args) {
-        HerModules modules = ClientBrains.of(call.companion()).modules();
+        HerModules modules = call.context().of(HerModules.class);
         if (modules.reset(args.name()) == null) {
             throw new ApiError(ErrorKind.NOT_FOUND, "nothing named " + args.name() + " ships with this version; only "
                     + "a built-in module can be reset", Call.of("numen.module.list"));

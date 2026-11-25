@@ -23,11 +23,13 @@ import java.util.UUID;
 public final class ClientCall {
 
     private final UUID companion;
+    private final ClientContext context;
     private final ApiFunction function;
     private final FnArgs args;
 
-    ClientCall(UUID companion, ApiFunction function, FnArgs args) {
+    ClientCall(UUID companion, ClientContext context, ApiFunction function, FnArgs args) {
         this.companion = companion;
+        this.context = context;
         this.function = function;
         this.args = args;
     }
@@ -35,6 +37,11 @@ public final class ClientCall {
     /** 她是谁。 */
     public UUID companion() {
         return companion;
+    }
+
+    /** 她的大脑里这次调用要碰的东西。 */
+    public ClientContext context() {
+        return context;
     }
 
     /** 这次调用写成的那一行 Lua。 */

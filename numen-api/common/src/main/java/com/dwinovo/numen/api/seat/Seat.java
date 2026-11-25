@@ -296,7 +296,10 @@ final class Seat {
     }
 
     /** 叫停身体上在跑的活。 */
-    void stopBody() {
-        seats.world().main().execute(() -> seats.world().programs().stopBody(companion));
+    SeatState stopBody() throws Exception {
+        return seats.onMain(() -> {
+            seats.world().programs().stopBody(companion);
+            return seats.world().state(companion);
+        });
     }
 }

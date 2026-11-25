@@ -22,8 +22,7 @@ import java.util.function.Function;
  */
 public final class ClientBrains {
 
-    private static final Map<UUID, LoopHost> HOSTS = new ConcurrentHashMap<>();
-
+    private final Map<UUID, LoopHost> hosts = new ConcurrentHashMap<>();
     private final SeatClient seat;
     private final Executor main;
     private final Function<UUID, LoopHost> create;
@@ -41,23 +40,14 @@ public final class ClientBrains {
         seat.onCatalogChanged((companion, version) -> main.execute(() -> refetch(companion)));
     }
 
-    /** 这只同伴的大脑;这台电脑上没有(不是她的创建者、座位还没坐上)是编程错误。 */
-    public static LoopHost of(UUID companion) {
-        LoopHost host = HOSTS.get(companion);
-        if (host == null) {
-            throw new IllegalStateException("her brain does not run here: " + companion);
-        }
-        return host;
+    /** 这只同伴的大脑;这条连接上没有(不是她的创建者、座位还没坐上)是 {@code null}。 */
+    public LoopHost get(UUID companion) {
+        return hosts.get(companion);
     }
 
-    /** 这只同伴的大脑在不在这台电脑上跑。 */
-    public static boolean present(UUID companion) {
-        return HOSTS.containsKey(companion);
-    }
-
-    /** 这台电脑上跑着的所有大脑。 */
-    public static Collection<LoopHost> all() {
-        return HOSTS.values();
+    /** 这条连接上跑着的所有大脑。 */
+    public Collection<LoopHost> all() {
+        return hosts.values();
     }
 
     /**
@@ -78,7 +68,7 @@ public final class ClientBrains {
 
     private void open(UUID companion) {
         LoopHost host = create.apply(companion);
-        HOSTS.put(companion, host);
+        hosts.put(companion, host);
         seat.open(companion, seat.lastSeq(companion))
                 .thenCompose(opened -> seat.catalog(companion).thenApply(Catalog::fromJson)
                         .thenAccept(catalog -> main.execute(() -> host.attach(opened, catalog))))
@@ -94,7 +84,7 @@ public final class ClientBrains {
     }
 
     private void refetch(UUID companion) {
-        LoopHost host = HOSTS.get(companion);
+        LoopHost host = hosts.get(companion);
         if (host == null) {
             return;
         }
@@ -109,7 +99,7 @@ public final class ClientBrains {
 
     private void release(UUID companion) {
         sitting.remove(companion);
-        LoopHost host = HOSTS.remove(companion);
+        LoopHost host = hosts.remove(companion);
         if (host != null) {
             host.dispose();
             host.detach();
@@ -119,7 +109,7 @@ public final class ClientBrains {
     /** 每个客户端刻一次:各只的大脑往前走一步。 */
     public void tick() {
         for (UUID companion : sitting) {
-            LoopHost host = HOSTS.get(companion);
+            LoopHost host = hosts.get(companion);
             if (host != null) {
                 host.tick();
             }

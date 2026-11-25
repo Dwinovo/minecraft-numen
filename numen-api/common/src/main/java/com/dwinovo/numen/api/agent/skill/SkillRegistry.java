@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 一位玩家的技能。技能是 markdown 目录,她按需用 {@code skill} 工具装进来:把"怎么做某件事"的长篇说明从系统提示挪到工具调用的
@@ -65,21 +66,17 @@ public final class SkillRegistry {
         List<SkillInfo> list();
 
         /**
-         * 一份的正文。
-         *
-         * @throws IllegalArgumentException 没有这一份
+         * 一份的正文;在服务端,所以是答复来了才有。没有这一份,答复是 {@link IllegalArgumentException}。
          */
-        SkillInfo get(String name);
+        CompletableFuture<SkillInfo> get(String name);
 
         /**
-         * 一份的一个附属文件。
-         *
-         * @throws IllegalArgumentException 没有这份技能、路径越界、文件缺失或超限
+         * 一份的一个附属文件。没有这份技能、路径越界、文件缺失或超限,答复是 {@link IllegalArgumentException}。
          */
-        String file(String name, String relPath);
+        CompletableFuture<String> file(String name, String relPath);
 
         /** 一份的附属文件清单。 */
-        List<String> files(String name);
+        CompletableFuture<List<String>> files(String name);
 
         /** 一份都没有。 */
         Bundled NONE = new Bundled() {
@@ -89,18 +86,18 @@ public final class SkillRegistry {
             }
 
             @Override
-            public SkillInfo get(String name) {
-                throw new IllegalArgumentException("unknown skill: " + name);
+            public CompletableFuture<SkillInfo> get(String name) {
+                return CompletableFuture.failedFuture(new IllegalArgumentException("unknown skill: " + name));
             }
 
             @Override
-            public String file(String name, String relPath) {
-                throw new IllegalArgumentException("unknown skill: " + name);
+            public CompletableFuture<String> file(String name, String relPath) {
+                return CompletableFuture.failedFuture(new IllegalArgumentException("unknown skill: " + name));
             }
 
             @Override
-            public List<String> files(String name) {
-                throw new IllegalArgumentException("unknown skill: " + name);
+            public CompletableFuture<List<String>> files(String name) {
+                return CompletableFuture.failedFuture(new IllegalArgumentException("unknown skill: " + name));
             }
         };
     }
@@ -163,13 +160,19 @@ public final class SkillRegistry {
         return Optional.ofNullable(parsed == null ? null : parsed.info());
     }
 
-    /** 开着的技能,连正文:对 skill 工具与技能命令,关掉的技能不可见。"能不能用"问这里。 */
+    /** 开着的技能(随发布的正文是 null):对 skill 工具与技能命令,关掉的技能不可见。"能不能用"问这里。 */
     public Optional<SkillInfo> get(String name) {
         Parsed parsed = skills().get(name);
+        return parsed == null || !library.enabled(parsed.id()) ? Optional.empty() : Optional.of(parsed.info());
+    }
+
+    /** 开着的技能,连正文:随发布的在服务端,答复来了才有。没有这一份或被关着,答复是 {@link IllegalArgumentException}。 */
+    public CompletableFuture<SkillInfo> read(String name) {
+        Parsed parsed = skills().get(name);
         if (parsed == null || !library.enabled(parsed.id())) {
-            return Optional.empty();
+            return CompletableFuture.failedFuture(new IllegalArgumentException("unknown skill: " + name));
         }
-        return Optional.of(parsed.shipped() ? bundled.get(name) : parsed.info());
+        return parsed.shipped() ? bundled.get(name) : CompletableFuture.completedFuture(parsed.info());
     }
 
     /** 所有已知的技能,含关掉的。 */
@@ -224,26 +227,22 @@ public final class SkillRegistry {
     /**
      * 三级披露:读取技能目录内的一个附属文件(SKILL.md 正文以相对路径引用,模型按需拉取)。
      *
-     * @return 文件文本;技能不存在、路径越界、文件缺失或超限时抛 IllegalArgumentException
+     * @return 文件文本;技能不存在、路径越界、文件缺失或超限时答复是 IllegalArgumentException
      */
-    public String readSupportFile(String skillName, String relPath) {
-        Parsed parsed = usable(skillName);
-        return parsed.shipped() ? bundled.file(skillName, relPath)
-                : SkillFiles.read(parsed.info().location().getParent(), skillName, relPath);
-    }
-
-    /** 技能目录内可引用的附属文件相对路径清单(不含 SKILL.md 本身,字典序)。 */
-    public List<String> listSupportFiles(String skillName) {
-        Parsed parsed = usable(skillName);
-        return parsed.shipped() ? bundled.files(skillName) : SkillFiles.list(parsed.info().location().getParent());
-    }
-
-    private Parsed usable(String skillName) {
+    public CompletableFuture<String> readSupportFile(String skillName, String relPath) {
         Parsed parsed = skills().get(skillName);
         if (parsed == null || !library.enabled(parsed.id())) {
-            throw new IllegalArgumentException("unknown skill: " + skillName);
+            return CompletableFuture.failedFuture(new IllegalArgumentException("unknown skill: " + skillName));
         }
-        return parsed;
+        if (parsed.shipped()) {
+            return bundled.file(skillName, relPath);
+        }
+        try {
+            return CompletableFuture.completedFuture(
+                    SkillFiles.read(parsed.info().location().getParent(), skillName, relPath));
+        } catch (IllegalArgumentException refused) {
+            return CompletableFuture.failedFuture(refused);
+        }
     }
 
     /** 读一个技能目录的 {@code SKILL.md};读不了或没有 {@code name:} 记一笔并返回 {@code null}。 */

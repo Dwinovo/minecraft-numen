@@ -55,6 +55,7 @@ import com.dwinovo.numen.api.seat.Opened;
 import com.dwinovo.numen.api.seat.SeatClient;
 import com.dwinovo.numen.api.seat.SeatEvent;
 import com.dwinovo.numen.api.seat.SeatState;
+import com.dwinovo.numen.api.sdk.ClientContext;
 import com.dwinovo.numen.api.store.JsonDoc;
 import com.google.gson.JsonObject;
 
@@ -88,7 +89,7 @@ import java.util.function.Supplier;
  *
  * <p>线程:全部在 {@link Parts#main} 上(产品里是客户端主线程)。座位的回调经它切回来。
  */
-public final class LoopHost {
+public final class LoopHost implements ClientContext {
 
     /**
      * 宿主给的东西。取值的都是现问现答,循环不存副本。
@@ -214,7 +215,6 @@ public final class LoopHost {
         loop.subscribe(compactor::on);
         loop.subscribe(goals::on);
         loop.subscribe(memory::on);
-        loop.subscribe(body::on);
         this.wasDriving = parts.driving().getAsBoolean();
         restore();
         parts.seat().onEvent(event -> {
@@ -222,6 +222,7 @@ public final class LoopHost {
                 parts.main().execute(() -> onSeatEvent(event));
             }
         });
+        parts.seat().serveContext(companion, this);
         parts.seat().serveModules(companion, hash -> parts.modules().hers().values().stream()
                 .filter(code -> com.dwinovo.numen.api.library.Fingerprint.of(code).equals(hash)).findFirst().orElse(null));
     }
@@ -279,6 +280,7 @@ public final class LoopHost {
     public void attach(Opened opened, Catalog fetched) {
         generation = opened.generation();
         catalog = fetched;
+        sources.refresh();
         seated = true;
         Constants.LOG.info("[numen-mind#{}] seated at generation {}", companion, generation);
     }
@@ -286,6 +288,20 @@ public final class LoopHost {
     /** 目录变了,新的到手。 */
     public void catalogChanged(Catalog fetched) {
         catalog = fetched;
+        sources.refresh();
+    }
+
+    /** 客户端函数在这里取她的大脑里的东西:她的模块、札记、技能、目录。 */
+    @Override
+    public <T> T of(Class<T> type) {
+        Object found = type == HerModules.class ? parts.modules()
+                : type == NoteBook.class ? notes
+                : type == SkillRegistry.class ? skills
+                : type == Catalog.class ? catalog : null;
+        if (found == null) {
+            throw new IllegalArgumentException("her brain has no " + type.getSimpleName());
+        }
+        return type.cast(found);
     }
 
     /** 座位上没人了(连接断了、她被遣散了):内脑待命,在飞的回合作废,输入照收。 */
@@ -408,11 +424,6 @@ public final class LoopHost {
     /** 她的技能:自己的加随发布的。 */
     public SkillRegistry skills() {
         return skills;
-    }
-
-    /** 一份模块写得读不读得通、撞没撞第 ① 层(服务端那一边的规则);没事是 {@code null}。 */
-    public String checkModule(String name, String code) {
-        return sources.checkModule(name, code);
     }
 
     /** 服务端目录的此刻的样子。 */

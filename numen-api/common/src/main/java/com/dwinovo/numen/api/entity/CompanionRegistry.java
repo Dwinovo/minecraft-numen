@@ -37,6 +37,7 @@ import java.util.UUID;
 public final class CompanionRegistry extends SavedData {
 
     /** One companion's catalog entry.
+     *  {@code skinRef} = 她穿的是签名缓存里的哪一张(界面据此标出穿着的那张),空串 = 没有;
      *  {@code skinValue}/{@code skinSig} = 借来的正版皮肤(Mojang 签名的 textures 属性),
      *  空串 = 无皮肤,客户端回落原版默认皮肤(按 UUID 哈希抽取)。
      *  {@code outside} = 她被留在外面(主人下令下线的,或被外面的人或插件请出了服务器的,后者带当时说的理由),在主人再召唤她之前不重建。
@@ -46,7 +47,7 @@ public final class CompanionRegistry extends SavedData {
      *  死亡不进名册:她死了就由原版重生流程当场重生,没有"死着等复活"的状态;老存档里的 {@code diedAt}、{@code deathCause}
      *  读档时被忽略,下一次存盘就不再写。 */
     public record Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos,
-                        String skinValue, String skinSig,
+                        String skinValue, String skinSig, String skinRef,
                         String taskName, String taskLua, String taskOld, Outside outside, long leftAt,
                         List<UUID> sharedWith) {
         public Entry {
@@ -55,7 +56,7 @@ public final class CompanionRegistry extends SavedData {
 
         /** A companion with no borrowed skin, idle. */
         public Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos) {
-            this(name, owner, dimension, pos, "", "", "", "", "", Outside.NONE, -1L, List.of());
+            this(name, owner, dimension, pos, "", "", "", "", "", "", Outside.NONE, -1L, List.of());
         }
 
         /** 她的主人们:创建者在前,后面是分享给的人,按加进来的先后。 */
@@ -76,38 +77,38 @@ public final class CompanionRegistry extends SavedData {
          * 在做、但接不回来。见 {@code TaskPersistence}。{@code taskOld} 只是读进来的:旧版本按一行命令记下的活,这一版不再跑它。
          */
         public Entry doing(String task, String lua) {
-            return new Entry(name, owner, dimension, pos, skinValue, skinSig,
+            return new Entry(name, owner, dimension, pos, skinValue, skinSig, skinRef,
                     task == null ? "" : task, lua == null ? "" : lua, "", outside, leftAt, sharedWith);
         }
 
         /** 刷新落点(休眠/移动时的 respawn 提示),皮肤原样保留。 */
         public Entry movedTo(ResourceKey<Level> dimension, BlockPos pos) {
-            return new Entry(name, owner, dimension, pos, skinValue, skinSig,
+            return new Entry(name, owner, dimension, pos, skinValue, skinSig, skinRef,
                     taskName, taskLua, taskOld, outside, leftAt, sharedWith);
         }
 
         /** 换上 Mojang 签名的皮肤数据(value+signature)。 */
-        public Entry withSkin(String value, String sig) {
+        public Entry withSkin(String value, String sig, String ref) {
             return new Entry(name, owner, dimension, pos,
-                    value == null ? "" : value, sig == null ? "" : sig, taskName, taskLua, taskOld, outside, leftAt,
+                    value == null ? "" : value, sig == null ? "" : sig, ref == null ? "" : ref, taskName, taskLua, taskOld, outside, leftAt,
                     sharedWith);
         }
 
         /** 换一个"留在外面"的状态({@link Outside#NONE} = 不在外面)。 */
         Entry outside(Outside next) {
-            return new Entry(name, owner, dimension, pos, skinValue, skinSig,
+            return new Entry(name, owner, dimension, pos, skinValue, skinSig, skinRef,
                     taskName, taskLua, taskOld, next, leftAt, sharedWith);
         }
 
         /** 记下她被登出世界的游戏时间;-1 = 清掉。 */
         Entry leftAt(long at) {
-            return new Entry(name, owner, dimension, pos, skinValue, skinSig,
+            return new Entry(name, owner, dimension, pos, skinValue, skinSig, skinRef,
                     taskName, taskLua, taskOld, outside, at, sharedWith);
         }
 
         /** 换一份分享给的人(不含创建者)。 */
         Entry sharedWith(List<UUID> next) {
-            return new Entry(name, owner, dimension, pos, skinValue, skinSig,
+            return new Entry(name, owner, dimension, pos, skinValue, skinSig, skinRef,
                     taskName, taskLua, taskOld, outside, leftAt, next);
         }
 
@@ -136,6 +137,7 @@ public final class CompanionRegistry extends SavedData {
                 BlockPos.CODEC.fieldOf("pos").forGetter(Entry::pos),
                 Codec.STRING.optionalFieldOf("skinValue", "").forGetter(Entry::skinValue),
                 Codec.STRING.optionalFieldOf("skinSig", "").forGetter(Entry::skinSig),
+                Codec.STRING.optionalFieldOf("skinRef", "").forGetter(Entry::skinRef),
                 Codec.STRING.optionalFieldOf("taskName", "").forGetter(Entry::taskName),
                 Codec.STRING.optionalFieldOf("taskLua", "").forGetter(Entry::taskLua),
                 // 旧版本记的那一行命令:读进来只为如实说它接不回来,写回去它已经清掉了
@@ -145,8 +147,8 @@ public final class CompanionRegistry extends SavedData {
                 OUTSIDE.optionalFieldOf("outside", Outside.NONE).forGetter(Entry::outside),
                 Codec.LONG.optionalFieldOf("leftAt", -1L).forGetter(Entry::leftAt),
                 UUIDUtil.STRING_CODEC.listOf().optionalFieldOf("sharedWith", List.of()).forGetter(Entry::sharedWith)
-        ).apply(i, (name, owner, dimension, pos, skinValue, skinSig, taskName, taskLua, taskOld, legacyRemovedFor,
-                    outside, leftAt, sharedWith) -> new Entry(name, owner, dimension, pos, skinValue, skinSig,
+        ).apply(i, (name, owner, dimension, pos, skinValue, skinSig, skinRef, taskName, taskLua, taskOld, legacyRemovedFor,
+                    outside, leftAt, sharedWith) -> new Entry(name, owner, dimension, pos, skinValue, skinSig, skinRef,
                 taskName, taskLua, taskOld, legacyRemovedFor.isEmpty() ? outside : Outside.byServer(legacyRemovedFor),
                 leftAt, sharedWith)));
     }

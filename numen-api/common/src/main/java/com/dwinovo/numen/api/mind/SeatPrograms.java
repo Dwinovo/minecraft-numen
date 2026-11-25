@@ -93,7 +93,12 @@ final class SeatPrograms implements ProgramHost {
 
     @Override
     public void stopBody(UUID who) {
-        seat.stopBody(companion).whenComplete((done, failed) -> logged("body stop", failed));
+        seat.stopBody(companion).whenComplete((state, failed) -> main.execute(() -> {
+            if (failed == null) {
+                states.accept(state);
+            }
+            logged("body stop", failed);
+        }));
     }
 
     private void logged(String what, Throwable failed) {

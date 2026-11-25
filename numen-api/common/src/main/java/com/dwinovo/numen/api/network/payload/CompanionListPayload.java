@@ -35,10 +35,11 @@ public record CompanionListPayload(String worldId, List<Entry> companions) imple
     public static final int MAX = 64;
 
     /** 一行。{@code creative} 是此刻的游戏模式(不在场按生存),
-     *  编辑卡的模式格用它显示当前值。{@code outside} 是她被留在外面的状态与原因(主人让她下线、服务器把她请出去,见
+     *  编辑卡的模式格用它显示当前值。{@code skinRef} 是她穿的是签名缓存里的哪一张(没有是空串)。{@code outside} 是她被留在外面的状态与原因(主人让她下线、服务器把她请出去,见
      *  {@link Attendance.Outside}):留在外面的不在世界里,等主人再召唤。{@code keepers} 是她的主人表:创建者在前(收到这份名册的人
      *  不是他,她就是分享来的),后面是分享给的人,按加进来的先后。 */
-    public record Entry(UUID uuid, String name, boolean creative, Attendance.Outside outside, List<Keeper> keepers) {
+    public record Entry(UUID uuid, String name, boolean creative, Attendance.Outside outside, String skinRef,
+                        List<Keeper> keepers) {
         private static final StreamCodec<io.netty.buffer.ByteBuf, Attendance.Why> WHY = ByteBufCodecs.idMapper(
                 ByIdMap.continuous(Attendance.Why::ordinal, Attendance.Why.values(), ByIdMap.OutOfBoundsStrategy.ZERO),
                 Attendance.Why::ordinal);
@@ -57,6 +58,7 @@ public record CompanionListPayload(String worldId, List<Entry> companions) imple
             buf.writeBoolean(e.creative);
             WHY.encode(buf, e.outside.why());
             Wire.TO_CLIENT.text().encode(buf, e.outside.reason());
+            Wire.TO_CLIENT.text().encode(buf, e.skinRef);
             KEEPERS.encode(buf, e.keepers);
         }
 
@@ -66,7 +68,8 @@ public record CompanionListPayload(String worldId, List<Entry> companions) imple
             boolean creative = buf.readBoolean();
             Attendance.Why why = WHY.decode(buf);
             String reason = Wire.TO_CLIENT.text().decode(buf);
-            return new Entry(uuid, name, creative, new Attendance.Outside(why, reason), KEEPERS.decode(buf));
+            String skinRef = Wire.TO_CLIENT.text().decode(buf);
+            return new Entry(uuid, name, creative, new Attendance.Outside(why, reason), skinRef, KEEPERS.decode(buf));
         }
     }
 

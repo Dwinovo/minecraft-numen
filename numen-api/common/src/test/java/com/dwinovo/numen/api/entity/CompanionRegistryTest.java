@@ -40,7 +40,7 @@ class CompanionRegistryTest {
     void entriesSurviveASaveLoadCycle() {
         CompanionRegistry reg = new CompanionRegistry();
         reg.put(A, entry("小焰", OWNER));
-        reg.put(B, entry("阿岩", OTHER_OWNER).withSkin("val", "sig"));
+        reg.put(B, entry("阿岩", OTHER_OWNER).withSkin("val", "sig", "skin:blue"));
 
         CompanionRegistry back = roundTrip(reg);
 
@@ -57,7 +57,7 @@ class CompanionRegistryTest {
         // 老存档里死着等复活的同伴带着 diedAt 与 deathCause。读档不能因为认不得它们就丢掉整条记录(全世界同伴蒸发),
         // 读出来她就是一只普通的同伴,下一次存盘这两个字段不再写出
         CompanionRegistry reg = new CompanionRegistry();
-        reg.put(A, entry("小焰", OWNER).withSkin("val", "sig"));
+        reg.put(A, entry("小焰", OWNER).withSkin("val", "sig", "skin:blue"));
         CompoundTag tag = reg.save(new CompoundTag(), null);
         CompoundTag saved = tag.getCompound("companions").getCompound(A.toString());
         saved.putLong("diedAt", 12345L);
@@ -252,7 +252,7 @@ class CompanionRegistryTest {
         reg.put(A, entry("小焰", OWNER));
         reg.share(A, OTHER_OWNER);
 
-        reg.put(A, reg.find(A).withSkin("v", "s").movedTo(Level.NETHER, new BlockPos(9, 9, 9)).doing("t", "t()"));
+        reg.put(A, reg.find(A).withSkin("v", "s", "skin:blue").movedTo(Level.NETHER, new BlockPos(9, 9, 9)).doing("t", "t()"));
         reg.markOutside(A, Attendance.Outside.byOwner());
         reg.markLeftAt(A, 7L);
 
@@ -292,7 +292,7 @@ class CompanionRegistryTest {
         reg.markOutside(A, Attendance.Outside.byServer("cheating at cards"));
 
         // 换肤 / 挪落点都不该顺手把在做的活和被请出去的状态抹掉
-        reg.put(A, reg.find(A).withSkin("v", "s"));
+        reg.put(A, reg.find(A).withSkin("v", "s", "skin:blue"));
         reg.put(A, reg.find(A).movedTo(Level.NETHER, new BlockPos(9, 9, 9)));
 
         assertEquals("v", reg.find(A).skinValue());
