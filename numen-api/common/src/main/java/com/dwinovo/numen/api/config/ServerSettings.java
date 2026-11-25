@@ -10,7 +10,6 @@ import com.google.gson.JsonObject;
  * 读不通就当缺省并记一笔,不阻断服务器起来。
  *
  * <ul>
- *   <li>{@code dailyTokenLimit}:服主的 key 给每位玩家每天能用多少 token(0 = 不限,缺省)。玩家自己的 key 不受限。</li>
  *   <li>{@code maxCompanions}:每位玩家最多召唤几只同伴(0 = 不限,缺省)。召唤只要一个名字,这是唯一的上限。</li>
  * </ul>
  */
@@ -19,7 +18,6 @@ public final class ServerSettings {
     public static final String FILE = "server.json";
 
     private final JsonDoc doc;
-    private volatile long dailyTokenLimit;
     private volatile int maxCompanions;
 
     public ServerSettings(Home server) {
@@ -29,7 +27,6 @@ public final class ServerSettings {
 
     /** 重新读文件;文件不在就写一份缺省的,免得管理员不知道有这一项。 */
     public synchronized void reload() {
-        dailyTokenLimit = 0;
         maxCompanions = 0;
         try {
             JsonObject root = doc.read().orElse(null);
@@ -37,20 +34,12 @@ public final class ServerSettings {
                 doc.write(toJson());
                 return;
             }
-            if (root.get("dailyTokenLimit") instanceof com.google.gson.JsonPrimitive limit && limit.isNumber()) {
-                dailyTokenLimit = Math.max(0, limit.getAsLong());
-            }
             if (root.get("maxCompanions") instanceof com.google.gson.JsonPrimitive max && max.isNumber()) {
                 maxCompanions = Math.max(0, max.getAsInt());
             }
         } catch (RuntimeException unreadable) {
             Constants.LOG.warn("[numen-server] {} cannot be read, using default settings: {}", doc.file(), unreadable.toString());
         }
-    }
-
-    /** 服主的 key 每人每天的 token 上限;0 = 不限。 */
-    public long dailyTokenLimit() {
-        return dailyTokenLimit;
     }
 
     /** 每位玩家最多召唤几只同伴;0 = 不限。 */
@@ -66,7 +55,6 @@ public final class ServerSettings {
 
     private JsonObject toJson() {
         JsonObject root = new JsonObject();
-        root.addProperty("dailyTokenLimit", dailyTokenLimit);
         root.addProperty("maxCompanions", maxCompanions);
         return root;
     }

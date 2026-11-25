@@ -14,8 +14,7 @@ import java.util.UUID;
 
 /**
  * 她的绑定文件({@code binding.json},在她的家里)的内容:三项库条目({@link Slot})各绑着什么、是谁绑的({@link Bound}),
- * 和她穿的皮肤。这个文件长什么样只有这里知道:她的大脑({@link CompanionLoop})读写它,启动时改指绑定的迁移({@link HostMerge})
- * 也经这里。
+ * 和她穿的皮肤。这个文件长什么样只有这里知道:她的大脑({@link LoopHost})读写它。
  *
  * <pre>{@code
  * {"provider": {"by": "<绑的人>", "id": "my:档案"}, "persona": {...}, "voice": {...}, "skin": "<哈希>-<粗细>"}

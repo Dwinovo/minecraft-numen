@@ -89,15 +89,15 @@ class KeysTest {
     void theServerSettingsFileIsWrittenWithTheDefaultsForTheAdminToFindAndEditAndReread() throws IOException {
         ServerSettings settings = new ServerSettings(home("server"));
 
-        assertEquals(0, settings.dailyTokenLimit(), "缺省不限");
-        assertTrue(Files.readString(dir.resolve("server/server.json")).contains("dailyTokenLimit"));
+        assertEquals(0, settings.maxCompanions(), "缺省不限");
+        assertTrue(Files.readString(dir.resolve("server/server.json")).contains("maxCompanions"));
 
-        Files.writeString(dir.resolve("server/server.json"), "{\"dailyTokenLimit\": 5000}");
+        Files.writeString(dir.resolve("server/server.json"), "{\"maxCompanions\": 3}");
         settings.reload();
-        assertEquals(5000, settings.dailyTokenLimit());
+        assertEquals(3, settings.maxCompanions());
 
         Files.writeString(dir.resolve("server/server.json"), "{garbage");
         settings.reload();
-        assertEquals(0, settings.dailyTokenLimit(), "读不通用缺省,不拦着服务器起来");
+        assertEquals(0, settings.maxCompanions(), "读不通用缺省,不拦着服务器起来");
     }
 }
