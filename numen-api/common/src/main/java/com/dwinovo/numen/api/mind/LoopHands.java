@@ -3,7 +3,6 @@ package com.dwinovo.numen.api.mind;
 import com.dwinovo.numen.api.agent.inbox.ExternalWait;
 import com.dwinovo.numen.api.agent.llm.ToolOutcome;
 import com.dwinovo.numen.api.agent.loop.LoopEvent;
-import com.dwinovo.numen.api.agent.loop.RunEnd;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
 import com.dwinovo.numen.api.agent.tool.ScriptTool;
@@ -204,7 +203,7 @@ public final class LoopHands implements ExternalHands {
         });
     }
 
-    /** 来访着的渠道收她说的话;她这一轮说完了,来访就收了。 */
+    /** 来访着的渠道收她说的话;她这一轮收了(不论怎么收的),来访就收了。 */
     private void heard(UUID companion, LoopEvent event) {
         McpChannels.Channel channel = visits.get(companion);
         if (channel == null) {
@@ -215,8 +214,8 @@ public final class LoopHands implements ExternalHands {
             if (!said.isEmpty()) {
                 channel.said(companion, said);
             }
-        } else if (event instanceof LoopEvent.RunEnded ended && ended.end() instanceof RunEnd.Done) {
-            visits.remove(companion, channel);
+        } else if (event instanceof LoopEvent.RunEnded) {
+            visits.remove(companion, channel);   // 完成、失败、被切断:这一轮怎么收的都收了来访
         }
     }
 

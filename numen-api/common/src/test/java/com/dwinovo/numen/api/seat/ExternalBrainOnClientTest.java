@@ -402,4 +402,21 @@ class ExternalBrainOnClientTest {
         }
         assertTrue(later.toString().contains("在的"), later.toString());
     }
+
+    @Test
+    void aVisitEndsWhenHerRoundIsCutOffSoLaterThingsAreNotSentToThatChannel() throws Exception {
+        McpClient channel = connect(McpToken.Role.CHANNEL, null);
+        model.holding = true;
+        model.say("在的");
+        assertTrue(call(channel, "send", args("text", "在吗")).contains("sent"));
+        until("she is thinking about it", () -> !model.asked.isEmpty());
+
+        host.abort();   // the round is cut off, it never ends as Done
+
+        venues.show(new ConsentVenues.Offer(11, HER, "Her", "drop 1 diamond", List.of()));
+        JsonObject wait = new JsonObject();
+        wait.addProperty("wait_seconds", 0);
+        String replies = call(channel, "get_replies", wait);
+        assertTrue(!replies.contains("consent"), "the visit is over, the channel gets nothing more: " + replies);
+    }
 }
