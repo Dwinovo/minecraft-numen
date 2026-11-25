@@ -27,6 +27,8 @@ public final class ClientBrains {
     private final Executor main;
     private final Function<UUID, LoopHost> create;
     private final Set<UUID> sitting = ConcurrentHashMap.newKeySet();
+    /** 上一次连接里收到的最后一个序号:重连时 {@code seat/open} 报上它,服务端从下一号补。 */
+    private final Map<UUID, Long> resume = new ConcurrentHashMap<>();
 
     /**
      * @param seat   这条到服务器的座位连接
@@ -69,7 +71,7 @@ public final class ClientBrains {
     private void open(UUID companion) {
         LoopHost host = create.apply(companion);
         hosts.put(companion, host);
-        seat.open(companion, seat.lastSeq(companion))
+        seat.open(companion, resume.getOrDefault(companion, 0L))
                 .thenCompose(opened -> seat.catalog(companion).thenApply(Catalog::fromJson)
                         .thenAccept(catalog -> main.execute(() -> host.attach(opened, catalog))))
                 .whenComplete((done, failed) -> {
@@ -114,6 +116,11 @@ public final class ClientBrains {
                 host.tick();
             }
         }
+    }
+
+    /** 这只同伴上一次连接收到的最后一个序号;下一次坐上她的座位时报给服务端。 */
+    public void resume(UUID companion, long lastSeq) {
+        resume.put(companion, lastSeq);
     }
 
     /** 断线:所有大脑收掉,收到的序号记着,重连时报给服务端。 */

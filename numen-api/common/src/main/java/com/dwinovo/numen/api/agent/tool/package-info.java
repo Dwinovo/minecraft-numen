@@ -12,8 +12,5 @@
  * helpers). The per-call {@code ToolContext} lives next door in
  * {@code agent.tool.api}; any server-side task execution ships in the tool pack
  * (Numen) — not in Numen API.
- *
- * <p>Internal member ({@link com.dwinovo.numen.api.Internal @Internal}):
- * {@link ClientToolContext} (the client-side context implementation).
  */
 package com.dwinovo.numen.api.agent.tool;

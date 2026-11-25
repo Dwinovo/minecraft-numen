@@ -68,7 +68,8 @@ public final class ClientPrefs implements Switches {
         }
     }
 
-    private JsonObject toJson() {
+    /** 界面读的整份偏好。 */
+    public synchronized JsonObject toJson() {
         JsonObject o = new JsonObject();
         o.addProperty("initiative", initiative);
         JsonObject off = new JsonObject();

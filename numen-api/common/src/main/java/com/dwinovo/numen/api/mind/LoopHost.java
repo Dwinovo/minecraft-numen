@@ -103,13 +103,13 @@ public final class LoopHost implements ClientContext {
      * @param driving    驾驶席是不是在外接大脑手里
      * @param initiative 主动性档位 1~10
      * @param persona    她绑的人设的正文;没有这个人设返回 {@code null}
-     * @param modules    她自己的模块
+     * @param modules    她自己的模块(内置的原文在服务端,见 {@link SeatSources})
      * @param skills     她自己的技能(随发布的在座位那一头,见 {@link SeatSources})
      * @param playerName 一位玩家给人看的名字;不知道是空串
      */
     public record Parts(UUID companion, UUID creator, Home home, Executor main, SeatClient seat, Mind mind,
                         ToolBook tools, BooleanSupplier driving, IntSupplier initiative,
-                        Function<Bound, String> persona, HerModules modules,
+                        Function<Bound, String> persona, Function<HerModules.Builtins, HerModules> modules,
                         Function<SkillRegistry.Bundled, SkillRegistry> skills, Function<UUID, String> playerName) {}
 
     private static final String CHAT = "chat.jsonl";
@@ -128,6 +128,7 @@ public final class LoopHost implements ClientContext {
     private final BodyMirror body = new BodyMirror();
     private final NoteBook notes;
     private final SeatSources sources;
+    private final HerModules modules;
     private final SkillRegistry skills;
     private final SeatPrograms programs;
     private final CompanionToolPort tools;
@@ -185,8 +186,9 @@ public final class LoopHost implements ClientContext {
         JsonDoc scheduleDoc = new JsonDoc(home.file(SCHEDULES), JsonDoc.Format.of(1), home.io());
         this.schedules = new OwnerSchedules(scheduleDoc, readDoc(scheduleDoc));
         this.sources = new SeatSources(parts.seat(), companion, () -> catalog);
+        this.modules = parts.modules().apply(sources.builtins);
         this.skills = parts.skills().apply(sources.skills);
-        this.programs = new SeatPrograms(parts.seat(), companion, parts.modules(), parts.main(), () -> generation,
+        this.programs = new SeatPrograms(parts.seat(), companion, modules, parts.main(), () -> generation,
                 this::stateArrived);
         ToolAnchor anchor = new ToolAnchor() {
             @Override
@@ -223,7 +225,7 @@ public final class LoopHost implements ClientContext {
             }
         });
         parts.seat().serveContext(companion, this);
-        parts.seat().serveModules(companion, hash -> parts.modules().hers().values().stream()
+        parts.seat().serveModules(companion, hash -> modules.hers().values().stream()
                 .filter(code -> com.dwinovo.numen.api.library.Fingerprint.of(code).equals(hash)).findFirst().orElse(null));
     }
 
@@ -294,7 +296,7 @@ public final class LoopHost implements ClientContext {
     /** 客户端函数在这里取她的大脑里的东西:她的模块、札记、技能、目录。 */
     @Override
     public <T> T of(Class<T> type) {
-        Object found = type == HerModules.class ? parts.modules()
+        Object found = type == HerModules.class ? modules
                 : type == NoteBook.class ? notes
                 : type == SkillRegistry.class ? skills
                 : type == Catalog.class ? catalog : null;
@@ -413,7 +415,7 @@ public final class LoopHost implements ClientContext {
 
     /** 她自己的模块:{@code numen.module} 各函数读写它。 */
     public HerModules modules() {
-        return parts.modules();
+        return modules;
     }
 
     /** 她的札记。 */
@@ -433,7 +435,7 @@ public final class LoopHost implements ClientContext {
 
     /** 这一轮请求的系统提示:人设、操作核心、技能表、API 索引……内置大脑读的就是它,外接大脑经 MCP 的 guide 工具取同一份。 */
     public String systemPrompt() {
-        return SystemPromptComposer.compose(personaText(), catalog, parts.modules().hers(), parts.modules().disabled(),
+        return SystemPromptComposer.compose(personaText(), catalog, modules.hers(), modules.disabled(),
                 skills.formatXml());
     }
 
@@ -847,7 +849,7 @@ public final class LoopHost implements ClientContext {
             // 这一轮用的端点和日志里最后记下的不同,就在日志里记一条换了模型 / 换了档位
             log.noteEndpoint(endpoint);
             return AgentRequestContext.turn(convo.snapshot(), body.xml(), personaText(), catalog,
-                    parts.modules().hers(), parts.modules().disabled(), skills.formatXml(), parts.tools().all());
+                    modules.hers(), modules.disabled(), skills.formatXml(), parts.tools().all());
         }
 
         @Override
