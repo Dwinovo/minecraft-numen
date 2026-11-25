@@ -170,15 +170,15 @@ public final class ClientLibraries {
 
     // ---- 钥匙串 ----
 
-    /** 一个服务商的 key:{@code mine} 是他自己的(没有是 null);{@code server} 只有管理员看得到。 */
-    public record KeyRow(String service, String mine, boolean serverSet, String server) {}
+    /** 一个服务商的 key:{@code mine} 是这台电脑钥匙串里的(没有是 null)。 */
+    public record KeyRow(String service, String mine) {}
 
     public static List<KeyRow> keys() {
         List<KeyRow> out = new ArrayList<>();
         for (JsonElement e : entries(LibraryDesk.KEY)) {
             JsonObject o = e.getAsJsonObject();
             if (o.has("service")) {
-                out.add(new KeyRow(text(o, "service"), text(o, "mine"), flag(o, "serverSet"), text(o, "server")));
+                out.add(new KeyRow(text(o, "service"), text(o, "mine")));
             }
         }
         return out;
@@ -190,29 +190,22 @@ public final class ClientLibraries {
                 .filter(java.util.Objects::nonNull).findFirst().orElse("");
     }
 
-    /** 这个服务商服主的 key;没有或看不到是空串。 */
-    public static String serverKey(String service) {
-        return keys().stream().filter(k -> k.service().equals(service)).map(KeyRow::server)
-                .filter(java.util.Objects::nonNull).findFirst().orElse("");
-    }
-
     /**
-     * key 按服务商存进钥匙串(不进条目);和已存的不同才发。服主的({@code server})只有管理员能改,房主没有"服主的"之分。
+     * key 按服务商存进这台电脑的钥匙串(不进条目);和已存的不同才发。
      */
-    public static void saveKey(String service, String key, boolean server) {
+    public static void saveKey(String service, String key) {
         String typed = key == null ? "" : key.strip();
-        String stored = server ? serverKey(service) : mineKey(service);
+        String stored = mineKey(service);
         if (service == null || service.isBlank() || typed.equals(stored)) {
             return;
         }
         JsonObject body = new JsonObject();
         body.addProperty("service", service);
         body.addProperty("key", typed);
-        body.addProperty("scope", server ? "server" : "mine");
         ClientCompanions.library().request(LibraryDesk.KEY, Libraries.PUT, body);
     }
 
-    // ---- 型号目录与连通性检测(管理员的档案表单问的;目录、端点解析、检测都在服务端算) ----
+    // ---- 型号目录与连通性检测(档案表单问的;目录、端点解析、检测由这台电脑上的桌面算) ----
 
     /** 一个厂家。{@code defaultModel}:换到它时先选的型号。 */
     public record Vendor(String id, String name, String host, boolean popular, String defaultModel) {}

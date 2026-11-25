@@ -184,10 +184,9 @@ public final class SkinPickerPanel extends ModalCard {
         return ClientCompanions.admin();
     }
 
-    /** 服务器钥匙串里 MineSkin 的 key;房主的钥匙就是服务器那一本,在他自己的那一份里。 */
+    /** 这台电脑钥匙串里 MineSkin 的 key。 */
     private static String storedKey() {
-        return ClientCompanions.host() ? ClientLibraries.mineKey(MineSkinClient.KEY_SERVICE)
-                : ClientLibraries.serverKey(MineSkinClient.KEY_SERVICE);
+        return ClientLibraries.mineKey(MineSkinClient.KEY_SERVICE);
     }
 
     // ---- 版式 ----
@@ -276,7 +275,7 @@ public final class SkinPickerPanel extends ModalCard {
             return;
         }
         if (admin()) {
-            ClientLibraries.saveKey(MineSkinClient.KEY_SERVICE, mineSkinKey, !ClientCompanions.host());
+            ClientLibraries.saveKey(MineSkinClient.KEY_SERVICE, mineSkinKey);
         }
         SetupDraft draft = host.draft();
         if (draft != null) {

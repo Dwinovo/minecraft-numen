@@ -175,7 +175,7 @@ public final class SettingsView {
             providerForm = new ProfileFormPanel(
                     this::onProfileSave,
                     () -> { addingProvider = false; providerEditId = null; host.rebuild(); },
-                    this::storedKey);
+                    ClientLibraries::mineKey);
         }
         return providerForm;
     }
@@ -193,7 +193,7 @@ public final class SettingsView {
     private LibraryListPanel<ClientLibraries.Provider> profileList;
 
     /**
-     * 模型档案:服务器提供的(服务器目录里,管理员能改)和我的两组。玩家对服务器提供的只读,想改先复制到我的;每一条可以由玩家自己关掉。
+     * 模型档案:服务器目录里自带的只读,想改先复制到我的;我的可以改、删;每一条可以由玩家自己关掉。
      * key 不在档案里:表单上输入的 key 按厂家存进钥匙串(见 {@link ClientLibraries#saveKey})。
      */
     private LibraryListPanel<ClientLibraries.Provider> profileList() {
@@ -207,15 +207,15 @@ public final class SettingsView {
                         // 行尾勾 = 当前同伴走这份档案(召唤后也能换,即时生效)
                         Boolean marked = bound(Slot.PROVIDER, e.id());
                         return new LibraryListPanel.Row(e.name() == null ? "" : e.name(), meta(e.base(), detail),
-                                !e.hasKey(), marked, !editable(e.base()), e.base().server());
+                                !e.hasKey(), marked, e.base().server(), e.base().server());
                     },
                     e -> Component.translatable(ModLanguageData.Keys.PROVIDER_DELETE_CONFIRM,
                             e.name() == null ? "" : e.name()).getString(),
-                    e -> ClientCompanions.library().delete(LibraryDesk.PROVIDER, e.id(), e.base().server()),
+                    e -> ClientCompanions.library().delete(LibraryDesk.PROVIDER, e.id(), false),
                     this::beginEditProvider)
                     .withSections(e -> groupOf(e.base()),
                             LibraryListPanel.shelves(ModLanguageData.Keys.PROVIDER_ADD, ModLanguageData.Keys.PROVIDER_EMPTY,
-                                    () -> beginNewProvider(false), () -> beginNewProvider(true)))
+                                    this::beginNewProvider, null))
                     .withMenu(e -> updateMenu(LibraryDesk.PROVIDER, e.base()))
                     .withClone(e -> request(LibraryDesk.PROVIDER, LibraryDesk.COPY, e.base()))
                     .withRowToggle(e -> e.base().enabled(), e -> flip(LibraryDesk.PROVIDER, e.base()))
@@ -296,27 +296,17 @@ public final class SettingsView {
         if (providerEditId != null) {
             body.addProperty("id", providerEditId);
         }
-        if (providerEditServer) {
-            body.addProperty("group", "server");
-        }
         ClientCompanions.library().put(LibraryDesk.PROVIDER, body);
-        ClientLibraries.saveKey(d.provider, d.apiKey, providerEditServer);
+        ClientLibraries.saveKey(d.provider, d.apiKey);
         addingProvider = false;
         providerEditId = null;
         host.rebuild();
     }
 
 
-    /** 表单里这个厂家已存的 key:改服务器提供的档案是服主的,别的是玩家自己的;没存过是空串。 */
-    private String storedKey(String service) {
-        return providerEditServer ? ClientLibraries.serverKey(service) : ClientLibraries.mineKey(service);
-    }
-
     // ---- model-config section state (mirrors the persona section) ----
     private boolean addingProvider;
     private String providerEditId;
-    /** 正在编辑的是"服务器提供"里的那一条(只有管理员),不是我的。 */
-    private boolean providerEditServer;
 
     // ---- voice section state (mirrors the model-config section: list / form / delete-confirm) ----
     private boolean addingVoice;
@@ -1373,10 +1363,9 @@ public final class SettingsView {
     }
 
     /** 新建模型配置:打开空白表单卡。召唤卡上"没有——去设置里新建"也走这里(设置页先由屏幕切到模型配置)。新建的在我的。 */
-    private void beginNewProvider(boolean server) {
+    private void beginNewProvider() {
         addingProvider = true;
         providerEditId = null;
-        providerEditServer = server;
         providerDraft = new ProfileFormPanel.Draft();
         host.rebuild();
     }
@@ -1384,9 +1373,8 @@ public final class SettingsView {
     private void beginEditProvider(ClientLibraries.Provider e) {
         addingProvider = true;
         providerEditId = e.id();
-        providerEditServer = e.base().server();
         providerDraft = ProfileFormPanel.Draft.of(e.name(), e.full().profile());
-        providerDraft.apiKey = storedKey(providerDraft.provider);
+        providerDraft.apiKey = ClientLibraries.mineKey(providerDraft.provider);
         host.rebuild();
     }
 

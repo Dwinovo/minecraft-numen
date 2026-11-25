@@ -28,7 +28,7 @@ import java.util.concurrent.CompletableFuture;
  * {@link ModelCatalog}——和同伴开口时走的是同一条路,所以表单上看到的"会怎样"就是真会怎样。
  *
  * <p>草稿的样子与一条档案的内容相同({@link ProviderLibrary#profileFromJson}),界面写、这里读,编解码只那一处。
- * 连通性检测用的 key:草稿里带了 {@code key}(表单上正输入、还没保存的)就用它,否则用这位玩家钥匙串里这个服务的(先他的、再服主的)。
+ * 连通性检测用的 key:草稿里带了 {@code key}(表单上正输入、还没保存的)就用它,否则用这台电脑钥匙串里这个服务的。
  */
 public final class ProviderForm {
 
