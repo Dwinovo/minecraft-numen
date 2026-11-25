@@ -1,6 +1,7 @@
 # 0011 服务端必装、客户端可选,循环、记忆与外接大脑放服务端
 
-- 状态:已接受;"三种大脑、客户端代调为默认"与"key 不出主人机器"被 [runtime 0001](../runtime/0001-server-agent-two-brains.md) 修订
+- 状态:已接受;"三种大脑、客户端代调为默认"与"key 不出主人机器"被 [runtime 0001](../runtime/0001-server-agent-two-brains.md) 修订;
+  "循环、记忆与外接大脑放服务端"被 [runtime 0008](../runtime/0008-brain-on-owners-client.md) 修订(大脑回到主人的客户端)
 - 日期:2026-10-11(用户拍板)
 - 提交:`a8754af50`、`a9e99d7ab`(设计稿)
 - 另见:`docs/input-pipeline.md`
