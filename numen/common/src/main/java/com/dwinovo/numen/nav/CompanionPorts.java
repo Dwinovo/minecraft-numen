@@ -48,8 +48,7 @@ public final class CompanionPorts {
      * 每一刻在哪写在同一个文件里。门面那一侧只给值,落盘的形状在这里定。
      */
     private static Trace pathTrail(NumenPlayer player) {
-        return event -> com.dwinovo.numen.api.agent.trace.TraceRecorders.of(player.getUUID())
-                .ifPresent(trace -> trace.event("path", pathBody(event)));
+        return event -> com.dwinovo.numen.api.entity.BodyTrace.of(player).event("path", pathBody(event));
     }
 
     /** 一趟收场写成轨迹里的一行:坐标写成数组,结局与原因照它们给的类别名,重搜次数按原因各记一项。 */

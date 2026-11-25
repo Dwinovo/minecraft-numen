@@ -13,7 +13,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 一本旁路的轨迹:她每一轮看到了什么({@code turn},身体的样子就在发出去的那份运行期状态里)、寻路为什么放弃({@code path})。
- * 写在她的大脑所在的那台电脑上;寻路的 {@code path} 来自同一个进程里的服务端({@link TraceRecorders}),所以只在服务端与大脑同一进程时(单人、评测、GameTest)才有。
+ * 大脑那一头写它自己的每一轮,身体那一头({@code BodyTrace})写寻路的 {@code path} 一类,各写各的文件。
  *
  * <p><b>它绝不进会话历史。</b>{@code <runtime_state>} 现算、一个字都不入历史是有意为之——
  * 那些都会变,进了历史就是理直气壮的旧数。这里把每一轮现算的那一份写到旁边的文件里,读者是人和工具,不是模型。
@@ -89,16 +89,6 @@ public final class TraceRecorder {
         this.home = home;
         this.io = io;
         this.log = at(1);
-    }
-
-    /** 这只同伴这一趟服务端运行的 session;重建大脑不换。 */
-    public static long sessionOf(UUID companion) {
-        return SESSIONS.computeIfAbsent(companion, id -> ThreadLocalRandom.current().nextLong());
-    }
-
-    /** 服务端停了:下一次运行是新的 session。宿主自己在关服时调。 */
-    public static void forgetSessions() {
-        SESSIONS.clear();
     }
 
     public long session() {
