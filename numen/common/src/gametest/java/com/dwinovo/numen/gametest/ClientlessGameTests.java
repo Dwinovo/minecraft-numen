@@ -133,8 +133,9 @@ public class ClientlessGameTests {
     }
 
     /**
-     * 创建者把她分享给一位朋友({@code /numen player share}):朋友在场她就在线(创建者走了也不登出),只有创建者能做的事(删除、再分享给别人)朋友做不了;朋友退出({@code /numen player leave})后
-     * 她的主人表上无人在场,她登出。
+     * 创建者把她分享给一位朋友({@code /numen player share}):朋友进了她的主人表;只有创建者能做的事(删除、再分享给别人)朋友做不了;
+     * 她的大脑只在创建者的客户端上,创建者走了,没有谁能驾驶她,她就登出——朋友在场也一样;朋友退出({@code /numen player leave})后
+     * 她的主人表上只剩创建者。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
     public static void a_shared_companion_serves_the_friend_and_stays_her_creators(GameTestHelper helper) {
@@ -152,94 +153,30 @@ public class ClientlessGameTests {
         helper.assertTrue(registry.find(id).usableBy(friend.getUUID()),
                 "the share command did not put him on her owners: " + heard);
 
+        List<Component> refused = new ArrayList<>();
+        run(friend, "numen player delete gt_shared", refused);
+        helper.assertTrue(registry.find(id) != null
+                        && refused.stream().anyMatch(m -> isKey(m, Keys.COMMAND_NO_SUCH_COMPANION)),
+                "the friend could delete a companion he did not create: " + refused);
+        helper.assertTrue(com.dwinovo.numen.api.brain.Sharing.share(server, friend.getUUID(), id,
+                        java.util.UUID.randomUUID()) == com.dwinovo.numen.api.brain.Sharing.Outcome.NOT_CREATOR,
+                "the friend could share her on");
+
+        run(friend, "numen player leave gt_shared", refused);
+        helper.assertTrue(!registry.find(id).usableBy(friend.getUUID()),
+                "leaving did not take him off her owners: " + refused);
+
         GameTestKit.steps(helper)
                 .thenExecute(() -> {
                     com.dwinovo.numen.api.platform.PlayerSessions.left(creator);   // 平台的登出事件先到,玩家后移除
                     GameTestKit.leave(creator);
                 })
-                .thenIdle(3)
-                .thenExecute(() -> {
-                    NumenPlayer still = NumenPlayer.findByUuid(server, id);
-                    helper.assertTrue(still != null, "she logged out though the friend she is shared with is here");
-                    List<Component> refused = new ArrayList<>();
-                    run(friend, "numen player delete gt_shared", refused);
-                    helper.assertTrue(registry.find(id) != null
-                                    && refused.stream().anyMatch(m -> isKey(m, Keys.COMMAND_NO_SUCH_COMPANION)),
-                            "the friend could delete a companion he did not create: " + refused);
-                    helper.assertTrue(com.dwinovo.numen.api.brain.Sharing.share(server, friend.getUUID(), id,
-                                    java.util.UUID.randomUUID()) == com.dwinovo.numen.api.brain.Sharing.Outcome.NOT_CREATOR,
-                            "the friend could share her on");
-
-                    run(friend, "numen player leave gt_shared", refused);
-                    helper.assertTrue(!registry.find(id).usableBy(friend.getUUID()),
-                            "leaving did not take him off her owners: " + refused);
-                })
                 .thenWaitUntil(() -> helper.assertTrue(NumenPlayer.findByUuid(server, id) == null,
-                        "she stayed in the world with none of her owners present"))
+                        "she stayed in the world though her creator's seat is empty"))
                 .thenExecute(() -> {
                     Companions.dismiss(server, creator.getUUID(), List.of(id));
                     GameTestKit.leave(friend);
                 })
                 .thenSucceed();
-    }
-
-    // ---- 征询与动作栏 ----
-
-    /** 消息里依次出现的、点下去会敲的命令。 */
-    private static List<String> clickCommands(Component message) {
-        List<String> out = new ArrayList<>();
-        if (message.getStyle().getClickEvent() instanceof net.minecraft.network.chat.ClickEvent click
-                && click.getAction() == net.minecraft.network.chat.ClickEvent.Action.RUN_COMMAND) {
-            out.add(click.getValue());
-        }
-        message.getSiblings().forEach(sibling -> out.addAll(clickCommands(sibling)));
-        return out;
-    }
-
-    private static ConsentItem oakLog(GameTestHelper helper) {
-        return new ConsentItem(Verb.BREAK, helper.absolutePos(new BlockPos(5, 2, 5)), ConsentItem.NO_ENTITY,
-                "oak_log", Items.OAK_LOG, Blocks.OAK_LOG.getName(), "minecraft:oak_log", "belongs to the owner",
-                Component.literal("it is yours"));
-    }
-
-    /**
-     * 她的征询到了没装客户端的主人那里,是一条带三个可点按钮的聊天消息;点按钮就是他敲了 /numen consent,答复进同一个登记处。
-     * 请求没等到答复就撤了,他在聊天栏里读到为什么。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
-    public static void a_consent_request_is_a_chat_message_with_buttons_for_an_owner_without_our_client(
-            GameTestHelper helper) {
-        NumenPlayer companion = spawnAt(helper, "gametest_asker", new BlockPos(3, 2, 3), false);
-        ServerPlayer owner = GameTestKit.presentVanillaPlayer(helper, companion, "gametest_asked", "en_us");
-        GameTestKit.said(owner);
-
-        ConsentDesk.Ticket ticket = ConsentDesk.of(companion).ask(new Object(), List.of(oakLog(helper)));
-
-        List<OwnerLine.Said> asked = GameTestKit.said(owner);
-        long id = ticket.request().id();
-        helper.assertTrue(asked.size() == 1 && asked.get(0).text().getString().contains("gametest_asker"),
-                "the request did not reach him as one chat message: " + asked);
-        helper.assertTrue(clickCommands(asked.get(0).text()).equals(List.of("/numen consent allow " + id,
-                        "/numen consent remember " + id, "/numen consent deny " + id)),
-                "the buttons are not allow, always allow and deny: " + clickCommands(asked.get(0).text()));
-
-        owner.getServer().getCommands().performPrefixedCommand(owner.createCommandSourceStack(),
-                clickCommands(asked.get(0).text()).get(0).substring(1));
-        helper.assertTrue(ticket.poll() != null && ticket.poll().decision() == ConsentAnswer.Decision.ALLOW_ONCE,
-                "pressing [allow] did not answer the request: " + ticket.poll());
-
-        // 下一张没等到答复就撤了:他在聊天栏里读到是谁的请求、为什么撤
-        Object scope = new Object();
-        ConsentDesk.of(companion).ask(scope, List.of(oakLog(helper)));
-        GameTestKit.said(owner);
-        ConsentDesk.of(companion).release(scope, ConsentDesk.Withdrawal.TASK_ENDED);
-        List<OwnerLine.Said> withdrawn = GameTestKit.said(owner);
-        helper.assertTrue(withdrawn.size() == 1 && withdrawn.get(0).text().getString().contains("gametest_asker")
-                        && withdrawn.get(0).text().getString().contains("went away"),
-                "the withdrawal did not say whose request went away: " + withdrawn);
-
-        CompanionFactory.despawn(owner.getServer(), companion);
-        GameTestKit.leave(owner);
-        helper.succeed();
     }
 }

@@ -233,12 +233,13 @@ public class ScriptGameTests {
         ToolRun shown = lua(her, "return numen.module.show(\"" + COPIED + "\")");
         helper.assertTrue(shown.receipt() != null && shown.receipt().contains("function M.version()"),
                 "the factory module does not read as itself: " + shown.receipt());
-        ToolRun changed = lua(her, """
+        ToolRun saved = lua(her, """
                 local code = numen.module.show("gt.copied").code
                 local mine = string.gsub(code, "\\nreturn M%s*$", "\\nfunction M.gt_marker() return 7 end\\nreturn M\\n")
                 numen.module.save(mine, {name = "gt.copied"})
-                return gt.copied.gt_marker() + gt.copied.version()
                 """);
+        helper.assertTrue(saved.ranToTheEnd(), "her change was not saved: " + saved.receipt());
+        ToolRun changed = lua(her, "return gt.copied.gt_marker() + gt.copied.version()");
         helper.assertTrue(changed.ranToTheEnd() && changed.receipt().contains("returned: 8"),
                 "her change was not used: " + changed.receipt());
         JsonObject listed = module(lua(her, "numen.module.list()"), COPIED);
@@ -266,7 +267,7 @@ public class ScriptGameTests {
     }
 
     /**
-     * 她存一个自己的模块(在 my 下)、读它、在两段程序里按名字 {@code my.gt_clear} 用它,战绩累计;读不通的、改第 ① 层函数的、不在
+     * 她存一个自己的模块(在 my 下)、读它、在两段程序里按名字 {@code my.gt_clear} 用它;读不通的、改第 ① 层函数的、不在
      * my 下又不是内置名字的不收、说为什么;主人拿编辑器改了文件,下一段程序就用新的;目录里一个坏模块只让用到它的程序出错;她自己的
      * 删得掉。模块目录是这次 GameTest 专用的,不是主人的。
      */
@@ -320,8 +321,7 @@ public class ScriptGameTests {
                     ToolRun list = lua(her, "numen.module.list()");
                     JsonObject mine = module(list, "my.gt_clear");
                     helper.assertTrue(mine != null && mine.get("summary").getAsString().equals("Clearing cells.")
-                                    && mine.get("whose").getAsString().equals("yours") && mine.get("runs").getAsInt() == 2
-                                    && mine.get("finished").getAsInt() == 2, "the record does not add up: " + mine);
+                                    && mine.get("whose").getAsString().equals("yours"), "the record does not add up: " + mine);
                     JsonObject work = module(list, "numen.work");
                     helper.assertTrue(work != null && work.get("whose").getAsString().equals("built in"), list.reply());
                 })

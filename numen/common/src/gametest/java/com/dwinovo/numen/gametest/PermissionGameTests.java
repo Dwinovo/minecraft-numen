@@ -103,7 +103,7 @@ public class PermissionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 504, batch = "numen_permission")
     public static void a_walk_asks_at_the_owners_wall_and_goes_on_when_allowed(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, "gametest_host");
+        net.minecraft.server.level.ServerPlayer owner = presentSeatedOwner(helper, null, "gametest_host");
         ownersRoom(helper, 7, 7, owner.getUUID());
         int planksBefore = plankCount(helper, 7, 7);
         NumenPlayer companion = adopted(spawnAt(helper, "gametest_tenant", WEST_INSIDE, false), owner);
@@ -161,7 +161,7 @@ public class PermissionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 375, batch = "numen_permission")
     public static void a_walk_refused_at_the_owners_wall_stops_there(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, "gametest_strict");
+        net.minecraft.server.level.ServerPlayer owner = presentSeatedOwner(helper, null, "gametest_strict");
         ownersRoom(helper, 7, 7, owner.getUUID());
         int planksBefore = plankCount(helper, 7, 7);
         NumenPlayer companion = adopted(spawnAt(helper, "gametest_squatter", WEST_INSIDE, false), owner);
@@ -201,7 +201,7 @@ public class PermissionGameTests {
     public static void mine_asks_once_for_the_owners_logs_then_mines(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> logs = List.of(new BlockPos(5, 2, 4), new BlockPos(5, 2, 6));
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, "gametest_forester");
+        net.minecraft.server.level.ServerPlayer owner = presentSeatedOwner(helper, null, "gametest_forester");
         ownedBlocks(helper, owner.getUUID(), logs, Blocks.OAK_LOG);
         NumenPlayer companion = adopted(spawnAt(helper, "gametest_lumberjack", new BlockPos(2, 2, 5), false), owner);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
@@ -234,7 +234,7 @@ public class PermissionGameTests {
         ServerLevel level = helper.getLevel();
         List<BlockPos> owners = List.of(new BlockPos(5, 2, 4), new BlockPos(5, 2, 6));
         List<BlockPos> wild = List.of(new BlockPos(11, 2, 4), new BlockPos(11, 2, 6));
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, "gametest_warden");
+        net.minecraft.server.level.ServerPlayer owner = presentSeatedOwner(helper, null, "gametest_warden");
         ownedBlocks(helper, owner.getUUID(), owners, Blocks.ACACIA_LOG);
         for (BlockPos rel : wild) {
             wildLog(helper, rel, Blocks.ACACIA_LOG);
@@ -277,7 +277,7 @@ public class PermissionGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_objector", new BlockPos(3, 2, 6), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_botanist");
+        net.minecraft.server.level.ServerPlayer owner = presentSeatedOwner(helper, companion, "gametest_botanist");
         storeOf(owner).edit(companion.getUUID(), new com.dwinovo.numen.permission.Edit.SetTier(
                 com.dwinovo.numen.permission.Verb.BREAK, com.dwinovo.numen.permission.Tier.DENY));
         ToolRun reply = scan(companion, 5, "minecraft:crimson_stem");
@@ -366,7 +366,7 @@ public class PermissionGameTests {
     public static void interact_left_click_on_owners_chest_asks(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos chestRel = new BlockPos(6, 2, 5);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, null, "gametest_hoarder");
+        net.minecraft.server.level.ServerPlayer owner = presentSeatedOwner(helper, null, "gametest_hoarder");
         ownedBlocks(helper, owner.getUUID(), List.of(chestRel), Blocks.CHEST);
         BlockPos chest = helper.absolutePos(chestRel);
         NumenPlayer companion = adopted(spawnAt(helper, "gametest_poker", new BlockPos(4, 2, 5), true), owner);
@@ -402,7 +402,7 @@ public class PermissionGameTests {
     public static void a_target_that_moves_keeps_its_consent_request(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = armedCompanion(helper, new BlockPos(4, 2, 4));
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_swineherd");
+        net.minecraft.server.level.ServerPlayer owner = presentSeatedOwner(helper, companion, "gametest_swineherd");
         storeOf(owner).edit(companion.getUUID(), new com.dwinovo.numen.permission.Edit.SetTier(
                 com.dwinovo.numen.permission.Verb.ATTACK, com.dwinovo.numen.permission.Tier.ASK));
         var pig = EntityType.PIG.create(level);
@@ -455,7 +455,7 @@ public class PermissionGameTests {
     public static void an_owner_stop_while_a_card_is_up_withdraws_the_card(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_hesitant", new BlockPos(4, 2, 4), false);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_changed_mind");
+        net.minecraft.server.level.ServerPlayer owner = presentSeatedOwner(helper, companion, "gametest_changed_mind");
         companion.getInventory().add(new ItemStack(Items.GOLD_INGOT, 4));
         ToolRun record = lua(companion, "numen.inv.drop(\"minecraft:gold_ingot\", {count = 4})");
         boolean[] stopped = new boolean[1];
@@ -500,8 +500,8 @@ public class PermissionGameTests {
     public static void consent_command_answers_like_the_card(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_almoner", new BlockPos(4, 2, 4), false);
-        ServerPlayer owner = presentPlayer(helper, companion, "gametest_beggar");
-        ServerPlayer stranger = presentPlayer(helper, null, "gametest_passerby");
+        ServerPlayer owner = presentSeatedPlayer(helper, companion, "gametest_beggar");
+        ServerPlayer stranger = presentSeatedPlayer(helper, null, "gametest_passerby");
         companion.getInventory().add(new ItemStack(Items.DIAMOND, 2));
         companion.getInventory().add(new ItemStack(Items.EMERALD, 4));
         ToolRun[] calls = new ToolRun[3];
@@ -666,7 +666,7 @@ public class PermissionGameTests {
         ServerLevel level = helper.getLevel();
         BlockPos chest = chestWithDiamonds(helper, new BlockPos(6, 2, 5), 3);
         NumenPlayer companion = spawnAt(helper, "gametest_borrower", new BlockPos(4, 2, 5), false);
-        ServerPlayer owner = presentPlayer(helper, companion, "gametest_lender");
+        ServerPlayer owner = presentSeatedPlayer(helper, companion, "gametest_lender");
         List<String> set = runAs(owner, "numen permission set " + companion.getName().getString() + " use_block ask");
         helper.assertTrue(set.stream().anyMatch(m -> m.contains("use_block is now ask")), "the tier was not set: " + set);
         ToolRun take = lua(companion, "numen.container.take(" + xyz(chest) + ", \"minecraft:diamond\")");
@@ -750,7 +750,7 @@ public class PermissionGameTests {
         level.addFreshEntity(villager);
         NumenPlayer companion = spawnAt(helper, "gametest_enforcer", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_magistrate");
+        net.minecraft.server.level.ServerPlayer owner = presentSeatedOwner(helper, companion, "gametest_magistrate");
         storeOf(owner).edit(companion.getUUID(), new com.dwinovo.numen.permission.Edit.SetTier(
                 com.dwinovo.numen.permission.Verb.ATTACK, com.dwinovo.numen.permission.Tier.ASK));
         ToolRun attack = lua(companion, "numen.fight.attack(" + ref(villager) + ")");
@@ -811,7 +811,7 @@ public class PermissionGameTests {
         ServerLevel level = helper.getLevel();
         BlockPos stoneRel = new BlockPos(6, 2, 5);
         level.setBlockAndUpdate(helper.absolutePos(stoneRel), Blocks.STONE.defaultBlockState());
-        ServerPlayer owner = presentPlayer(helper, null, "gametest_house_owner");
+        ServerPlayer owner = presentSeatedPlayer(helper, null, "gametest_house_owner");
         NumenPlayer companion = adopted(spawnAt(helper, "gametest_house_sitter", new BlockPos(4, 2, 5), true), owner);
         String name = companion.getName().getString();
 
@@ -861,7 +861,7 @@ public class PermissionGameTests {
     public static void she_tightens_at_once_and_loosening_goes_through_a_card(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_scribe", new BlockPos(4, 2, 4), false);
-        ServerPlayer owner = presentOwner(helper, companion, "gametest_scribe_owner");
+        ServerPlayer owner = presentSeatedOwner(helper, companion, "gametest_scribe_owner");
         var tighten = lua(companion, "return numen.permission.set(\"break\", \"ask\")");
         var again = lua(companion, "return numen.permission.set(\"break\", \"ask\")");
         var typo = lua(companion, "numen.permission.set(\"brek\", \"ask\")");
@@ -961,7 +961,7 @@ public class PermissionGameTests {
     public static void a_verb_asked_by_default_puts_up_a_card_and_goes_after_yes(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_giver", new BlockPos(4, 2, 4), false);
-        ServerPlayer owner = presentOwner(helper, companion, "gametest_giver_owner");
+        ServerPlayer owner = presentSeatedOwner(helper, companion, "gametest_giver_owner");
         companion.getInventory().add(new ItemStack(Items.DIAMOND, 2));
         ToolRun drop = lua(companion, "numen.inv.drop(\"minecraft:diamond\", {count = 2})");
         boolean[] answered = new boolean[1];
@@ -991,7 +991,7 @@ public class PermissionGameTests {
     public static void always_allow_puts_the_name_on_the_list_and_it_is_not_asked_again(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_regular", new BlockPos(4, 2, 4), false);
-        ServerPlayer owner = presentOwner(helper, companion, "gametest_regular_owner");
+        ServerPlayer owner = presentSeatedOwner(helper, companion, "gametest_regular_owner");
         companion.getInventory().add(new ItemStack(Items.DIAMOND, 2));
         companion.getInventory().add(new ItemStack(Items.EMERALD, 2));
         ToolRun[] calls = new ToolRun[3];
@@ -1055,7 +1055,7 @@ public class PermissionGameTests {
     public static void a_denied_use_item_tier_keeps_the_snowball_in_her_hand(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_thrower", new BlockPos(4, 2, 4), false);
-        ServerPlayer owner = presentOwner(helper, companion, "gametest_thrower_owner");
+        ServerPlayer owner = presentSeatedOwner(helper, companion, "gametest_thrower_owner");
         companion.getInventory().add(new ItemStack(Items.SNOWBALL, 4));
         List<String> set = runAs(owner, "numen permission set gametest_thrower use_item deny");
         helper.assertTrue(set.stream().anyMatch(m -> m.contains("use_item is now deny")), "the tier was not set: " + set);

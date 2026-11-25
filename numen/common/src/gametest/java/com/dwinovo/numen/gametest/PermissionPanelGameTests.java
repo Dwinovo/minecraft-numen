@@ -43,7 +43,7 @@ public class PermissionPanelGameTests {
 
     /** 装着我们的客户端的主人认下这只同伴,同伴在名册上有一行(面板的同伴列表读名册)。 */
     private static ServerPlayer clientOwner(GameTestHelper helper, NumenPlayer companion, String name) {
-        ServerPlayer owner = presentOwner(helper, companion, name);
+        ServerPlayer owner = presentSeatedOwner(helper, companion, name);
         CompanionRegistry.get(owner.getServer()).put(companion.getUUID(), new CompanionRegistry.Entry(
                 companion.getName().getString(), owner.getUUID(), Level.OVERWORLD, companion.blockPosition()));
         Replies.hello(owner, Presence.PROTOCOL);

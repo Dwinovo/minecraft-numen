@@ -100,9 +100,10 @@ public class LibraryCommandGameTests {
     public static void skin_commands_dress_her_from_the_servers_folder_or_a_player_and_undress_her(GameTestHelper helper)
             throws Exception {
         var server = helper.getLevel().getServer();
-        ServerPlayer owner = GameTestKit.presentVanillaPlayer(helper, null, "gametest_dresser", "en_us");
+        ServerPlayer owner = GameTestKit.presentPlayer(helper, null, "gametest_dresser");
         var her = com.dwinovo.numen.api.gametest.Bodies.summon(server, owner.getUUID(), "gametest_dressed",
                 helper.getLevel(), net.minecraft.world.phys.Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(8, 2, 8))));
+        GameTestKit.occupy(owner, her.getUUID());   // 他的客户端坐着她的座位:她的主人在场,她才留在世界里
         java.util.concurrent.atomic.AtomicInteger signed = new java.util.concurrent.atomic.AtomicInteger();
         ServerSkins.start(server, fakeSigning(signed));
         java.nio.file.Path file = SkinFolder.here().dir().resolve("gametest_dress.png");
@@ -133,7 +134,7 @@ public class LibraryCommandGameTests {
                             "the rebuilt body does not carry the cached signature");
                     helper.assertTrue(GameTestKit.said(owner).stream().anyMatch(m -> m.text().getString().contains("now wears skin")),
                             "the owner was not told it was worn");
-                    helper.assertTrue(registry.find(id).skinRef() != null,
+                    helper.assertTrue(!registry.find(id).skinRef().isEmpty(),
                             "the roster does not say which skin she wears");
                     heard.clear();
                     run(owner, "numen companion gametest_dressed skin server gametest_dress", heard);
@@ -149,7 +150,7 @@ public class LibraryCommandGameTests {
                     helper.assertTrue(signed.get() == 1, "a borrowed skin was sent to MineSkin");
                     heard.clear();
                     run(owner, "numen companion gametest_dressed skin", heard);
-                    helper.assertTrue(registry.find(id).skinValue().isEmpty() && registry.find(id).skinRef() == null,
+                    helper.assertTrue(registry.find(id).skinValue().isEmpty() && registry.find(id).skinRef().isEmpty(),
                             "the skin was not taken off: " + heard);
                     run(owner, "numen companion gametest_dressed skin server no_such_skin", heard);
                     helper.assertTrue(heard.stream().anyMatch(m -> isKey(m, Keys.COMMAND_SKIN_FAILED)),

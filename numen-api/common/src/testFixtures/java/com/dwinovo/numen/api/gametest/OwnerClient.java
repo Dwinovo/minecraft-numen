@@ -47,11 +47,21 @@ public final class OwnerClient implements ClientTransport {
         opening.join();
     }
 
+    /** 这台服务器。 */
+    public MinecraftServer server() {
+        return server;
+    }
+
+    /** 他坐上这只同伴的座位(没有大脑,只占着座):她的主人就算在场。 */
+    public void occupy(UUID companion) {
+        if (seated.add(companion)) {
+            sit(companion);
+        }
+    }
+
     @Override
     public void request(Request request, Consumer<String> done) {
-        if (seated.add(request.companion())) {
-            sit(request.companion());
-        }
+        occupy(request.companion());
         ServerSeats.transport().request(request, done);
     }
 

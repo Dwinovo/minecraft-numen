@@ -609,8 +609,7 @@ public final class GameTestKit {
     }
 
     /**
-     * 让主人"在场":一个玩家站到场地角上,认作她的主人。登记处只认主人在不在线——不在就当场按拒绝,答不答复就无从测起。
-     * 答复由用例直接调登记处,等于主人在卡片上按了键。用完经 {@link #leave} 离开。
+     * 一个玩家站到场地角上,认作她的主人;他的客户端没有坐她的座位(要坐见 {@link #presentSeatedOwner})。用完经 {@link #leave} 离开。
      */
     static net.minecraft.server.level.ServerPlayer presentOwner(GameTestHelper helper, NumenPlayer companion,
                                                                 String name) {
@@ -619,6 +618,47 @@ public final class GameTestKit {
         owner.teleportTo(helper.getLevel(), at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
         return owner;
     }
+    /** 主人客户端的座位,按玩家:每刻替他把名下在世界里的同伴的座位都坐上({@link #seatOwned})。 */
+    private static final java.util.Map<UUID, com.dwinovo.numen.api.gametest.OwnerClient> SEATED =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * 让主人"在场":一个玩家站到场地角上,认作她的主人,他的客户端坐上她的座位(之后名下新来的同伴也每刻跟着坐上)。登记处只认主人在不在场
+     * (座位上有没有人)——不在就当场按拒绝,答不答复就无从测起。答复由用例直接调登记处,等于主人在卡片上按了键。用完经 {@link #leave} 离开。
+     */
+    static net.minecraft.server.level.ServerPlayer presentSeatedOwner(GameTestHelper helper, NumenPlayer companion,
+                                                                      String name) {
+        var owner = presentOwner(helper, companion, name);
+        SEATED.put(owner.getUUID(), new com.dwinovo.numen.api.gametest.OwnerClient(owner.getServer(), owner.getUUID()));
+        seatOwned();
+        return owner;
+    }
+
+    /** 同 {@link #presentPlayer},他的客户端坐上她的座位(之后名下新来的同伴也每刻跟着坐上)。 */
+    static net.minecraft.server.level.ServerPlayer presentSeatedPlayer(GameTestHelper helper, NumenPlayer companion,
+                                                                       String name) {
+        var owner = presentPlayer(helper, companion, name);
+        SEATED.put(owner.getUUID(), new com.dwinovo.numen.api.gametest.OwnerClient(owner.getServer(), owner.getUUID()));
+        seatOwned();
+        return owner;
+    }
+
+    /** 他坐上这只同伴的座位:座位上有人,她的主人就在场。 */
+    static void occupy(net.minecraft.server.level.ServerPlayer owner, UUID companion) {
+        SEATED.computeIfAbsent(owner.getUUID(),
+                id -> new com.dwinovo.numen.api.gametest.OwnerClient(owner.getServer(), id)).occupy(companion);
+    }
+
+    private static void seatOwned() {
+        for (var seated : SEATED.entrySet()) {
+            for (var player : List.copyOf(seated.getValue().server().getPlayerList().getPlayers())) {
+                if (player instanceof NumenPlayer body && seated.getKey().equals(body.getOwnerUuid())) {
+                    seated.getValue().occupy(body.getUUID());
+                }
+            }
+        }
+    }
+
     /**
      * 一个真玩家,不是同伴:主人要在聊天栏里敲 {@code /numen} 的管理指令(权限、征询)时也用它。没有真客户端,装着我们的客户端的样子,
      * 连接是 {@link OwnerLine}:她的世界事件照主人客户端那样交给在跑的程序,下行的模组载荷记下来({@link #received}),别的包丢掉。
@@ -726,6 +766,7 @@ public final class GameTestKit {
     /** {@link #presentPlayer} 请来的玩家离开服务器。 */
     static void leave(net.minecraft.server.level.ServerPlayer player) {
         LINES.remove(player.getUUID());
+        SEATED.remove(player.getUUID());
         player.getServer().getPlayerList().remove(player);
     }
 
@@ -1020,6 +1061,7 @@ public final class GameTestKit {
      */
     static void observeLive() {
         com.dwinovo.numen.api.gametest.GameBrain.tickAll();
+        seatOwned();
         for (Live live : LIVE) {
             live.run().lookAll(live.body());
             if (live.ended().get()) {

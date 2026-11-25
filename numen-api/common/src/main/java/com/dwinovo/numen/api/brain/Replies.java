@@ -14,7 +14,6 @@ import com.dwinovo.numen.api.network.payload.HelloAckPayload;
 import com.dwinovo.numen.api.network.payload.LibraryPayload;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.dwinovo.numen.api.permission.ConsentChat;
 import com.google.gson.JsonArray;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -131,17 +130,8 @@ public final class Replies {
         pushTo(server, owner, Libraries.PERMISSION);
     }
 
-    /**
-     * 她的征询交到主人面前,或者撤回了(撤回的 {@code request} 是 {@link ConsentRequestPayload#none})。装了客户端的,推给他的
-     * 客户端画答复框;没装的,发给他一条带可点按钮的聊天消息,撤回时说一声为什么。他答复的唯一入口不变:{@code ConsentDesk.reply}。
-     */
+    /** 她的征询交到主人面前,或者撤回了(撤回的 {@code request} 是 {@link ConsentRequestPayload#none}):推给他的客户端画答复框。他答复的唯一入口:{@code ConsentDesk.reply}。 */
     public static void consent(ServerPlayer owner, String companion, ConsentRequestPayload request) {
-        if (Presence.hasClient(owner.getUUID())) {
-            NumenNetwork.sendToPlayer(owner, request);
-        } else if (!request.withdrawn()) {
-            owner.sendSystemMessage(ConsentChat.ask(companion, request));
-        } else if (request.withdrawnBecause() != null) {
-            owner.sendSystemMessage(ConsentChat.withdrawn(companion, request.withdrawnBecause(), request.withdrawnBy()));
-        }
+        NumenNetwork.sendToPlayer(owner, request);
     }
 }

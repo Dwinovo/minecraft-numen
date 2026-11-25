@@ -273,6 +273,7 @@ public class CommandGameTests {
                     helper.assertTrue(registry.find(id) != null && !registry.find(id).outside().isOutside(),
                             "the roster lost her or marked her left outside");
                     returned.set(presentVanillaPlayerAs(helper, ownerId, "gametest_att_owner", "en_us"));
+                    GameTestKit.occupy(returned.get(), id);   // 他的客户端坐上她的座位,她的主人才算回来
                 })
                 .thenWaitUntil(() -> helper.assertTrue(NumenPlayer.findByUuid(server, id) != null,
                         "she did not come back with her owner"))
@@ -459,7 +460,7 @@ public class CommandGameTests {
         ServerLevel level = helper.getLevel();
         BlockPos target = new BlockPos(8, 3, 8);
         NumenPlayer companion = spawnAt(helper, "gametest_mc_builder", new BlockPos(4, 2, 4), false);
-        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_landlord");
+        net.minecraft.server.level.ServerPlayer owner = presentSeatedOwner(helper, companion, "gametest_mc_landlord");
         grantOp(owner);
         String line = setblock(helper, target);
         ToolRun run = lua(companion, "numen.mc.run(\"" + line + "\")");
@@ -535,7 +536,7 @@ public class CommandGameTests {
                 .withEntity(helper.makeMockPlayer(GameType.SURVIVAL)).withPermission(4);
 
         Set<String> verbs = usable(numen, player);
-        helper.assertTrue(verbs.containsAll(List.of("player", "settings", "reset", "permission", "consent", "drive"))
+        helper.assertTrue(verbs.containsAll(List.of("player", "settings", "permission", "consent", "drive"))
                         && List.of("task", "api", "mc", "move", "work").stream().noneMatch(verbs::contains),
                 "a player's /numen is not the admin verbs, or carries her API: " + verbs);
         helper.assertTrue(!numen.canUse(companion.createCommandSourceStack()), "she can use /numen");

@@ -142,7 +142,7 @@ public final class GameBrain {
 
     /** 座位坐上、目录取到了:大脑可以开工。 */
     public boolean ready() {
-        return host.catalog() != null;
+        return host.catalog() != com.dwinovo.numen.api.seat.Catalog.EMPTY;
     }
 
     /** 每个服务器刻一次:座位上来的回调做掉,大脑往前走一步。 */
