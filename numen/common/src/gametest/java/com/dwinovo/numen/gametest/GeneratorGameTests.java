@@ -124,21 +124,6 @@ public class GeneratorGameTests {
     }
 
     /**
-     * 放下的不透光整块的光照都算过了(阻塞着等,见 {@link GameTestKit#awaitLight})。放方块只把这一格的光照更新排给光照线程;
-     * 一次更新算完的几格是一起换上去的,不透光整块里的光照算完是 0。拍"前"的快照要等到这一刻,不然更新落在两次快照之间,快照里的光照不一样。
-     */
-    private static void awaitLit(ServerLevel level, Iterable<BlockPos> placed) {
-        GameTestKit.awaitLight(level, () -> {
-            for (BlockPos p : placed) {
-                if (level.getBrightness(LightLayer.SKY, p) != 0 || level.getBrightness(LightLayer.BLOCK, p) != 0) {
-                    return false;
-                }
-            }
-            return true;
-        });
-    }
-
-    /**
      * feature:一棵原版橡树种在一块泥土上头。交回的是原木与树叶,真实世界一格没动;放下去之后一致。
      */
     @GameTest(template = "floor52", timeoutTicks = 200, batch = BATCH)
@@ -159,7 +144,7 @@ public class GeneratorGameTests {
         scene(level, dirt, Blocks.DIRT);
         AtomicReference<JsonArray> cells = new AtomicReference<>();
         AtomicReference<ToolRun> build = new AtomicReference<>();
-        awaitLit(level, List.of(dirt));
+        GameTestKit.awaitLightSettled(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8));
         steps(helper).thenExecute(() -> {
             Snapshot before = snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8));
             ToolRun run = GameTestKit.shapeSeed(seed,
@@ -193,10 +178,8 @@ public class GeneratorGameTests {
         ServerLevel level = helper.getLevel();
         // a structure settles on the highest block of the column: the arena has no walls, but the test frame puts a lid
         // over it. Clear whatever stands above the floor and lay a stone floor of our own; the hut then sits on that floor
-        List<BlockPos> floor = new ArrayList<>();
         for (int x = 0; x < 64; x++) {
             for (int z = 0; z < 64; z++) {
-                floor.add(helper.absolutePos(new BlockPos(x, 1, z)));
                 level.setBlock(helper.absolutePos(new BlockPos(x, 1, z)), Blocks.STONE.defaultBlockState(), 2);
                 for (int y = 2; y < 40; y++) {
                     BlockPos up = helper.absolutePos(new BlockPos(x, y, z));
@@ -217,8 +200,8 @@ public class GeneratorGameTests {
                 new BlockPos(at.getX() - origin.getX() + 12, 2, at.getZ() - origin.getZ() + 12), true);
         BlockPos min = new BlockPos(cx * 16 - 1, origin.getY() - 3, cz * 16 - 1);
         BlockPos max = new BlockPos(cx * 16 + 33, origin.getY() + 20, cz * 16 + 33);
-        // 和同文件另外几条一样,铺地板排给光照线程的更新算完了再拍"前":不然更新落在两次快照之间,光照对不上
-        awaitLit(level, floor);
+        // 和同文件另外几条一样,排给光照线程的更新(铺地板、清场地)算完了再拍"前":不然更新落在两次快照之间,光照对不上
+        GameTestKit.awaitLightSettled(level, min, max);
         Snapshot before = snapshot(level, min, max);
         ToolRun run = lua(her, "return numen.shape.structure(" + xyz(at) + ", \"minecraft:swamp_hut\")");
         helper.assertTrue(run.ranToTheEnd(), "structure failed: " + run.receipt());
@@ -265,7 +248,7 @@ public class GeneratorGameTests {
         scene(level, dirt, Blocks.DIRT);
         AtomicReference<JsonArray> cells = new AtomicReference<>();
         AtomicReference<ToolRun> build = new AtomicReference<>();
-        awaitLit(level, List.of(dirt));
+        GameTestKit.awaitLightSettled(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8));
         steps(helper).thenExecute(() -> {
             Snapshot before = snapshot(level, dirt.offset(-8, -3, -8), dirt.offset(8, 14, 8));
             ToolRun run = GameTestKit.shapeSeed(seed, () -> lua(her, "return numen.shape.cuboid(" + xyz(dirt.offset(0, -1, 0))

@@ -215,13 +215,24 @@ public final class GameTestKit {
     }
 
     /**
-     * 阻塞到 {@code lit} 为真。光照由独立的线程算,放方块只把更新排给它,什么时候算完看墙钟;按刻数等的话负载一高就先超时。
-     * 这里一边催光照线程开工(平时由每刻的区块更新催)一边等,等多久都不占刻数。
+     * 阻塞到光照线程把 {@code min}~{@code max} 这个长方体的光照算完。光照由独立的线程算,放方块、清场地只把更新排给它,什么时候算完看
+     * 墙钟;按刻数等的话负载一高就先超时。
+     *
+     * <p>"算完"不能看某一格的亮度:那一格可能凑巧已经是要的值(上一条用例在同一格放过不透光的方块),而更新还排着;更新按区块的优先级
+     * 出队,后排的也可能先算。所以在体积本身与外面一圈区块(光最远照 15 格,一圈区块够宽)各排一个哨兵({@code waitForPendingTasks}):
+     * 同一个区块的任务按先后出队,哨兵到了就是它前面排的都算完了。哨兵到之前一边催光照线程开工(平时由每刻的区块更新催)一边等;
+     * 等的时候服务器线程不排新的更新。
      */
-    static void awaitLight(ServerLevel level, java.util.function.BooleanSupplier lit) {
-        var engine = level.getChunkSource().getLightEngine();
+    static void awaitLightSettled(ServerLevel level, BlockPos min, BlockPos max) {
+        var engine = (net.minecraft.server.level.ThreadedLevelLightEngine) level.getChunkSource().getLightEngine();
+        List<java.util.concurrent.CompletableFuture<?>> sentinels = new ArrayList<>();
+        for (int cx = (min.getX() >> 4) - 1; cx <= (max.getX() >> 4) + 1; cx++) {
+            for (int cz = (min.getZ() >> 4) - 1; cz <= (max.getZ() >> 4) + 1; cz++) {
+                sentinels.add(engine.waitForPendingTasks(cx, cz));
+            }
+        }
         long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(60);
-        while (!lit.getAsBoolean()) {
+        while (!sentinels.stream().allMatch(java.util.concurrent.CompletableFuture::isDone)) {
             if (System.nanoTime() > deadline) {
                 throw new net.minecraft.gametest.framework.GameTestAssertException("the light engine did not settle within 60 s");
             }
