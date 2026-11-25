@@ -135,6 +135,8 @@ public class CompanionChatScreen extends Screen {
 
         @Override public CompanionView loop() { return CompanionChatScreen.this.loop(); }
 
+        @Override public com.dwinovo.numen.api.agent.tool.Asking asking() { return Conversations.asking(conv); }
+
         @Override public Conversation conversation() { return conv; }
 
         @Override public void onConsentSettled() {

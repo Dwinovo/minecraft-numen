@@ -1019,6 +1019,14 @@ public final class ChatView {
                         if (plan != null) {
                             checklist(f, who, msgIndex, entry.ts(), plan, innerW, done, failed, bubbleMaxW);
                         }
+                        // 主人答了她的提问:对话流里留一行服务消息,说他答了什么
+                        List<com.dwinovo.numen.api.agent.tool.Questions.Answer> answered = com.dwinovo.numen.api.agent.tool.Questions.answersIn(results.get(tc.id()));
+                        if (!answered.isEmpty()) {
+                            flushProcess(f, done, failed, bubbleMaxW);
+                            String said = answered.stream().map(x -> "「" + x.answer() + "」").collect(java.util.stream.Collectors.joining());
+                            notice(out, I18n.get(com.dwinovo.numen.api.data.ModLanguageData.Keys.QUESTION_ANSWERED, said), bubbleMaxW);
+                            f.last = null;
+                        }
                     }
                 }
                 case ConvoState.Msg.Tool ignored -> { /* result drives done/fail, not a block */ }

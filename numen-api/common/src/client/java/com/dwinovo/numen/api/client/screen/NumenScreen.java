@@ -1409,6 +1409,10 @@ public final class NumenScreen extends Screen {
             return NumenScreen.this.loop();
         }
 
+        @Override public com.dwinovo.numen.api.agent.tool.Asking asking() {
+            return conv == null ? null : Conversations.asking(conv);
+        }
+
         @Override public Conversation conversation() {
             return conv;
         }

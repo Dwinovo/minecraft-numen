@@ -440,6 +440,17 @@ public final class Conversations {
         return new Members(brains, conv == null ? null : rooms.tagOf(conv));
     }
 
+    /** 这个会话里此刻在向主人提问的那一位的提问(多人会话取先问的);没有是 null。 */
+    public static com.dwinovo.numen.api.agent.tool.Asking asking(Conversation conv) {
+        for (LoopHost brain : membersOf(conv.id()).brains()) {
+            com.dwinovo.numen.api.agent.tool.Asking asking = brain.questions().pending();
+            if (asking != null) {
+                return asking;
+            }
+        }
+        return null;
+    }
+
     /**
      * 说完之后。
      *

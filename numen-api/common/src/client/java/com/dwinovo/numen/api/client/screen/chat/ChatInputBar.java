@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.client.screen.chat;
 
+import com.dwinovo.numen.api.agent.tool.Asking;
 import com.dwinovo.numen.api.client.command.Completion;
 import com.dwinovo.numen.api.client.consent.ConsentCards;
 import com.dwinovo.numen.api.client.consent.ConsentMessage;
@@ -40,6 +41,9 @@ import java.util.Set;
  * 不让位,按钮只用指针点(和 Telegram 一样);点了"说一句再拒绝"就在输入框上方挂一条提示栏(和引用栏同一条),
  * 这时发出去的那句就是拒绝的理由。挂没挂着只看
  * {@link ConsentCards},不各自判断。
+ *
+ * <p>她挂着提问({@code AskUserQuestion})时,这条输入行被它接管:输入框上面长出提问面板({@link QuestionPanel}),
+ * 输入框成了"其他回答…"那一行,数字键选选项,回车交"其他"的话,Esc 是现在不想答。高度跟着面板长,上面的对话流让位。
  */
 public final class ChatInputBar {
 
@@ -87,6 +91,9 @@ public final class ChatInputBar {
         /** 她等的那条征询收起了(主人答了、超时、任务结束)。在 {@link #tick} 里调。 */
         default void onConsentSettled() {}
 
+        /** 这条输入行对着的那位此刻向主人提的问题(挂着就由提问面板接管输入行);没有是 null。 */
+        default Asking asking() { return null; }
+
         /** 这个会话里主人上一句说的话(输入框空着时按 ↑ 取回来改);没有是 null。 */
         default String lastSent() { return null; }
 
@@ -104,6 +111,14 @@ public final class ChatInputBar {
 
     private final UiRoot ui = new UiRoot();
     private final Host host;
+    /** 她挂着提问时输入框上面的那块面板,与它此刻露出多高(按趋近走)。 */
+    private final QuestionPanel question = new QuestionPanel();
+    private float questionShown;
+    /** 上一帧挂着的那次提问:开始时把输入框里写了一半的话收起来,结束时放回去。 */
+    private Asking questioned;
+    private String stashed = "";
+    /** 刚被数字键选中的那一位:随后到的那个字符不进输入框。 */
+    private char swallowed;
     /** 这条输入行带哪几颗键。 */
     private final Set<Key> wanted;
 
@@ -173,7 +188,11 @@ public final class ChatInputBar {
      * 宿主按它排上面的东西。
      */
     public int height() {
-        return fieldH + Math.round(barShown);
+        return fieldH + Math.round(barShown) + Math.round(questionShown);
+    }
+
+    private Asking asking() {
+        return host.asking();
     }
 
     /** 这条输入行对着的那位挂着的征询;没有是 null。 */
@@ -272,10 +291,21 @@ public final class ChatInputBar {
     public void refreshEnablement() {
         if (field == null) return;
         boolean paged = panel != null;
+        Asking asking = asking();
+        if (asking != questioned) {
+            if (questioned != null) setText(stashed);
+            if (asking != null) {
+                stashed = field.value();
+                setText("");
+                ui.requestFocus(field);
+            }
+            questioned = asking;
+        }
         // 面板在场时输入框让位(它就摆在输入框那格),旁边几颗键跟着停手——
-        // 叫停除外:那是主人的急刹车,任何时候都得能按。
-        field.setVisible(!paged);
-        field.setEnabled(!paged);
+        // 叫停除外:那是主人的急刹车,任何时候都得能按。提问到了确认那一步,输入框也让位。
+        boolean hidden = paged || (asking != null && asking.reviewing());
+        field.setVisible(!hidden);
+        field.setEnabled(!hidden);
         ConsentCards.Card card = waiting();
         ConsentCards.Card note = card != null && card.writing() ? card : null;
         if (note != null && note != noteShown) {
@@ -288,7 +318,7 @@ public final class ChatInputBar {
             ui.requestFocus(field);
         }
         noteShown = note;
-        field.placeholder(note != null
+        field.placeholder(asking != null ? I18n.get(ModLanguageData.Keys.QUESTION_OTHER) : note != null
                 ? I18n.get(note.writingKey() == ConsentCards.ALLOW_NOTE ? ModLanguageData.Keys.CONSENT_ALLOW_NOTE_ROW
                         : ModLanguageData.Keys.CONSENT_NOTE_ROW, ConsentCards.name(note.companion()))
                 : host.hint());
@@ -341,6 +371,7 @@ public final class ChatInputBar {
         grow(dt);
         IDrawSurface s = new McDrawSurface(g, Minecraft.getInstance().font);
         renderBar(g, mouseX, mouseY, c, dt);
+        renderQuestion(g, mouseX, mouseY, c, dt);
         g.fill(fieldX, fieldY, actX + ACT_W, fieldY + fieldH, c.inputBg());   // 输入框和右边那一格同一条底
         ui.render(s, c, mouseX, mouseY, nowMs);
         renderAct(g, mouseX, mouseY, c);
@@ -363,6 +394,19 @@ public final class ChatInputBar {
     }
 
     public boolean mouseClicked(double mx, double my, int button) {
+        Asking asking = asking();
+        if (asking != null && button == 0 && Math.abs(questionShown - question.height()) < 1.5f) {
+            QuestionPanel.Hit hit = question.hit(mx, my, questionBottom());
+            if (hit != null) {
+                switch (hit.action()) {
+                    case OPTION -> asking.pick(hit.option());
+                    case NEXT -> asking.next();
+                    case SUBMIT -> asking.submit();
+                    case CHAT -> asking.clarify();
+                }
+                return true;
+            }
+        }
         if (barOpen() && overBarClose(mx, my)) {
             closeBar();
             return true;
@@ -381,6 +425,12 @@ public final class ChatInputBar {
     }
 
     public boolean keyPressed(int keyCode, int modifiers) {
+        swallowed = 0;
+        Asking asking = asking();
+        if (asking != null) {
+            // 提问挂着:键盘归它。数字选、回车交"其他"、Esc 是现在不想答;别的键(打字、光标)只去输入框
+            return questionKey(asking, keyCode, modifiers) || ui.keyPressed(keyCode, modifiers);
+        }
         // 面板在场:键盘整个归它,一个都不往下漏。Esc 是回输入框,不是关整个界面。
         if (panel != null) {
             if (keyCode == KeyCodes.ESCAPE) {
@@ -448,6 +498,52 @@ public final class ChatInputBar {
     }
 
     /**
+     * 提问挂着时这颗键归不归提问:Esc 是现在不想答;回车交"其他"那句(输入框空着时,多选的是"下一步",确认那一步是提交);
+     * 输入框空着时数字键选第几项(确认那一步 1 是提交),左键回上一题。输入框里已有字时数字就是字。
+     */
+    private boolean questionKey(Asking asking, int keyCode, int modifiers) {
+        boolean empty = !field.visible() || field.value().isEmpty();
+        if (keyCode == KeyCodes.ESCAPE) {
+            asking.decline();
+            return true;
+        }
+        if (keyCode == KeyCodes.ENTER && !KeyCodes.shift(modifiers)) {
+            answerOther(asking);
+            return true;
+        }
+        if (keyCode == KeyCodes.LEFT && empty) {
+            asking.back();
+            return true;
+        }
+        int digit = KeyCodes.digit(keyCode);
+        if (digit > 0 && empty) {
+            if (asking.reviewing()) {
+                if (digit == 1) asking.submit();
+            } else {
+                asking.pick(digit - 1);
+            }
+            swallowed = (char) ('0' + digit);
+            return true;
+        }
+        return false;
+    }
+
+    /** 输入框里的话是这个问题的"其他"回答;输入框空着:多选的往下走,确认那一步提交。 */
+    private void answerOther(Asking asking) {
+        if (asking.reviewing()) {
+            asking.submit();
+            return;
+        }
+        String text = field.value() == null ? "" : field.value().trim();
+        if (text.isEmpty()) {
+            asking.next();
+            return;
+        }
+        asking.other(text);
+        setText("");
+    }
+
+    /**
      * {@code @名字}是一个整体(Discord、微信里 @ 出来的都是一整块):退格/删除一下整个去掉,
      * 左右键一步跨过。段就是换色的那些段——同一份判断,亮的那块就是整块。
      */
@@ -492,7 +588,7 @@ public final class ChatInputBar {
 
     /** 弹层此刻该不该在。 */
     private boolean popupOpen() {
-        return !dismissed && !candidates.isEmpty() && field != null && field.isFocused();
+        return !dismissed && !candidates.isEmpty() && field != null && field.isFocused() && questioned == null;
     }
 
     /**
@@ -586,6 +682,10 @@ public final class ChatInputBar {
     public boolean charTyped(char ch) {
         // 面板在场时输入框是隐着的,打进去的字看不见也用不上——直接吞掉。
         if (panel != null) return true;
+        if (swallowed != 0 && ch == swallowed) {
+            swallowed = 0;
+            return true;
+        }
         return ui.charTyped(ch);
     }
 
@@ -607,6 +707,11 @@ public final class ChatInputBar {
 
     private void send() {
         if (field == null || panel != null) return;
+        Asking asking = asking();
+        if (asking != null) {
+            answerOther(asking);   // 挂着提问时右边那一格的发送是交"其他"回答
+            return;
+        }
         String text = field.value() == null ? "" : field.value().trim();
         if (text.isEmpty()) return;
         // 挂着"说一句再答"的提示栏:这句是答复的附言,连同答复送给她,不当成一句话
@@ -674,6 +779,25 @@ public final class ChatInputBar {
         Nb.text(g, font, "×", actX + (ACT_W - font.width("×")) / 2, y0 + (BAR_H - 8) / 2,
                 hot ? c.textPrimary() : c.textMuted());
         g.disableScissor();
+    }
+
+    /** 提问面板的底边:引用栏或提示栏之上。 */
+    private int questionBottom() {
+        return fieldY - Math.round(barShown);
+    }
+
+    /** 提问面板:挂着提问时按内容长出来,答完收回去;排版与点击用同一份({@link QuestionPanel#layout})。 */
+    private void renderQuestion(GuiGraphics g, int mouseX, int mouseY, NumenTheme.Colors c, float dt) {
+        Asking asking = asking();
+        var font = Minecraft.getInstance().font;
+        if (asking != null) {
+            question.layout(font, asking, c, fieldX, actX + ACT_W - fieldX);
+        }
+        questionShown = com.dwinovo.numen.api.client.ui.Anim.approach(questionShown,
+                asking != null ? question.height() : 0f, 18f, dt);
+        if (asking != null && questionShown >= 0.5f) {
+            question.render(g, font, asking, c, questionBottom(), Math.round(questionShown), mouseX, mouseY);
+        }
     }
 
     /** 输入框随内容往上长:一行一行长到 {@link #MAX_LINES} 行,底边不动,高度按趋近走(上面的东西跟着让)。 */

@@ -40,6 +40,17 @@ public final class KeyCodes {
         return keyCode == KP_ENTER ? ENTER : keyCode;
     }
 
+    /** 数字键(主键盘与小键盘)对应的 1-9;不是数字键是 -1。 */
+    public static int digit(int keyCode) {
+        if (keyCode >= 49 && keyCode <= 57) {
+            return keyCode - 48;
+        }
+        if (keyCode >= 321 && keyCode <= 329) {
+            return keyCode - 320;
+        }
+        return -1;
+    }
+
     public static boolean ctrl(int modifiers) {
         return (modifiers & MOD_CTRL) != 0;
     }
