@@ -6,6 +6,8 @@ import com.dwinovo.numen.api.client.hud.NumenHudToasts;
 import com.dwinovo.numen.api.client.ui.NumenToasts;
 import com.dwinovo.numen.api.data.ModLanguageData;
 import com.dwinovo.numen.api.network.payload.ConsentReplyPayload;
+import com.dwinovo.numen.api.client.seat.ClientSeats;
+import com.dwinovo.numen.api.mind.ConsentVenues;
 import com.dwinovo.numen.api.network.payload.ConsentRequestPayload;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
 import com.dwinovo.numen.api.permission.ConsentDesk;
@@ -200,8 +202,10 @@ public final class ConsentCards {
             Card card = new Card(p, System.currentTimeMillis());
             PENDING.put(companion, card);
             HISTORY.computeIfAbsent(companion, k -> new ArrayList<>()).add(card);
+            ClientSeats.services().venues().show(offer(p));
             return;
         }
+        ClientSeats.services().venues().clear(companion, p.withdrawnBecause());
         Card card = PENDING.remove(companion);
         if (card == null) {
             return;   // 主人在这里答过了:答的那一刻已经收起
@@ -213,6 +217,20 @@ public final class ConsentCards {
             NumenHudToasts.push(NumenToasts.Severity.WARN, I18n.get(ModLanguageData.Keys.CONSENT_WITHDRAWN,
                     name(companion), card.goneText()));
         }
+    }
+
+    /** 答复框之外的场所(外部大脑的客户端、渠道)看到的这一条:要做的事一句话,选"以后都允许"会记下的几项。 */
+    private static ConsentVenues.Offer offer(ConsentRequestPayload p) {
+        List<String> doing = new ArrayList<>();
+        for (ConsentRequestPayload.Line line : p.lines()) {
+            doing.add(line.kind().word() + " " + line.count() + " " + line.name().getString() + " ("
+                    + line.cause().getString() + ")");
+        }
+        List<String> remembers = new ArrayList<>();
+        for (ConsentRequestPayload.Remember one : p.remember()) {
+            remembers.add(one.kind().word() + " " + one.what().getString());
+        }
+        return new ConsentVenues.Offer(p.id(), p.companion(), name(p.companion()), String.join("; ", doing), remembers);
     }
 
     /** 花名册里的名字;不在花名册里是 "?"。 */
@@ -249,6 +267,7 @@ public final class ConsentCards {
         }
         ConsentAnswer.Decision decision = DECISIONS[key];
         NumenNetwork.sendToServer(new ConsentReplyPayload(card.companion(), card.request.id(), decision, said));
+        ClientSeats.services().venues().clear(card.companion(), null);
         card.chosen = key;
         card.note = said;
         card.settle();

@@ -34,6 +34,8 @@ import com.dwinovo.numen.api.agent.request.MemoryPreamble;
 import com.dwinovo.numen.api.agent.request.SystemPromptComposer;
 import com.dwinovo.numen.api.agent.skill.SkillRegistry;
 import com.dwinovo.numen.api.agent.tool.CompanionToolPort;
+import com.dwinovo.numen.api.agent.trace.TraceRecorder;
+import com.dwinovo.numen.api.agent.trace.TraceRecorders;
 import com.dwinovo.numen.api.agent.tool.ToolAnchor;
 import com.dwinovo.numen.api.agent.tool.ToolBook;
 import com.dwinovo.numen.api.brain.Bindings;
@@ -133,6 +135,8 @@ public final class LoopHost implements ClientContext {
     private final SeatPrograms programs;
     private final CompanionToolPort tools;
     private final TokenLedger tokens;
+    /** 这个进程不记轨迹({@link TraceRecorders#recording})时是 {@code null}。 */
+    private final TraceRecorder trace;
     private final Compactor compactor;
     private final GoalSteward goals;
     private final AgentLoop loop;
@@ -152,7 +156,6 @@ public final class LoopHost implements ClientContext {
     /** 上一刻驾驶席在不在外接大脑手里,只用来找翻转的那一下。 */
     private boolean wasDriving;
     /** 外接大脑正在跑的那个调用要收的进展;没有在跑的是 {@code null}。 */
-    private Consumer<String> externalProgress;
 
     /** 这一头的钟:最近一次座位上说的游戏刻与时刻,之后每刻前进一刻。 */
     private static final class Clock {
@@ -217,6 +220,11 @@ public final class LoopHost implements ClientContext {
         loop.subscribe(compactor::on);
         loop.subscribe(goals::on);
         loop.subscribe(memory::on);
+        this.trace = TraceRecorders.recording() ? new TraceRecorder(home.dir(), home.io(), companion) : null;
+        if (trace != null) {
+            TraceRecorders.put(companion, trace);
+            loop.subscribe(trace::on);
+        }
         this.wasDriving = parts.driving().getAsBoolean();
         restore();
         parts.seat().onEvent(event -> {
@@ -535,6 +543,7 @@ public final class LoopHost implements ClientContext {
 
     /** 这只同伴离场或遣散:在飞的回合作废,不再往她的会话里写任何东西。 */
     public void dispose() {
+        TraceRecorders.forget(companion);
         loop.halt(HaltReason.DISPOSE);
     }
 
@@ -610,21 +619,35 @@ public final class LoopHost implements ClientContext {
     }
 
     /** 外接大脑跑一个工具调用:交给她自己的工具口,与内脑同一个派发器({@link AgentLoop#runAside})。 */
-    public boolean runExternal(LlmToolCall call, Consumer<String> progress, Consumer<String> done) {
+    public boolean runExternal(LlmToolCall call, Consumer<String> done) {
         if (!loop.asideFree()) {
             return false;
         }
         convo.addAssistant(new AssistantTurn("", List.of(call), null));
-        externalProgress = progress;
-        boolean taken = loop.runAside(call, result -> {
-            externalProgress = null;
+        return loop.runAside(call, result -> {
             convo.addToolResult(call.id(), result);
             done.accept(result);
         });
-        if (!taken) {
-            externalProgress = null;
-        }
-        return taken;
+    }
+
+    /**
+     * 外接大脑要的她此刻的 {@code <runtime_state>}:向座位现取一份(身体的样子是服务端的,这里的镜像只在内脑开轮时更新),
+     * 放进镜像再交出。读不到(座位没了)交 {@code null},外脑照样拿到别的。
+     */
+    public CompletableFuture<String> readState() {
+        CompletableFuture<String> read = new CompletableFuture<>();
+        parts.seat().state(companion).whenComplete((sitting, failed) -> parts.main().execute(() -> {
+            if (failed != null) {
+                Constants.LOG.warn("[numen-mind#{}] could not read her state for the external brain: {}", companion,
+                        failed.toString());
+                read.complete(null);
+                return;
+            }
+            generation = sitting.generation();
+            stateArrived(sitting.state());
+            read.complete(runtimeState());
+        }));
+        return read;
     }
 
     /** 外接大脑替她说话:和内脑的一条回复同一个出口,见 {@link AgentLoop#said}。 */
@@ -814,6 +837,27 @@ public final class LoopHost implements ClientContext {
         return persona == null ? null : parts.persona().apply(persona);
     }
 
+    // ---- 轨迹 ----
+
+    /** 这一轮记进轨迹的其余字段:出处、档位、阶段、目标、队里有几条、发出去的那份运行期状态原文(身体的样子就在它里面)。 */
+    private JsonObject turnBody(LlmEndpoint endpoint, String xml) {
+        JsonObject o = new JsonObject();
+        o.addProperty("model", endpoint.model().id());
+        o.addProperty("thinking", endpoint.options().thinking().id());
+        LoopStatus status = loop.status();
+        o.addProperty("phase", status.phase() == null ? "IDLE" : status.phase().name());
+        GoalState goal = goals.goal();
+        o.addProperty("goal", goal == null ? "" : goal.objective());
+        o.addProperty("inbox", queue.size());
+        o.addProperty("runtime", xml);
+        return o;
+    }
+
+    /** 这一只的轨迹记录;这个进程不记轨迹时是 {@code null}。评测与读轨迹的用例按它找文件。 */
+    public TraceRecorder trace() {
+        return trace;
+    }
+
     // ---- 内核的端口 ----
 
     /** 模型那一侧:一轮开头取她此刻的样子、组装请求、问 {@link Mind}、把回调切回主线程。 */
@@ -848,8 +892,14 @@ public final class LoopHost implements ClientContext {
             LlmEndpoint endpoint = parts.mind().endpoint(bound(Slot.PROVIDER));
             // 这一轮用的端点和日志里最后记下的不同,就在日志里记一条换了模型 / 换了档位
             log.noteEndpoint(endpoint);
-            return AgentRequestContext.turn(convo.snapshot(), body.xml(), personaText(), catalog,
+            // xml 只算一次:记下来的必须就是发出去的那一份
+            String xml = body.xml();
+            ModelRequest request = AgentRequestContext.turn(convo.snapshot(), xml, personaText(), catalog,
                     modules.hers(), modules.disabled(), skills.formatXml(), parts.tools().all());
+            if (trace != null) {
+                trace.turn(runId, n, turnBody(endpoint, xml));
+            }
+            return request;
         }
 
         @Override

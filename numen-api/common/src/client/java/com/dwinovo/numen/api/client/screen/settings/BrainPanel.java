@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.client.screen.settings;
 
+import com.dwinovo.numen.api.mind.LibraryDesk;
 import com.dwinovo.numen.api.data.ModLanguageData;
 import com.dwinovo.numen.api.client.ui.IDrawSurface;
 import com.dwinovo.numen.api.client.ui.NumenStyle;
@@ -291,14 +292,14 @@ public final class BrainPanel {
         body.addProperty("port", portValue());
         body.addProperty("callTimeoutSeconds", Math.max(1, timeout));
         body.add("hiddenTools", hidden);
-        ClientCompanions.library().put(Libraries.MCP_SERVER, body, this::settleSave);
+        ClientCompanions.library().put(LibraryDesk.MCP_SERVER, body, this::settleSave);
     }
 
     /** 拨一个开关,只改这一项。 */
     private void put(String key, boolean value) {
         JsonObject body = new JsonObject();
         body.addProperty(key, value);
-        ClientCompanions.library().put(Libraries.MCP_SERVER, body);
+        ClientCompanions.library().put(LibraryDesk.MCP_SERVER, body);
     }
 
     /** 服务端答了保存:办成,草稿作废、配置重新成为真源;没办成(最常见是端口被占),话挂回出错的那个框。 */
@@ -328,7 +329,7 @@ public final class BrainPanel {
         // 状态页开着时每两秒向服务端要一次最新的(谁接进来了、多久前动过);配置变了才重搭
         if (nowMs - lastAskMs > 2_000) {
             lastAskMs = nowMs;
-            ClientCompanions.library().ask(Libraries.MCP_SERVER);
+            ClientCompanions.library().ask(LibraryDesk.MCP_SERVER);
         }
         if (mcp == null || !mcp.sameConfig(builtFor)) {
             if (mcp != null || builtFor != null) build(x, y, w, h);

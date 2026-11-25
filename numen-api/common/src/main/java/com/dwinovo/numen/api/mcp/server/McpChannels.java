@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.mcp.server;
 
 import com.dwinovo.numen.api.permission.ConsentDesk;
-import com.dwinovo.numen.api.permission.ConsentVenues;
+import com.dwinovo.numen.api.mind.ConsentVenues;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
@@ -100,10 +100,8 @@ public final class McpChannels {
     List<JsonObject> take(String token, long waitMillis) throws Exception {
         Box box = box(token);
         LinkedBlockingDeque<JsonObject> items = box.items();
-        long seen = box.posts().get();
-        // 空着等的是她的话或征询:游戏那一头投进来才到
-        JsonObject first = waitMillis > 0 && items.isEmpty()
-                ? GameWaits.await(() -> box.posts().get() != seen, () -> items.pollFirst(waitMillis, TimeUnit.MILLISECONDS))
+        // 空着等的是她的话或征询:大脑那一头投进来才到
+        JsonObject first = waitMillis > 0 && items.isEmpty() ? items.pollFirst(waitMillis, TimeUnit.MILLISECONDS)
                 : items.pollFirst();
         List<JsonObject> out = new ArrayList<>();
         if (first != null) {

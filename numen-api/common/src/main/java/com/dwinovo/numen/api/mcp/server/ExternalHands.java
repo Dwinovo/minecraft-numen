@@ -3,23 +3,25 @@ package com.dwinovo.numen.api.mcp.server;
 import com.dwinovo.numen.api.agent.inbox.ExternalWait;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
-import com.dwinovo.numen.api.permission.ConsentDesk;
 
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 远程端点伸向同伴的手(外部大脑与渠道共用):{@link McpServer} 对她们的全部接触都收在这一个口里。宿主不关心同伴的大脑怎么接——
- * 实现 {@link ServerActuator} 直接操作进程内的 {@code CompanionLoop}。
+ * 远程端点伸向同伴的手(外部大脑与渠道共用):端点对她们的全部接触都收在这一个口里。实现是主人客户端上的一份
+ * ({@code LoopHands}),直接操作她的大脑({@code LoopHost})。
  *
- * <p>每个方法可在任意线程调,工作由实现切到自己的主线程,结果经 future 回来。每个调用都寻址到一只同伴的 UUID,
+ * <p>每个方法在端点自己的线程上调(从不在客户端主线程上),工作由实现切到客户端主线程,结果经 future 回来。每个调用都寻址到一只同伴的 UUID,
  * 各同伴独立执行,所以一个外脑可以并行驱动好几只。
  */
 public interface ExternalHands {
 
     /** 主人的一只同伴:稳定 id + 显示名。 */
     record Companion(UUID uuid, String name) {}
+
+    /** 调用的线程是不是客户端主线程:是的话端点不许在它上面阻塞等 future({@code ExternalBrain#await})。 */
+    boolean onMainThread();
 
     /** 这位主人的同伴看得到的工具,和内置大脑每轮请求里发出去的是同一份(含他自己接进来的 MCP 工具,减去他关掉的)。 */
     CompletableFuture<List<NumenTool>> tools();
@@ -30,7 +32,7 @@ public interface ExternalHands {
      */
     CompletableFuture<String> guide(UUID companion);
 
-    /** 主人名下此刻在世界里的同伴。 */
+    /** 主人名下此刻在世界里、大脑坐着座位的同伴。 */
     CompletableFuture<List<Companion>> companions();
 
     /**
@@ -64,25 +66,22 @@ public interface ExternalHands {
     CompletableFuture<Boolean> say(UUID companion, String text);
 
     /**
-     * 渠道上主人的话:渠道来访开始(她的回话与征询回到 {@code channel}),话和游戏里主人的话同走 {@code OwnerInputs}
-     * 的一个入口。送不进去(不是他的同伴……)是 false,来访随之作废。
+     * 渠道上主人的话:渠道来访开始(她的回话与征询回到 {@code channel}),话和面板里主人的话同一个入口。
+     * 送不进去(她的大脑不在这台电脑上……)是 false,来访随之作废。
      */
     CompletableFuture<Boolean> hear(UUID companion, String text, McpChannels.Channel channel);
 
     /**
-     * 主人在游戏之外答了一条征询(外部大脑客户端上的人经 elicitation 答的),和游戏里的答复框、{@code /numen consent}
-     * 同走 {@code ConsentDesk.reply}。{@code note} 只随拒绝。
+     * 主人在游戏之外答了一条征询(外部大脑客户端上的人经 elicitation 答的、渠道上答的),和答复框同一条路发回服务端。
+     * {@code note} 只随拒绝。
      */
-    CompletableFuture<ConsentDesk.Reply> answer(UUID companion, long id, ConsentAnswer.Decision decision, String note);
+    CompletableFuture<Boolean> answer(UUID companion, long id, ConsentAnswer.Decision decision, String note);
 
     /**
      * 用她的身体跑一个工具(与内置大脑用的是同一批工具,不经模型)。结果是 {@code ToolOutcome} 的 JSON 串;
      * 失败(未知工具、参数错、工具抛错)也以失败结果回来,不是异常的 future。
      *
      * @param argsJson 工具参数的 JSON 对象串;空视作 {@code {}}
-     * @param progress 调用期间她手上的活有进展时收到那一句话(身体报告里的描述,与 {@code <current_task>} 同一句),可在任意线程被调,
-     *                 不得阻塞;调用收场后不再被调
      */
-    CompletableFuture<String> invoke(UUID companion, String toolName, String argsJson,
-                                     java.util.function.Consumer<String> progress);
+    CompletableFuture<String> invoke(UUID companion, String toolName, String argsJson);
 }

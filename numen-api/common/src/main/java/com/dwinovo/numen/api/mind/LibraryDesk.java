@@ -17,6 +17,7 @@ import com.dwinovo.numen.api.library.LibraryKind;
 import com.dwinovo.numen.api.library.Shelf;
 import com.dwinovo.numen.api.library.Shipped;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig;
+import com.dwinovo.numen.api.mcp.server.McpMode;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
 import com.dwinovo.numen.api.voice.VoiceProfile;
 import com.dwinovo.numen.mcp.client.McpConnections;
@@ -45,6 +46,8 @@ public final class LibraryDesk {
     public static final String PERSONA = "persona";
     public static final String PROVIDER = "provider";
     public static final String MCP_CLIENT = "mcp-client";
+    /** 外部大脑的端点:接入地址、开关、超时、不暴露的工具。在这台电脑上,主人自己的设置。 */
+    public static final String MCP_SERVER = "mcp-server";
     public static final String PREFS = "prefs";
     public static final String SKILL = "skill";
     public static final String NOTES = "notes";
@@ -129,6 +132,9 @@ public final class LibraryDesk {
 
         /** 接进来的 MCP 服务器的连接。 */
         ClientMcp mcp();
+
+        /** 外部大脑的端点。 */
+        McpMode external();
     }
 
     private final Sources sources;
@@ -162,6 +168,7 @@ public final class LibraryDesk {
                     (from, to) -> rebind(Slot.VOICE, from, to));
             case KEY -> key(op, body);
             case MCP_CLIENT -> mcpClient(owner, admin, op, body);
+            case MCP_SERVER -> Done.of(mcpServer(op, body), false);
             case PREFS -> Done.of(prefs(owner, op, body), false);
             case NOTES -> notes(owner, op, body);
             case SCHEDULES -> schedules(owner, op, body);
@@ -235,6 +242,7 @@ public final class LibraryDesk {
             });
             case KEY -> keyRows(out);
             case MCP_CLIENT -> mcpRows(owner, admin, out);
+            case MCP_SERVER -> out.add(mcpServerView());
             case CATALOG -> out.add(ProviderForm.answer(catalog, ask));
             case PREFS -> out.add(sources.prefs().toJson());
             case NOTES -> sources.brains().forEach(brain -> brain.notes().index()
@@ -560,6 +568,60 @@ public final class LibraryDesk {
                 row.add("tools", tools);
             }
         });
+    }
+
+    /** 外部大脑端点的整份状态:配置、谁连着、起服失败的原因。令牌不在这里:它们是主人在聊天里用 /token 发的。 */
+    private JsonObject mcpServerView() {
+        McpMode mode = sources.external();
+        var cfg = mode.config();
+        JsonObject o = new JsonObject();
+        o.addProperty("enabled", mode.enabled());
+        o.addProperty("host", cfg.host());
+        o.addProperty("port", cfg.port());
+        o.addProperty("lanExposed", cfg.lanExposed());
+        o.addProperty("callTimeoutSeconds", cfg.callTimeoutSeconds());
+        JsonArray hidden = new JsonArray();
+        cfg.hiddenTools().forEach(hidden::add);
+        o.add("hiddenTools", hidden);
+        o.addProperty("endpoint", mode.endpoint());
+        if (mode.clientName() != null) {
+            o.addProperty("clientName", mode.clientName());
+        }
+        o.addProperty("lastActivityMs", mode.lastActivityMs());
+        if (mode.lastError() != null) {
+            o.addProperty("lastError", mode.lastError());
+        }
+        return o;
+    }
+
+    /** 外部大脑端点:开关、地址与超时、不暴露的工具,哪些字段在 {@code put} 里就改哪些。起服失败的原因当作办不成的原因交回。 */
+    private String mcpServer(String op, JsonObject body) {
+        if (LIST.equals(op)) {
+            return null;
+        }
+        if (!PUT.equals(op)) {
+            return "unknown operation";
+        }
+        McpMode mode = sources.external();
+        var cfg = mode.config();
+        if (body.has("host") || body.has("port") || body.has("callTimeoutSeconds") || body.has("hiddenTools")) {
+            List<String> hidden = new ArrayList<>(cfg.hiddenTools());
+            if (body.get("hiddenTools") instanceof JsonArray names) {
+                hidden.clear();
+                names.forEach(n -> hidden.add(n.getAsString()));
+            }
+            String host = string(body, "host") == null ? cfg.host() : string(body, "host");
+            int port = body.has("port") ? body.get("port").getAsInt() : cfg.port();
+            int timeout = body.has("callTimeoutSeconds") ? body.get("callTimeoutSeconds").getAsInt()
+                    : cfg.callTimeoutSeconds();
+            if (!mode.applySettings(host, port, Math.max(1, timeout), hidden)) {
+                return mode.lastError();
+            }
+        }
+        if (body.has("enabled") && !mode.setEnabled(body.get("enabled").getAsBoolean())) {
+            return mode.lastError();
+        }
+        return null;
     }
 
     /**

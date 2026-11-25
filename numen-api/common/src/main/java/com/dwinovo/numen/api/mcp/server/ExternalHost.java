@@ -3,7 +3,6 @@ package com.dwinovo.numen.api.mcp.server;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
 import com.dwinovo.numen.api.agent.tool.ToolHints;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
-import com.dwinovo.numen.api.permission.ConsentDesk;
 import com.dwinovo.numen.mcp.server.McpHost;
 import com.dwinovo.numen.mcp.server.McpToken;
 import com.google.gson.Gson;
@@ -21,7 +20,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
 
 /**
  * 外接大脑在游戏里的那一头:{@link McpHost} 的实现。MCP 端点(协议、传输、认人、限流、审计)在 {@code mcp} 模块,不认识同伴;
@@ -51,7 +49,7 @@ public final class ExternalHost implements McpHost {
 
     private static final String ICON = "/numen_api_mcp_icon.png";
 
-    private final Function<UUID, ExternalHands> handsOf;
+    private final ExternalHands hands;
     private final McpChannels channels;
     private final String version;
     private final Gson gson = new Gson();
@@ -60,8 +58,8 @@ public final class ExternalHost implements McpHost {
     /**
      * @param version Numen API 这个模组的版本,serverInfo 里报
      */
-    public ExternalHost(Function<UUID, ExternalHands> handsOf, McpChannels channels, String version) {
-        this.handsOf = handsOf;
+    ExternalHost(ExternalHands hands, McpChannels channels, String version) {
+        this.hands = hands;
         this.channels = channels;
         this.version = version;
     }
@@ -130,7 +128,7 @@ public final class ExternalHost implements McpHost {
         // 全量给外脑,不做渐进披露:那是我们自己请求里的省法,外脑的上下文预算归它自己管,
         // 而且 MCP 客户端(Claude Code 之类)本来就会把借来的工具再延迟一次。工具表是内置大脑每轮请求里发的那一份;
         // 顺序是确定的:控制工具固定在前,其余按名字排——接进来的 MCP 工具什么时候登记不由我们定。
-        handsOf.apply(who.owner()).tools().get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS).stream()
+        ExternalBrain.await(hands, hands.tools()).stream()
                 .sorted(Comparator.comparing(NumenTool::name))
                 .forEach(tool -> tools.add(def(tool.name(), tool.hints(), tool.description(),
                         withCompanion(tool.parameterSchema()))));
@@ -277,7 +275,7 @@ public final class ExternalHost implements McpHost {
     public Result call(McpToken who, String tool, String argsJson, int timeoutSeconds, Progress progress)
             throws Exception {
         JsonObject args = JsonParser.parseString(argsJson).getAsJsonObject();
-        Call call = new Call(who, handsOf.apply(who.owner()), channels, args, timeoutSeconds, progress);
+        Call call = new Call(who, hands, channels, args, timeoutSeconds);
         if (who.role() == McpToken.Role.CHANNEL) {
             return switch (tool) {
                 case "list_companions" -> call.listCompanions();
@@ -306,17 +304,14 @@ public final class ExternalHost implements McpHost {
         private final McpChannels channels;
         private final JsonObject args;
         private final int timeoutSeconds;
-        private final Progress progress;
         private UUID target;
 
-        Call(McpToken token, ExternalHands hands, McpChannels channels, JsonObject args, int timeoutSeconds,
-             Progress progress) {
+        Call(McpToken token, ExternalHands hands, McpChannels channels, JsonObject args, int timeoutSeconds) {
             this.token = token;
             this.hands = hands;
             this.channels = channels;
             this.args = args;
             this.timeoutSeconds = timeoutSeconds;
-            this.progress = progress;
         }
 
         Result text(String text, boolean error) {
@@ -325,7 +320,7 @@ public final class ExternalHost implements McpHost {
 
         /** 作用域管得着的、此刻在世界里的同伴。 */
         private List<ExternalHands.Companion> visible() throws Exception {
-            return hands.companions().get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS).stream()
+            return ExternalBrain.await(hands, hands.companions()).stream()
                     .filter(c -> token.scope().covers(c.uuid())).toList();
         }
 
@@ -349,7 +344,7 @@ public final class ExternalHost implements McpHost {
             if (name.isEmpty()) {
                 return text("create_companion needs a 'name' (3–16 letters, digits, or underscore)", true);
             }
-            boolean ok = hands.create(name).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            boolean ok = ExternalBrain.await(hands, hands.create(name));
             if (!ok) {
                 return text("could not summon — the owner has to be in the game", true);
             }
@@ -362,7 +357,7 @@ public final class ExternalHost implements McpHost {
             if (companion == null) {
                 return text("no such companion — call list_companions to see valid names/ids", true);
             }
-            boolean ok = hands.delete(companion).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            boolean ok = ExternalBrain.await(hands, hands.delete(companion));
             return text(ok ? "dismissed " + companion + " — it drops its inventory, armor and accessories and is gone for good"
                     : "could not dismiss " + companion + " — the owner has to be in the game", !ok);
         }
@@ -383,7 +378,7 @@ public final class ExternalHost implements McpHost {
             if (companion == null || words.isEmpty()) {
                 return text("send needs a 'companion' (name or id from list_companions) and a non-empty 'text'", true);
             }
-            boolean ok = hands.hear(companion, words, channel).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            boolean ok = ExternalBrain.await(hands, hands.hear(companion, words, channel));
             return text(ok ? "sent — her answer comes back through get_replies" : "could not send to her", !ok);
         }
 
@@ -412,11 +407,9 @@ public final class ExternalHost implements McpHost {
             if (decision == null || (decision != ConsentAnswer.Decision.DENY && !note.isBlank())) {
                 return text("'decision' is allow, remember or deny; a note only goes with deny", true);
             }
-            ConsentDesk.Reply reply = hands.answer(companion, args.get("id").getAsLong(), decision, note)
-                    .get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-            return text(reply == ConsentDesk.Reply.ANSWERED ? "answered"
-                    : "nothing to answer: that request is not pending any more (answered, expired or replaced)",
-                    reply != ConsentDesk.Reply.ANSWERED);
+            boolean answered = ExternalBrain.await(hands, hands.answer(companion, args.get("id").getAsLong(), decision, note));
+            return text(answered ? "answered"
+                    : "nothing to answer: that request is not pending any more (answered, expired or replaced)", !answered);
         }
 
         Result guide() throws Exception {
@@ -436,7 +429,7 @@ public final class ExternalHost implements McpHost {
             if (words.isEmpty()) {
                 return text("say needs a non-empty 'text'", true);
             }
-            boolean ok = hands.say(companion, words).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            boolean ok = ExternalBrain.await(hands, hands.say(companion, words));
             return text(ok ? "said" : "could not say — is the companion live?", !ok);
         }
 
@@ -448,10 +441,9 @@ public final class ExternalHost implements McpHost {
             }
             JsonObject toolArgs = args.deepCopy();
             toolArgs.remove("companion");
-            java.util.concurrent.CompletableFuture<String> running = hands.invoke(companion, toolName, toolArgs.toString(),
-                    progress::report);
+            java.util.concurrent.CompletableFuture<String> running = hands.invoke(companion, toolName, toolArgs.toString());
             // 工具在游戏里跑(程序一步步等主线程执行):收尾才到
-            String result = GameWaits.await(running::isDone, () -> running.get(timeoutSeconds, TimeUnit.SECONDS));
+            String result = running.get(timeoutSeconds, TimeUnit.SECONDS);
             return body(ExternalBrain.afterProgram(hands, companion, result));
         }
 

@@ -7,7 +7,13 @@ import com.dwinovo.numen.api.client.agent.NumenRoster;
 import com.dwinovo.numen.api.library.EntryId;
 import com.dwinovo.numen.api.home.Homes;
 import com.dwinovo.numen.api.mind.ClientServices;
+import com.dwinovo.numen.api.entity.SummonSetup;
+import com.dwinovo.numen.api.mcp.server.ExternalHands;
+import com.dwinovo.numen.api.mind.LoopHands;
 import com.dwinovo.numen.api.mind.LoopHost;
+import com.dwinovo.numen.api.network.payload.ConsentReplyPayload;
+import com.dwinovo.numen.api.network.payload.DismissRequestPayload;
+import com.dwinovo.numen.api.network.payload.SummonRequestPayload;
 import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.Wire;
 import com.dwinovo.numen.api.network.payload.SeatPayload;
@@ -16,6 +22,8 @@ import com.dwinovo.numen.mcp.rpc.RpcException;
 import net.minecraft.client.Minecraft;
 
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -46,7 +54,40 @@ public final class ClientSeats {
         }
         client = new SeatClient(Minecraft.getInstance(), Executors.newVirtualThreadPerTaskExecutor(),
                 message -> NumenNetwork.sendToServer(SeatPayload.frame(Wire.TO_SERVER, message)));
-        services = new ClientServices(me, Homes.clientDir(), client, Minecraft.getInstance(), () -> false);
+        Minecraft game = Minecraft.getInstance();
+        services = new ClientServices(me, Homes.clientDir(), client, game, new ClientServices.Game(game::isSameThread,
+                ClientSeats::liveCompanions, new LoopHands.Actions() {
+                    @Override
+                    public boolean summon(String name) {
+                        if (game.getConnection() == null) {
+                            return false;
+                        }
+                        NumenNetwork.sendToServer(new SummonRequestPayload(name, SummonSetup.NONE));
+                        return true;
+                    }
+
+                    @Override
+                    public boolean dismiss(UUID companion) {
+                        if (game.getConnection() == null) {
+                            return false;
+                        }
+                        NumenNetwork.sendToServer(new DismissRequestPayload(companion));
+                        return true;
+                    }
+                }, (companion, id, decision, note) ->
+                NumenNetwork.sendToServer(new ConsentReplyPayload(companion, id, decision, note))));
+    }
+
+    /** 主人名下此刻在世界里的同伴:名册上创建者是这位玩家、没有被留在外面的。 */
+    private static List<ExternalHands.Companion> liveCompanions() {
+        UUID me = Minecraft.getInstance().player == null ? null : Minecraft.getInstance().player.getUUID();
+        List<ExternalHands.Companion> out = new ArrayList<>();
+        for (NumenRoster.Entry entry : NumenRoster.instance().entries()) {
+            if (entry.createdBy(me) && !entry.outside().isOutside()) {
+                out.add(new ExternalHands.Companion(entry.uuid(), entry.name()));
+            }
+        }
+        return out;
     }
 
     /** 这条连接上她们的大脑要用的一切;还没报到好是编程错误。 */
@@ -109,7 +150,7 @@ public final class ClientSeats {
     /** 每个客户端刻让各只的大脑往前走一步。 */
     public static void tick() {
         if (services != null) {
-            services.brains().tick();
+            services.tick();
         }
     }
 

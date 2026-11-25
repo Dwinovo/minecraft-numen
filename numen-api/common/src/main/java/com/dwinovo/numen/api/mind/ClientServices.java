@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.mind;
 
+import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.NumenIo;
 import com.dwinovo.numen.api.agent.llm.ModelCatalog;
 import com.dwinovo.numen.api.agent.llm.ProviderLibrary;
@@ -11,6 +12,8 @@ import com.dwinovo.numen.api.keys.Keychain;
 import com.dwinovo.numen.api.keys.Keys;
 import com.dwinovo.numen.api.library.LibraryHub;
 import com.dwinovo.numen.api.library.Shipped;
+import com.dwinovo.numen.api.mcp.server.ExternalHands;
+import com.dwinovo.numen.api.mcp.server.McpMode;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
 import com.dwinovo.numen.api.platform.Services;
@@ -24,6 +27,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 
 /**
  * 主人这台电脑上、连着一台服务器期间她的大脑要用的一切,由这一处接起来:她的上下文在这台电脑上她的家里,主人的库(人设、模型档案、声线、
@@ -41,7 +45,6 @@ public final class ClientServices {
     private final UUID player;
     private final Path root;
     private final Executor main;
-    private final BooleanSupplier driving;
     private final ClientBrains brains;
     private final ClientPrefs prefs;
     private final LibraryHub hub;
@@ -52,19 +55,31 @@ public final class ClientServices {
     private final LibraryDesk desk;
     private final Home home;
     private final Home library;
+    private final ConsentVenues venues;
+    private McpMode external;
+
+    /**
+     * 游戏这一侧给大脑的东西。
+     *
+     * @param onMain  调用的线程是不是客户端主线程
+     * @param roster  主人名下此刻在世界里的同伴
+     * @param actions 召唤与遣散
+     * @param answers 征询的答复怎么发回服务端
+     */
+    public record Game(BooleanSupplier onMain, Supplier<List<ExternalHands.Companion>> roster, LoopHands.Actions actions,
+                       ConsentVenues.Answers answers) {}
 
     /**
      * @param player  这台电脑上的玩家
      * @param root    主人在这台电脑上的东西放哪({@code config/numen/client/})
      * @param seat    这条到服务器的座位连接
      * @param main    大脑的线程
-     * @param driving 她的驾驶席在不在外接大脑手里(谁在驾驶在客户端一处定)
+     * @param game    游戏这一侧给的东西
      */
-    public ClientServices(UUID player, Path root, SeatClient seat, Executor main, BooleanSupplier driving) {
+    public ClientServices(UUID player, Path root, SeatClient seat, Executor main, Game game) {
         this.player = player;
         this.root = root;
         this.main = main;
-        this.driving = driving;
         com.dwinovo.numen.api.store.Io io = NumenIo.lanes().io("client");
         this.home = new Home(root, io);
         this.library = new Home(root.resolve("library"), io);
@@ -77,7 +92,12 @@ public final class ClientServices {
         this.providers = new ProviderLibrary(hub.library(ProviderLibrary.KIND), new Keys(keychain), models);
         this.mcp = new ClientMcp(player, main, hub.library(McpClientConfig.KIND), keychain, () -> { });
         this.mcp.reconcile();
+        this.venues = new ConsentVenues(game.answers());
         this.brains = new ClientBrains(seat, main, companion -> brain(seat, companion));
+        LoopHands hands = new LoopHands(brains, main, game.onMain(), mcp, game.roster(), game.actions(), venues);
+        this.external = new McpMode(new Home(root.resolve("mcp"), io), player, hands, venues,
+                Services.platform().modVersion(Constants.MOD_ID));
+        this.external.start();
         this.desk = new LibraryDesk(new LibraryDesk.Sources() {
             @Override
             public com.dwinovo.numen.api.library.Library library(com.dwinovo.numen.api.library.LibraryKind kind) {
@@ -113,6 +133,11 @@ public final class ClientServices {
             public ClientMcp mcp() {
                 return mcp;
             }
+
+            @Override
+            public McpMode external() {
+                return external;
+            }
         }, models);
     }
 
@@ -121,7 +146,7 @@ public final class ClientServices {
         PersonaLibrary personas = new PersonaLibrary(hub.library(PersonaLibrary.KIND));
         Home hers = new Home(root.resolve("companions").resolve(companion.toString()), home.io());
         return new LoopHost(new LoopHost.Parts(companion, player, hers, main, seat,
-                new LlmMind(() -> providers, models), mcp, driving, prefs::initiative,
+                new LlmMind(() -> providers, models), mcp, () -> external.driving(companion), prefs::initiative,
                 (Bound bound) -> {
                     PersonaLibrary.Persona persona = personas.get(bound.id().toString());
                     return persona == null ? null : persona.text();
@@ -161,8 +186,26 @@ public final class ClientServices {
         return keychain;
     }
 
-    /** 断线:大脑收掉,MCP 连接放手。 */
+    /** 外部大脑的端点:谁在驾驶、令牌、设置都在这里。 */
+    public McpMode external() {
+        return external;
+    }
+
+    /** 征询的去处:答复框之外的场所(外部大脑的客户端、渠道)。 */
+    public ConsentVenues venues() {
+        return venues;
+    }
+
+    /** 每个客户端刻一次:端点清扫过期的会话与令牌,各只的大脑往前走一步。 */
+    public void tick() {
+        external.tick();
+        brains.tick();
+    }
+
+    /** 断线:大脑收掉,外部大脑的端点与 MCP 连接放手。 */
     public void close() {
+        external.shutdown();
+        venues.clearAll();
         brains.leave();
         mcp.shutdown();
     }

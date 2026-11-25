@@ -6,7 +6,6 @@ import com.dwinovo.numen.api.agent.tool.NumenTool;
 import com.dwinovo.numen.api.agent.tool.ToolCall;
 import com.dwinovo.numen.api.agent.tool.ToolHints;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
-import com.dwinovo.numen.api.permission.ConsentDesk;
 import com.dwinovo.numen.mcp.server.McpHost;
 import com.dwinovo.numen.mcp.server.McpToken;
 import com.google.gson.JsonObject;
@@ -18,10 +17,10 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -40,6 +39,12 @@ class ExternalHostTest {
         final List<String> answers = new ArrayList<>();
         final List<String> heard = new ArrayList<>();
         volatile String events;
+        volatile boolean onMain;
+
+        @Override
+        public boolean onMainThread() {
+            return onMain;
+        }
 
         @Override
         public CompletableFuture<String> guide(UUID companion) {
@@ -96,17 +101,14 @@ class ExternalHostTest {
         }
 
         @Override
-        public CompletableFuture<ConsentDesk.Reply> answer(UUID companion, long id, ConsentAnswer.Decision decision,
-                                                           String note) {
+        public CompletableFuture<Boolean> answer(UUID companion, long id, ConsentAnswer.Decision decision,
+                                                 String note) {
             answers.add(companion + "#" + id + ":" + decision + ":" + note);
-            return CompletableFuture.completedFuture(ConsentDesk.Reply.ANSWERED);
+            return CompletableFuture.completedFuture(true);
         }
 
         @Override
-        public CompletableFuture<String> invoke(UUID companion, String toolName, String argsJson,
-                                                Consumer<String> progress) {
-            progress.accept("step 1");
-            progress.accept("step 2");
+        public CompletableFuture<String> invoke(UUID companion, String toolName, String argsJson) {
             return CompletableFuture.completedFuture(ToolOutcome.success("ran " + toolName + " " + argsJson));
         }
     }
@@ -131,7 +133,7 @@ class ExternalHostTest {
 
     private final Hands hands = new Hands();
     private final McpChannels channels = new McpChannels();
-    private final ExternalHost host = new ExternalHost(owner -> hands, channels, "9.9.9");
+    private final ExternalHost host = new ExternalHost(hands, channels, "9.9.9");
 
     private static McpToken token(McpToken.Role role, McpToken.Scope scope) {
         return new McpToken(UUID.randomUUID().toString().substring(0, 8), UUID.randomUUID().toString(), OWNER, role, scope,
@@ -211,19 +213,17 @@ class ExternalHostTest {
     // ---- 回执 ----
 
     @Test
-    void aProgramsReceiptCarriesItsEventsThenHerRuntimeStateAndTheBodysProgressIsForwarded() throws Exception {
+    void aProgramsReceiptCarriesItsEventsThenHerRuntimeState() throws Exception {
         hands.events = "<events>x</events>";
-        List<String> progress = new ArrayList<>();
         JsonObject lua = args("companion", "alice");
         lua.addProperty("code", "return 1");
 
-        McpHost.Result result = host.call(BRAIN, "lua", lua.toString(), 5, progress::add);
+        McpHost.Result result = host.call(BRAIN, "lua", lua.toString(), 5, McpHost.Progress.NONE);
 
         assertEquals(List.of("ran lua {\"code\":\"return 1\"}", "<events>x</events>",
                 "<runtime_state>of " + ALICE + "</runtime_state>"), result.texts());
         assertFalse(result.error());
         assertEquals(ALICE, result.subject());
-        assertEquals(List.of("step 1", "step 2"), progress);
     }
 
     @Test
@@ -306,5 +306,15 @@ class ExternalHostTest {
         allowWithNote.addProperty("note", "sneaky");
         assertTrue(call(channel, "answer_consent", allowWithNote).error(), "附言只随拒绝");
         assertEquals(1, hands.answers.size());
+    }
+
+    // ---- 线程 ----
+
+    @Test
+    void aBlockingWaitOnTheClientMainThreadIsRefusedBeforeItCanWaitForItself() {
+        hands.onMain = true;
+
+        assertThrows(IllegalStateException.class,
+                () -> ExternalBrain.await(hands, new CompletableFuture<String>()));
     }
 }

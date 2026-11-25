@@ -6,6 +6,7 @@ import com.dwinovo.numen.api.agent.llm.ToolOutcome;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -37,19 +38,30 @@ final class ExternalBrain {
     private ExternalBrain() {}
 
     /**
+     * 等她的手办完一件事:只在端点自己的线程上等。客户端主线程是办这些事的那一条线程,在它上面等就是等自己——
+     * 手({@code LoopHands})的 future 在主线程上才完成,主线程自己等就永远等不到,所以结构上拒绝。
+     */
+    static <T> T await(ExternalHands hands, CompletableFuture<T> future) throws Exception {
+        if (hands.onMainThread()) {
+            throw new IllegalStateException("a blocking wait on the client main thread would wait for itself");
+        }
+        return future.get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    }
+
+    /**
      * 一个程序(或别的她的工具)跑完之后的正文:结果的话在前;这段时间到达的事件其次(取走即不再由 get_events 交,外脑干活时
      * 不必另外轮询);她此刻的运行期状态在最后。
      *
      * @param result {@code ToolOutcome} 的 JSON 串
      */
     static Body afterProgram(ExternalHands hands, UUID companion, String result) throws Exception {
-        String events = hands.takeEvents(companion).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        String events = await(hands, hands.takeEvents(companion));
         return body(ToolOutcome.modelText(result), ToolOutcome.failed(result), events, hands, companion);
     }
 
     /** 内置大脑读的系统提示(人设、操作核心、API 索引、规矩……)。她没有大脑是失败。 */
     static Body guide(ExternalHands hands, UUID companion) throws Exception {
-        String prompt = hands.guide(companion).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        String prompt = await(hands, hands.guide(companion));
         return prompt == null ? new Body(List.of("this companion has no brain to read the guide of"), true)
                 : new Body(List.of(prompt), false);
     }
@@ -65,7 +77,7 @@ final class ExternalBrain {
         if (waitSeconds > 0) {
             ExternalWait.Parked parked = hands.awaitEvents(companion);
             try {
-                batch = GameWaits.await(parked.batch()::isDone, () -> parked.batch().get(waitSeconds, TimeUnit.SECONDS));
+                batch = parked.batch().get(waitSeconds, TimeUnit.SECONDS);
             } catch (TimeoutException deadline) {
                 // 到点,转清扫——叫醒只是提前,正确性由清扫兜底
             } finally {
@@ -75,7 +87,7 @@ final class ExternalBrain {
             }
         }
         if (batch == null) {
-            String rest = hands.takeEvents(companion).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            String rest = await(hands, hands.takeEvents(companion));
             batch = rest != null ? rest : NO_NEWS;
         }
         return body(batch, false, null, hands, companion);
@@ -88,7 +100,7 @@ final class ExternalBrain {
         if (events != null) {
             texts.add(events);
         }
-        String state = hands.runtimeState(companion).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        String state = await(hands, hands.runtimeState(companion));
         if (state != null && !state.isBlank()) {
             texts.add(state);
         }

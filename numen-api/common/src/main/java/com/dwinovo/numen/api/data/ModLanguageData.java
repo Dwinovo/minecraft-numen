@@ -548,6 +548,8 @@ public final class ModLanguageData {
         public static final String COMMAND_TOKEN_REVOKED = "numen.command.token_revoked";
         public static final String COMMAND_TOKEN_NOT_FOUND = "numen.command.token_not_found";
         public static final String COMMAND_TOKEN_NO_COMPANION = "numen.command.token_no_companion";
+        public static final String COMMAND_TOKEN_COPIED = "numen.command.token_copied";
+        public static final String COMMAND_TOKEN_USAGE = "numen.command.token_usage";
         public static final String DEBUG_ON          = "numen.debug.on";
         public static final String DEBUG_OFF         = "numen.debug.off";
 
@@ -588,6 +590,8 @@ public final class ModLanguageData {
         public static final String CMD_COMPACT_QUEUED = "numen.cmd.compact_queued";
         public static final String CMD_GOAL = "numen.cmd.goal";
         public static final String CMD_GOAL_ARGS = "numen.cmd.goal_args";
+        public static final String CMD_TOKEN = "numen.cmd.token";
+        public static final String CMD_TOKEN_ARGS = "numen.cmd.token_args";
         public static final String CMD_GOAL_NONE_TO_CLEAR = "numen.cmd.goal_none_to_clear";
         public static final String CMD_GOAL_CLEARED = "numen.cmd.goal_cleared";
         public static final String CMD_GOAL_REPLACED = "numen.cmd.goal_replaced";
@@ -1282,17 +1286,19 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_SKIN_FAILED,    "Skin '%1$s' could not be prepared: %2$s");
         adder.add(Keys.COMMAND_SKIN_FULL,      "You already have %s skins being prepared; wait for one to finish");
         adder.add("numen.skin.error.bad_image", "The image cannot be used: %s");
-        adder.add(Keys.COMMAND_TOKEN_ISSUED, "Issued token %s (%s, %s). It is shown only once — click it to copy:");
+        adder.add(Keys.COMMAND_TOKEN_ISSUED, "Issued token %s (%s, %s). It is shown only once; the full secret is now on your clipboard:");
         adder.add(Keys.COMMAND_TOKEN_UNAVAILABLE,
                 "The token store can't be read, so tokens can't be issued, listed or revoked, and the endpoint refuses "
-                        + "every token. File: %s — %s. Fix or move the file and restart the server.");
+                        + "every token. File: %s — %s. Fix or move the file and restart the game.");
         adder.add(Keys.COMMAND_TOKEN_ENDPOINT_OFF,
-                "The remote endpoint is off. The server owner turns it on in config/numen/server/mcp_server.json.");
+                "The external brain endpoint is off. Turn it on in the settings, under Brain.");
         adder.add(Keys.COMMAND_TOKEN_LIST_NONE, "You have no tokens.");
         adder.add(Keys.COMMAND_TOKEN_ROW, "%s — %s, %s, %s");
         adder.add(Keys.COMMAND_TOKEN_REVOKED, "Revoked token %s; sessions using it are disconnected.");
         adder.add(Keys.COMMAND_TOKEN_NOT_FOUND, "You have no token %s");
         adder.add(Keys.COMMAND_TOKEN_NO_COMPANION, "You have no companion named '%s'");
+        adder.add(Keys.COMMAND_TOKEN_COPIED, "%s… (copied to the clipboard)");
+        adder.add(Keys.COMMAND_TOKEN_USAGE, "/token create <brain|channel> [all|<companion>] [days] | list | revoke <id>");
         adder.add(Keys.DEBUG_ON,          "Debug mode on: UI text shown unfiltered");
         adder.add(Keys.DEBUG_OFF,         "Debug mode off");
         adder.add(Keys.LOOP_GONE, "She is gone");
@@ -1359,6 +1365,8 @@ public final class ModLanguageData {
         adder.add(Keys.CMD_COMPACT_QUEUED, "Compacting is queued; it starts when she finishes this turn");
         adder.add(Keys.CMD_GOAL, "Long-term goal: she keeps at it turn after turn");
         adder.add(Keys.CMD_GOAL_ARGS, "<what to do> | clear");
+        adder.add(Keys.CMD_TOKEN, "Tokens for the external brain endpoint: create, list, revoke");
+        adder.add(Keys.CMD_TOKEN_ARGS, "create <brain|channel> [all|<companion>] [days] | list | revoke <id>");
         adder.add(Keys.CMD_GOAL_NONE_TO_CLEAR, "There was no goal.");
         adder.add(Keys.CMD_GOAL_CLEARED, "Cleared: %s");
         adder.add(Keys.CMD_GOAL_REPLACED, "Replaced the old one: %s");
@@ -2053,15 +2061,17 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_SKIN_FAILED,    "皮肤「%1$s」没准备好:%2$s");
         adder.add(Keys.COMMAND_SKIN_FULL,      "你已经有 %s 张皮肤在准备中,等一张好了再加");
         adder.add("numen.skin.error.bad_image", "这张图用不了:%s");
-        adder.add(Keys.COMMAND_TOKEN_ISSUED, "已发令牌 %s(%s,%s)。只显示这一次——点它复制:");
+        adder.add(Keys.COMMAND_TOKEN_ISSUED, "已发令牌 %s(%s,%s)。只显示这一次,完整令牌已复制到剪贴板:");
         adder.add(Keys.COMMAND_TOKEN_UNAVAILABLE,
-                "令牌库读不了,所以不能发、列、作废令牌,端点也拒绝所有令牌。文件:%s——%s。修好或挪走这个文件,再重启服务器。");
-        adder.add(Keys.COMMAND_TOKEN_ENDPOINT_OFF, "远程端点没开。服主在 config/numen/server/mcp_server.json 里开。");
+                "令牌库读不了,所以不能发、列、作废令牌,端点也拒绝所有令牌。文件:%s——%s。修好或挪走这个文件,再重启游戏。");
+        adder.add(Keys.COMMAND_TOKEN_ENDPOINT_OFF, "外部大脑的端点没开。在设置的「大脑」页里打开。");
         adder.add(Keys.COMMAND_TOKEN_LIST_NONE, "你还没有令牌。");
         adder.add(Keys.COMMAND_TOKEN_ROW, "%s — %s,%s,%s");
         adder.add(Keys.COMMAND_TOKEN_REVOKED, "已作废令牌 %s,用它的会话已断开。");
         adder.add(Keys.COMMAND_TOKEN_NOT_FOUND, "你没有令牌 %s");
         adder.add(Keys.COMMAND_TOKEN_NO_COMPANION, "你没有叫「%s」的同伴");
+        adder.add(Keys.COMMAND_TOKEN_COPIED, "%s…(已复制到剪贴板)");
+        adder.add(Keys.COMMAND_TOKEN_USAGE, "/token create <brain|channel> [all|<同伴>] [天数] | list | revoke <编号>");
         adder.add(Keys.DEBUG_ON,          "调试模式已开:UI 文本不过滤直出");
         adder.add(Keys.DEBUG_OFF,         "调试模式已关");
         adder.add(Keys.LOOP_GONE, "她已经不在了");
@@ -2128,6 +2138,8 @@ public final class ModLanguageData {
         adder.add(Keys.CMD_COMPACT_QUEUED, "整理记忆已排上,她手上这轮完就走");
         adder.add(Keys.CMD_GOAL, "长期目标:她会一轮接一轮做下去");
         adder.add(Keys.CMD_GOAL_ARGS, "<要做什么> | clear");
+        adder.add(Keys.CMD_TOKEN, "外部大脑端点的令牌:发、列、作废");
+        adder.add(Keys.CMD_TOKEN_ARGS, "create <brain|channel> [all|<同伴>] [天数] | list | revoke <编号>");
         adder.add(Keys.CMD_GOAL_NONE_TO_CLEAR, "本来就没有目标。");
         adder.add(Keys.CMD_GOAL_CLEARED, "清掉了:%s");
         adder.add(Keys.CMD_GOAL_REPLACED, "换掉了原来的:%s");

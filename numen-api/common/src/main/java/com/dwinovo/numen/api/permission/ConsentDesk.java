@@ -361,15 +361,13 @@ public final class ConsentDesk {
             return OwnerPresence.present(body.getUUID());
         }
 
-        /** 问她的每一位主人:在游戏里的就在游戏里问;不在游戏里的(外部大脑连着、渠道在说话)交给游戏之外的场所。 */
+        /** 问她的每一位主人:推给他们在线的客户端;答复框之外的场所(外部大脑的客户端、渠道)在客户端那头。 */
         @Override
         public void show(ConsentRequest request) {
             for (UUID keeper : body.keepers()) {
                 ServerPlayer player = body.getServer().getPlayerList().getPlayer(keeper);
                 if (player != null) {
                     Replies.consent(player, body.getName().getString(), ConsentRequestPayload.of(request));
-                } else {
-                    ConsentVenues.show(keeper, ConsentVenues.Offer.of(body.getName().getString(), request));
                 }
             }
         }
@@ -390,13 +388,12 @@ public final class ConsentDesk {
             }
         }
 
-        /** 一位主人那边挂着的请求撤掉:游戏里的他,和游戏之外问着他的场所。 */
+        /** 一位主人那边挂着的请求撤掉。 */
         private void withdraw(UUID keeper, long id, ConsentRequestPayload gone) {
             ServerPlayer player = body.getServer().getPlayerList().getPlayer(keeper);
             if (player != null) {
                 Replies.consent(player, body.getName().getString(), gone);
             }
-            ConsentVenues.clear(keeper, id, gone.withdrawnBecause());
         }
 
         @Override

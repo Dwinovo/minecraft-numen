@@ -671,7 +671,7 @@ public final class ClientLibraries {
     }
 
     public static McpServerState mcpServer() {
-        JsonArray rows = entries(Libraries.MCP_SERVER);
+        JsonArray rows = entries(LibraryDesk.MCP_SERVER);
         if (rows.isEmpty()) {
             return null;
         }

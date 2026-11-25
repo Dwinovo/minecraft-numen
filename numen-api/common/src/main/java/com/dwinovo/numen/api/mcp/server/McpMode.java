@@ -9,62 +9,49 @@ import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
 import com.dwinovo.numen.api.permission.ConsentDesk;
-import com.dwinovo.numen.api.permission.ConsentVenues;
-import com.dwinovo.numen.api.platform.Services;
+import com.dwinovo.numen.api.mind.ConsentVenues;
 import com.dwinovo.numen.mcp.server.McpEndpoint;
 import com.dwinovo.numen.mcp.server.McpPresence;
 import com.dwinovo.numen.mcp.server.McpQuestion;
 
-import java.util.HashSet;
-import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
 
 /**
- * 远程端点宿主的唯一状态源——界面、驾驶席闸门、命令、HTTP 服务器共读的一处真相。
+ * 外部大脑的端点宿主,在主人的客户端上:这台电脑上的 HTTP 服务器(默认绑 127.0.0.1)、令牌、渠道信箱,和谁在驾驶的唯一判据。
+ * 外部大脑经它驱动她,走的是内置大脑同一条座位({@code LoopHost});服务端不知道驾驶的是哪一个。
  *
- * <h2>端点 = 服务器开关</h2>
+ * <h2>端点 = 开关</h2>
  * {@link McpConfig#enabled} 开着,HTTP 服务器就在跑;关着,没人连得上。设置里拨动开关 → {@link #setEnabled}
- * 即时起停并写回配置文件。专用服默认关,服主自己开。
+ * 即时起停并写回配置文件。默认关。
  *
  * <h2>谁在驾驶:{@link #driving}</h2>
- * 驾驶席按同伴算:她主人名下有连着的、身份是大脑的令牌,且其作用域管着她,外部大脑就坐在她的驾驶席上,
- * 内置大脑一轮都不开(循环内核每次推进都现问它,在它手里时停牌 {@code EXTERNAL})。外部大脑断开了,
+ * 驾驶席按同伴算:主人名下有连着的、身份是大脑的令牌,且其作用域管着她,外部大脑就坐在她的驾驶席上,
+ * 内置大脑一轮都不开({@code LoopHost.tick} 每刻现问它,在它手里时停牌 {@code EXTERNAL})。外部大脑断开了,
  * 驾驶席现算地交还内脑——"连着"的口径只在 {@link McpPresence} 一处。
  *
- * <h2>线程</h2>
- * {@link #enabled()} 被渲染线程和游戏主线程高频读,故用 volatile 裸字段;在场记录由 HTTP 线程写入、主线程读。
+ * <p>线程:{@link #enabled()} 被渲染线程和客户端主线程高频读,故用 volatile 裸字段;在场记录由 HTTP 线程写入、主线程读。
  */
 public final class McpMode {
-
-    private static final McpMode INSTANCE = new McpMode();
-
-    /** 谁连上了、谁断开了:装载方(服务端)据此告诉主人,并重算他在不在。每刻在主线程上查一次边沿。 */
-    public interface Watch {
-
-        /** 这位主人的外部大脑连上了。 */
-        void connected(UUID owner);
-
-        /** 这位主人的外部大脑断开了(最后一个会话也不再连着)。 */
-        void gone(UUID owner);
-    }
 
     private volatile boolean enabled;
     private volatile String lastError;       // 起服失败的原因,给 UI 显示
 
-    private Home home;
-    private McpConfig config = McpConfig.disabledDefault();
+    private final Home home;
+    private final UUID owner;
+    private final ExternalHands hands;
+    private final ConsentVenues venues;
+    private final String version;
+    private final McpTokens tokens;
+    private final McpPresence presence;
+    private final McpLimits limits;
+    private final McpChannels channels = new McpChannels();
+    private final McpAudit audit;
+    private final McpStrangers strangers;
+    private McpConfig config;
     private McpEndpoint endpoint;
-    private McpTokens tokens;
-    private McpPresence presence;
-    private McpLimits limits;
-    private McpChannels channels;
-    private McpAudit audit;
-    private McpStrangers strangers;
-    private Function<UUID, ExternalHands> hands;
-    private Watch watch;
-    /** 上一刻有大脑连着的主人,找连上、断开的边沿。只在主线程碰。 */
-    private Set<UUID> connectedOwners = Set.of();
+
+    /** 配置文件名,在端点的家里。 */
+    static final String CONFIG_FILE = "mcp_server.json";
 
     /** 选项的值:问人的表单里三个选项,答复回来按它们认。 */
     private static final String ALLOW = "allow";
@@ -72,23 +59,22 @@ public final class McpMode {
     private static final String DENY = "deny";
 
     /**
-     * 外部大脑客户端上的人:经 elicitation 问。服务器在跑才有;跟着服务器起停。
+     * 外部大脑客户端上的人:经 elicitation 问。端点在跑才有;跟着端点起停。
      * 外部大脑驾驶时,要问主人的事问的是坐在电脑前的人,不是驾驶席上的模型:经大脑令牌的客户端开着的流去问
-     * ({@link McpEndpoint#ask}),主人在别处答了或到期就撤回;人的选择走和游戏里答复框同一个 {@code ConsentDesk.reply}。
-     * 客户端没声明会答 elicitation 的,征询就挂到主人进游戏答,到期按拒绝。服务端没有任何让模型自己答的口。
+     * ({@link McpEndpoint#ask}),主人在别处答了或到期就撤回;人的选择走和答复框同一条路({@link ExternalHands#answer})。
+     * 客户端没声明会答 elicitation 的,征询就挂在答复框里,到期按拒绝。这里没有任何让模型自己答的口。
      */
     private final ConsentVenues.Venue elicitation = new ConsentVenues.Venue() {
         @Override
-        public void show(UUID owner, ConsentVenues.Offer offer) {
+        public void show(ConsentVenues.Offer offer) {
             McpEndpoint e = endpoint;
-            Function<UUID, ExternalHands> h = hands;
-            if (e != null && h != null) {
-                e.ask(offer.id(), owner, offer.companion(), question(offer), answer -> settle(h, owner, offer, answer));
+            if (e != null) {
+                e.ask(offer.id(), owner, offer.companion(), question(offer), answer -> settle(offer, answer));
             }
         }
 
         @Override
-        public void clear(UUID owner, long id, ConsentDesk.Withdrawal why) {
+        public void clear(long id, ConsentDesk.Withdrawal why) {
             McpEndpoint e = endpoint;
             if (e != null) {
                 e.withdraw(id);
@@ -109,11 +95,10 @@ public final class McpMode {
     }
 
     /**
-     * 人的选择交给征询台:选了哪项就是哪项,明确拒绝是拒绝,关掉弹窗没选不算答复——征询仍挂着,主人可以进游戏答,到期按拒绝。
+     * 人的选择交给答复的口:选了哪项就是哪项,明确拒绝是拒绝,关掉弹窗没选不算答复——征询仍挂着,主人可以在答复框里答,到期按拒绝。
      * 附言只随拒绝。
      */
-    private static void settle(Function<UUID, ExternalHands> hands, UUID owner, ConsentVenues.Offer offer,
-                               McpQuestion.Answer answer) {
+    private void settle(ConsentVenues.Offer offer, McpQuestion.Answer answer) {
         ConsentAnswer.Decision decision;
         if (answer.declined()) {
             decision = ConsentAnswer.Decision.DENY;
@@ -128,42 +113,42 @@ public final class McpMode {
             };
         }
         if (decision != null) {
-            hands.apply(owner).answer(offer.companion(), offer.id(), decision,
+            hands.answer(offer.companion(), offer.id(), decision,
                     decision == ConsentAnswer.Decision.DENY ? answer.note() : "");
         }
     }
 
-    private McpMode() {}
-
-    public static McpMode instance() {
-        return INSTANCE;
+    /**
+     * @param home    端点的家:配置、令牌库、审计都在这里
+     * @param owner   这台电脑上的玩家:令牌只认他名下的同伴
+     * @param hands   她们的手,端点对她们的全部接触都经它
+     * @param venues  征询的场所:端点在跑时,外部大脑客户端上的人也是一个
+     * @param version Numen API 这个模组的版本,serverInfo 里报
+     */
+    public McpMode(Home home, UUID owner, ExternalHands hands, ConsentVenues venues, String version) {
+        this.home = home;
+        this.owner = owner;
+        this.hands = hands;
+        this.venues = venues;
+        this.version = version;
+        this.config = McpConfig.load(home.file(CONFIG_FILE), home.io());
+        this.tokens = new McpTokens(home.dir(), home.io(), System::currentTimeMillis);
+        this.presence = new McpPresence(System::currentTimeMillis);
+        this.limits = new McpLimits(config.limits(), System::currentTimeMillis);
+        this.audit = new McpAudit(home.dir(), home.io());
+        this.strangers = new McpStrangers(audit, System::currentTimeMillis);
     }
 
     // ---- 生命周期 ----
 
-    /** 装载配置:记住服务器的家、同伴的手和通知口,enabled 则立刻起服。大脑所在的那一端启动时调一次。 */
-    void bootstrap(Home serverHome, Function<UUID, ExternalHands> hands, Watch watch) {
-        this.home = serverHome;
-        this.hands = hands;
-        this.watch = watch;
-        this.config = McpConfig.load(serverHome.file(CONFIG_FILE), serverHome.io());
-        this.tokens = new McpTokens(serverHome.dir(), serverHome.io(), System::currentTimeMillis);
-        this.presence = new McpPresence(System::currentTimeMillis);
-        this.limits = new McpLimits(config.limits(), System::currentTimeMillis);
-        this.audit = new McpAudit(serverHome.dir(), serverHome.io());
-        this.strangers = new McpStrangers(audit, System::currentTimeMillis);
-        this.channels = new McpChannels();
-        this.connectedOwners = Set.of();
+    /** 配置里开着就起服。连上服务器、大脑建起来之后调一次。 */
+    public void start() {
         if (config.enabled()) {
             startServer();
         } else {
-            this.enabled = false;
-            Constants.LOG.info("[numen-mcp] the remote endpoint is off (the server owner turns it on in {})", CONFIG_FILE);
+            Constants.LOG.info("[numen-mcp] the external brain endpoint is off (turn it on in the settings or {})", CONFIG_FILE);
         }
     }
-
-    /** 配置文件名,在服务器的家里。 */
-    static final String CONFIG_FILE = "mcp_server.json";
 
     /**
      * 拨动开关:即时起停服务器并写回配置文件。
@@ -211,33 +196,22 @@ public final class McpMode {
         return config;
     }
 
-    /** 令牌库;宿主没装载时是 null。 */
+    /** 令牌库。 */
     public McpTokens tokens() {
         return tokens;
     }
 
-    /** 大脑所在的那一端关停时放手:服务器停掉,会话结束,不碰配置文件里的开关(下次起来照旧)。 */
+    /** 断线时放手:服务器停掉,会话结束,不碰配置文件里的开关(下次起来照旧)。 */
     public void shutdown() {
         stopServer();
-        presence = null;
-        tokens = null;
-        limits = null;
-        audit = null;
-        strangers = null;
-        channels = null;
-        hands = null;
-        watch = null;
-        home = null;
-        connectedOwners = Set.of();
-        config = McpConfig.disabledDefault();
-        Constants.LOG.info("[numen-mcp] the remote endpoint host shuts down with this side");
+        Constants.LOG.info("[numen-mcp] the external brain endpoint shuts down with this connection");
     }
 
     private boolean startServer() {
         lastError = null;
         limits.configure(config.limits());
         McpEndpoint s = new McpEndpoint(config, tokens, limits, audit, strangers, presence,
-                new ExternalHost(hands, channels, Services.platform().modVersion(Constants.MOD_ID)));
+                new ExternalHost(hands, channels, version));
         try {
             s.start();
         } catch (Exception ex) {
@@ -248,8 +222,8 @@ public final class McpMode {
         }
         endpoint = s;
         enabled = true;
-        ConsentVenues.register(elicitation);
-        Constants.LOG.info("[numen-mcp] the remote endpoint is on, {}; each token is issued with /numen token", endpoint());
+        venues.register(elicitation);
+        Constants.LOG.info("[numen-mcp] the remote endpoint is on, {}; each token is issued with /token in the companion chat", endpoint());
         if (config.lanExposed()) {
             Constants.LOG.warn("[numen-mcp] the endpoint is bound to {} over plain HTTP: tokens travel the network in clear text. "
                     + "Put a reverse proxy with HTTPS in front of it and bind the endpoint itself to loopback only", config.host());
@@ -258,12 +232,11 @@ public final class McpMode {
     }
 
     private void stopServer() {
-        ConsentVenues.unregister(elicitation);
+        venues.unregister(elicitation);
         if (endpoint != null) {
             endpoint.stop();
             endpoint = null;
         }
-        GameWaits.clear();
         enabled = false;
         Constants.LOG.info("[numen-mcp] the remote endpoint is closed");
     }
@@ -276,64 +249,18 @@ public final class McpMode {
     }
 
     /** 这只同伴的驾驶席此刻在外部大脑手里吗。 */
-    public boolean driving(UUID owner, UUID companion) {
-        McpPresence p = presence;
-        return enabled && p != null && p.drives(owner, companion);
+    public boolean driving(UUID companion) {
+        return enabled && presence.drives(owner, companion);
     }
 
-    /** 这位主人有外部大脑连着(任何一只同伴上):"主人在不在"的一半,另一半是人在不在游戏里。 */
-    public boolean brainConnected(UUID owner) {
-        McpPresence p = presence;
-        return enabled && p != null && p.brainConnected(owner);
-    }
-
-    /** 有客户端结束了会话、请求还没收场({@link McpPresence#closing}):有就是一句说明,没有(或端点没装载)是 {@code null}。 */
-    public String closing() {
-        McpPresence p = presence;
-        return p == null ? null : p.closing();
-    }
-
-    /**
-     * 有几次请求此刻停在等游戏上、等的东西还没到({@link GameWaits}:她的事件、程序收尾、渠道的回话):只读。别的在飞的请求在算,几毫秒就完。
-     * GameTest 服务器每刻据此区分"请求在算"(等它算完再往下走)与"请求在等游戏"(游戏得往前走它才等得到)。
-     */
-    public int waitingOnGame() {
-        return GameWaits.count();
-    }
-
-    /** 已经弹给外部大脑客户端上的人、答复还没交给征询台的问题有几条(端点没开是 0):只读。 */
-    public int asking() {
-        McpEndpoint e = endpoint;
-        return e == null ? 0 : e.asking();
-    }
-
-    /**
-     * 每刻一次(大脑所在的那一端驱动):令牌作废、过期的会话结束,外部大脑连上、断开的边沿。
-     * 主人有知情权——外部大脑没了得说一声,不能让她无声变成"已读不回"。
-     */
+    /** 每个客户端刻一次:令牌作废、过期的会话结束。 */
     public void tick() {
-        McpPresence p = presence;
+        presence.sweep(tokens::valid);
         McpEndpoint e = endpoint;
-        if (p == null) {
-            return;
-        }
-        p.sweep(tokens::valid);
         if (e != null) {
             e.sweep();
         }
         strangers.flushClosed();
-        Set<UUID> now = enabled ? p.brainOwners() : Set.of();
-        for (UUID owner : now) {
-            if (!connectedOwners.contains(owner)) {
-                watch.connected(owner);
-            }
-        }
-        for (UUID owner : new HashSet<>(connectedOwners)) {
-            if (!now.contains(owner)) {
-                watch.gone(owner);
-            }
-        }
-        connectedOwners = now;
     }
 
     /** 端点的地址,给界面与提示词。 */
@@ -343,10 +270,8 @@ public final class McpMode {
 
     /** 最近一次接入的客户端自报的名字,或 null(还没人接入)。 */
     public String clientName() {
-        McpPresence p = presence;
-        if (p == null) return null;
         McpPresence.Entry latest = null;
-        for (McpPresence.Entry one : p.all()) {
+        for (McpPresence.Entry one : presence.all()) {
             if (latest == null || one.lastSeen() > latest.lastSeen()) latest = one;
         }
         return latest == null ? null : latest.client();
@@ -354,11 +279,8 @@ public final class McpMode {
 
     /** 最近一次收到请求的时刻(毫秒),0 = 从未。 */
     public long lastActivityMs() {
-        McpPresence p = presence;
         long last = 0;
-        if (p != null) {
-            for (McpPresence.Entry one : p.all()) last = Math.max(last, one.lastSeen());
-        }
+        for (McpPresence.Entry one : presence.all()) last = Math.max(last, one.lastSeen());
         return last;
     }
 

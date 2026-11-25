@@ -608,7 +608,7 @@ public final class SettingsView {
             case PERSONA -> ClientCompanions.library().request(LibraryDesk.PERSONA, LibraryDesk.RELOAD, new JsonObject());
             case MCP -> ClientCompanions.library().ask(LibraryDesk.MCP_CLIENT);
             case SKILLS -> ClientCompanions.library().ask(LibraryDesk.SKILL);
-            case BRAIN -> ClientCompanions.library().ask(Libraries.MCP_SERVER);
+            case BRAIN -> ClientCompanions.library().ask(LibraryDesk.MCP_SERVER);
             case PERMISSION -> ClientCompanions.library().ask(Libraries.PERMISSION);
             case PLUGINS -> ClientCompanions.library().ask(Libraries.PLUGIN);
             default -> { }

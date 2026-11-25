@@ -3,7 +3,6 @@ package com.dwinovo.numen.api.brain;
 import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.home.Homes;
-import com.dwinovo.numen.api.mcp.server.McpMode;
 import com.dwinovo.numen.api.permission.PermissionLibrary;
 import com.dwinovo.numen.api.permission.PermissionStore;
 import com.dwinovo.numen.api.plugin.PluginRoster;
@@ -15,7 +14,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,8 +38,6 @@ public final class Libraries {
     public static final String PERMISSION = "permission";
     /** 插件花名册:人人读;开关(记在服务器的停用名单里,下次启动生效)只有管理员与房主能改,用 {@link #ENABLE}/{@link #DISABLE}。 */
     public static final String PLUGIN = "plugin";
-    /** 外接大脑宿主:接入地址、开关、超时、不暴露的工具,只有管理员读写。 */
-    public static final String MCP_SERVER = "mcp-server";
     public static final String LIST = "list";
     public static final String PUT = "put";
     public static final String DELETE = "delete";
@@ -160,7 +156,6 @@ public final class Libraries {
             case PERMISSION -> permission(owner, op, body);
             case PLUGIN -> new Done(plugin(admin || sources.host(owner), op, body), true);
             case SKIN_FILES -> LIST.equals(op) ? Done.ok() : Done.problem("unknown operation");
-            case MCP_SERVER -> new Done(mcpServer(admin, op, body), true);
             default -> Done.problem("unknown library");
         };
         return new Result(view(owner, admin, kind), done.problem(), done.shared() && done.problem() == null);
@@ -174,11 +169,6 @@ public final class Libraries {
             case SKIN_FILES -> fileRows(owner, out);
             case PLUGIN -> pluginRows(admin || sources.host(owner), out);
             case PERMISSION -> out.addAll(PermissionLibrary.view(sources.permission(owner)));
-            case MCP_SERVER -> {
-                if (admin) {
-                    out.add(mcpServerView());
-                }
-            }
             default -> { }
         }
         return out.toString();
@@ -343,66 +333,6 @@ public final class Libraries {
         return sources.plugins().setDisabled(string(body, "id"), DISABLE.equals(op));
     }
 
-    /** 外接大脑宿主的整份状态:配置、谁连着、起服失败的原因。令牌不在这里:它们是主人在游戏里用命令发的。 */
-    private static JsonObject mcpServerView() {
-        McpMode mode = McpMode.instance();
-        var cfg = mode.config();
-        JsonObject o = new JsonObject();
-        o.addProperty("enabled", mode.enabled());
-        o.addProperty("host", cfg.host());
-        o.addProperty("port", cfg.port());
-        o.addProperty("lanExposed", cfg.lanExposed());
-        o.addProperty("callTimeoutSeconds", cfg.callTimeoutSeconds());
-        JsonArray hidden = new JsonArray();
-        cfg.hiddenTools().forEach(hidden::add);
-        o.add("hiddenTools", hidden);
-        o.addProperty("endpoint", mode.endpoint());
-        if (mode.clientName() != null) {
-            o.addProperty("clientName", mode.clientName());
-        }
-        o.addProperty("lastActivityMs", mode.lastActivityMs());
-        if (mode.lastError() != null) {
-            o.addProperty("lastError", mode.lastError());
-        }
-        return o;
-    }
-
-    /**
-     * 外接大脑宿主:开关、端点与超时、不暴露的工具,哪些字段在 {@code put} 里就改哪些。起服失败的原因当作办不成的原因交回。
-     */
-    private String mcpServer(boolean admin, String op, JsonObject body) {
-        if (LIST.equals(op)) {
-            return null;
-        }
-        if (!admin) {
-            return "only a server admin may change the external brain";
-        }
-        if (!PUT.equals(op)) {
-            return "unknown operation";
-        }
-        McpMode mode = McpMode.instance();
-        var cfg = mode.config();
-        if (body.has("host") || body.has("port") || body.has("callTimeoutSeconds") || body.has("hiddenTools")) {
-            List<String> hidden = new ArrayList<>(cfg.hiddenTools());
-            if (body.get("hiddenTools") instanceof JsonArray names) {
-                hidden.clear();
-                names.forEach(n -> hidden.add(n.getAsString()));
-            }
-            String host = string(body, "host") == null ? cfg.host() : string(body, "host");
-            int port = body.has("port") ? body.get("port").getAsInt() : cfg.port();
-            int timeout = body.has("callTimeoutSeconds") ? body.get("callTimeoutSeconds").getAsInt()
-                    : cfg.callTimeoutSeconds();
-            if (!mode.applySettings(host, port, Math.max(1, timeout), hidden)) {
-                return mode.lastError();
-            }
-        }
-        if (body.has("enabled") && !mode.setEnabled(body.get("enabled").getAsBoolean())) {
-            return mode.lastError();
-        }
-        return null;
-    }
-
-    /** 请求里 {@code companion} 写的那只,前提是它在这位玩家名下;不是(没写、写坏了、别人的)是 {@code null}。 */
     private UUID ownedCompanion(UUID owner, JsonObject body) {
         String text = string(body, "companion");
         UUID companion;
