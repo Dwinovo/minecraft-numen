@@ -56,6 +56,11 @@ class MemoryToolTest {
             public QuestionDesk questions() {
                 throw new UnsupportedOperationException();
             }
+
+            @Override
+            public boolean channelVisit() {
+                return false;
+            }
         };
     }
 

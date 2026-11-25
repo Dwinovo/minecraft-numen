@@ -14,7 +14,7 @@ import java.util.Map;
  * 她向主人提选择题的工具,照 Claude Code 的 AskUserQuestion:一次调用问 1–4 个问题,调用挂起,主人在面板上作答,答案就是这次调用的结果
  * ({@link Questions#result})。主人的面板接管输入框({@link QuestionDesk} 与 {@link Asking} 是面板读的状态);等待没有时限,
  * 停止键、急件、她离开世界把调用放弃或打断,和别的工具被打断走同一条路({@link ToolCall#onAbandon})。大脑在主人电脑上,
- * 所以只问创建者;外接大脑与渠道来访没有这块面板,不提供这个工具({@link #waitsForOwner})。
+ * 所以只问创建者;外接大脑没有这块面板,不提供这个工具({@link #waitsForOwner}),渠道来访她的那一轮调用它当场回绝。
  */
 public final class AskUserQuestionTool implements NumenTool {
 
@@ -114,6 +114,11 @@ public final class AskUserQuestionTool implements NumenTool {
             questions = Questions.parse(call.args());
         } catch (IllegalArgumentException bad) {
             call.complete(ToolOutcome.failure(bad.getMessage()));
+            return;
+        }
+        if (call.ctx().channelVisit()) {
+            call.complete(ToolOutcome.failure("Your owner is talking to you through a chat channel, not at the game, so "
+                    + "there is no panel to answer on. Ask in your reply instead."));
             return;
         }
         QuestionDesk desk = call.ctx().questions();

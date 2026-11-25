@@ -302,7 +302,7 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
   换成 "your owner",删去计划模式与预览)。调用挂起,主人在输入框那里长出的提问面板上作答,答案就是这次调用的结果:答了、拒绝(Esc)、
   想先聊聊("聊聊这个")各有一句固定的话(`Questions`),停止键、急件、她离开世界把它放弃或打断,和别的调用走同一条路(`ToolCall.onAbandon`,
   `NumenTool.waitsForOwner`)。答了的结果信封里除 `message` 还带结构化的 `answers`,只给界面在对话流里画"你答「…」"一行,模型读到的仍只有 `message`。
-  只问创建者(大脑在他电脑上):外接大脑的工具表与渠道来访的那一轮不含它。模型的工具表是 `[lua, skill, todo, memory, AskUserQuestion]`。
+  只问创建者(大脑在他电脑上):外接大脑的工具表不含它;渠道来访她的那一轮,她调它当场收到回绝("在聊天渠道里,没有面板可答,请在回复里问"),工具表不随来访变,缓存前缀不动。模型的工具表是 `[lua, skill, todo, memory, AskUserQuestion]`。
 - **测试**:GameTest 全部从 Lua 入口调(`GameTestKit.lua`);库函数各有端到端的 GameTest(`mine`、`work.collect`、
   `fight.clear`、`build.raise`),到达方式 `reach`、`build.left`、够不着时 `build.at` 的拒绝各有一条。
 

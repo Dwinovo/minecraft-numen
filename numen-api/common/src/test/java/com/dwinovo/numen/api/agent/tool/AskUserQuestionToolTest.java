@@ -34,6 +34,7 @@ class AskUserQuestionToolTest {
                 {"label":"Coal","description":"c"},{"label":"Wood","description":"w"},{"label":"Lava","description":"l"}]}]}""";
 
     private final QuestionDesk desk = new QuestionDesk();
+    private boolean channel;
     private final AskUserQuestionTool tool = new AskUserQuestionTool();
 
     private ToolAnchor anchor() {
@@ -56,6 +57,11 @@ class AskUserQuestionToolTest {
             @Override
             public QuestionDesk questions() {
                 return desk;
+            }
+
+            @Override
+            public boolean channelVisit() {
+                return channel;
             }
         };
     }
@@ -229,6 +235,17 @@ class AskUserQuestionToolTest {
                 + "Questions asked:\n"
                 + "- \"Which furnace?\"\n  Answer: Smoker\n"
                 + "- \"Which fuels?\"\n  (No answer provided)", message(result.get()));
+    }
+
+    @Test
+    void duringAChannelVisitTheCallIsRefusedAtOnceWithWhatToDoInstead() {
+        channel = true;
+        AtomicReference<String> result = new AtomicReference<>();
+        tool.invoke(call(ONE, result));
+        assertTrue(ToolOutcome.failed(result.get()));
+        assertEquals("Your owner is talking to you through a chat channel, not at the game, so there is no panel to "
+                + "answer on. Ask in your reply instead.", message(result.get()));
+        assertNull(desk.pending(), "nothing hangs on a panel nobody sits at");
     }
 
     @Test

@@ -195,8 +195,8 @@ public final class LoopHands implements ExternalHands {
             }
             // 先开来访再送话:话一进收件箱内核就可能开轮
             visits.put(companion, channel);
-            host.visited(true);
             if (listening.add(companion)) {
+                host.visiting(() -> visits.containsKey(companion));
                 host.subscribe(event -> heard(companion, event));
             }
             host.submitPrompt(text);
@@ -217,10 +217,6 @@ public final class LoopHands implements ExternalHands {
             }
         } else if (event instanceof LoopEvent.RunEnded ended && ended.end() instanceof RunEnd.Done) {
             visits.remove(companion, channel);
-            LoopHost host = brains.get(companion);
-            if (host != null) {
-                host.visited(visits.containsKey(companion));
-            }
         }
     }
 

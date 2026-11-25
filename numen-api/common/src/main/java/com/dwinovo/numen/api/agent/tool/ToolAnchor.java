@@ -22,4 +22,7 @@ public interface ToolAnchor {
 
     /** 她向主人提的问题挂在这里({@code AskUserQuestion} 工具)。 */
     QuestionDesk questions();
+
+    /** 主人此刻是经聊天渠道在对她说话(不在游戏面板前)。 */
+    boolean channelVisit();
 }

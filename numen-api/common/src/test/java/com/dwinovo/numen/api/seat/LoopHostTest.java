@@ -316,17 +316,20 @@ class LoopHostTest {
     }
 
     @Test
-    void aChannelVisitDoesNotOfferTheToolThatNeedsTheOwnerAtThePanel() throws Exception {
-        model.say("好的").say("好的");
-        host.submitPrompt("你好");
-        until("first request", () -> model.asked.size() == 1);
-        assertTrue(model.asked.get(0).tools().stream().anyMatch(t -> t.name().equals(AskUserQuestionTool.NAME)));
+    void duringAChannelVisitAQuestionIsRefusedAndTheToolListStaysTheSame() throws Exception {
+        model.ask("ask-3", QUESTION).say("好的");
+        host.visiting(() -> true);
 
-        host.visited(true);
         host.submitPrompt("在吗");
-        until("second request", () -> model.asked.size() == 2);
-        assertTrue(model.asked.get(1).tools().stream().noneMatch(t -> t.name().equals(AskUserQuestionTool.NAME)),
-                "nobody sits at the panel during a channel visit");
-        assertTrue(model.asked.get(1).tools().stream().anyMatch(t -> t.name().equals(new ScriptTool().name())));
+        until("the refusal woke the next request", () -> model.asked.size() == 2);
+
+        assertEquals(null, host.questions().pending(), "nothing is shown at the game");
+        assertEquals(model.asked.get(0).tools().stream().map(t -> t.name()).toList(),
+                model.asked.get(1).tools().stream().map(t -> t.name()).toList(), "the cached tool list is not touched");
+        String result = model.asked.get(1).messages().stream()
+                .filter(m -> m instanceof com.dwinovo.numen.api.agent.llm.ConvoState.Msg.Tool)
+                .map(m -> ((com.dwinovo.numen.api.agent.llm.ConvoState.Msg.Tool) m).content()).findFirst().orElse("");
+        assertTrue(com.dwinovo.numen.api.agent.llm.ToolOutcome.failed(result), result);
+        assertTrue(result.contains("chat channel"), result);
     }
 }

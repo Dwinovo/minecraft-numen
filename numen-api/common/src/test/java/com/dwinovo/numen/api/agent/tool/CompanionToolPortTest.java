@@ -108,6 +108,11 @@ class CompanionToolPortTest {
         public QuestionDesk questions() {
             return desk;
         }
+
+        @Override
+        public boolean channelVisit() {
+            return false;
+        }
     }, host, new ToolBook() {
         @Override
         public List<NumenTool> all() {

@@ -36,7 +36,6 @@ import com.dwinovo.numen.api.agent.skill.SkillRegistry;
 import com.dwinovo.numen.api.agent.tool.CompanionToolPort;
 import com.dwinovo.numen.api.agent.trace.TraceRecorder;
 import com.dwinovo.numen.api.agent.trace.TraceRecorders;
-import com.dwinovo.numen.api.agent.tool.NumenTool;
 import com.dwinovo.numen.api.agent.tool.QuestionDesk;
 import com.dwinovo.numen.api.agent.tool.ToolAnchor;
 import com.dwinovo.numen.api.agent.tool.ToolBook;
@@ -140,8 +139,8 @@ public final class LoopHost implements ClientContext {
     private final CompanionToolPort tools;
     /** 她向主人提的问题挂在这里;面板读它。 */
     private final QuestionDesk questions = new QuestionDesk();
-    /** 渠道来访着:这一轮没有坐在面板前的人,问主人的工具不发给模型。 */
-    private volatile boolean visited;
+    /** 渠道此刻在来访她吗:由收渠道来访的那一头({@code LoopHands})按它的来访表回答,没有渠道就是 false。 */
+    private volatile BooleanSupplier visiting = () -> false;
     private final TokenLedger tokens;
     /** 这个进程不记轨迹({@link TraceRecorders#recording})时是 {@code null}。 */
     private final TraceRecorder trace;
@@ -220,6 +219,11 @@ public final class LoopHost implements ClientContext {
             @Override
             public QuestionDesk questions() {
                 return questions;
+            }
+
+            @Override
+            public boolean channelVisit() {
+                return visiting.getAsBoolean();
             }
         };
         this.tools = new CompanionToolPort(companion, () -> anchor, programs, parts.tools(), this::receiptAfterCut);
@@ -475,9 +479,9 @@ public final class LoopHost implements ClientContext {
         return questions;
     }
 
-    /** 渠道来访开始或结束:来访期间没有坐在面板前的人,等主人作答的工具不发给模型。 */
-    public void visited(boolean on) {
-        visited = on;
+    /** 渠道来访的来访表在谁手里:她被渠道来访着的时候,问主人的工具当场回绝。 */
+    public void visiting(BooleanSupplier visiting) {
+        this.visiting = visiting;
     }
 
     /** 订阅循环事件:界面、记账之外的人在这里接。 */
@@ -675,12 +679,6 @@ public final class LoopHost implements ClientContext {
     /** 外接大脑替她说话:和内脑的一条回复同一个出口,见 {@link AgentLoop#said}。 */
     public void externalSay(String text) {
         loop.said(new AssistantTurn(text, List.of(), null));
-    }
-
-    /** 这一轮发给模型的工具:渠道来访着时不含等主人作答的。 */
-    private List<NumenTool> offered() {
-        List<NumenTool> all = parts.tools().all();
-        return visited ? all.stream().filter(tool -> !tool.waitsForOwner()).toList() : all;
     }
 
     /** 切断后程序交出的回执:这一批已经作废,她仍必须知道切断前做了什么,所以作为一条事件进收件箱。 */
@@ -958,7 +956,7 @@ public final class LoopHost implements ClientContext {
             // xml 只算一次:记下来的必须就是发出去的那一份
             String xml = body.xml();
             ModelRequest request = AgentRequestContext.turn(convo.snapshot(), xml, personaText(), catalog,
-                    modules.hers(), modules.disabled(), skills.formatXml(), offered());
+                    modules.hers(), modules.disabled(), skills.formatXml(), parts.tools().all());
             if (trace != null) {
                 trace.turn(runId, n, turnBody(endpoint, xml));
             }
