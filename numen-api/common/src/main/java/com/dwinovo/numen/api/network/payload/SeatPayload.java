@@ -49,13 +49,14 @@ public record SeatPayload(Type<SeatPayload> type, String json) implements Custom
     /**
      * 一条消息装成这个方向上的包,发送之前量过:装不下一整条消息的上限({@link Wire#MESSAGE_BYTES})的不装。
      *
-     * @throws IOException 消息太长,送不出去;说明写给收到失败的那一方看
+     * @throws com.dwinovo.numen.mcp.rpc.MessageTooBig 消息太长,送不出去;说明写给收到失败的那一方看
      */
     public static SeatPayload frame(Wire direction, RpcMessage message) throws IOException {
         SeatPayload payload = new SeatPayload(typeOf(direction), message.encode());
         int size = Wire.size(codecOf(direction), payload, Unpooled::buffer);
         if (!direction.carries(size)) {
-            throw new IOException(direction.tooBigMessage("This message", size) + ", so it was not sent");
+            throw new com.dwinovo.numen.mcp.rpc.MessageTooBig(direction.tooBigMessage("This message", size)
+                    + ", so it was not sent. Ask for less of it at a time.");
         }
         return payload;
     }

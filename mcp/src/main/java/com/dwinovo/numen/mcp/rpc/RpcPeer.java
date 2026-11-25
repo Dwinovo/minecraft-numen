@@ -188,9 +188,20 @@ public final class RpcPeer {
         }
         try {
             replyTo.send(response);
+        } catch (MessageTooBig tooBig) {
+            // 路通着、这份答复装不下:换成一条说明原因的错误,请求方马上知道该少要一些
+            answerFailed(request, replyTo, new RpcError(RpcError.INTERNAL_ERROR, tooBig.getMessage(), null));
         } catch (IOException gone) {
             // 请求来时的那条路已经断了(对方走了):答复没处可交,照规范断开不等于撤回,处理已经做完
             LOG.debug("[numen-mcp] reply to {} {} not delivered: {}", request.method(), request.id(), gone.toString());
+        }
+    }
+
+    private void answerFailed(RpcMessage.Request request, Outbound replyTo, RpcError error) {
+        try {
+            replyTo.send(RpcMessage.Response.failed(request.id(), error));
+        } catch (IOException gone) {
+            LOG.debug("[numen-mcp] error reply to {} {} not delivered: {}", request.method(), request.id(), gone.toString());
         }
     }
 

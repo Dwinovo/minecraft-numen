@@ -1,18 +1,15 @@
 package com.dwinovo.numen.api.seat;
 
 import com.dwinovo.numen.api.Constants;
-import com.dwinovo.numen.api.network.Wire;
 import com.dwinovo.numen.api.sdk.Dispatcher;
 import com.dwinovo.numen.mcp.rpc.RpcException;
 import com.dwinovo.numen.mcp.rpc.RpcMessage;
 import com.dwinovo.numen.mcp.rpc.RpcPeer;
 import com.dwinovo.numen.script.ApiReply;
-import com.dwinovo.numen.script.ErrorKind;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -34,9 +31,6 @@ import java.util.function.Consumer;
  * <p>线程:{@link #receive} 任何线程;通知的监听在收到它的线程上跑,不许阻塞;客户端函数在 {@code main} 上执行。
  */
 public final class SeatClient {
-
-    /** 一条消息的信封(id、字段名、长度前缀)留的余量,量答复装不装得下用。 */
-    private static final int ENVELOPE_BYTES = 256;
 
     private final Executor main;
     private final RpcPeer peer;
@@ -200,8 +194,8 @@ public final class SeatClient {
     }
 
     /**
-     * 程序里的客户端函数:在客户端主线程上执行,答复就是那次调用的 {@code ApiReply}。答复装不下一条消息的上限,换成一条说明这件事的失败,
-     * 让程序知道该少要一些。服务端撤回(超时、程序结束)时处理线程被打断,不再答复。
+     * 程序里的客户端函数:在客户端主线程上执行,答复就是那次调用的 {@code ApiReply}。答复装不下一条消息的上限时由 {@code RpcPeer}
+     * 换成一条说明这件事的错误答复({@link com.dwinovo.numen.mcp.rpc.MessageTooBig})。服务端撤回(超时、程序结束)时处理线程被打断,不再答复。
      */
     private JsonElement clientCall(RpcPeer.Incoming in) throws Exception {
         UUID companion = Params.uuid(in.params(), "companion");
@@ -209,12 +203,6 @@ public final class SeatClient {
         JsonObject args = Params.object(in.params(), "args");
         CompletableFuture<String> reply = new CompletableFuture<>();
         main.execute(() -> Dispatcher.client(function, args, companion, reply::complete));
-        String text = reply.get();
-        int size = text.getBytes(StandardCharsets.UTF_8).length + ENVELOPE_BYTES;
-        if (!Wire.TO_SERVER.carries(size)) {
-            text = ApiReply.error(ErrorKind.FAILED, Wire.TO_SERVER.tooBigMessage("The result of this call", size)
-                    + ", so it was not sent. Ask for less of it at a time.", null, null).toString();
-        }
-        return JsonParser.parseString(text);
+        return JsonParser.parseString(reply.get());
     }
 }

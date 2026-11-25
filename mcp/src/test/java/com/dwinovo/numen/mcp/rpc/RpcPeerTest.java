@@ -48,6 +48,31 @@ class RpcPeerTest {
     }
 
     @Test
+    void anAnswerThatIsTooBigToSendIsReplacedByAnErrorTheRequesterReads() throws Exception {
+        RpcPeer server = peer();
+        server.onRequest("big", request -> new JsonPrimitive("x"));
+        RpcPeer client = peer();
+        Wire toServer = new Wire();
+        Wire toClient = new Wire();
+        AtomicBoolean refusedOnce = new AtomicBoolean();
+        RpcPeer.Outbound refusingTheResult = message -> {
+            if (message instanceof RpcMessage.Response ok && ok.error() == null && !refusedOnce.getAndSet(true)) {
+                throw new MessageTooBig("this answer is over the limit");
+            }
+            toClient.send(message);
+        };
+
+        RpcPeer.Outgoing outgoing = client.request("big", null, toServer);
+        server.receive((RpcMessage) toServer.next(), refusingTheResult);
+        client.receive((RpcMessage) toClient.next(), toServer);
+
+        Throwable failed = assertThrows(java.util.concurrent.ExecutionException.class,
+                () -> outgoing.result().get(1, TimeUnit.SECONDS)).getCause();
+        assertInstanceOf(RpcException.class, failed);
+        assertTrue(failed.getMessage().contains("over the limit"), failed.getMessage());
+    }
+
+    @Test
     void aRequestIsAnsweredByItsHandlerAndTheAnswerMatchesTheId() throws Exception {
         RpcPeer server = peer();
         server.onRequest("echo", request -> request.params());
