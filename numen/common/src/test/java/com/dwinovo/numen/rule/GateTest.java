@@ -170,7 +170,7 @@ class GateTest {
     @Test
     void anAllowBeatsAnAskTierButNotADenyTierAndWithNobodyTalkingTheTierDecides() {
         FakeWorld world = new FakeWorld().set(POS, Blocks.STONE.defaultBlockState());
-        assertTrue(gateWith(Settings.FACTORY, Map.of("yes", SAYS_YES)).judge(Action.drop(Items.DIAMOND), world).allowed(),
+        assertTrue(gateWith(Settings.FACTORY, Map.of("yes", SAYS_YES)).judge(Action.drop(Items.DIAMOND, 1), world).allowed(),
                 "档位是问时,回答者的许算数");
 
         Settings observe = Settings.FACTORY.with(Preset.OBSERVE);
@@ -180,10 +180,10 @@ class GateTest {
         assertEquals("the owner's setting for break is deny", denied.cause());
 
         Verdict dropAsks = gateWith(Settings.FACTORY, Map.<String, Answerer>of())
-                .judge(Action.drop(Items.DIAMOND), world);
+                .judge(Action.drop(Items.DIAMOND, 1), world);
         assertEquals(Tier.ASK, dropAsks.tier(), "扔东西出厂是问");
         Settings dropAllowed = new Edit.SetTier(Verb.DROP, Tier.ALLOW).applyTo(Settings.FACTORY);
-        assertTrue(gateWith(dropAllowed, Map.<String, Answerer>of()).judge(Action.drop(Items.DIAMOND), world).allowed());
+        assertTrue(gateWith(dropAllowed, Map.<String, Answerer>of()).judge(Action.drop(Items.DIAMOND, 1), world).allowed());
     }
 
     @Test
@@ -205,7 +205,7 @@ class GateTest {
         assertEquals("minecraft:oak_log", Action.useBlock(POS, world.getBlockState(POS)).key());
         assertEquals("minecraft:oak_planks", Action.place(POS, Blocks.AIR.defaultBlockState(), Items.OAK_PLANKS).key(),
                 "放记的是放的那样东西");
-        assertEquals("minecraft:diamond", Action.drop(Items.DIAMOND).key());
+        assertEquals("minecraft:diamond", Action.drop(Items.DIAMOND, 1).key());
         assertEquals("minecraft:ender_pearl", Action.useItem(Items.ENDER_PEARL).key());
         assertEquals("", Action.place(POS, Blocks.AIR.defaultBlockState(), null).key(), "规划期还不知道耗材");
     }

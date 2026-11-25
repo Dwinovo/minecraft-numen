@@ -24,8 +24,9 @@ import java.util.TreeSet;
  * @param entity  实体动作的对象
  * @param item    放/丢的物品;规划期还不知道会用哪种耗材时为 null
  * @param command 执行的游戏指令;其余动作为 null
+ * @param count   丢的件数(征询清单上写的就是它);其余动作是 1
  */
-public record Action(Verb kind, BlockPos pos, BlockState state, Entity entity, Item item, CommandLine command) {
+public record Action(Verb kind, BlockPos pos, BlockState state, Entity entity, Item item, CommandLine command, int count) {
 
     /**
      * 一条游戏指令。规则按根名认它({@code command(setblock)}),认的是 {@link #names}:她打的那个根,连同服务器
@@ -47,33 +48,34 @@ public record Action(Verb kind, BlockPos pos, BlockState state, Entity entity, I
     }
 
     public static Action breakBlock(BlockPos pos, BlockState state) {
-        return new Action(Verb.BREAK, pos, state, null, null, null);
+        return new Action(Verb.BREAK, pos, state, null, null, null, 1);
     }
 
     /** @param item 要放的物品;规划期未定时传 null */
     public static Action place(BlockPos pos, BlockState current, Item item) {
-        return new Action(Verb.PLACE, pos, current, null, item, null);
+        return new Action(Verb.PLACE, pos, current, null, item, null, 1);
     }
 
     public static Action attack(Entity target) {
-        return new Action(Verb.ATTACK, null, null, target, null, null);
+        return new Action(Verb.ATTACK, null, null, target, null, null, 1);
     }
 
     public static Action useBlock(BlockPos pos, BlockState state) {
-        return new Action(Verb.USE_BLOCK, pos, state, null, null, null);
+        return new Action(Verb.USE_BLOCK, pos, state, null, null, null, 1);
     }
 
     public static Action useEntity(Entity target) {
-        return new Action(Verb.USE_ENTITY, null, null, target, null, null);
+        return new Action(Verb.USE_ENTITY, null, null, target, null, null, 1);
     }
 
-    public static Action drop(Item item) {
-        return new Action(Verb.DROP, null, null, null, item, null);
+    /** @param count 要丢几件 */
+    public static Action drop(Item item, int count) {
+        return new Action(Verb.DROP, null, null, null, item, null, count);
     }
 
     /** 用手里的东西:对着空气右键,或右键方块、实体没被吃掉、落到物品自用的那一下。 */
     public static Action useItem(Item item) {
-        return new Action(Verb.USE_ITEM, null, null, null, item, null);
+        return new Action(Verb.USE_ITEM, null, null, null, item, null, 1);
     }
 
     /**
@@ -98,7 +100,7 @@ public record Action(Verb kind, BlockPos pos, BlockState state, Entity entity, I
                 }
             }
         }
-        return new Action(Verb.COMMAND, null, null, null, null, new CommandLine(text, root, names));
+        return new Action(Verb.COMMAND, null, null, null, null, new CommandLine(text, root, names), 1);
     }
 
     /** 一个根真正指向的节点:别名重定向去的那个,不是别名就是它自己。 */

@@ -29,7 +29,7 @@ class ConsentTest extends Scenario {
 
         ConsentRequestPayload ask = owner.awaitConsent();
         assertEquals(rin, ask.companion());
-        assertTrue(!ask.lines().isEmpty() && ask.lines().get(0).count() >= 1, "the request does not say what she wants: " + ask);
+        assertTrue(!ask.lines().isEmpty() && ask.lines().get(0).count() == 4, "the request does not say what she wants: " + ask);
 
         owner.answer(ask, ConsentAnswer.Decision.ALLOW_ONCE);
 

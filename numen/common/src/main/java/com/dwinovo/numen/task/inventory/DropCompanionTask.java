@@ -54,7 +54,7 @@ public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTask
      * 不许就带着理由收场。
      */
     private TaskState tryDrop() {
-        Permit permit = gate().permit(com.dwinovo.numen.api.permission.Action.drop(r.which.item()));
+        Permit permit = gate().permit(com.dwinovo.numen.api.permission.Action.drop(r.which.item(), r.count));
         if (permit.state() == PermitState.WAITING) {
             return TaskState.RUNNING;
         }

@@ -37,9 +37,10 @@ import java.util.Map;
  *                   改设置的征询({@link #settingsEdit})不能记,为空串——她不能给自己发许可
  * @param cause      为什么要问:英文一句({@code belongs to the owner})
  * @param shownCause 同一句给主人看的
+ * @param count      这一条说几件:丢几件;其余动作是 1
  */
 public record ConsentItem(Verb kind, BlockPos pos, int entityId, String subject, Item icon, Component name,
-                          String key, String cause, Component shownCause) {
+                          String key, String cause, Component shownCause, int count) {
 
     public static final int NO_ENTITY = -1;
 
@@ -57,7 +58,7 @@ public record ConsentItem(Verb kind, BlockPos pos, int entityId, String subject,
         String shown = "/" + line;
         return new ConsentItem(Verb.COMMAND, null, NO_ENTITY, shown, null, Component.literal(shown), "",
                 "changes the owner's permission settings",
-                Component.translatable(ModLanguageData.Keys.PERMISSION_SETTINGS_EDIT));
+                Component.translatable(ModLanguageData.Keys.PERMISSION_SETTINGS_EDIT), 1);
     }
 
     /** 点"以后都允许"会记下什么:这一条的动作与名字;不能记的为 null。 */
@@ -70,7 +71,7 @@ public record ConsentItem(Verb kind, BlockPos pos, int entityId, String subject,
      * (动作、{@code head} 的图标或名字、数量、{@code head} 的 {@code shownCause})都从这一堆出。
      *
      * @param head  这一堆的第一条
-     * @param count 这一堆有几条
+     * @param count 这一堆合起来说几件(挖几块、丢几件)
      * @param cells 这一堆点得出的格子(实体与丢弃没有)
      */
     public record Group(ConsentItem head, int count, List<BlockPos> cells) {
@@ -93,17 +94,17 @@ public record ConsentItem(Verb kind, BlockPos pos, int entityId, String subject,
                 yield new ConsentItem(action.kind(), null, entity.getId(),
                         BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).getPath(), null,
                         thisOne ? entity.getName() : entity.getType().getDescription(), key, verdict.cause(),
-                        verdict.shown());
+                        verdict.shown(), 1);
             }
             case DROP, USE_ITEM -> {
                 Subject subject = Subject.of(action);
                 yield new ConsentItem(action.kind(), null, NO_ENTITY, subject.id, subject.icon, subject.name, key,
-                        verdict.cause(), verdict.shown());
+                        verdict.cause(), verdict.shown(), action.count());
             }
             default -> {
                 Subject subject = Subject.of(action);
                 yield new ConsentItem(action.kind(), action.pos(), NO_ENTITY, subject.id, subject.icon, subject.name,
-                        key, verdict.cause(), verdict.shown());
+                        key, verdict.cause(), verdict.shown(), 1);
             }
         };
     }
@@ -163,7 +164,7 @@ public record ConsentItem(Verb kind, BlockPos pos, int entityId, String subject,
                     cells.add(item.pos);
                 }
             }
-            out.add(new Group(group.get(0), group.size(), cells));
+            out.add(new Group(group.get(0), group.stream().mapToInt(ConsentItem::count).sum(), cells));
         }
         return out;
     }

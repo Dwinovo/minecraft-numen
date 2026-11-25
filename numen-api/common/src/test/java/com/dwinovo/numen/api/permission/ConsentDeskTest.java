@@ -61,7 +61,7 @@ class ConsentDeskTest {
 
     private static ConsentItem log(int x) {
         return new ConsentItem(Verb.BREAK, new BlockPos(x, 64, 0), ConsentItem.NO_ENTITY, "oak_log", null, LOG_NAME,
-                "minecraft:oak_log", "belongs to the owner", OWNERS);
+                "minecraft:oak_log", "belongs to the owner", OWNERS, 1);
     }
 
     private FakeLine line;
@@ -264,9 +264,9 @@ class ConsentDeskTest {
         Component rex = Component.literal("Rex");
         Component owned = OWNERS;
         items.add(new ConsentItem(Verb.ATTACK, null, 42, "wolf", null, rex, "00000000-0000-0000-0000-00000000002a",
-                "belongs to the owner", owned));
+                "belongs to the owner", owned, 1));
         items.add(new ConsentItem(Verb.ATTACK, null, 43, "wolf", null, Component.literal("Fang"),
-                "00000000-0000-0000-0000-00000000002b", "belongs to the owner", owned));
+                "00000000-0000-0000-0000-00000000002b", "belongs to the owner", owned, 1));
         List<ConsentItem.Group> groups = ConsentItem.listing(items);
         assertEquals(3, groups.size(), "两只起了不同名字的狼各是一堆");
         assertEquals("break 8 oak_log (0,64,0; 1,64,0; 2,64,0; 3,64,0; 4,64,0; 5,64,0; +2 more): belongs to the owner",
