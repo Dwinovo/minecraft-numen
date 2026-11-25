@@ -21,19 +21,15 @@ class HomesTest {
             new Lanes(Runnable::run, e -> { }), HIM);
 
     @Test
-    void herThingsLiveInTheWorldAndTheOwnersLibrariesLiveOnTheServer() {
+    void herThingsLiveInTheWorldAndTheServersLiveUnderTheConfigRoot() {
         assertEquals(Path.of("save", "numen", "companions", HER.toString()), homes.companion(HER).dir());
         assertEquals(Path.of("save", "numen", "players", HIM.toString()), homes.worldOwner(HIM).dir());
-        assertEquals(Path.of("config", "numen", "players", HIM.toString()), homes.owner(HIM).dir());
         assertEquals(Path.of("config", "numen", "server"), homes.server().dir());
     }
 
     @Test
-    void everyOwnerOfAThingHasItsOwnRootAndNothingLivesLooseUnderTheConfigRoot() {
+    void theServersKeychainLivesUnderTheServerRoot() {
         assertEquals(Path.of("config", "numen", "server", "keys"), homes.server().file("keys"), "服主的钥匙串在服务器根下");
-        assertEquals(Path.of("config", "numen", "players", HIM.toString(), "keys"), homes.owner(HIM).file("keys"),
-                "玩家的钥匙串在他自己的根下");
-        assertFalse(homes.server().dir().equals(homes.owner(HIM).dir().getParent()), "服务器的根不是玩家们的根");
     }
 
     @Test
@@ -56,6 +52,5 @@ class HomesTest {
         assertSame(herLane, homes.companion(HER).io().executor(), "同一只同伴每次拿到的是同一条车道");
         assertNotSame(herLane, homes.companion(HIM).io().executor());
         assertNotSame(herLane, homes.worldOwner(HIM).io().executor());
-        assertNotSame(herLane, homes.owner(HIM).io().executor());
     }
 }
