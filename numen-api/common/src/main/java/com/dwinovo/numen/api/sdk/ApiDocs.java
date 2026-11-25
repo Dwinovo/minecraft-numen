@@ -15,6 +15,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * API 的说明,全由登记({@link ApiFunction})与模块里函数上面的注释生成,没有手写的第二份。以类型签名呈现(Lua 是 LuaLS 的注解,由脚本
@@ -95,8 +96,12 @@ public final class ApiDocs {
      * 判据在 {@code ClientMods#offered},这里只是按它筛;隐藏的组({@link ApiRegistry.Group#hidden})不列。
      */
     private static List<ApiRegistry.Group> offered(Modules modules) {
+        return offered(modules.companion());
+    }
+
+    private static List<ApiRegistry.Group> offered(UUID companion) {
         return ApiRegistry.groups().stream()
-                .filter(g -> !g.hidden() && com.dwinovo.numen.api.plugin.ClientMods.offered(modules.companion(), g.namespace()))
+                .filter(g -> !g.hidden() && com.dwinovo.numen.api.plugin.ClientMods.offered(companion, g.namespace()))
                 .toList();
     }
 
@@ -339,40 +344,94 @@ public final class ApiDocs {
      * 以及声明了的类。给工具读,生成别的视图;Numen 的 lint 报告把它与 {@link #stubs} 一起写出来。
      */
     public static String metadata() {
-        ScriptEngine engine = ScriptEngine.IN_USE;
         JsonArray functions = new JsonArray();
         for (ApiFunction fn : ApiRegistry.functions()) {
-            JsonObject o = new JsonObject();
-            o.addProperty("name", fn.fullName());
-            o.addProperty("summary", fn.summary());
-            o.addProperty("side", fn.side().name().toLowerCase(java.util.Locale.ROOT));
-            o.addProperty("kind", fn.kind().name().toLowerCase(java.util.Locale.ROOT));
-            JsonArray params = new JsonArray();
-            for (ApiFunction.Param p : fn.params()) {
-                JsonObject param = new JsonObject();
-                param.addProperty("name", p.name());
-                param.addProperty("role", p.role().name().toLowerCase(java.util.Locale.ROOT));
-                param.addProperty("type", engine.typeText(p.codec().type()));
-                if (p.doc() != null) {
-                    param.addProperty("doc", p.doc());
-                }
-                if (p.omitted() != null) {
-                    param.addProperty("omitted", p.omitted());
-                }
-                params.add(param);
-            }
-            o.add("params", params);
-            o.addProperty("returns", engine.typeText(fn.returns().type()));
-            o.add("examples", new Gson().toJsonTree(fn.examples()));
-            o.add("notes", new Gson().toJsonTree(fn.notes()));
-            o.add("see_also", new Gson().toJsonTree(fn.seeAlso()));
-            functions.add(o);
+            functions.add(functionJson(fn));
         }
-        JsonObject classes = new JsonObject();
-        LuaCodecs.classes().forEach((name, c) -> classes.addProperty(name, engine.classText(c)));
         JsonObject out = new JsonObject();
         out.add("functions", functions);
-        out.add("classes", classes);
+        out.add("classes", classesJson());
         return new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create().toJson(out);
+    }
+
+    /**
+     * 这位主人的同伴能用的 API,机器可读(JSON),不含任何一位玩家的东西:登记表里的组({@code groups},每组的名字、一句说明、函数名)、
+     * 这些组的每个函数的元数据({@code functions},同 {@link #metadata})、声明了的类({@code classes}、共用的几种 {@code shared})、
+     * 随模组发布的内置模块({@code modules},名字、一句说明、函数名)。系统提示里的 {@link #index} 就是由这些拼出来的;
+     * 目标模组只在客户端的联动,主人的客户端没报它就不列(同 {@link #offered}),隐藏的组不列。
+     *
+     * @param companion 她;不是谁的视图(只读随模组发布的文字)是 null,都列
+     */
+    public static JsonObject catalog(UUID companion) {
+        Map<String, Library> library = library(Modules.factory());
+        JsonArray groups = new JsonArray();
+        JsonArray functions = new JsonArray();
+        for (ApiRegistry.Group group : offered(companion)) {
+            JsonObject g = new JsonObject();
+            g.addProperty("name", group.fullName());
+            g.addProperty("namespace", group.namespace());
+            g.addProperty("summary", group.summary());
+            JsonArray names = new JsonArray();
+            group.functions().forEach(f -> names.add(f.name()));
+            functionsOf(group.fullName(), library).forEach(names::add);
+            g.add("functions", names);
+            groups.add(g);
+            group.functions().forEach(f -> functions.add(functionJson(f)));
+        }
+        JsonArray modules = new JsonArray();
+        Modules.factory().all().forEach((name, module) -> {
+            if (com.dwinovo.numen.api.plugin.ClientMods.offered(companion, name.substring(0, name.indexOf('.')))) {
+                JsonObject m = new JsonObject();
+                m.addProperty("name", name);
+                m.addProperty("summary", module.summary() == null ? "" : module.summary());
+                JsonArray names = new JsonArray();
+                functionsOf(name, library).forEach(names::add);
+                m.add("functions", names);
+                modules.add(m);
+            }
+        });
+        JsonObject out = new JsonObject();
+        out.add("groups", groups);
+        out.add("functions", functions);
+        out.add("classes", classesJson());
+        out.add("shared", new Gson().toJsonTree(LuaCodecs.SHARED));
+        out.add("modules", modules);
+        return out;
+    }
+
+    private static JsonObject functionJson(ApiFunction fn) {
+        ScriptEngine engine = ScriptEngine.IN_USE;
+        JsonObject o = new JsonObject();
+        o.addProperty("name", fn.fullName());
+        o.addProperty("summary", fn.summary());
+        o.addProperty("side", fn.side().name().toLowerCase(java.util.Locale.ROOT));
+        o.addProperty("kind", fn.kind().name().toLowerCase(java.util.Locale.ROOT));
+        JsonArray params = new JsonArray();
+        for (ApiFunction.Param p : fn.params()) {
+            JsonObject param = new JsonObject();
+            param.addProperty("name", p.name());
+            param.addProperty("role", p.role().name().toLowerCase(java.util.Locale.ROOT));
+            param.addProperty("type", engine.typeText(p.codec().type()));
+            if (p.doc() != null) {
+                param.addProperty("doc", p.doc());
+            }
+            if (p.omitted() != null) {
+                param.addProperty("omitted", p.omitted());
+            }
+            params.add(param);
+        }
+        o.add("params", params);
+        o.addProperty("returns", engine.typeText(fn.returns().type()));
+        o.add("examples", new Gson().toJsonTree(fn.examples()));
+        o.add("notes", new Gson().toJsonTree(fn.notes()));
+        o.add("see_also", new Gson().toJsonTree(fn.seeAlso()));
+        return o;
+    }
+
+    private static JsonObject classesJson() {
+        ScriptEngine engine = ScriptEngine.IN_USE;
+        JsonObject classes = new JsonObject();
+        LuaCodecs.classes().forEach((name, c) -> classes.addProperty(name, engine.classText(c)));
+        return classes;
     }
 }

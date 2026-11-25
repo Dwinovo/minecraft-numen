@@ -36,16 +36,22 @@ public final class ReflexRegistry {
         REFLEXES.putIfAbsent(reflex.id(), reflex);
     }
 
+    /** Every registered reflex's one-line self-description, in the order they enlisted. */
+    public static synchronized List<String> descriptions() {
+        List<String> lines = new ArrayList<>();
+        for (Reflex r : REFLEXES.values()) {
+            lines.add(r.describe());
+        }
+        return lines;
+    }
+
     /**
      * The reflex overview for the model: every registered reflex's self-description
      * joined into one paragraph, ending on the constitutional guarantee that
      * explicit actions always win. Empty when nothing is registered.
      */
     public static synchronized String overview() {
-        List<String> lines = new ArrayList<>();
-        for (Reflex r : REFLEXES.values()) {
-            lines.add(r.describe());
-        }
+        List<String> lines = descriptions();
         if (lines.isEmpty()) return "";
         return "Your body has these instincts; they happen on their own and need no tool: "
                 + String.join("; ", lines)

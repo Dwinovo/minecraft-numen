@@ -149,6 +149,22 @@ public final class SkillRegistry {
                 .toList();
     }
 
+    /**
+     * 随模组与插件发布的技能(技能库里服务器目录那一组):有描述的、(目标模组只在客户端的联动带的)主人的客户端提供的。
+     * 不看玩家的开关与"我的"那一组:那是持有大脑的一方自己的事。
+     */
+    public List<SkillInfo> bundled() {
+        List<SkillInfo> out = new ArrayList<>();
+        for (Library.Entry entry : library.group(Library.Group.SERVER)) {
+            SkillInfo info = com.dwinovo.numen.api.plugin.ClientMods.offered(companion, entry.id().namespace())
+                    ? read(entry.path()) : null;
+            if (info != null && info.description() != null && !info.description().isBlank()) {
+                out.add(info);
+            }
+        }
+        return out;
+    }
+
     public int size() {
         return skills().size();
     }
