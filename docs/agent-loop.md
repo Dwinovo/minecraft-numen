@@ -250,6 +250,10 @@ void end(RunEnd reason) {
   `SerialCalls` 让它停在调用之间(座位上的 `program/interrupt`),交回的结局里带结构化的"为什么停",这一批余下的调用
   逐条回"没执行"并写那个原因(规则见宪法 §六)。最后一件受理了这批就结算,所以 run 往往在身体还在干活时就结束了;
   `task_finished` 作为插话进队,下次 pump 开新 run。这正是 pi 的"闲时来消息就开 run"。
+- **等主人作答的工具**(`AskUserQuestion`,ADR control 0028):调用挂起、没有时限,主人在输入框那里长出的面板上作答,答案经
+  `ToolCall.complete` 成为这次调用的结果。急件也能打断它(`SerialCalls.Port.interruptible`;`NumenTool.waitsForOwner`),
+  结局是一句"被什么打断了",余下的调用照样回"没执行";停止键、死亡、登出、外接接管这些切断经 `CompanionToolPort.cancel` 放弃它,
+  工具登记的收尾(`ToolCall.onAbandon`)摘下面板,晚到的答复无处可报。切断点与悬空结果照旧由 `ProtocolView` 配平。
 - **没有轮数上限、没有循环检测**:保持现状(模型合理地连着派很多任务;失控由主人停止)。
 
 ---

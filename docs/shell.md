@@ -294,10 +294,15 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
 - **计划也是另一个工具,不是 API**(10-04):判据是工具只放管大脑自己的事、不碰世界的(技能、计划),作用于世界的一律是
   Lua API。照 Claude Code 的 TodoWrite,`todo` 工具收整份计划(`items`,一项一个带记号的字符串),每次替换上一份,大脑
   当场答;聊天里的清单从成功的这次调用的参数读(`PlanChecklist`,一项的写法只在 `TodoTool.Item.parse`)。`numen.todo.write`
-  与只为它存在的回执回显(`data.echoed`)删了。模型的工具表是 `[lua, skill, todo, memory]`,外接大脑经 `ToolRegistry` 拿到同一套。
+  与只为它存在的回执回显(`data.echoed`)删了。外接大脑经 `ToolRegistry` 拿到同一套(问主人的 `AskUserQuestion` 除外,见下)。
 - **札记也是另一个工具,不是 API**(10-04):同一判据,札记本落在她的家里(服务器)、管她自己的事。照 Anthropic 的 memory 工具,一个
   `memory` 工具带 `command`(`remember`、`recall`、`forget`),三件事作用于同一本札记、参数大半共用,不拆成三个工具。札记索引照旧
   每轮作为 `<memory>` 注入。`numen.memory.*` 删了。
+- **问主人也是一个工具**(11-26,ADR control 0028):照 Claude Code 的 `AskUserQuestion`,工具名、参数、说明一字对齐(只把 "the user"
+  换成 "your owner",删去计划模式与预览)。调用挂起,主人在输入框那里长出的提问面板上作答,答案就是这次调用的结果:答了、拒绝(Esc)、
+  想先聊聊("聊聊这个")各有一句固定的话(`Questions`),停止键、急件、她离开世界把它放弃或打断,和别的调用走同一条路(`ToolCall.onAbandon`,
+  `NumenTool.waitsForOwner`)。答了的结果信封里除 `message` 还带结构化的 `answers`,只给界面在对话流里画"你答「…」"一行,模型读到的仍只有 `message`。
+  只问创建者(大脑在他电脑上):外接大脑的工具表与渠道来访的那一轮不含它。模型的工具表是 `[lua, skill, todo, memory, AskUserQuestion]`。
 - **测试**:GameTest 全部从 Lua 入口调(`GameTestKit.lua`);库函数各有端到端的 GameTest(`mine`、`work.collect`、
   `fight.clear`、`build.raise`),到达方式 `reach`、`build.left`、够不着时 `build.at` 的拒绝各有一条。
 
