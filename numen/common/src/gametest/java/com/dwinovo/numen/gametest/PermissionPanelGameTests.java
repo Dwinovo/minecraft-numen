@@ -102,7 +102,7 @@ public class PermissionPanelGameTests {
                 "a mistyped verb was not refused: " + refused);
 
         Replies.library(owner, Libraries.PERMISSION, "tier",
-                "{\"companion\":\"" + who + "\",\"verb\":\"break\",\"tier\":\"deny\"}");
+                "{\"companion\":\"" + who + "\",\"verb\":\"break\",\"tier\":\"deny\"}", 0);
         LibraryPayload set = lastTable(received(owner));
         helper.assertTrue(set != null && set.problem().isEmpty() && tierRow(set, companion, "break") != null
                         && "deny".equals(tierRow(set, companion, "break").get("tier").getAsString()),
@@ -120,7 +120,7 @@ public class PermissionPanelGameTests {
                                 && level.getBlockState(helper.absolutePos(stoneRel)).is(Blocks.STONE),
                         "the panel's tier did not hold: " + calls[0].outcome());
                 Replies.library(owner, Libraries.PERMISSION, "tier",
-                        "{\"companion\":\"" + who + "\",\"verb\":\"break\",\"tier\":\"allow\"}");
+                        "{\"companion\":\"" + who + "\",\"verb\":\"break\",\"tier\":\"allow\"}", 0);
                 helper.assertTrue(store.settingsOf(companion.getUUID()).tier(Verb.BREAK) == Tier.ALLOW,
                         "the tier was not set back");
                 calls[1] = click(helper, companion, "left", stoneRel);

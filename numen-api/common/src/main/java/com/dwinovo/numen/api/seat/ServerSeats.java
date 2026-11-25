@@ -97,6 +97,11 @@ public final class ServerSeats {
         return SEATS.modules(companion);
     }
 
+    /** 她此刻的样子:座位上 {@code state/get} 给的那一份。 */
+    public static SeatState state(UUID companion) {
+        return WORLD.state(companion);
+    }
+
     /** 世界上没有哪一个身体发出、却要告诉她的一件事(别的成员离开了会话……):盖上此刻的时刻,送进她的座位。 */
     public static void tell(UUID companion, String type, String text) {
         SEATS.publish(companion, NumenEvents.entry(WORLD.dayTime(), type, null, text, System.currentTimeMillis(), false));

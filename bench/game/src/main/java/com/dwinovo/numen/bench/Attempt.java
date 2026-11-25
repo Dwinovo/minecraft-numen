@@ -8,28 +8,24 @@ import com.dwinovo.numen.api.agent.loop.Hold;
 import com.dwinovo.numen.api.agent.loop.LoopEvent;
 import com.dwinovo.numen.api.agent.loop.LoopStatus;
 import com.dwinovo.numen.api.agent.loop.RunEnd;
-import com.dwinovo.numen.api.agent.memory.NoteBook;
 import com.dwinovo.numen.api.agent.prompt.NumenPrompts;
-import com.dwinovo.numen.api.agent.request.SystemPromptComposer;
 import com.dwinovo.numen.api.brain.Bound;
-import com.dwinovo.numen.api.brain.CompanionBrains;
-import com.dwinovo.numen.api.brain.CompanionLoop;
-import com.dwinovo.numen.api.brain.CompanionLoops;
 import com.dwinovo.numen.api.brain.Feed;
+import com.dwinovo.numen.api.brain.FeedEncoder;
 import com.dwinovo.numen.api.brain.Presence;
 import com.dwinovo.numen.api.brain.Replies;
-import com.dwinovo.numen.api.brain.Venue;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.agent.skill.SkillRegistry;
-import com.dwinovo.numen.api.library.EntryId;
+import com.dwinovo.numen.api.agent.tool.NumenTool;
+import com.dwinovo.numen.api.agent.tool.ToolBook;
+import com.dwinovo.numen.api.agent.tool.ToolRegistry;
 import com.dwinovo.numen.api.library.LibraryHub;
-import com.dwinovo.numen.api.script.Modules;
+import com.dwinovo.numen.api.library.EntryId;
 import com.dwinovo.numen.api.store.Io;
 import com.dwinovo.numen.api.store.StoreException;
 import com.dwinovo.numen.bench.report.EndReason;
 import com.dwinovo.numen.bench.report.FailureTag;
-import com.dwinovo.numen.bench.report.PathEnd;
 import com.dwinovo.numen.bench.report.Pricing;
 import com.dwinovo.numen.bench.report.Run;
 import com.dwinovo.numen.bench.report.Variant;
@@ -42,11 +38,14 @@ import com.dwinovo.numen.api.network.Wire;
 import com.dwinovo.numen.api.network.payload.ConsentRequestPayload;
 import com.dwinovo.numen.api.network.payload.FragmentPayload;
 import com.dwinovo.numen.api.network.payload.SeatPayload;
+import com.dwinovo.numen.api.library.Switches;
+import com.dwinovo.numen.api.mind.ClientBrains;
+import com.dwinovo.numen.api.mind.LoopHost;
+import com.dwinovo.numen.api.script.BuiltinModules;
+import com.dwinovo.numen.api.script.HerModules;
 import com.dwinovo.numen.api.seat.SeatClient;
 import com.dwinovo.numen.api.seat.ServerSeats;
 import com.dwinovo.numen.api.permission.ConsentDesk;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.mojang.authlib.GameProfile;
 import io.netty.buffer.Unpooled;
 import net.minecraft.core.BlockPos;
@@ -81,7 +80,6 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -96,12 +94,12 @@ import java.util.stream.Stream;
  * 最后一种是她自己收工;收工前最后一个失败的结果是主人拒绝或规则不许,记作权限被拒。
  *
  * <h2>她的大脑</h2>
- * 就是产品里服务端的大脑({@link CompanionLoop},经 {@link CompanionBrains#create} 建),只换三样:模型({@link Mind},真实的或基线)、
- * 人设(内置默认人设)、主动性(默认档位)。程序在服务端跑、世界上的事直接进她的收件箱、死亡与复活走产品的路——评测不另接一遍。
+ * 就是产品里主人客户端上的大脑({@link LoopHost},经 {@link ClientBrains} 坐上她的座位),只换三样:模型({@link Mind},真实的或基线)、
+ * 人设(内置默认人设)、主动性(默认档位)。程序经座位在服务端跑、世界上的事经座位进她的收件箱、死亡与复活走产品的路——评测不另接一遍。
  *
  * <h2>主人</h2>
  * 主人是一个在线的模拟玩家,他的连接是 {@link OwnerLine}:服务端发给他的模组载荷由它截下,这里只处理征询卡
- * (分片的消息进主人的收件箱拼回,{@link NumenNetwork#assembled},编解码一遍),由剧本答复。主人没有客户端,所以大脑推给他的界面事件
+ * (分片的消息进主人的收件箱拼回,{@link NumenNetwork#assembled},编解码一遍),由剧本答复。主人没有界面,所以大脑的界面事件
  * 用不着,只有落进她日志的世界事件({@code <events>})记进这次的记录。
  */
 final class Attempt {
@@ -111,8 +109,6 @@ final class Attempt {
     /** 搭好场景之后等几刻再开口:让搭场景时发生的事先落进她的收件箱,她的那一轮先跑完。 */
     private static final int WARMUP_TICKS = 20;
 
-    /** 收场时等轨迹那条车道把攒下的写落完,最多等这么久。 */
-    private static final int TRACE_FLUSH_SECONDS = 10;
     /** 她闲下来保持这么久算收工。 */
     static final int SETTLE_TICKS = 60;
     /** 评测里她绑的人设的 id;正文是内置默认人设,与档案、服主的配置无关。 */
@@ -148,7 +144,9 @@ final class Attempt {
     /** 主人客户端上的座位一端:服务端要主人客户端执行的函数在它上面答。 */
     private SeatClient seat;
     private NumenPlayer her;
-    private CompanionLoop loop;
+    private ClientBrains brains;
+    private LoopHost host;
+    private FeedEncoder encoder;
     private String promptHash = "";
     private final long startMs = System.currentTimeMillis();
     private long ticks;
@@ -174,8 +172,6 @@ final class Attempt {
         LOG.info("[numen-bench] {}/{} {} #{} 开始,场地 {}", suite, scenario.id(), variant.id(), number,
                 origin.toShortString());
         MinecraftServer server = level.getServer();
-        // 失败分类要读她的轨迹(见 lastPath):这个进程给之后建的大脑都记
-        com.dwinovo.numen.api.agent.trace.TraceRecorders.record();
         transcript = new Transcript(Results.get().transcript(suite, scenario.id(), variant.id(), number));
         meter = new Meter(transcript);
         settleWorld(level);
@@ -197,11 +193,6 @@ final class Attempt {
         // 与产品同一条车道:服务端主线程只排队,写落在后台的串行执行器上。评测每刻都要问一次身体、
         // 每轮都要记一条轨迹,同步直写在主线程上会把评测结果本身改掉
         io = NumenIo.lanes().io("companion/" + her.getUUID());
-        NoteBook.init(uuid -> new Home(home.resolve("memory"), io), () -> (int) (level.getDayTime() / 24000L));
-        LibraryHub libraries = LibraryHub.headless(home.resolve("library"));
-        UUID libraryOwner = owner.getUUID();
-        Modules.init(uuid -> libraries.library(Modules.KIND, libraryOwner));
-        SkillRegistry.init(uuid -> libraries.library(SkillRegistry.KIND, libraryOwner));
         BooleanSupplier mayCall = () -> meter.turns <= scenario.budget().turns();
         LlmEndpoint endpoint = settings.endpoint();
         mind = switch (variant) {
@@ -215,19 +206,51 @@ final class Attempt {
         seat = new SeatClient(mail::add, java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor(), message ->
                 ServerSeats.received(Fragments.crossed(Wire.TO_SERVER, SeatPayload.TO_SERVER_CODEC,
                         SeatPayload.frame(Wire.TO_SERVER, message)), owner));
-        seat.open(her.getUUID(), 0).whenComplete((opened, failed) -> {
-            if (failed != null) {
-                LOG.warn("[numen-bench] her seat did not open: {}", failed.toString());
+        Home library = new Home(home.resolve("library"), io);
+        HerModules modules = new HerModules(library, new HerModules.Builtins() {
+            @Override
+            public java.util.Set<String> names() {
+                return BuiltinModules.all().keySet();
+            }
+
+            @Override
+            public boolean loaded() {
+                return true;
+            }
+
+            @Override
+            public String code(String name) {
+                BuiltinModules.Builtin builtin = BuiltinModules.get(name);
+                return builtin == null ? null : builtin.code();
             }
         });
-        loop = CompanionBrains.create(server, her.getUUID(), owner.getUUID(), new Home(home.resolve("her"), io), mind,
-                new OwnerEnd(), () -> true, () -> false, () -> EventQueue.DEFAULT_LEVEL, bound -> NumenPrompts.DEFAULT_PERSONA);
-        loop.bind(com.dwinovo.numen.api.brain.Slot.PERSONA, new Bound(owner.getUUID(), BENCH_PERSONA));
-        loop.subscribe(meter);
-        loop.subscribe(this::onLoopEvent);
+        LibraryHub hub = LibraryHub.local(library, Switches.inMemory(), List.of(), java.util.Set.of());
+        UUID ownerId = owner.getUUID();
+        ToolBook tools = new ToolBook() {
+            @Override
+            public List<NumenTool> all() {
+                return ToolRegistry.all(ownerId);
+            }
+
+            @Override
+            public NumenTool resolve(String name) {
+                return ToolRegistry.resolve(ownerId, name);
+            }
+        };
+        brains = new ClientBrains(seat, mail::add, companion -> {
+            LoopHost made = new LoopHost(new LoopHost.Parts(companion, ownerId, new Home(home.resolve("her"), io),
+                    mail::add, seat, mind, tools, () -> false, () -> EventQueue.DEFAULT_LEVEL,
+                    bound -> NumenPrompts.DEFAULT_PERSONA, builtins -> modules,
+                    bundled -> SkillRegistry.of(hub.library(SkillRegistry.KIND), bundled), id -> "Owner"));
+            made.bind(com.dwinovo.numen.api.brain.Slot.PERSONA, new Bound(ownerId, BENCH_PERSONA));
+            return made;
+        });
+        brains.sit(java.util.Set.of(her.getUUID()));
+        host = brains.get(her.getUUID());
+        host.subscribe(meter);
+        host.subscribe(this::onLoopEvent);
+        encoder = new FeedEncoder(host, this::heard);
         scenario.setup(scene);
-        promptHash = sha256(SystemPromptComposer.compose(NumenPrompts.DEFAULT_PERSONA,
-                Modules.of(her.getUUID()), SkillRegistry.of(her.getUUID()))).substring(0, 12);
     }
 
     /** 每个服务端 tick 一次。 */
@@ -240,6 +263,8 @@ final class Attempt {
         for (Runnable job; (job = mail.poll()) != null; ) {
             job.run();
         }
+        brains.tick();
+        encoder.flush();
         if (end != null) {
             return;
         }
@@ -260,9 +285,9 @@ final class Attempt {
      * 她闲下来了:没在跑的对话、没停牌、身体没有后台活、队里没有会叫醒她的条目。
      */
     private boolean idle() {
-        LoopStatus status = loop.status();
+        LoopStatus status = host.status();
         return status.phase() == null && status.hold() == null && !status.bodyTaskRunning()
-                && !loop.inbox().hasWaking();
+                && !host.inbox().hasWaking();
     }
 
     private void judge() {
@@ -319,9 +344,9 @@ final class Attempt {
 
     /** 判断言、记一行、收拾场地。 */
     Run finish() {
-        Path trace = loop == null ? null : loop.trace().file().getParent();
-        if (loop != null) {
-            loop.dispose();
+        if (host != null) {
+            promptHash = sha256(host.systemPrompt()).substring(0, 12);
+            brains.leave();
         }
         List<Run.Check> checks = new ArrayList<>();
         List<Run.Check> subgoals = new ArrayList<>();
@@ -340,7 +365,7 @@ final class Attempt {
         boolean live = variant == Variant.LIVE;
         Pricing.Price price = live ? settings.pricing().of(settings.modelLabel()) : null;
         FailureTag tag = FailureTag.auto(passed, end, live, meter != null && meter.commandError,
-                !passed && end == EndReason.DONE, meter == null ? List.of() : meter.functions(), lastPath(trace));
+                !passed && end == EndReason.DONE, meter == null ? List.of() : meter.functions(), null);
         Run run = new Run(suite, scenario.id(), variant.id(), number, settings.commit(), promptHash,
                 live ? settings.modelLabel() : variant.id(), passed, checks, subgoals, end.name(),
                 meter == null ? 0 : meter.turns, meter == null ? 0 : meter.toolCalls,
@@ -372,83 +397,10 @@ final class Attempt {
         }
     }
 
-    /**
-     * 她最后一趟路怎么收的场。轨迹的写走后台车道,所以先等那条车道把这次攒下的写落完再读——不等的话读到的是上一趟,
-     * 或者什么都没有。一趟都没走过、等不到、读不动都给 null:失败分类少一条证据而已,不该把这次评测拖垮。
-     */
-    private PathEnd lastPath(Path trace) {
-        if (trace == null) {
-            return null;
-        }
-        try {
-            if (!NumenIo.lanes().drain(TRACE_FLUSH_SECONDS, TimeUnit.SECONDS)) {
-                LOG.warn("[numen-bench] 等不到轨迹落盘,这次的失败分类少一条证据");
-                return null;
-            }
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-            return null;
-        }
-        if (!Files.isDirectory(trace)) {
-            return null;
-        }
-        PathEnd last = null;
-        try (Stream<Path> segments = Files.list(trace)) {
-            for (Path segment : segments.sorted().toList()) {
-                for (String line : Files.readAllLines(segment)) {
-                    PathEnd end = pathOf(line);
-                    if (end != null) {
-                        last = end;
-                    }
-                }
-            }
-        } catch (IOException | RuntimeException unreadable) {
-            LOG.warn("[numen-bench] 读不了轨迹 {}:{}", trace, unreadable.toString());
-            return null;
-        }
-        return last;
-    }
-
-    /** 轨迹里的一行,是 {@code path} 那一种就取结局与原因;别的种类、头一行、空行都给 null。 */
-    private static PathEnd pathOf(String line) {
-        if (line.isBlank()) {
-            return null;
-        }
-        JsonObject o = JsonParser.parseString(line).getAsJsonObject();
-        if (!o.has("type") || !"path".equals(o.get("type").getAsString())) {
-            return null;
-        }
-        return new PathEnd(o.has("outcome") ? o.get("outcome").getAsString() : null,
-                o.has("reason") ? o.get("reason").getAsString() : null);
-    }
-
-    /**
-     * 把这次的轨迹搬到记录旁边。临时目录整个删掉,轨迹跟着删的话,报告里写着"规划失败"而凭据已经没了——
-     * 分类说得出是哪一类,人还要看得到那一趟到底发生了什么。搬不动不算评测失败,记一行接着走。
-     */
-    private void keepTrace(Path trace) {
-        if (trace == null || !Files.isDirectory(trace)) {
-            return;
-        }
-        Path kept = Results.get().transcript(suite, scenario.id(), variant.id(), number)
-                .resolveSibling(suite + "-" + scenario.id() + "-" + variant.id() + "-" + number + "-trace.jsonl");
-        try (Stream<Path> segments = Files.list(trace)) {
-            List<String> lines = new ArrayList<>();
-            for (Path segment : segments.sorted().toList()) {
-                lines.addAll(Files.readAllLines(segment));
-            }
-            Files.write(kept, lines, StandardCharsets.UTF_8);
-        } catch (IOException | RuntimeException broke) {
-            LOG.warn("[numen-bench] 留不下轨迹 {}:{}", kept, broke.toString());
-        }
-    }
-
     /** 她、主人、掉在地上的东西、场地本身,一样不留;临时目录删掉。 */
     private void cleanUp() {
         MinecraftServer server = level.getServer();
         if (her != null) {
-            keepTrace(loop == null ? null : loop.trace().file().getParent());
-            CompanionLoops.dismissed(server, her.getUUID());
             CompanionRegistry.get(server).remove(her.getUUID());
             // 她死过的话 her 是死掉的那具,世界里站着的是原版重生换上来的新身体
             NumenPlayer now = NumenPlayer.findByUuid(server, her.getUUID());
@@ -485,7 +437,7 @@ final class Attempt {
 
     private void ownerSays(String words) {
         transcript.write("owner_says", "text", words);
-        loop.submitPrompt(words);
+        host.submitPrompt(words);
     }
 
     /**
@@ -506,30 +458,14 @@ final class Attempt {
         }
     }
 
-    /**
-     * 她的大脑往主人那一头推的东西。评测的主人没有客户端,界面要的那些用不着;只把落进她日志的世界事件记进这次的记录。
-     */
-    private final class OwnerEnd implements CompanionLoops.Link {
-
-        @Override
-        public boolean hasClient() {
-            return true;
-        }
-
-        @Override
-        public void send(UUID companion, List<Feed> events) {
-            for (Feed feed : events) {
-                if (feed instanceof Feed.Line line && line.line().msg() instanceof ConvoState.Msg.User user
-                        && user.content().startsWith("<events>")) {
-                    transcript.write("event", "text", Transcript.clip(user.content()));
-                }
+    /** 她的大脑推给界面的东西。评测的主人没有界面;只把落进她日志的世界事件记进这次的记录。 */
+    private void heard(List<Feed> events) {
+        for (Feed feed : events) {
+            if (feed instanceof Feed.Line line && line.line().msg() instanceof ConvoState.Msg.User user
+                    && user.content().startsWith("<events>")) {
+                transcript.write("event", "text", Transcript.clip(user.content()));
             }
         }
-
-        @Override
-        public void said(UUID companion, String said, Venue venue, String conversation) {
-        }
-
     }
 
     private void consent(ConsentRequestPayload request) {

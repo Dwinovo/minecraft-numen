@@ -202,8 +202,8 @@ public class CommandGameTests {
     }
 
     /**
-     * 服主踢她({@code /kick} 对目标做的就是 {@code connection.disconnect}):身体被外面移除。身体不在、大脑停牌、她的收件箱里留下一条事实、主人收到消息、名册记着;
-     * 主人再召唤她就回来,停牌解开。
+     * 服主踢她({@code /kick} 对目标做的就是 {@code connection.disconnect}):身体被外面移除。身体不在、她的座位上留下一条事实、主人收到消息、名册记着;
+     * 主人再召唤她就回来。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
     public static void a_kick_removes_her_body_and_the_owner_can_summon_her_back(GameTestHelper helper) {
@@ -215,24 +215,15 @@ public class CommandGameTests {
                 net.minecraft.world.phys.Vec3.atBottomCenterOf(at));
         java.util.UUID id = her.getUUID();
         var registry = com.dwinovo.numen.api.entity.CompanionRegistry.get(server);
-        var loop = com.dwinovo.numen.api.brain.CompanionLoops.get(id).orElseThrow();
-        loop.submitPrompt("在吗");   // 没绑模型档案:她停在"端点不可用",被请出去又回来要重新露出这个停牌
-        helper.assertTrue(loop.status().hold() == com.dwinovo.numen.api.agent.loop.Hold.BLOCKED,
-                "her loop is not blocked on the unbound model: " + loop.status().hold());
 
         // /kick 只在专用服务器上注册,测试服务器里没有;它做的事就是这一句
         her.connection.disconnect(Component.literal("cheating at cards"));
 
         helper.assertTrue(NumenPlayer.findByUuid(server, id) == null, "her body is still in the world");
-        // 面板收到的就是这样译出来的:被请出去又回来,停牌的变化也要能编成要发给客户端的 JSON
-        var encoded = new java.util.ArrayList<com.google.gson.JsonElement>();
-        var panel = new com.dwinovo.numen.api.brain.FeedEncoder(loop, events -> events.forEach(e -> encoded.add(e.toJson())));
-        helper.assertTrue(loop.status().hold() == com.dwinovo.numen.api.agent.loop.Hold.DEAD,
-                "her loop was not held: " + loop.status().hold());
-        helper.assertTrue(loop.inbox().entries().stream().anyMatch(entry ->
+        helper.assertTrue(GameTestKit.events(her).stream().anyMatch(entry ->
                         entry.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.REMOVED)
                                 && entry.text().contains("cheating at cards")),
-                "her inbox has no removal fact: " + loop.inbox().entries());
+                "her seat was not given the removal fact: " + GameTestKit.events(her));
         helper.assertTrue(registry.find(id) != null && registry.find(id).outside().server(), "the roster does not record it");
         helper.assertTrue(GameTestKit.said(owner).stream().anyMatch(line ->
                         line.text().getString().contains("Kickable") && line.text().getString().contains("cheating at cards")),
@@ -246,12 +237,7 @@ public class CommandGameTests {
         helper.assertTrue(back.getUUID().equals(id) && NumenPlayer.findByUuid(server, id) != null,
                 "the summon did not bring the same companion back");
         helper.assertTrue(!registry.find(id).outside().isOutside(), "the roster still says she is out");
-        helper.assertTrue(loop.status().hold() != com.dwinovo.numen.api.agent.loop.Hold.DEAD,
-                "her loop is still held for the missing body");
-        panel.flush();   // 回来后的停牌变化若编不出来,这里抛出
-        helper.assertTrue(!encoded.isEmpty(), "the panel got nothing after she came back");
         CompanionFactory.despawn(server, back);
-        com.dwinovo.numen.api.brain.CompanionLoops.dismissed(server, id);
         registry.remove(id);
         leave(owner);
         helper.succeed();
@@ -295,11 +281,11 @@ public class CommandGameTests {
                     helper.assertTrue(back.blockPosition().equals(where), "she did not return where she left: "
                             + back.blockPosition() + " vs " + where);
                     helper.assertTrue(back.getInventory().countItem(Items.DIAMOND) == 3, "her backpack changed");
-                    var inbox = com.dwinovo.numen.api.brain.CompanionLoops.get(id).orElseThrow().inbox();
-                    helper.assertTrue(inbox.entries().stream().anyMatch(entry ->
+                    var told = GameTestKit.events(back);
+                    helper.assertTrue(told.stream().anyMatch(entry ->
                                     entry.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.RETURNED)
                                             && entry.text().contains("owner_absent")),
-                            "she was not told she was back: " + inbox.entries());
+                            "she was not told she was back: " + told);
                     com.dwinovo.numen.api.entity.Companions.dismiss(server, back);
                     leave(returned.get());
                 })
@@ -320,15 +306,15 @@ public class CommandGameTests {
         java.util.UUID id = her.getUUID();
         her.getInventory().setItem(0, new net.minecraft.world.item.ItemStack(Items.DIAMOND, 2));
         var registry = com.dwinovo.numen.api.entity.CompanionRegistry.get(server);
-        var loop = com.dwinovo.numen.api.brain.CompanionLoops.get(id).orElseThrow();
 
         server.getCommands().performPrefixedCommand(owner.createCommandSourceStack(), "numen player despawn ordered");
 
         helper.assertTrue(NumenPlayer.findByUuid(server, id) == null, "the order did not log her out");
         helper.assertTrue(registry.find(id) != null && registry.find(id).outside().why()
                         == com.dwinovo.numen.api.entity.Attendance.Why.OWNER, "the roster does not record the order");
-        helper.assertTrue(loop.status().hold() == com.dwinovo.numen.api.agent.loop.Hold.DEAD,
-                "her loop is not held while she is offline: " + loop.status().hold());
+        helper.assertTrue(GameTestKit.events(her).stream().anyMatch(entry ->
+                        entry.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.OFFLINE)),
+                "her seat was not told she was ordered offline: " + GameTestKit.events(her));
         com.dwinovo.numen.api.entity.Companions.scheduleReconcile(owner.getUUID());   // 主人登入时排的就是这一笔
 
         steps(helper)
@@ -341,12 +327,10 @@ public class CommandGameTests {
                     helper.assertTrue(back.getUUID().equals(id), "the summon made another companion");
                     helper.assertTrue(back.getInventory().countItem(Items.DIAMOND) == 2, "her backpack changed");
                     helper.assertTrue(!registry.find(id).outside().isOutside(), "the roster still says she is out");
-                    helper.assertTrue(loop.status().hold() != com.dwinovo.numen.api.agent.loop.Hold.DEAD,
-                            "her loop is still held for the missing body");
-                    helper.assertTrue(loop.inbox().entries().stream().anyMatch(entry ->
+                    helper.assertTrue(GameTestKit.events(back).stream().anyMatch(entry ->
                                     entry.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.RETURNED)
                                             && entry.text().contains("owner_ordered")),
-                            "she was not told she was back: " + loop.inbox().entries());
+                            "she was not told she was back: " + GameTestKit.events(back));
                     com.dwinovo.numen.api.entity.Companions.dismiss(server, back);
                     leave(owner);
                 })
@@ -364,7 +348,6 @@ public class CommandGameTests {
         NumenPlayer her = com.dwinovo.numen.api.gametest.Bodies.summon(server, owner.getUUID(), "Hearsay", level,
                 net.minecraft.world.phys.Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(8, 2, 8))));
         java.util.UUID id = her.getUUID();
-        var loop = com.dwinovo.numen.api.brain.CompanionLoops.get(id).orElseThrow();
         var notArrived = new NumenPlayer(server, level, new com.mojang.authlib.GameProfile(id, "Hearsay"),
                 net.minecraft.server.level.ClientInformation.createDefault());
 
@@ -373,7 +356,7 @@ public class CommandGameTests {
         her.fakeClient().onOutbound(new net.minecraft.network.protocol.game.ClientboundSystemChatPacket(
                 Component.literal("said-after-arriving"), false));
 
-        var heard = loop.inbox().entries().stream()
+        var heard = GameTestKit.events(her).stream()
                 .filter(entry -> entry.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.SERVER_MESSAGE))
                 .map(entry -> entry.text()).toList();
         helper.assertTrue(heard.stream().noneMatch(text -> text.contains("said-before-arriving")),
@@ -381,7 +364,6 @@ public class CommandGameTests {
         helper.assertTrue(heard.stream().anyMatch(text -> text.contains("said-after-arriving")),
                 "she did not hear what was said after she arrived: " + heard);
         CompanionFactory.despawn(server, her);
-        com.dwinovo.numen.api.brain.CompanionLoops.dismissed(server, id);
         com.dwinovo.numen.api.entity.CompanionRegistry.get(server).remove(id);
         leave(owner);
         helper.succeed();

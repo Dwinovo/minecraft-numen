@@ -540,11 +540,6 @@ public final class ModLanguageData {
         public static final String COMMAND_SKIN_WAITING   = "numen.command.skin.waiting";
         public static final String COMMAND_SKIN_FAILED    = "numen.command.skin.failed";
         public static final String COMMAND_SKIN_FULL      = "numen.command.skin.full";
-        public static final String COMMAND_CHAT_ENTERED     = "numen.command.chat.entered";
-        public static final String COMMAND_CHAT_LEFT        = "numen.command.chat.left";
-        public static final String COMMAND_CHAT_GONE        = "numen.command.chat.gone";
-        public static final String COMMAND_CHAT_GONE_UNSENT = "numen.command.chat.gone_unsent";
-        public static final String COMMAND_CHAT_NOT_SENT    = "numen.command.chat.not_sent";
         public static final String COMMAND_TOKEN_ISSUED = "numen.command.token_issued";
         public static final String COMMAND_TOKEN_UNAVAILABLE = "numen.command.token_unavailable";
         public static final String COMMAND_TOKEN_ENDPOINT_OFF = "numen.command.token_endpoint_off";
@@ -1287,11 +1282,6 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_SKIN_FAILED,    "Skin '%1$s' could not be prepared: %2$s");
         adder.add(Keys.COMMAND_SKIN_FULL,      "You already have %s skins being prepared; wait for one to finish");
         adder.add("numen.skin.error.bad_image", "The image cannot be used: %s");
-        adder.add(Keys.COMMAND_CHAT_ENTERED,      "Your chat now goes to %s and only you see it. /numen chat takes you back to public chat");
-        adder.add(Keys.COMMAND_CHAT_LEFT,         "Back to public chat");
-        adder.add(Keys.COMMAND_CHAT_GONE,         "The conversation you were chatting in is gone, so you are back in public chat");
-        adder.add(Keys.COMMAND_CHAT_GONE_UNSENT,  "The conversation you were chatting in is gone, so you are back in public chat. That line was not sent");
-        adder.add(Keys.COMMAND_CHAT_NOT_SENT,     "Nobody got that: %s");
         adder.add(Keys.COMMAND_TOKEN_ISSUED, "Issued token %s (%s, %s). It is shown only once — click it to copy:");
         adder.add(Keys.COMMAND_TOKEN_UNAVAILABLE,
                 "The token store can't be read, so tokens can't be issued, listed or revoked, and the endpoint refuses "
@@ -2063,11 +2053,6 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_SKIN_FAILED,    "皮肤「%1$s」没准备好:%2$s");
         adder.add(Keys.COMMAND_SKIN_FULL,      "你已经有 %s 张皮肤在准备中,等一张好了再加");
         adder.add("numen.skin.error.bad_image", "这张图用不了:%s");
-        adder.add(Keys.COMMAND_CHAT_ENTERED,      "你的聊天现在进「%s」,只有你自己看得到。/numen chat 切回公屏");
-        adder.add(Keys.COMMAND_CHAT_LEFT,         "已切回公屏");
-        adder.add(Keys.COMMAND_CHAT_GONE,         "你聊天的那个会话没有了,已切回公屏");
-        adder.add(Keys.COMMAND_CHAT_GONE_UNSENT,  "你聊天的那个会话没有了,已切回公屏。刚才那句没有发出去");
-        adder.add(Keys.COMMAND_CHAT_NOT_SENT,     "没有人收到:%s");
         adder.add(Keys.COMMAND_TOKEN_ISSUED, "已发令牌 %s(%s,%s)。只显示这一次——点它复制:");
         adder.add(Keys.COMMAND_TOKEN_UNAVAILABLE,
                 "令牌库读不了,所以不能发、列、作废令牌,端点也拒绝所有令牌。文件:%s——%s。修好或挪走这个文件,再重启服务器。");

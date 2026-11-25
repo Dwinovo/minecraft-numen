@@ -211,8 +211,8 @@ public class ScriptGameTests {
 
     static {
         if (GameTestKit.numenTestsEnabled()) {
-            // 放进这次 GameTest 专用的服务器目录里,和 jar 同步下来的内置模块在同一处
-            com.dwinovo.numen.api.gametest.TestLibraries.builtinModule(COPIED, """
+            // 登记成内置模块,和随模组发布的在同一处
+            com.dwinovo.numen.api.script.BuiltinModules.register(COPIED, """
                     -- Test fixture: a built-in module to change, delete and reset.
                     local M = {}
                     ---Say which version this is.
@@ -276,8 +276,8 @@ public class ScriptGameTests {
         NumenPlayer her = spawnAt(helper, "gametest_lua_saver", new BlockPos(2, 2, 2), true);
         BlockPos cell = helper.absolutePos(new BlockPos(4, 2, 2));
         level.setBlockAndUpdate(cell, Blocks.STONE.defaultBlockState());
-        java.nio.file.Path dir = com.dwinovo.numen.api.script.Modules.of(her.getUUID()).dir();
-        helper.assertTrue(dir.toString().contains("numen-gametest-lib-"),
+        java.nio.file.Path dir = GameTestKit.programs(her).modules().dir();
+        helper.assertTrue(dir.toString().contains("numen-gametest-modules-"),
                 "GameTest reads modules from " + dir + ", not from its own empty directory");
 
         ToolRun flat = lua(her, "numen.module.save(\"-- Flat.\\nreturn {}\", {name = \"gt_flat\"})");
@@ -335,7 +335,7 @@ public class ScriptGameTests {
                     } catch (java.io.IOException e) {
                         throw new java.io.UncheckedIOException(e);
                     }
-                    Modules.of(her.getUUID()).reload();
+                    GameTestKit.programs(her).modules().reload();
                     ToolRun edited = lua(her, "return my.gt_clear.version()");
                     helper.assertTrue(edited.ranToTheEnd() && edited.receipt().contains("returned: 2"),
                             "the edited file was not used: " + edited.receipt());
@@ -485,7 +485,7 @@ public class ScriptGameTests {
                         local me = numen.status.self()
                         local words = gt.gt_client.hello()
                         return me.name .. ":" .. words
-                        """, Modules.of(her.getUUID()), true), ServerSeats.transport(), CallObserver.NONE, result::set))
+                        """, Modules.of(her.getUUID(), java.util.Map.of(), java.util.Set.of()), true), ServerSeats.transport(), CallObserver.NONE, result::set))
                 .thenWaitUntil(() -> {
                     seat.pump();
                     helper.assertTrue(result.get() != null, "the receipt has not come back");
@@ -553,7 +553,7 @@ public class ScriptGameTests {
                   if x.category == "gt:press" then machine = x.sources[1] .. ":" .. x.category_name end
                 end
                 return table.concat(state, ",") .. "|" .. tostring(merged) .. "|" .. tostring(machine)
-                """, Modules.of(her.getUUID()), true), ServerSeats.transport(), CallObserver.NONE, result::set);
+                """, Modules.of(her.getUUID(), java.util.Map.of(), java.util.Set.of()), true), ServerSeats.transport(), CallObserver.NONE, result::set);
 
         steps(helper)
                 .thenWaitUntil(() -> {
@@ -600,10 +600,10 @@ public class ScriptGameTests {
                     helper.assertTrue(seat.seated(), "her seat is not open");
                 })
                 .thenExecute(() -> {
-                    helper.assertFalse(com.dwinovo.numen.api.sdk.ApiDocs.index(Modules.of(her.getUUID())).contains("gtcm.pad"),
+                    helper.assertFalse(com.dwinovo.numen.api.sdk.ApiDocs.index(Modules.of(her.getUUID(), java.util.Map.of(), java.util.Set.of())).contains("gtcm.pad"),
                             "the index lists a client-only mod the owner's client did not report");
                     ServerPrograms.run(her, her.getUUID(), owner.getUUID(), new ServerPrograms.Request(
-                            "padless-" + UUID.randomUUID(), "return pcall(gtcm.pad.read)", Modules.of(her.getUUID()), true),
+                            "padless-" + UUID.randomUUID(), "return pcall(gtcm.pad.read)", Modules.of(her.getUUID(), java.util.Map.of(), java.util.Set.of()), true),
                             ServerSeats.transport(), CallObserver.NONE, refused::set);
                 })
                 .thenWaitUntil(() -> helper.assertTrue(refused.get() != null, "the refusal has not come back"))
@@ -617,10 +617,10 @@ public class ScriptGameTests {
                     com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL,
                             java.util.Set.of("gtcm"));
                     seat.pump();
-                    helper.assertTrue(com.dwinovo.numen.api.sdk.ApiDocs.index(Modules.of(her.getUUID())).contains("gtcm.pad"),
+                    helper.assertTrue(com.dwinovo.numen.api.sdk.ApiDocs.index(Modules.of(her.getUUID(), java.util.Map.of(), java.util.Set.of())).contains("gtcm.pad"),
                             "the index does not list a client-only mod the owner's client reported");
                     ServerPrograms.run(her, her.getUUID(), owner.getUUID(), new ServerPrograms.Request(
-                            "padded-" + UUID.randomUUID(), "return gtcm.pad.read()", Modules.of(her.getUUID()), true),
+                            "padded-" + UUID.randomUUID(), "return gtcm.pad.read()", Modules.of(her.getUUID(), java.util.Map.of(), java.util.Set.of()), true),
                             ServerSeats.transport(), CallObserver.NONE, answered::set);
                 })
                 .thenWaitUntil(() -> {
@@ -657,7 +657,7 @@ public class ScriptGameTests {
                 })
                 .thenExecute(() -> ServerPrograms.run(her, her.getUUID(), owner.getUUID(),
                         new ServerPrograms.Request("big-" + UUID.randomUUID(),
-                                "return gt.gt_client.length([==[" + text + "]==])", Modules.of(her.getUUID()), true),
+                                "return gt.gt_client.length([==[" + text + "]==])", Modules.of(her.getUUID(), java.util.Map.of(), java.util.Set.of()), true),
                         ServerSeats.transport(), CallObserver.NONE, result::set))
                 .thenWaitUntil(() -> {
                     seat.pump();

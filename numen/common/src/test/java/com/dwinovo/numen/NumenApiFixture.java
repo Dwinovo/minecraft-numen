@@ -35,18 +35,6 @@ public final class NumenApiFixture {
         // 内置内容产品里由加载器从 jar 里的 numen/ 交出去,单测从类路径上同一个目录交
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN,
                 numen -> numen.bundleContent(resource("numen")));
-        // 她的库落在这次测试专用的空目录里,和评测、GameTest 一样只有内置那一层
-        try {
-            java.nio.file.Path root = java.nio.file.Files.createTempDirectory("numen-test-lib-");
-            root.toFile().deleteOnExit();
-            java.util.UUID owner = java.util.UUID.randomUUID();
-            com.dwinovo.numen.api.library.LibraryHub hub = com.dwinovo.numen.api.library.LibraryHub.headless(root);
-            com.dwinovo.numen.api.script.Modules.init(uuid -> hub.library(com.dwinovo.numen.api.script.Modules.KIND, owner));
-            com.dwinovo.numen.api.agent.skill.SkillRegistry.init(
-                    uuid -> hub.library(com.dwinovo.numen.api.agent.skill.SkillRegistry.KIND, owner));
-        } catch (java.io.IOException e) {
-            throw new java.io.UncheckedIOException(e);
-        }
         // Numen API 自己的工具与几组(跑脚本、装技能、记计划、札记四个工具,api、mc、task、module 四组)产品里在初始化时登记,单测里同一个
         // 入口登记一次
         com.dwinovo.numen.api.CommonClass.registerTools();

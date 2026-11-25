@@ -2,7 +2,6 @@ package com.dwinovo.numen.gametest;
 
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.agent.loop.Hold;
-import com.dwinovo.numen.api.brain.CompanionLoops;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.gametest.OwnerLine;
@@ -62,8 +61,6 @@ public class RespawnGameTests {
             helper.assertTrue(server.getPlayerList().getPlayers().stream().filter(p -> p.getUUID().equals(uuid)).count() == 1,
                     "she is in the player list more than once");
             helper.assertTrue(owner.equals(now.getOwnerUuid()), "the respawned body lost its owner");
-            helper.assertTrue(CompanionLoops.get(uuid).orElseThrow().status().hold() != Hold.DEAD,
-                    "her brain is still frozen as dead");
 
             BlockPos spawn = level.getSharedSpawnPos();
             helper.assertTrue(now.level().dimension() == Level.OVERWORLD

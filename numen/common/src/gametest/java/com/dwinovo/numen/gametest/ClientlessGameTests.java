@@ -107,86 +107,33 @@ public class ClientlessGameTests {
         helper.succeed();
     }
 
-    /**
-     * 原版 {@code /msg} 把话送到收话人手里的最后一步(它的 {@code MsgCommand.sendMessage} 是私有的,所以照它的写法重做):
-     * 签了名的私聊带着发话人的 uuid,聊天类型是 {@code msg_command_incoming}。经指令的字符串走会被当成无来源的系统私聊,
-     * 真客户端发的签名指令不会。
-     */
-    private static void whisper(ServerPlayer from, NumenPlayer to, String text) {
-        to.sendChatMessage(OutgoingChatMessage.create(PlayerChatMessage.unsigned(from.getUUID(), text)), false,
-                ChatType.bind(ChatType.MSG_COMMAND_INCOMING, from.createCommandSourceStack()));
-    }
-
-    /** 她的请求里写着眼前的主人游戏里选的语言:客户端报给服务端的那个值,给他翻消息用的也是它。 */
+    /** 座位给她的状态里写着主人游戏里选的语言:客户端报给服务端的那个值,给他翻消息用的也是它。 */
     @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_clientless")
-    public static void her_request_names_the_language_her_owners_game_is_set_to(GameTestHelper helper) throws Exception {
+    public static void her_state_names_the_language_her_owners_game_is_set_to(GameTestHelper helper) {
         var server = helper.getLevel().getServer();
         ServerPlayer owner = GameTestKit.presentVanillaPlayer(helper, null, "gametest_zh_owner", "zh_cn");
-        BrainGameTests.Brain her = new BrainGameTests.Brain(helper, "gametest_lang",
-                Files.createTempDirectory("numen-gametest-brain-"), owner.getUUID(),
-                Replies.link(server, owner.getUUID()));
-        String state = her.loop.runtimeState();
-        helper.assertTrue(state.contains("<owner language=\"Chinese (China)\"/>"),
-                "her request does not name the language of her owner's game: " + state);
-        her.close();
-        GameTestKit.leave(owner);
-        helper.succeed();
-    }
-
-    /** 主人私聊她:话进她的单聊会话,她回的话以私信的样子回到他手里。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
-    public static void the_owners_whisper_reaches_her_and_she_whispers_back(GameTestHelper helper) throws Exception {
-        var server = helper.getLevel().getServer();
-        ServerPlayer owner = GameTestKit.presentVanillaPlayer(helper, null, "gametest_whisperer", "en_us");
-        BrainGameTests.Brain her = new BrainGameTests.Brain(helper, "gametest_whispered",
-                Files.createTempDirectory("numen-gametest-brain-"), owner.getUUID(),
-                Replies.link(server, owner.getUUID()));
-        her.mind.say("在呢");
-
-        whisper(owner, her.companion, "你好");
-
-        List<OwnerLine.Said> heard = new ArrayList<>();
+        NumenPlayer her = com.dwinovo.numen.api.gametest.Bodies.summon(server, owner.getUUID(), "gametest_lang",
+                helper.getLevel(), net.minecraft.world.phys.Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(8, 2, 8))));
+        com.dwinovo.numen.api.gametest.GameBrain brain = com.dwinovo.numen.api.gametest.GameBrain.sit(server, her,
+                new BrainGameTests.Scripted());
+        java.util.concurrent.CompletableFuture<?>[] asked = new java.util.concurrent.CompletableFuture<?>[1];
         succeedWhen(helper, () -> {
-            heard.addAll(GameTestKit.said(owner));
-            helper.assertTrue(her.conversation().stream().anyMatch(m -> m instanceof
-                            com.dwinovo.numen.api.agent.llm.ConvoState.Msg.User u && u.content().contains("你好")),
-                    "the whisper is not in her log: " + her.conversation());
-            helper.assertTrue(heard.stream().anyMatch(said -> said.text().getContents() instanceof TranslatableContents t
-                            && t.getKey().equals("commands.message.display.incoming")
-                            && said.text().getString().contains("在呢") && !said.overlay()),
-                    "her answer did not come back as a whisper: " + heard);
-            her.close();
+            helper.assertTrue(brain.ready(), "her brain has not taken the seat");
+            if (asked[0] == null) {
+                asked[0] = brain.state();
+            }
+            helper.assertTrue(asked[0].isDone(), "the seat has not answered the state request");
+            String state = ((com.dwinovo.numen.api.seat.SeatClient.Sitting) asked[0].join()).state().text();
+            helper.assertTrue(state.contains("<owner language=\"Chinese (China)\"/>"),
+                    "her state does not name the language of her owner's game: " + state);
+            brain.close();
+            Companions.dismiss(server, owner.getUUID(), List.of(her.getUUID()));
             GameTestKit.leave(owner);
-        });
-    }
-
-    /** 别的玩家私聊她:按旁听档进收件箱、标着是谁说的,不叫醒她。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
-    public static void a_strangers_whisper_is_overheard_and_does_not_wake_her(GameTestHelper helper) throws Exception {
-        var server = helper.getLevel().getServer();
-        ServerPlayer owner = GameTestKit.presentVanillaPlayer(helper, null, "gametest_host", "en_us");
-        ServerPlayer stranger = GameTestKit.presentVanillaPlayer(helper, null, "gametest_passerby", "en_us");
-        BrainGameTests.Brain her = new BrainGameTests.Brain(helper, "gt_overhearer",
-                Files.createTempDirectory("numen-gametest-brain-"), owner.getUUID(),
-                Replies.link(server, owner.getUUID()));
-
-        whisper(stranger, her.companion, "借把镐子");
-
-        helper.assertTrue(her.loop.inbox().entries().stream().anyMatch(e -> e.type().equals(EventTypes.TALK)
-                        && e.text().contains("gametest_passerby → gt_overhearer") && e.text().contains("借把镐子")),
-                "the stranger's whisper is not in her inbox, marked with who said it: " + her.loop.inbox().entries());
-        helper.runAfterDelay(20, () -> {
-            helper.assertTrue(her.mind.asked.isEmpty(), "a stranger's whisper woke her");
-            her.close();
-            GameTestKit.leave(owner);
-            GameTestKit.leave(stranger);
-            helper.succeed();
         });
     }
 
     /**
-     * 创建者把她分享给一位朋友({@code /numen player share}):朋友在场她就在线(创建者走了也不登出),朋友的私聊和主人的话一样
-     * 叫得到她、标着是谁说的;只有创建者能做的事(删除、清空记忆、再分享给别人)朋友做不了;朋友退出({@code /numen player leave})后
+     * 创建者把她分享给一位朋友({@code /numen player share}):朋友在场她就在线(创建者走了也不登出),只有创建者能做的事(删除、再分享给别人)朋友做不了;朋友退出({@code /numen player leave})后
      * 她的主人表上无人在场,她登出。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
@@ -214,26 +161,11 @@ public class ClientlessGameTests {
                 .thenExecute(() -> {
                     NumenPlayer still = NumenPlayer.findByUuid(server, id);
                     helper.assertTrue(still != null, "she logged out though the friend she is shared with is here");
-                    whisper(friend, still, "你好");
-                    var loop = com.dwinovo.numen.api.brain.CompanionLoops.get(id).orElseThrow();
-                    String from = "from=\"player@" + friend.getUUID().toString().substring(0, 6) + " (gt_friend)\"";
-                    helper.assertTrue(loop.inbox().entries().stream().anyMatch(e -> e.type().equals(EventTypes.QUERY)
-                                    && e.text().contains("你好") && e.text().contains(from))
-                                    || loop.log().loadLines(100).stream().anyMatch(line -> line.msg() instanceof
-                                    com.dwinovo.numen.api.agent.llm.ConvoState.Msg.User u && u.content().contains("你好")
-                                    && u.content().contains(from)),
-                            "the friend's whisper did not reach her as an owner's words naming him: "
-                                    + loop.inbox().entries());
-                    helper.assertTrue(friend.getUUID().equals(loop.speaker()), "she is not answering the friend");
-
                     List<Component> refused = new ArrayList<>();
                     run(friend, "numen player delete gt_shared", refused);
                     helper.assertTrue(registry.find(id) != null
                                     && refused.stream().anyMatch(m -> isKey(m, Keys.COMMAND_NO_SUCH_COMPANION)),
                             "the friend could delete a companion he did not create: " + refused);
-                    helper.assertTrue(com.dwinovo.numen.api.brain.OwnerInputs.apply(server, friend.getUUID(),
-                                    new com.dwinovo.numen.api.brain.OwnerInput.Wipe(id)).problem() != null,
-                            "the friend could wipe her memory");
                     helper.assertTrue(com.dwinovo.numen.api.brain.Sharing.share(server, friend.getUUID(), id,
                                     java.util.UUID.randomUUID()) == com.dwinovo.numen.api.brain.Sharing.Outcome.NOT_CREATOR,
                             "the friend could share her on");
@@ -309,41 +241,5 @@ public class ClientlessGameTests {
         CompanionFactory.despawn(owner.getServer(), companion);
         GameTestKit.leave(owner);
         helper.succeed();
-    }
-
-    /**
-     * 没装客户端的主人在动作栏上看到她在干什么(他客户端的语言);装了客户端的主人不收动作栏——他的头顶气泡与档案页读同一份状态。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
-    public static void an_owner_without_our_client_sees_what_she_is_doing_on_the_action_bar(GameTestHelper helper)
-            throws Exception {
-        var server = helper.getLevel().getServer();
-        ServerPlayer plain = GameTestKit.presentVanillaPlayer(helper, null, "gametest_watcher", "zh_cn");
-        ServerPlayer installed = GameTestKit.presentPlayer(helper, null, "gametest_installed");
-        Replies.hello(installed, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
-        BrainGameTests.Brain worker = new BrainGameTests.Brain(helper, "gametest_worker",
-                Files.createTempDirectory("numen-gametest-brain-"), plain.getUUID(),
-                Replies.link(server, plain.getUUID()));
-        BrainGameTests.Brain other = new BrainGameTests.Brain(helper, "gametest_other",
-                Files.createTempDirectory("numen-gametest-brain-"), installed.getUUID(),
-                Replies.link(server, installed.getUUID()));
-        worker.mind.program("gt.gt_sync.hold(100)").say("好了");
-        other.mind.program("gt.gt_sync.hold(100)").say("好了");
-        worker.loop.submitPrompt("干活");
-        other.loop.submitPrompt("干活");
-
-        List<OwnerLine.Said> bar = new ArrayList<>();
-        List<OwnerLine.Said> installedBar = new ArrayList<>();
-        succeedWhen(helper, () -> {
-            GameTestKit.said(plain).stream().filter(OwnerLine.Said::overlay).forEach(bar::add);
-            GameTestKit.said(installed).stream().filter(OwnerLine.Said::overlay).forEach(installedBar::add);
-            helper.assertTrue(bar.stream().anyMatch(b -> b.text().getString().equals("gametest_worker: 执行")),
-                    "what she is doing is not on his action bar in his language: " + bar);
-            helper.assertTrue(installedBar.isEmpty(), "an owner with our client got an action bar: " + installedBar);
-            worker.close();
-            other.close();
-            GameTestKit.leave(plain);
-            GameTestKit.leave(installed);
-        });
     }
 }

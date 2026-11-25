@@ -279,9 +279,9 @@ public final class GameTestKit {
     static NumenPlayer spawnAt(GameTestHelper helper, String name, BlockPos rel, boolean creative) {
         ServerLevel level = helper.getLevel();
         BlockPos spawn = helper.absolutePos(rel);
-        NumenPlayer companion = withBrain(Bodies.spawn(level.getServer(), UUID.randomUUID(),
+        NumenPlayer companion = Bodies.spawn(level.getServer(), UUID.randomUUID(),
                 name, UUID.randomUUID(), level,
-                new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5)));
+                new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
         companion.getRandom().setSeed(ENTITY_SEED);
         if (creative) {
             companion.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
@@ -289,72 +289,25 @@ public final class GameTestKit {
         return companion;
     }
 
-    /** 不思考的脑:GameTest 造的同伴只要一个收事件的收件箱,主人不在线,她待命,事件原样攒着;真被叫去想是用例写错了。 */
-    private static final com.dwinovo.numen.api.brain.Mind SILENT = new com.dwinovo.numen.api.brain.Mind() {
-        @Override
-        public com.dwinovo.numen.api.agent.loop.Cause unavailable(com.dwinovo.numen.api.brain.Bound provider) {
-            return com.dwinovo.numen.api.agent.loop.Cause.of(com.dwinovo.numen.api.agent.loop.Cause.NO_KEY, "gametest");
-        }
+    /** 送到她手里的事件,按同伴:大脑在主人的客户端,GameTest 里的这一份就是她的收件箱。 */
+    private static final java.util.Map<UUID, List<EventQueue.Entry>> DELIVERED =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
-        @Override
-        public com.dwinovo.numen.api.agent.llm.LlmEndpoint endpoint(com.dwinovo.numen.api.brain.Bound provider) {
-            return com.dwinovo.numen.api.agent.llm.LlmEndpoint.unresolved("");
-        }
-
-        @Override
-        public void ask(com.dwinovo.numen.api.brain.Bound provider, UUID companion, com.dwinovo.numen.api.agent.loop.ModelRequest request,
-                        com.dwinovo.numen.api.agent.http.CancelToken cancel,
-                        java.util.function.Consumer<com.dwinovo.numen.api.agent.loop.ModelPort.Delta> onDelta,
-                        java.util.function.Consumer<com.dwinovo.numen.api.agent.loop.ModelOutcome> onDone) {
-            throw new IllegalStateException("a GameTest companion's brain does not think");
-        }
-    };
-
-    /** 主人那一头什么也没有:不推界面,她的话也不告诉谁。 */
-    private static final com.dwinovo.numen.api.brain.CompanionLoops.Link NO_OWNER =
-            new com.dwinovo.numen.api.brain.CompanionLoops.Link() {
-                @Override
-                public boolean hasClient() {
-                    return false;
-                }
-
-                @Override
-                public void send(UUID companion, List<com.dwinovo.numen.api.brain.Feed> events) {
-                }
-
-                @Override
-                public void said(UUID companion, String said, com.dwinovo.numen.api.brain.Venue venue,
-                                 String conversation) {
-                }
-
-            };
-
-    /**
-     * 给一具直接造出来的身体配上收事件的大脑({@link #SILENT}):世界上发生的事经产品里同一个口({@code NumenEvents})进她的收件箱,
-     * 用例从 {@link #events} 读。
-     */
-    static NumenPlayer withBrain(NumenPlayer companion) {
-        try {
-            com.dwinovo.numen.api.store.Io io = com.dwinovo.numen.api.NumenIo.inline("numen-gametest");
-            com.dwinovo.numen.api.brain.CompanionBrains.create(companion.getServer(), companion.getUUID(),
-                    companion.getOwnerUuid(), new com.dwinovo.numen.api.home.Home(
-                            java.nio.file.Files.createTempDirectory("numen-gametest-brain-"), io), SILENT, NO_OWNER,
-                    () -> false, () -> false, () -> EventQueue.DEFAULT_LEVEL, id -> null);
-        } catch (java.io.IOException e) {
-            throw new java.io.UncheckedIOException(e);
-        }
-        return companion;
+    static {
+        com.dwinovo.numen.api.event.NumenEvents.onDelivered((companion, entry) ->
+                DELIVERED.computeIfAbsent(companion, uuid -> new java.util.concurrent.CopyOnWriteArrayList<>())
+                        .add(entry));
     }
 
-    /** 她收件箱里此刻的条目,只看不取:世界上发生的事(任务收尾、本能、服务器的话……)的唯一去处。 */
+    /** 送到她手里的条目此刻有哪些,只看不取:世界上发生的事(任务收尾、本能、服务器的话……)的唯一去处。 */
     static List<EventQueue.Entry> events(NumenPlayer companion) {
-        return com.dwinovo.numen.api.brain.CompanionLoops.get(companion.getUUID()).orElseThrow().inbox().entries();
+        return List.copyOf(DELIVERED.getOrDefault(companion.getUUID(), List.of()));
     }
 
     /** 同 {@link #events},取走并清空。 */
     static List<EventQueue.Entry> takeEvents(NumenPlayer companion) {
-        return com.dwinovo.numen.api.brain.CompanionLoops.get(companion.getUUID()).orElseThrow().inbox()
-                .takeEntries(System.currentTimeMillis(), 0L);
+        List<EventQueue.Entry> taken = DELIVERED.remove(companion.getUUID());
+        return taken == null ? List.of() : List.copyOf(taken);
     }
 
     /** 一间 5×5、三格高、无顶的木板屋,她在屋里。生存、空手:垫不高,只能拆墙或不出去。 */
@@ -785,21 +738,64 @@ public final class GameTestKit {
 
         private final net.minecraft.server.MinecraftServer server;
         private final com.dwinovo.numen.api.gametest.OwnerClient transport;
+        /** 主人客户端上她的模块:内置的取自这一次运行里登记过的,她自己的落在这一次专用的目录里。 */
+        private final com.dwinovo.numen.api.script.HerModules hers;
         private final java.util.Map<String, java.util.function.Consumer<com.dwinovo.numen.api.agent.loop.Program.Outcome>>
                 waiting = new java.util.concurrent.ConcurrentHashMap<>();
 
         private Programs(net.minecraft.server.MinecraftServer server, UUID owner) {
             this.server = server;
             this.transport = new com.dwinovo.numen.api.gametest.OwnerClient(server, owner);
+            try {
+                this.hers = new com.dwinovo.numen.api.script.HerModules(new com.dwinovo.numen.api.home.Home(
+                        java.nio.file.Files.createTempDirectory("numen-gametest-modules-"),
+                        com.dwinovo.numen.api.NumenIo.inline("numen-gametest")), new FactoryModules());
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+        }
+
+        /** 内置模块,GameTest 里就在这个进程里。 */
+        private static final class FactoryModules implements com.dwinovo.numen.api.script.HerModules.Builtins {
+            @Override
+            public java.util.Set<String> names() {
+                return com.dwinovo.numen.api.script.BuiltinModules.all().keySet();
+            }
+
+            @Override
+            public boolean loaded() {
+                return true;
+            }
+
+            @Override
+            public String code(String name) {
+                var builtin = com.dwinovo.numen.api.script.BuiltinModules.get(name);
+                return builtin == null ? null : builtin.code();
+            }
+        }
+
+        /** 主人客户端上她的模块。 */
+        com.dwinovo.numen.api.script.HerModules modules() {
+            return hers;
         }
 
         /** 跑一段程序,{@code observer} 看着它的每次调用。 */
         void run(UUID companion, String programId, String code, com.dwinovo.numen.api.program.CallObserver observer,
                  java.util.function.Consumer<com.dwinovo.numen.api.agent.loop.Program.Outcome> done) {
             waiting.put(programId, done);
+            transport.serve(companion, new com.dwinovo.numen.api.sdk.ClientContext() {
+                @Override
+                @SuppressWarnings("unchecked")
+                public <T> T of(Class<T> type) {
+                    if (type != com.dwinovo.numen.api.script.HerModules.class) {
+                        throw new IllegalArgumentException("a GameTest client has no " + type.getSimpleName());
+                    }
+                    return (T) hers;
+                }
+            });
             com.dwinovo.numen.api.program.ServerPrograms.run(NumenPlayer.findByUuid(server, companion), companion,
                     companion, new com.dwinovo.numen.api.program.ServerPrograms.Request(programId, code,
-                            com.dwinovo.numen.api.script.Modules.of(companion), true), transport, observer, outcome -> {
+                            com.dwinovo.numen.api.script.Modules.of(companion, hers.hers(), hers.disabled()), true), transport, observer, outcome -> {
                         var to = waiting.remove(programId);
                         if (to != null) {
                             to.accept(outcome);
@@ -1023,6 +1019,7 @@ public final class GameTestKit {
      * 收尾后记录就送走了,晚一刻再看就看不到。程序跑完的摘掉。
      */
     static void observeLive() {
+        com.dwinovo.numen.api.gametest.GameBrain.tickAll();
         for (Live live : LIVE) {
             live.run().lookAll(live.body());
             if (live.ended().get()) {

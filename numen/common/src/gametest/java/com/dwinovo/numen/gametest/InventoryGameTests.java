@@ -110,7 +110,7 @@ public class InventoryGameTests {
         GameTestKit.said(watcher);
 
         com.dwinovo.numen.api.entity.Companions.applySkin(server, uuid,
-                new com.dwinovo.numen.api.entity.MojangSkins.Skin("ZmFrZQ==", ""));
+                new com.dwinovo.numen.api.entity.MojangSkins.Skin("ZmFrZQ==", ""), null);
 
         helper.assertTrue(NumenPlayer.findByUuid(server, uuid) == first, "she was rebuilt instead of changed in place");
         helper.assertTrue(first.getGameProfile().getProperties().containsKey("textures"),
@@ -119,7 +119,7 @@ public class InventoryGameTests {
         helper.assertTrue(!wait.done(), "the task in her hands was cut off by the skin change");
         helper.assertTrue(GameTestKit.said(watcher).stream().noneMatch(s -> s.text().getString().contains("joined")),
                 "changing the skin was announced as a join");
-        com.dwinovo.numen.api.entity.Companions.applySkin(server, uuid, null);
+        com.dwinovo.numen.api.entity.Companions.applySkin(server, uuid, null, null);
         helper.assertTrue(!first.getGameProfile().getProperties().containsKey("textures"), "the skin did not come off");
         GameTestKit.leave(watcher);
         com.dwinovo.numen.api.entity.Companions.dismiss(server, first);

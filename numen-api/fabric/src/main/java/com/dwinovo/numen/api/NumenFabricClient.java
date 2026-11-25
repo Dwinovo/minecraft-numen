@@ -55,13 +55,13 @@ public class NumenFabricClient implements ClientModInitializer {
         net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK
                 .register(client -> {
                     com.dwinovo.numen.api.client.NumenKeys.tick();
-                    com.dwinovo.numen.api.client.agent.RemoteCompanions.tick();
+                    com.dwinovo.numen.api.client.agent.ClientCompanions.tick();
                 });
 
         net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.DISCONNECT
                 .register((handler, client) -> {
                     // 服务端推来的一切都不算了:别让上一个存档的东西漂进下一个存档
-                    com.dwinovo.numen.api.client.agent.RemoteCompanions.disconnected();
+                    com.dwinovo.numen.api.client.agent.ClientCompanions.disconnected();
                     com.dwinovo.numen.api.network.NumenNetwork.disconnectedFromServer();
                     com.dwinovo.numen.api.client.data.ClientNumenState.clear();
                     com.dwinovo.numen.api.client.agent.KnownSkins.clear();

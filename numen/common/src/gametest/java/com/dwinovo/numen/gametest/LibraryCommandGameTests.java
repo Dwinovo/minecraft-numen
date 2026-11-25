@@ -1,20 +1,13 @@
 package com.dwinovo.numen.gametest;
 
-import com.dwinovo.numen.api.brain.Bound;
-import com.dwinovo.numen.api.brain.CompanionLoops;
-import com.dwinovo.numen.api.brain.Replies;
 import com.dwinovo.numen.api.brain.ServerSkins;
-import com.dwinovo.numen.api.brain.Slot;
 import com.dwinovo.numen.api.data.ModLanguageData.Keys;
-import com.dwinovo.numen.api.library.EntryId;
-import com.dwinovo.numen.api.library.LibraryHub;
-import com.dwinovo.numen.api.persona.PersonaLibrary;
 import com.dwinovo.numen.api.skin.MineSkinClient;
 import com.dwinovo.numen.api.skin.MojangSkinLookup;
 import com.dwinovo.numen.api.skin.SkinError;
 import com.dwinovo.numen.api.skin.SkinFolder;
 import com.dwinovo.numen.api.skin.SkinSigning;
-import com.dwinovo.numen.api.voice.VoiceProfile;
+import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
@@ -29,50 +22,9 @@ import static com.dwinovo.numen.gametest.ClientlessGameTests.isKey;
 import static com.dwinovo.numen.gametest.ClientlessGameTests.run;
 
 /**
- * 没装客户端的主人用命令管她的绑定、她的皮肤:{@code /numen companion …}、{@code /numen companion … skin …}。主人是 {@link GameTestKit#presentVanillaPlayer}(原版客户端的样子)。
+ * 没装客户端的主人用命令管她的皮肤:{@code /numen companion … skin …}。主人是 {@link GameTestKit#presentVanillaPlayer}(原版客户端的样子)。
  */
 public class LibraryCommandGameTests {
-
-    /** 三项绑定经命令换上、换下,和面板编辑卡走同一个入口;库里没有的条目说清楚、不动她的绑定。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_clientless")
-    public static void companion_commands_bind_and_unbind_her_three_items(GameTestHelper helper) throws Exception {
-        var server = helper.getLevel().getServer();
-        ServerPlayer owner = GameTestKit.presentVanillaPlayer(helper, null, "gametest_binder", "en_us");
-        var her = new BrainGameTests.Brain(helper, "gametest_bound", Files.createTempDirectory("numen-gametest-brain-"),
-                owner.getUUID(), Replies.link(server, owner.getUUID()));
-        var hub = LibraryHub.of(server);
-        EntryId persona = EntryId.mine("gametest_cmd_persona");
-        hub.library(PersonaLibrary.KIND, owner.getUUID()).mine().write(persona, "你是测试员\n");
-        EntryId voice = EntryId.mine("gametest_cmd_voice");
-        hub.library(VoiceProfile.KIND, owner.getUUID()).mine().write(voice,
-                new VoiceProfile("", "openai", "", "", "m", "alex", "", "", "", 1f).write());
-        List<Component> heard = new ArrayList<>();
-
-        run(owner, "numen companion gametest_bound persona " + persona, heard);
-        run(owner, "numen companion gametest_bound voice " + voice, heard);
-        helper.assertTrue(new Bound(owner.getUUID(), persona).equals(her.loop.bound(Slot.PERSONA)), "persona: " + heard);
-        helper.assertTrue(new Bound(owner.getUUID(), voice).equals(her.loop.bound(Slot.VOICE)), "voice: " + heard);
-        helper.assertTrue(heard.stream().allMatch(m -> isKey(m, Keys.COMMAND_BOUND)), "not told: " + heard);
-
-        heard.clear();
-        run(owner, "numen companion gametest_bound voice my:not_there", heard);
-        helper.assertTrue(heard.size() == 1 && isKey(heard.get(0), Keys.COMMAND_BIND_FAILED), "refusal not said: " + heard);
-        helper.assertTrue(new Bound(owner.getUUID(), voice).equals(her.loop.bound(Slot.VOICE)),
-                "a refused bind changed her voice");
-
-        heard.clear();
-        run(owner, "numen companion gametest_bound voice", heard);
-        helper.assertTrue(her.loop.bound(Slot.VOICE) == null && isKey(heard.get(0), Keys.COMMAND_UNBOUND),
-                "the voice was not taken off: " + heard);
-        run(owner, "numen companion gametest_bound profile", heard);
-        helper.assertTrue(her.loop.bound(Slot.PROVIDER) == null, "a profile cannot be unbound by leaving it out");
-
-        hub.library(PersonaLibrary.KIND, owner.getUUID()).mine().delete(persona);
-        hub.library(VoiceProfile.KIND, owner.getUUID()).mine().delete(voice);
-        her.close();
-        GameTestKit.leave(owner);
-        helper.succeed();
-    }
 
     private static String contents(Component message) {
         StringBuilder out = new StringBuilder();
@@ -149,8 +101,8 @@ public class LibraryCommandGameTests {
             throws Exception {
         var server = helper.getLevel().getServer();
         ServerPlayer owner = GameTestKit.presentVanillaPlayer(helper, null, "gametest_dresser", "en_us");
-        var her = new BrainGameTests.Brain(helper, "gametest_dressed", Files.createTempDirectory("numen-gametest-brain-"),
-                owner.getUUID(), Replies.link(server, owner.getUUID()));
+        var her = com.dwinovo.numen.api.gametest.Bodies.summon(server, owner.getUUID(), "gametest_dressed",
+                helper.getLevel(), net.minecraft.world.phys.Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(8, 2, 8))));
         java.util.concurrent.atomic.AtomicInteger signed = new java.util.concurrent.atomic.AtomicInteger();
         ServerSkins.start(server, fakeSigning(signed));
         java.nio.file.Path file = SkinFolder.here().dir().resolve("gametest_dress.png");
@@ -166,7 +118,7 @@ public class LibraryCommandGameTests {
             ServerSkins.start(server, SkinSigning.Backend.NETWORK);
         });
         var registry = com.dwinovo.numen.api.entity.CompanionRegistry.get(server);
-        UUID id = her.companion.getUUID();
+        UUID id = her.getUUID();
         List<Component> heard = new ArrayList<>();
 
         run(owner, "numen companion gametest_dressed skin server gametest_dress", heard);
@@ -181,8 +133,8 @@ public class LibraryCommandGameTests {
                             "the rebuilt body does not carry the cached signature");
                     helper.assertTrue(GameTestKit.said(owner).stream().anyMatch(m -> m.text().getString().contains("now wears skin")),
                             "the owner was not told it was worn");
-                    helper.assertTrue(CompanionLoops.get(id).orElseThrow().state().skinId() != null,
-                            "her binding does not say which skin she wears");
+                    helper.assertTrue(registry.find(id).skinRef() != null,
+                            "the roster does not say which skin she wears");
                     heard.clear();
                     run(owner, "numen companion gametest_dressed skin server gametest_dress", heard);
                     helper.assertTrue(GameTestKit.said(owner).stream().anyMatch(m -> m.text().getString().contains("now wears skin")),
@@ -197,13 +149,11 @@ public class LibraryCommandGameTests {
                     helper.assertTrue(signed.get() == 1, "a borrowed skin was sent to MineSkin");
                     heard.clear();
                     run(owner, "numen companion gametest_dressed skin", heard);
-                    helper.assertTrue(registry.find(id).skinValue().isEmpty()
-                                    && CompanionLoops.get(id).orElseThrow().state().skinId() == null,
+                    helper.assertTrue(registry.find(id).skinValue().isEmpty() && registry.find(id).skinRef() == null,
                             "the skin was not taken off: " + heard);
                     run(owner, "numen companion gametest_dressed skin server no_such_skin", heard);
                     helper.assertTrue(heard.stream().anyMatch(m -> isKey(m, Keys.COMMAND_SKIN_FAILED)),
                             "a missing file was not said: " + heard);
-                    CompanionLoops.dismissed(server, id);
                     var live = com.dwinovo.numen.api.entity.NumenPlayer.findByUuid(server, id);
                     if (live != null) {
                         com.dwinovo.numen.api.entity.CompanionFactory.despawn(server, live);

@@ -349,9 +349,9 @@ public class CombatGameTests {
                 level.setBlockAndUpdate(new BlockPos(x, y - 1, z), net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
             }
         }
-        NumenPlayer companion = GameTestKit.withBrain(Bodies.spawn(level.getServer(),
+        NumenPlayer companion = Bodies.spawn(level.getServer(),
                 java.util.UUID.randomUUID(), "gametest_cornered", java.util.UUID.randomUUID(), level,
-                new net.minecraft.world.phys.Vec3(x0 + 3.5, y, z0 + 2.5)));
+                new net.minecraft.world.phys.Vec3(x0 + 3.5, y, z0 + 2.5));
         companion.getRandom().setSeed(ENTITY_SEED);
         companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_SWORD));
         companion.getFoodData().setFoodLevel(20);
@@ -450,7 +450,7 @@ public class CombatGameTests {
 
     /** 她此刻请求里的 {@code <nearby>} 一栏;半径里什么都没有是空串。 */
     private static String nearbyOf(NumenPlayer companion) {
-        String state = com.dwinovo.numen.api.brain.CompanionLoops.get(companion.getUUID()).orElseThrow().runtimeState();
+        String state = com.dwinovo.numen.api.seat.ServerSeats.state(companion.getUUID()).text();
         int from = state.indexOf("<nearby");
         return from < 0 ? "" : state.substring(from, state.indexOf("</nearby>") + "</nearby>".length());
     }

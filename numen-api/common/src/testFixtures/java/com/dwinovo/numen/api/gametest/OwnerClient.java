@@ -60,6 +60,11 @@ public final class OwnerClient implements ClientTransport {
         ServerSeats.transport().cancel(callId);
     }
 
+    /** 这个"客户端"上她的大脑里的东西(她的模块):客户端函数从这里取。 */
+    public void serve(UUID companion, com.dwinovo.numen.api.sdk.ClientContext context) {
+        pipe.client().serveContext(companion, context);
+    }
+
     /** 从此这个"客户端"的答复都到不了服务端:程序里的客户端函数只能等到时限。 */
     public void silence() {
         pipe.silence();

@@ -203,7 +203,7 @@ public class PluginGameTests {
         helper.assertTrue(answered(on), "the group's function did not answer: " + on.outcome());
 
         com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PLUGIN, "disable",
-                "{\"id\":\"gt_dyn\"}");
+                "{\"id\":\"gt_dyn\"}", 0);
         var row = pluginRow(GameTestKit.received(admin), "gt_dyn");
         helper.assertTrue(row != null && row.get("disabled").getAsBoolean() && !row.get("pending").getAsBoolean()
                         && "disabled".equals(row.get("status").getAsString()),
@@ -214,7 +214,7 @@ public class PluginGameTests {
                 "her program could still call the switched-off group: " + off.outcome());
 
         com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PLUGIN, "enable",
-                "{\"id\":\"gt_dyn\"}");
+                "{\"id\":\"gt_dyn\"}", 0);
         row = pluginRow(GameTestKit.received(admin), "gt_dyn");
         helper.assertTrue(row != null && !row.get("disabled").getAsBoolean() && "loaded".equals(row.get("status").getAsString()),
                 "the admin was not shown the plugin as on again: " + row);
@@ -224,11 +224,11 @@ public class PluginGameTests {
 
         // 再关再开一轮:任务执行器不留尸体、也不登记两份
         com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PLUGIN, "disable",
-                "{\"id\":\"gt_dyn\"}");
+                "{\"id\":\"gt_dyn\"}", 0);
         GameTestKit.received(admin);
         helper.assertTrue(!runnerRegistered(companion), "the task runner stayed registered after the plugin was switched off");
         com.dwinovo.numen.api.brain.Replies.library(admin, com.dwinovo.numen.api.brain.Libraries.PLUGIN, "enable",
-                "{\"id\":\"gt_dyn\"}");
+                "{\"id\":\"gt_dyn\"}", 0);
         GameTestKit.received(admin);
         helper.assertTrue(runnerRegistered(companion), "the task runner did not come back after switching the plugin on again");
         server.getPlayerList().deop(admin.getGameProfile());
