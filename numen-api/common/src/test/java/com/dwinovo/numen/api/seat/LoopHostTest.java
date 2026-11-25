@@ -65,7 +65,7 @@ class LoopHostTest {
 
         Scripted program(String id, String code) {
             replies.add(new ModelOutcome.Answered(new AssistantTurn("", List.of(new LlmToolCall(id, new ScriptTool().name(),
-                    "{\"code\":\"" + code + "\"}")), null), Usage.ZERO));
+                    "{\"code\":\"" + code + "\",\"description\":\"Run it\"}")), null), Usage.ZERO));
             return this;
         }
 

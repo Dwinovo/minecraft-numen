@@ -67,7 +67,7 @@ class McpEndpointTest {
     /** 假的宿主:两个工具;lua 报两次进展;"fail" 抛异常;"hold" 停到用例放行;记下每次调用。 */
     private static final class Host implements McpHost {
         volatile List<ToolInfo> tools = List.of(
-                new ToolInfo("lua", "Run program", "runs a program", "{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"}}}",
+                new ToolInfo("lua", "Run program", "runs a program", "{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"}}}",
                         new Hints(false, true, false, true)),
                 new ToolInfo("get_events", "Wait for events", "waits", "{\"type\":\"object\"}",
                         new Hints(true, false, false, false)));

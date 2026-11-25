@@ -160,7 +160,7 @@ interface Mind extends com.dwinovo.numen.api.mind.Mind {
             if (code != null) {
                 acted = true;
                 turn = new AssistantTurn("", List.of(new LlmToolCall("bench-" + UUID.randomUUID(), ScriptEngine.IN_USE.toolName(),
-                        ScriptTool.args(code).toString())), null);
+                        ScriptTool.args(code, "Run the scenario program").toString())), null);
             } else {
                 turn = new AssistantTurn(words, List.of(), null);
             }

@@ -20,6 +20,16 @@ public final class ScriptTool implements NumenTool {
 
     /** 参数里程序的那个键。 */
     private static final String CODE = "code";
+    /** 参数里这段程序做什么的那一句:主人在面板上读到的。 */
+    private static final String DESCRIPTION = "description";
+
+    /**
+     * 一次调用写下的东西。
+     *
+     * @param code        程序
+     * @param description 这段程序做什么,一句话,用她和主人说话的语言写
+     */
+    public record Program(String code, String description) {}
 
     @Override
     public String name() {
@@ -62,7 +72,12 @@ public final class ScriptTool implements NumenTool {
 
     @Override
     public Map<String, Object> parameterSchema() {
-        return Schema.object().string(CODE, "The program.").build();
+        return Schema.object()
+                .string(CODE, "The program.")
+                .string(DESCRIPTION, "A clear, concise line, in active voice, saying what this program does, a few "
+                        + "words: \"Mine the iron vein to the east\". Your owner reads it on the panel; write it in "
+                        + "the language you speak with them (see <speaking>).")
+                .build();
     }
 
     /** 程序只由派发器跑(见类注释),调到这里是接线错了。 */
@@ -72,12 +87,12 @@ public final class ScriptTool implements NumenTool {
     }
 
     /**
-     * 这次调用里写的程序。
+     * 这次调用里写的程序与它做什么的那一句。
      *
      * @param arguments 模型写的参数 JSON
-     * @throws IllegalArgumentException 参数不是 JSON、没写程序或多写了别的
+     * @throws IllegalArgumentException 参数不是 JSON、程序或那一句没写(或空白、不是字符串)、或多写了别的
      */
-    public static String code(String arguments) {
+    public static Program parse(String arguments) {
         JsonObject args;
         try {
             args = JsonParser.parseString(arguments).getAsJsonObject();
@@ -85,21 +100,29 @@ public final class ScriptTool implements NumenTool {
             throw new IllegalArgumentException("invalid arguments JSON: " + notJson.getMessage());
         }
         for (String key : args.keySet()) {
-            if (!key.equals(CODE)) {
-                throw new IllegalArgumentException("unknown argument '" + key + "'; this takes: " + CODE);
+            if (!key.equals(CODE) && !key.equals(DESCRIPTION)) {
+                throw new IllegalArgumentException("unknown argument '" + key + "'; this takes: " + CODE + ", "
+                        + DESCRIPTION);
             }
         }
-        JsonElement code = args.get(CODE);
-        if (code == null || !code.isJsonPrimitive() || !code.getAsJsonPrimitive().isString()) {
-            throw new IllegalArgumentException("argument '" + CODE + "' is missing: the program, as a string");
+        return new Program(text(args, CODE, "the program, as a string"),
+                text(args, DESCRIPTION, "what the program does, in a few words"));
+    }
+
+    private static String text(JsonObject args, String key, String what) {
+        JsonElement value = args.get(key);
+        if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()
+                || value.getAsString().isBlank()) {
+            throw new IllegalArgumentException("argument '" + key + "' is missing: " + what);
         }
-        return code.getAsString();
+        return value.getAsString();
     }
 
     /** 一段程序写成这个工具的一次调用的参数。 */
-    public static JsonObject args(String code) {
+    public static JsonObject args(String code, String description) {
         JsonObject args = new JsonObject();
         args.addProperty(CODE, code);
+        args.addProperty(DESCRIPTION, description);
         return args;
     }
 }

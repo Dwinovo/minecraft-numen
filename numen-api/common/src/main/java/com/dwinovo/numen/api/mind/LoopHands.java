@@ -245,7 +245,7 @@ public final class LoopHands implements ExternalHands {
                 }
                 String args = argsJson == null || argsJson.isBlank() ? "{}" : argsJson;
                 if (tool instanceof ScriptTool) {
-                    ScriptTool.code(args);   // 参数写错当场回失败,不占工具口
+                    ScriptTool.parse(args);   // 参数写错当场回失败,不占工具口
                 }
                 LlmToolCall call = new LlmToolCall(CALL_PREFIX + SEQ.incrementAndGet(), tool.name(), args);
                 if (!host.runExternal(call, f::complete)) {

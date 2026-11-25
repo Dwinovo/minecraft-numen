@@ -125,7 +125,7 @@ class CompanionToolPortTest {
     };
 
     private static LlmToolCall program(String id) {
-        return new LlmToolCall(id, "lua", ScriptTool.args("numen.work.dig({x = 1, y = 2, z = 3})").toString());
+        return new LlmToolCall(id, "lua", ScriptTool.args("numen.work.dig({x = 1, y = 2, z = 3})", "Dig one block").toString());
     }
 
     private static Program.Outcome ended(String receipt) {

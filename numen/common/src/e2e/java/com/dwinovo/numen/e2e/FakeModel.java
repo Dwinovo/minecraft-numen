@@ -197,6 +197,7 @@ final class FakeModel implements AutoCloseable {
             case Reply.Lua lua -> {
                 JsonObject arguments = new JsonObject();
                 arguments.addProperty("code", lua.code());
+                arguments.addProperty("description", "Run the e2e program");
                 JsonObject function = new JsonObject();
                 function.addProperty("name", "lua");
                 function.addProperty("arguments", arguments.toString());

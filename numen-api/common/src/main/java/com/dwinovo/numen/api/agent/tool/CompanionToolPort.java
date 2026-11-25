@@ -165,7 +165,7 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
                 companion, call.name(), call.id(), call.arguments().length());
         try {
             if (tool instanceof ScriptTool) {
-                programs.run(companion, call.id(), ScriptTool.code(call.arguments()),
+                programs.run(companion, call.id(), ScriptTool.parse(call.arguments()).code(),
                         outcome -> landed.accept(settled(outcome)));
                 return;
             }

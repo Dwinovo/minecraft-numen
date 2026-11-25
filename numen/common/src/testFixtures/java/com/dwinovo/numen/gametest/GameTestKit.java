@@ -1091,7 +1091,7 @@ public final class GameTestKit {
     static LlmToolCall programCall(String code) {
         String tool = com.dwinovo.numen.script.ScriptEngine.IN_USE.toolName();
         return new LlmToolCall("gametest-" + tool + "-" + UUID.randomUUID(), tool,
-                com.dwinovo.numen.api.agent.tool.ScriptTool.args(code).toString());
+                com.dwinovo.numen.api.agent.tool.ScriptTool.args(code, "Run a test program").toString());
     }
 
     /** 看着一段程序的每次调用:派出时记一笔,回来时记下回执与它派下的活(调度器按调用 id 认得出)。 */
@@ -1146,7 +1146,7 @@ public final class GameTestKit {
 
         @Override
         public void invoke(LlmToolCall call, java.util.function.Consumer<com.dwinovo.numen.api.agent.loop.SerialCalls.Settled> done) {
-            runProgram(body, call.id(), com.dwinovo.numen.api.agent.tool.ScriptTool.code(call.arguments()), run,
+            runProgram(body, call.id(), com.dwinovo.numen.api.agent.tool.ScriptTool.parse(call.arguments()).code(), run,
                     outcome -> done.accept(new com.dwinovo.numen.api.agent.loop.SerialCalls.Settled(outcome.receipt(),
                             outcome.ending(), outcome.calls(), outcome.stoppedFor())));
         }

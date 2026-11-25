@@ -323,6 +323,7 @@ class ExternalBrainOnClientTest {
         assertTrue(events.contains("<runtime_state>"), "the receipt ends with her state: " + events);
 
         JsonObject lua = args("code", "return 1 + 1");
+        lua.addProperty("description", "Add one and one");
         CompletableFuture<String> running = CompletableFuture.supplyAsync(() -> {
             try {
                 return call(client, new ScriptTool().name(), lua);

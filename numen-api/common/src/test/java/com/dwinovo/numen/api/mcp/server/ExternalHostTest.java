@@ -217,10 +217,11 @@ class ExternalHostTest {
         hands.events = "<events>x</events>";
         JsonObject lua = args("companion", "alice");
         lua.addProperty("code", "return 1");
+        lua.addProperty("description", "Return one");
 
         McpHost.Result result = host.call(BRAIN, "lua", lua.toString(), 5, McpHost.Progress.NONE);
 
-        assertEquals(List.of("ran lua {\"code\":\"return 1\"}", "<events>x</events>",
+        assertEquals(List.of("ran lua {\"code\":\"return 1\",\"description\":\"Return one\"}", "<events>x</events>",
                 "<runtime_state>of " + ALICE + "</runtime_state>"), result.texts());
         assertFalse(result.error());
         assertEquals(ALICE, result.subject());
