@@ -164,7 +164,7 @@ public final class Asking {
         for (int i = 0; i < questions.size(); i++) {
             String a = answer(i);
             if (a != null) {
-                out.add(new Answer(questions.get(i).question(), a, null));
+                out.add(new Answer(questions.get(i).question(), a));
             }
         }
         return out;

@@ -36,7 +36,7 @@ class AskingTest {
         Asking asking = asking(single("Q1?"));
         assertTrue(asking.direct());
         asking.pick(1);
-        assertEquals(List.of(new Reply.Answered(List.of(new Answer("Q1?", "b", null)))), replies);
+        assertEquals(List.of(new Reply.Answered(List.of(new Answer("Q1?", "b")))), replies);
     }
 
     @Test
@@ -52,7 +52,7 @@ class AskingTest {
         assertNull(asking.current());
         assertTrue(replies.isEmpty(), "nothing is handed in before the owner confirms");
         asking.submit();
-        assertEquals(List.of(new Reply.Answered(List.of(new Answer("Q1?", "a", null), new Answer("Q2?", "b", null)))),
+        assertEquals(List.of(new Reply.Answered(List.of(new Answer("Q1?", "a"), new Answer("Q2?", "b")))),
                 replies);
     }
 
@@ -70,7 +70,7 @@ class AskingTest {
         asking.next();
         assertTrue(asking.reviewing());
         asking.submit();
-        assertEquals(List.of(new Reply.Answered(List.of(new Answer("Q?", "x", null)))), replies);
+        assertEquals(List.of(new Reply.Answered(List.of(new Answer("Q?", "x")))), replies);
     }
 
     @Test
@@ -86,8 +86,8 @@ class AskingTest {
         asking.other("and more");
         assertEquals("y, and more", asking.answer(1));
         asking.submit();
-        assertEquals(List.of(new Reply.Answered(List.of(new Answer("Q1?", "neither", null),
-                new Answer("Q2?", "y, and more", null)))), replies);
+        assertEquals(List.of(new Reply.Answered(List.of(new Answer("Q1?", "neither"),
+                new Answer("Q2?", "y, and more")))), replies);
     }
 
     @Test
@@ -108,7 +108,7 @@ class AskingTest {
         asking.pick(1);
         asking.pick(0);
         asking.submit();
-        assertEquals(List.of(new Reply.Answered(List.of(new Answer("Q1?", "b", null), new Answer("Q2?", "a", null)))),
+        assertEquals(List.of(new Reply.Answered(List.of(new Answer("Q1?", "b"), new Answer("Q2?", "a")))),
                 replies);
     }
 
@@ -127,7 +127,7 @@ class AskingTest {
         asking.clarify();
         asking.decline();
         asking.pick(1);
-        assertEquals(List.of(new Reply.Clarify(List.of(new Answer("Q1?", "a", null)))), replies);
+        assertEquals(List.of(new Reply.Clarify(List.of(new Answer("Q1?", "a")))), replies);
         assertFalse(asking.open());
 
         replies.clear();

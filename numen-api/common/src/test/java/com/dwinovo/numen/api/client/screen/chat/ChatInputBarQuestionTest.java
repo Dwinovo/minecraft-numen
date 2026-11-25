@@ -67,7 +67,7 @@ class ChatInputBarQuestionTest {
     void aNumberKeyPicksTheOptionAndTheDigitIsNotTypedIntoTheBox() {
         ChatInputBar bar = ask(single("Q?"));
         assertTrue(bar.keyPressed(KEY_2, 0));
-        assertEquals(List.of(new Reply.Answered(List.of(new Answer("Q?", "b", null)))), replies);
+        assertEquals(List.of(new Reply.Answered(List.of(new Answer("Q?", "b")))), replies);
         assertTrue(bar.charTyped('2'), "the character that follows the key press is swallowed");
         assertEquals("", bar.text());
     }
@@ -77,7 +77,7 @@ class ChatInputBarQuestionTest {
         ChatInputBar bar = ask(single("Q?"));
         bar.setText("the one by the lake");
         assertTrue(bar.keyPressed(KeyCodes.ENTER, 0));
-        assertEquals(List.of(new Reply.Answered(List.of(new Answer("Q?", "the one by the lake", null)))), replies);
+        assertEquals(List.of(new Reply.Answered(List.of(new Answer("Q?", "the one by the lake")))), replies);
         assertTrue(host.sent.isEmpty(), "the words are an answer, not a message");
         assertEquals("", bar.text());
     }
@@ -107,7 +107,7 @@ class ChatInputBarQuestionTest {
         bar.keyPressed(KeyCodes.ENTER, 0);   // box empty: next
         assertTrue(host.asking.reviewing());
         bar.keyPressed(KeyCodes.ENTER, 0);   // review: submit
-        assertEquals(List.of(new Reply.Answered(List.of(new Answer("Q1?", "a", null), new Answer("Q2?", "x, y", null)))),
+        assertEquals(List.of(new Reply.Answered(List.of(new Answer("Q1?", "a"), new Answer("Q2?", "x, y")))),
                 replies);
     }
 

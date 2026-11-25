@@ -39,8 +39,8 @@ public final class Questions {
         }
     }
 
-    /** 主人对一个问题的答案;{@code notes} 是他附的话,没附是 null。多选的答案是各项用逗号连起来。 */
-    public record Answer(String question, String answer, String notes) {}
+    /** 主人对一个问题的答案;多选的答案是各项用逗号连起来。 */
+    public record Answer(String question, String answer) {}
 
     /** 主人怎么回:答了、拒绝(Esc)、想先聊聊。 */
     public sealed interface Reply {
@@ -172,7 +172,7 @@ public final class Questions {
 
     private static String answered(List<Answer> answers) {
         String parts = answers.stream().map(a -> "\"" + a.question() + "\"=\"" + a.answer() + "\""
-                + (a.notes() == null || a.notes().isBlank() ? "" : " user notes: " + a.notes()))
+)
                 .collect(Collectors.joining(", "));
         JsonObject envelope = JsonParser.parseString(ToolOutcome.success("Your owner has answered your questions: "
                 + parts + ". You can now continue with your owner's answers in mind.")).getAsJsonObject();
@@ -181,9 +181,6 @@ public final class Questions {
             JsonObject o = new JsonObject();
             o.addProperty("question", a.question());
             o.addProperty("answer", a.answer());
-            if (a.notes() != null && !a.notes().isBlank()) {
-                o.addProperty("notes", a.notes());
-            }
             list.add(o);
         }
         envelope.add("answers", list);
@@ -219,8 +216,7 @@ public final class Questions {
             List<Answer> out = new ArrayList<>();
             for (JsonElement e : array) {
                 JsonObject o = e.getAsJsonObject();
-                out.add(new Answer(o.get("question").getAsString(), o.get("answer").getAsString(),
-                        o.has("notes") ? o.get("notes").getAsString() : null));
+                out.add(new Answer(o.get("question").getAsString(), o.get("answer").getAsString()));
             }
             return out;
         } catch (RuntimeException notAnswers) {

@@ -189,7 +189,7 @@ class AskUserQuestionToolTest {
         assertEquals("Your owner has answered your questions: \"Which furnace?\"=\"Smoker\", "
                 + "\"Which fuels?\"=\"Coal, Lava\". You can now continue with your owner's answers in mind.",
                 message(result.get()));
-        assertEquals(List.of(new Answer("Which furnace?", "Smoker", null), new Answer("Which fuels?", "Coal, Lava", null)),
+        assertEquals(List.of(new Answer("Which furnace?", "Smoker"), new Answer("Which fuels?", "Coal, Lava")),
                 Questions.answersIn(result.get()), "the stream reads the answers from the result");
     }
 
@@ -200,14 +200,6 @@ class AskUserQuestionToolTest {
         desk.pending().other("  the one by the lake ");
         assertEquals("Your owner has answered your questions: \"Which furnace?\"=\"the one by the lake\". You can "
                 + "now continue with your owner's answers in mind.", message(result.get()));
-    }
-
-    @Test
-    void notesComeAfterTheirAnswerOnlyWhenGiven() {
-        String text = message(Questions.result(Questions.parse(args(MANY)), new Reply.Answered(List.of(
-                new Answer("Which furnace?", "Blast", "the red one"), new Answer("Which fuels?", "Coal", null)))));
-        assertEquals("Your owner has answered your questions: \"Which furnace?\"=\"Blast\" user notes: the red one, "
-                + "\"Which fuels?\"=\"Coal\". You can now continue with your owner's answers in mind.", text);
     }
 
     @Test
