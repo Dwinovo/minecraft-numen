@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.client.agent;
 
+import com.dwinovo.numen.api.agent.tool.ToolLine;
 import net.minecraft.client.resources.language.I18n;
 
 /**
@@ -11,7 +12,7 @@ public final class ToolWords {
     private ToolWords() {}
 
     public static String label(String name) {
-        String key = "numen.tool." + name;
+        String key = ToolLine.key(name);
         return I18n.exists(key) ? I18n.get(key) : name;
     }
 }

@@ -15,7 +15,7 @@ class BodyMirrorTest {
 
     @Test
     void aRunningCallReadsAsItsSummaryWhenItHasOne() {
-        assertEquals(new LoopStatus.Doing("numen.activity.default", List.of("Mine the iron vein")),
+        assertEquals(new LoopStatus.Doing("numen.tool.lua", List.of("lua", "Mine the iron vein")),
                 new BodyMirror().doing("lua", "Mine the iron vein"));
     }
 

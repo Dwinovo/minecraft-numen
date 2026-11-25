@@ -3,7 +3,7 @@ package com.dwinovo.numen.api.mind;
 import com.dwinovo.numen.api.agent.loop.LoopStatus;
 import com.dwinovo.numen.api.seat.BodyTask;
 import com.dwinovo.numen.api.seat.SeatState;
-import com.dwinovo.numen.api.task.Activity;
+import com.dwinovo.numen.api.agent.tool.ToolLine;
 
 /**
  * 服务端告诉大脑的她此刻的样子({@link SeatState}),大脑这一头读的那份——服务端事实的缓存,只有服务端的消息写它(一轮开头的 {@code state/get}、程序结局、叫停的答复、{@code task_finished} 事件):给模型的 {@code <runtime_state>} 文字,与循环要的手上那件活的结构
@@ -49,7 +49,7 @@ final class BodyMirror {
 
     /**
      * 她此刻在干什么,{@code LoopStatus} 要的那一句:后台活优先(几十秒的长活,得看见她在挖矿而不是卡死了),
-     * 没有才是手上这一个工具调用({@code tool}):它有 {@code summary}(工具自己说这次调用读作什么)就说那一句,没有就说工具名;
+     * 没有才是手上这一个工具调用({@code tool}):名字之后接上 {@code summary}(工具自己说这次调用读作什么,没有就不接,读法见 {@link ToolLine});
      * 都没有返回 {@code null}。"在干什么"只在这一处合成。
      */
     LoopStatus.Doing doing(String tool, String summary) {
@@ -60,7 +60,6 @@ final class BodyMirror {
         if (tool == null) {
             return null;
         }
-        return summary.isEmpty() ? new LoopStatus.Doing("numen.tool." + tool, java.util.List.of(tool))
-                : new LoopStatus.Doing(Activity.DEFAULT_KEY, java.util.List.of(summary));
+        return new LoopStatus.Doing(ToolLine.key(tool), summary.isEmpty() ? java.util.List.of(tool) : java.util.List.of(tool, summary));
     }
 }

@@ -12,6 +12,7 @@ import com.dwinovo.numen.api.client.agent.ToolWords;
 import com.dwinovo.numen.api.agent.provider.AssistantTurn;
 import com.dwinovo.numen.api.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
+import com.dwinovo.numen.api.agent.tool.ToolLine;
 import com.dwinovo.numen.api.agent.tool.ToolRegistry;
 import com.dwinovo.numen.api.client.agent.Conversations;
 import com.dwinovo.numen.api.client.agent.CompanionView;
@@ -1733,7 +1734,7 @@ public final class ChatView {
     private static String toolLine(LlmToolCall tc) {
         NumenTool tool = ToolRegistry.resolve(Minecraft.getInstance().getUser().getProfileId(), tc.name());
         String summary = NumenTool.summaryOf(tool, tc.arguments());
-        return summary.isEmpty() ? ToolWords.label(tc.name()) : ToolWords.label(tc.name()) + "  " + summary;
+        return ToolLine.of(ToolWords.label(tc.name()), summary);
     }
 
 }

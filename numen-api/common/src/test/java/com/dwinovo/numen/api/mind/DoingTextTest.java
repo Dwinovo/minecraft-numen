@@ -22,6 +22,16 @@ class DoingTextTest {
     }
 
     @Test
+    void aToolCallReadsAsItsLabelThenWhatItDoes() {
+        Component text = DoingText.of(new LoopStatus.Doing("numen.tool.lua", List.of("lua", "挖东边那片铁矿")),
+                Set.of("numen.tool.lua")::contains);
+        assertEquals(Component.translatable("numen.tool.lua").getString() + "  挖东边那片铁矿", text.getString());
+        Component untranslated = DoingText.of(new LoopStatus.Doing("numen.tool.mcp_fetch", List.of("mcp_fetch", "{\"q\":1}")),
+                key -> false);
+        assertEquals("mcp_fetch  {\"q\":1}", untranslated.getString());
+    }
+
+    @Test
     void aToolWithNoTranslationIsSaidByItsOwnName() {
         Component text = DoingText.of(new LoopStatus.Doing("numen.tool.mcp_fetch", List.of("mcp_fetch")), key -> false);
         assertEquals("mcp_fetch", text.getString());
