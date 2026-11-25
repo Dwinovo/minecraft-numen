@@ -87,9 +87,15 @@ final class Bot implements AutoCloseable {
     private boolean informed;
     private final List<String> packetErrors = new CopyOnWriteArrayList<>();
     private final List<String> payloadChannels = new CopyOnWriteArrayList<>();
+    /** 服务端发来的自定义载荷交给谁(无头的主人客户端读它);没有就只记频道名。 */
+    private volatile java.util.function.BiConsumer<String, byte[]> payloadListener;
 
-    private Bot(String name, String locale, Spec server) {
+    /** 配置阶段就登记的自定义载荷频道:装着模组的客户端在进入游戏之前就登记好,服务端在登入那一刻才认得出它收得了。 */
+    private final List<String> channels;
+
+    private Bot(String name, String locale, Spec server, List<String> channels) {
         this.name = name;
+        this.channels = channels;
         this.session = new TcpClientSession(server.host(), server.port(), new MinecraftProtocol(name));
         session.addListener(new SessionAdapter() {
             @Override
@@ -128,7 +134,12 @@ final class Bot implements AutoCloseable {
 
     /** 以这个名字、这个客户端语言进服;等到进了游戏才返回,被拒就抛出服务端给的原因。 */
     static Bot join(Spec server, String name, String locale) throws Exception {
-        Bot bot = new Bot(name, locale, server);
+        return join(server, name, locale, List.of());
+    }
+
+    /** 同上,配置阶段先登记这些频道(一个装着模组的客户端的样子)。 */
+    static Bot join(Spec server, String name, String locale, List<String> channels) throws Exception {
+        Bot bot = new Bot(name, locale, server, channels);
         bot.session.connect();
         try {
             bot.joined.get(60, TimeUnit.SECONDS);
@@ -142,12 +153,19 @@ final class Bot implements AutoCloseable {
     private void received(Packet packet, String locale) {
         if (packet instanceof ClientboundCustomPayloadPacket payload) {
             payloadChannels.add(payload.getChannel().asString());
+            java.util.function.BiConsumer<String, byte[]> listener = payloadListener;
+            if (listener != null) {
+                listener.accept(payload.getChannel().asString(), payload.getData());
+            }
         }
         if (packet instanceof ClientboundCustomPayloadPacket && !informed) {
             // 配置阶段的第一个包(服务端品牌)到了:原版客户端在这个阶段把自己的语言报上去
             informed = true;
             session.send(new ServerboundClientInformationPacket(locale, 8, ChatVisibility.FULL, true,
                     List.of(SkinPart.values()), HandPreference.RIGHT_HAND, false, true));
+            if (!channels.isEmpty()) {
+                payload("minecraft:register", String.join(" ", channels).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
         } else if (packet instanceof ClientboundPingPacket ping) {
             // 配置阶段服务端用 ping 探客户端处理到哪了;原版客户端立刻原样回 pong
             session.send(new ServerboundPongPacket(ping.getId()));
@@ -317,6 +335,17 @@ final class Bot implements AutoCloseable {
     /** 服务端发来的自定义载荷频道——原版客户端自己用不上的东西(我们的包)不该出现在这里。 */
     List<String> payloadChannels() {
         return List.copyOf(payloadChannels);
+    }
+
+    /** 服务端发来的每个自定义载荷(频道名与字节)交给 {@code listener},在网络线程上。 */
+    void onPayload(java.util.function.BiConsumer<String, byte[]> listener) {
+        this.payloadListener = listener;
+    }
+
+    /** 这位玩家的 UUID(离线模式按名字算,服务端认的就是它)。 */
+    java.util.UUID uuid() {
+        return java.util.UUID.nameUUIDFromBytes(("OfflinePlayer:" + ((MinecraftProtocol) session.getPacketProtocol()).getProfile().getName())
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     /** 模拟可选模组登记频道与发包。 */

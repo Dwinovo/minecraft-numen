@@ -24,7 +24,6 @@ class HandshakeTest extends Scenario {
             int mark = owner.mark();
             owner.command("numen player summon " + companion);
             owner.await(mark, m -> m.text().contains("Summoned") && m.text().contains(companion), WAIT, "summon");
-            String originalUuid = console("data get entity " + companion + " UUID");
 
             // 0.1.4 登记的频道:有名册与状态,没有开场。已有同伴时登记、重登之后再登记,两条路都不能发 Numen 包
             register(owner, ROSTER, "numen_api:numen_state", "numen_api:numen_locations");
@@ -32,10 +31,10 @@ class HandshakeTest extends Scenario {
             owner.close();
             waitFor(() -> !onList(name), "owner to leave");
             owner = join(name, "en_us");
-            waitFor(() -> onList(companion), "companion to log back in with her owner");
+            // 她的大脑在主人的客户端上:这位主人的客户端没有坐上她的座位,她就不回来
             register(owner, ROSTER, "numen_api:numen_state", "numen_api:numen_locations");
             assertNothingSent(owner, companion);
-            assertEquals(originalUuid, console("data get entity " + companion + " UUID"), "rejoining must keep the body");
+            assertTrue(!onList(companion), "she came back with an owner whose client sits at no seat of hers");
         } finally {
             if (owner.connected()) {
                 owner.command("numen player delete " + companion);

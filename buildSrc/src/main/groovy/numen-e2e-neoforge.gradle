@@ -46,7 +46,7 @@ tasks.register('e2eServerStart') {
     usesService(server)
     // runE2e 依赖的那些(编译、模板、运行配置的参数文件),不含 runE2e 本身
     dependsOn { game.get().taskDependencies.getDependencies(game.get()) }
-    dependsOn 'e2eSeed'
+    dependsOn 'e2ePorts'
     doLast {
         def run = game.get()
         def dir = gameDir
@@ -77,7 +77,6 @@ tasks.register('e2eServerStart') {
                 'sync-chunk-writes=false',
                 'motd=numen e2e',
         ].join('\n') + '\n'
-        ant.copy(todir: new File(dir, 'config/numen')) { fileset(dir: spec.seed.get().asFile) }
 
         def java = run.javaLauncher.get().executablePath.asFile.absolutePath
         def cp = run.classpathProvider.asPath

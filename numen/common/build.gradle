@@ -71,12 +71,27 @@ sourceSets {
 neoForge.addModdingDependenciesTo(sourceSets.testFixtures)
 
 /*
- * 端到端测试(src/e2e):一台真服务端 + 一个按原版客户端协议(MCProtocolLib)连进去的无头客户端,把没装 Numen 客户端的玩家
- * 能做的事从头走一遍。场景只认一份规格(地址、RCON 口、种子),不碰 Minecraft 与 Numen 的任何类,所以只是个独立编的源码集,
- * 不进发行 jar;跑在平台项目上:`:numen:neoforge:e2eTest`(任务与起服层见 buildSrc 的 numen-e2e)。
+ * 端到端测试(src/e2e):一台真服务端 + 按原版客户端协议(MCProtocolLib)连进去的无头客户端。一种是没装 Numen 的原版玩家;一种是
+ * 无头的主人客户端:同一条连接上跑 Numen API 里真的座位、大脑与包的编解码,模型是场景里的假端点。场景只认一份规格(地址、RCON 口、
+ * 假模型的端口),所以只是个独立编的源码集,不进发行 jar;跑在平台项目上:`:numen:neoforge:e2eTest`(任务与起服层见 buildSrc 的 numen-e2e)。
  */
 sourceSets {
     e2e
+}
+neoForge.addModdingDependenciesTo(sourceSets.e2e)
+// 原版钉死了几个库的版本(netty、gson、slf4j);MCProtocolLib 要的比它们新,同一条类路径上只能用原版这一份
+configurations.matching { it.name.startsWith('e2e') }.configureEach {
+    resolutionStrategy.eachDependency { details ->
+        def pinned = [
+                'io.netty'        : '4.1.97.Final',
+                'com.google.code.gson': '2.10.1',
+                'org.slf4j'       : '2.0.9',
+        ]
+        def version = pinned[details.requested.group]
+        if (version != null) {
+            details.useVersion version
+        }
+    }
 }
 
 repositories {
@@ -87,6 +102,7 @@ repositories {
 }
 
 dependencies {
+    e2eImplementation project(':numen-api:common')
     e2eImplementation 'org.geysermc.mcprotocollib:protocol:1.21-20241010.155958-24'
     e2eImplementation 'com.google.code.gson:gson:2.10.1'
     e2eImplementation platform('org.junit:junit-bom:5.11.4')

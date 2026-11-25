@@ -1,17 +1,15 @@
 package com.dwinovo.numen.e2e;
 
 /**
- * 场景对服务端的全部认识:一个地址、一个 RCON 口、一个本地假模型端点要听的端口,以及种子里那份档案叫什么。
+ * 场景对服务端的全部认识:一个地址、一个 RCON 口、一个本地假模型端点要听的端口和它认的 key(无头主人客户端上她的大脑调它)。
  * 值出自 buildSrc 的 numen-e2e 里的规格(Gradle 把它们交成系统属性),起服的一层也读同一份,所以这里没有任何一个字面量端口。
  */
-record Spec(String host, int port, int rconPort, String rconPassword, int modelPort, String modelKey,
-            String modelProfile) {
+record Spec(String host, int port, int rconPort, String rconPassword, int modelPort, String modelKey) {
 
     static Spec fromProperties() {
         return new Spec(property("e2e.host"), Integer.parseInt(property("e2e.port")),
                 Integer.parseInt(property("e2e.rcon.port")), property("e2e.rcon.password"),
-                Integer.parseInt(property("e2e.model.port")), property("e2e.model.key"),
-                property("e2e.model.profile"));
+                Integer.parseInt(property("e2e.model.port")), property("e2e.model.key"));
     }
 
     private static String property(String name) {

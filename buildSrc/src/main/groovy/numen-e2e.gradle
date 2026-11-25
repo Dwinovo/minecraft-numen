@@ -1,7 +1,7 @@
 /**
  * 端到端测试在平台项目这一侧的共用部分(numen/neoforge 应用它,起服层 numen-e2e-neoforge 再应用它):
- * 一台真服务端 + 一个按原版客户端协议(MCProtocolLib)连进去的无头客户端,把没装 Numen 客户端的玩家能做的事从头走一遍:
- * 进服、翻译、召唤、私聊、会话指令、补全、征询按钮、动作栏。场景是 numen/common 的 e2e 源码集(和 GameTest 用例同处),
+ * 一台真服务端 + 一个按原版客户端协议(MCProtocolLib)连进去的无头客户端,把玩家能做的事从头走一遍:
+ * 进服、翻译、召唤、私聊、会话指令、补全、征询。场景是 numen/common 的 e2e 源码集(和 GameTest 用例同处),
  * 不发布、不进发行 jar。
  *
  * <p>分两层:
@@ -16,9 +16,7 @@ evaluationDependsOn(':numen:common')
 
 /**
  * 场景对服务端的全部要求。三个端口(服务端、RCON、假模型)每次运行时由 e2ePorts 现取空闲的填进来,并行的 worktree 与 CI 互不相踩;
- * 起服层与种子都排在它后面、在执行期读这份规格,所以下面的端口只是占位。
- * 种子是铺进服务端配置根(config/numen/)的文件:一份指向假模型的内置模型档案和它用的 key,
- * 这是管理员配档案的正门(往内置库里放一个文件,见 docs/input-pipeline.md §六)。
+ * 起服层排在它后面、在执行期读这份规格,所以下面的端口只是占位。假模型在测试进程里,是无头主人客户端上她的大脑调的模型,服务端不知道它。
  */
 ext.e2e = [
         host        : '127.0.0.1',
@@ -27,8 +25,6 @@ ext.e2e = [
         rconPassword: 'e2e',
         modelPort   : 0,
         modelKey    : 'e2e-key',
-        modelProfile: 'server:e2e',
-        seed        : layout.buildDirectory.dir('e2e-seed'),
 ]
 
 tasks.register('e2ePorts') {
@@ -47,25 +43,6 @@ tasks.register('e2ePorts') {
             sockets*.close()
         }
         logger.lifecycle("[numen-e2e] 端口 服务端 ${spec.port}、RCON ${spec.rconPort}、假模型 ${spec.modelPort}")
-    }
-}
-
-tasks.register('e2eSeed') {
-    group = 'verification'
-    description = '生成铺进服务端配置根的种子:指向假模型的内置档案与它的 key'
-    def spec = e2e
-    dependsOn 'e2ePorts'
-    outputs.upToDateWhen { false }
-    outputs.dir(spec.seed)
-    doLast {
-        def root = spec.seed.get().asFile
-        def profile = new File(root, 'server/provider/server/e2e.json')
-        profile.parentFile.mkdirs()
-        profile.text = '{"provider":"custom","protocol":"chat","model":"e2e-fake",' +
-                "\"base_url\":\"http://${spec.host}:${spec.modelPort}/v1\"}\n"
-        def key = new File(root, 'server/keys/custom.key')
-        key.parentFile.mkdirs()
-        key.text = spec.modelKey + '\n'
     }
 }
 
@@ -96,6 +73,5 @@ tasks.register('e2eTest', Test) {
         systemProperty 'e2e.rcon.password', spec.rconPassword
         systemProperty 'e2e.model.port', spec.modelPort
         systemProperty 'e2e.model.key', spec.modelKey
-        systemProperty 'e2e.model.profile', spec.modelProfile
     }
 }
