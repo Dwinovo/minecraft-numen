@@ -65,18 +65,16 @@ public final class LibraryDesk {
     public static final String DELETE = "delete";
     /** 内容库专有:重扫目录。 */
     public static final String RELOAD = "reload";
-    /** 内容库专有:把服务器提供的一条原样复制到我的。 */
-    public static final String COPY = "copy";
-    /** 内容库专有:玩家自己的开关(记在他的偏好里)。 */
+    /** 内容库专有:主人自己的开关(记在他的偏好里)。 */
     public static final String ENABLE = "enable";
     public static final String DISABLE = "disable";
-    /** MCP 服务器专有:条目主人的"连不连"(服务器提供的只有管理员)。 */
+    /** MCP 服务器专有:条目的"连不连"。 */
     public static final String CONNECT = "connect";
     public static final String DISCONNECT = "disconnect";
-    /** 内容库专有,管理员:jar 带来了新版而他改过自带内容时,采用新版(换掉他的)或不采用(这一版不再提示)。 */
+    /** 内容库专有:jar 带来了新版而他改过自带内容时,采用新版(换掉他的)或不采用(这一版不再提示)。 */
     public static final String ACCEPT = "accept";
     public static final String DISMISS = "dismiss";
-    /** 内容库专有,管理员:改过的自带条目丢掉改动,取回 jar 里的默认。 */
+    /** 内容库专有:改过的自带条目丢掉改动,取回 jar 里的默认。 */
     public static final String RESTORE = "restore";
     /** MCP 服务器专有:交回授权回调网址。 */
     public static final String AUTH = "auth";
@@ -86,23 +84,17 @@ public final class LibraryDesk {
     /** 新建成功的答复里附的一行 {@code {"created": 新条目的 id}};改已有条目的答复不带。 */
     public static final String CREATED = "created";
 
-    /** 请求里选哪一组:缺省是我的;{@code "server"} 是服务器提供(只有管理员)。 */
-    public static final String GROUP_SERVER = "server";
-    public static final String GROUP_MINE = "mine";
-
     /**
      * 一次读写的结果。
      *
      * @param entries 这位玩家此刻看得到的整表(JSON 数组)
      * @param problem 办不成的原因(给界面和日志);办成是 {@code null}
      * @param later   还要等一会儿才有的结局(连通性检测的那次请求):到了再作为同一种库的又一张表送出去(请求号随这一张,它才是答复);没有是 {@code null}
-     * @param shared  这次改动改了所有人共用的东西(服务器目录、服主的设置):在线的其他玩家各收到他们看得到的新表
      */
-    public record Result(String entries, String problem, java.util.concurrent.CompletableFuture<String> later,
-                         boolean shared) {
+    public record Result(String entries, String problem, java.util.concurrent.CompletableFuture<String> later) {
 
         public Result(String entries, String problem) {
-            this(entries, problem, null, false);
+            this(entries, problem, null);
         }
     }
 
@@ -148,53 +140,53 @@ public final class LibraryDesk {
 
     /**
      * @param owner 发请求的玩家
-     * @param admin 他是不是管理员({@code Authority.isAdmin})
      * @param body  存和删带的 JSON;列不用
      */
-    public Result handle(UUID owner, boolean admin, String kind, String op, JsonObject body) {
+    public Result handle(UUID owner, String kind, String op, JsonObject body) {
         if (PROVIDER_CHECK.equals(kind)) {
             return check(owner, op, body);
         }
         Done done = switch (kind) {
-            case PERSONA -> contentLibrary(owner, admin, PersonaLibrary.KIND, op, body,
+            case PERSONA -> contentLibrary(PersonaLibrary.KIND, op, body,
                     b -> required(b, "text", "a persona needs a text"),
                     (from, to) -> rebind(Slot.PERSONA, from, to));
-            case PROVIDER -> contentLibrary(owner, admin, ProviderLibrary.KIND, op, body,
+            case PROVIDER -> contentLibrary(ProviderLibrary.KIND, op, body,
                     b -> ProviderLibrary.write(ProviderLibrary.profileFromJson(b)),
                     (from, to) -> rebind(Slot.PROVIDER, from, to));
-            case SKILL -> contentLibrary(owner, admin, SkillRegistry.KIND, op, body, null, (from, to) -> { });
-            case VOICE -> contentLibrary(owner, admin, VoiceProfile.KIND, op, body,
+            case SKILL -> contentLibrary(SkillRegistry.KIND, op, body, null, (from, to) -> { });
+            case VOICE -> contentLibrary(VoiceProfile.KIND, op, body,
                     b -> VoiceProfile.fromJson(b).write(),
                     (from, to) -> rebind(Slot.VOICE, from, to));
             case KEY -> key(op, body);
-            case MCP_CLIENT -> mcpClient(owner, admin, op, body);
-            case MCP_SERVER -> Done.of(mcpServer(op, body), false);
-            case PREFS -> Done.of(prefs(owner, op, body), false);
+            case MCP_CLIENT -> mcpClient(op, body);
+            case MCP_SERVER -> Done.of(mcpServer(op, body));
+            case PREFS -> Done.of(prefs(op, body));
             case NOTES -> notes(owner, op, body);
             case SCHEDULES -> schedules(owner, op, body);
-            case NOTE, CATALOG -> Done.of(LIST.equals(op) ? null : "unknown operation", false);
-            default -> Done.of("unknown library", false);
+            case NOTE, CATALOG -> Done.of(LIST.equals(op) ? null : "unknown operation");
+            default -> Done.of("unknown library");
         };
-        JsonArray entries = JsonParser.parseString(view(owner, admin, kind, body)).getAsJsonArray();
+        JsonArray entries = JsonParser.parseString(view(owner, kind, body)).getAsJsonArray();
         if (done.extra() != null) {
             entries.add(done.extra());
         }
-        return new Result(entries.toString(), done.problem(), null, done.shared() && done.problem() == null);
+        return new Result(entries.toString(), done.problem(), null);
     }
 
-    /** 一次操作的结局:办不成的原因,是不是改了所有人共用的东西,以及要随答复附在整表后面带给这位玩家的一行(提醒、规则错在哪)。 */
-    private record Done(String problem, boolean shared, JsonObject extra) {
+    /** 一次操作的结局:办不成的原因,以及要随答复附在整表后面带给这位玩家的一行(提醒、规则错在哪)。 */
+    private record Done(String problem, JsonObject extra) {
 
         static Done ok() {
-            return new Done(null, false, null);
+            return new Done(null, null);
         }
 
-        static Done of(String problem, boolean shared) {
-            return new Done(problem, shared, null);
+        /** {@code problem} 为 {@code null} 是办成了。 */
+        static Done of(String problem) {
+            return new Done(problem, null);
         }
 
         static Done problem(String problem) {
-            return new Done(problem, false, null);
+            return new Done(problem, null);
         }
     }
 
@@ -213,21 +205,21 @@ public final class LibraryDesk {
                     JsonArray done = new JsonArray();
                     done.add(state);
                     return done.toString();
-                }), false);
+                }));
     }
 
-    /** 这位玩家此刻看得到的整表。看不到的库是空表。 */
-    public String view(UUID owner, boolean admin, String kind) {
-        return view(owner, admin, kind, new JsonObject());
+    /** 此刻的整表。 */
+    public String view(UUID owner, String kind) {
+        return view(owner, kind, new JsonObject());
     }
 
     /** 同上;目录这种按问题答的库,{@code ask} 是问题(见 {@link ProviderForm#answer})。 */
-    private String view(UUID owner, boolean admin, String kind, JsonObject ask) {
+    private String view(UUID owner, String kind, JsonObject ask) {
         JsonArray out = new JsonArray();
         switch (kind) {
             case PERSONA -> rows(sources.library(PersonaLibrary.KIND), out, (entry, row) ->
                     row.addProperty("text", entry.text().strip()));
-            case PROVIDER -> providerRows(owner, admin, out);
+            case PROVIDER -> providerRows(out);
             case SKILL -> rows(sources.library(SkillRegistry.KIND), out, (entry, row) -> {
                 SkillInfo info = SkillRegistry.read(entry.path());
                 row.addProperty("skill", info == null ? entry.id().name() : info.name());
@@ -241,7 +233,7 @@ public final class LibraryDesk {
                 }
             });
             case KEY -> keyRows(out);
-            case MCP_CLIENT -> mcpRows(owner, admin, out);
+            case MCP_CLIENT -> mcpRows(out);
             case MCP_SERVER -> out.add(mcpServerView());
             case CATALOG -> out.add(ProviderForm.answer(catalog, ask));
             case PREFS -> out.add(sources.prefs().toJson());
@@ -370,25 +362,21 @@ public final class LibraryDesk {
 
     // ---- 内容库:同一套操作、同一种行 ----
 
-    /** 一条的内容库行共有的几项;{@code extra} 补各库自己的。服务器提供的在前,我的在后。 */
+    /** 一条的内容库行共有的几项;{@code extra} 补各库自己的。 */
     private static void rows(Library library, JsonArray out,
                              java.util.function.BiConsumer<Library.Entry, JsonObject> extra) {
-        for (Library.Group group : Library.Group.values()) {
-            for (Library.Entry entry : library.group(group)) {
-                JsonObject row = new JsonObject();
-                row.addProperty("id", entry.id().toString());
-                row.addProperty("name", entry.id().name());
-                row.addProperty("namespace", entry.id().namespace());
-                row.addProperty("group", group == Library.Group.SERVER && !library.merged() ? GROUP_SERVER : GROUP_MINE);
-                row.addProperty("shipped", entry.provenance().shipped());
-                row.addProperty("enabled", entry.enabled());
-                row.addProperty("paired", entry.paired());
-                row.addProperty("modified", entry.provenance().modified());
-                row.addProperty("update", entry.provenance().updateAvailable());
-                row.addProperty("gone", entry.provenance().sourceGone());
-                extra.accept(entry, row);
-                out.add(row);
-            }
+        for (Library.Entry entry : library.entries()) {
+            JsonObject row = new JsonObject();
+            row.addProperty("id", entry.id().toString());
+            row.addProperty("name", entry.id().name());
+            row.addProperty("namespace", entry.id().namespace());
+            row.addProperty("shipped", entry.provenance().shipped());
+            row.addProperty("enabled", entry.enabled());
+            row.addProperty("modified", entry.provenance().modified());
+            row.addProperty("update", entry.provenance().updateAvailable());
+            row.addProperty("gone", entry.provenance().sourceGone());
+            extra.accept(entry, row);
+            out.add(row);
         }
     }
 
@@ -406,17 +394,14 @@ public final class LibraryDesk {
     }
 
     /**
-     * 内容库的操作。写和删带 {@code group: "server"} 的是改服务器目录里的,只有管理员;默认是改我的(房主的"我的"就是服务器目录)。
-     * 服务器提供的一条玩家只读,
-     * 想改就 {@link #COPY} 到我的再改;开关记在他自己的偏好里。
+     * 内容库的操作。开关记在他自己的偏好里。
      *
      * @param content 请求的正文变成文件的正文;这种库不能经协议存就是 {@code null}
-     * @param renamed 我的某一条改了名(id 随之更换)时,他绑的旧 id 改指新的
+     * @param renamed 某一条改了名(id 随之更换)时,他绑的旧 id 改指新的
      */
-    private Done contentLibrary(UUID owner, boolean admin, LibraryKind kind, String op, JsonObject body, Content content,
+    private Done contentLibrary(LibraryKind kind, String op, JsonObject body, Content content,
                                 java.util.function.BiConsumer<EntryId, EntryId> renamed) {
         Library library = sources.library(kind);
-        boolean onServer = GROUP_SERVER.equals(string(body, "group"));
         EntryId id = EntryId.parse(string(body, "id"));
         switch (op) {
             case LIST:
@@ -424,8 +409,6 @@ public final class LibraryDesk {
             case RELOAD:
                 library.reload();   // 目录里的文件是真源,外部编辑器改过就重扫
                 return Done.ok();
-            case COPY:
-                return library.copyToMine(id) == null ? Done.problem("no such server entry") : Done.ok();
             case ENABLE:
             case DISABLE:
                 if (id == null || library.findAny(id) == null) {
@@ -435,47 +418,38 @@ public final class LibraryDesk {
                 return Done.ok();
             case ACCEPT:
             case DISMISS:
-                if (!admin) {
-                    return Done.problem("only a server admin may take or dismiss a new default version");
-                }
-                if (id == null || library.server().get(id) == null) {
-                    return Done.problem("no such server entry");
+                if (id == null || library.shelf().get(id) == null) {
+                    return Done.problem("no such entry");
                 }
                 if (ACCEPT.equals(op)) {
                     sources.manifest().accept(kind, id);
                 } else {
                     sources.manifest().dismiss(kind, id);
                 }
-                library.server().reload();   // 清单换了磁盘上的文件,内存里的表跟上
-                return Done.of(null, true);
+                library.reload();   // 清单换了磁盘上的文件,内存里的表跟上
+                return Done.ok();
             case RESTORE:
-                if (!admin) {
-                    return Done.problem("only a server admin may restore a shipped entry to its default");
-                }
-                if (id == null || library.server().get(id) == null) {
-                    return Done.problem("no such server entry");
+                if (id == null || library.shelf().get(id) == null) {
+                    return Done.problem("no such entry");
                 }
                 if (!sources.manifest().restore(kind, id)) {
                     return Done.problem("that entry has no default to go back to");
                 }
-                library.server().reload();   // 清单换了磁盘上的文件,内存里的表跟上
-                return Done.of(null, true);
+                library.reload();   // 清单换了磁盘上的文件,内存里的表跟上
+                return Done.ok();
             case PUT:
             case DELETE:
                 break;
             default:
                 return Done.problem("unknown operation");
         }
-        if (onServer && !admin) {
-            return Done.problem("only a server admin may change the server's entries");
-        }
-        Shelf shelf = onServer ? library.server() : library.mine();
+        Shelf shelf = library.shelf();
         if (DELETE.equals(op)) {
             if (id == null || shelf.get(id) == null) {
                 return Done.problem("no such entry");
             }
             shelf.delete(id);
-            return Done.of(null, shelf == library.server());
+            return Done.ok();
         }
         if (content == null) {
             return Done.problem("unknown operation");
@@ -493,21 +467,19 @@ public final class LibraryDesk {
         String clean = EntryId.clean(name, kind.dir());
         EntryId old = id != null && shelf.get(id) != null ? id : null;
         EntryId target = old != null && old.name().equals(clean) ? old
-                : shelf.unique(old != null ? old.namespace() : onServer ? EntryId.SERVER : EntryId.MINE, clean);
+                : shelf.unique(old != null ? old.namespace() : EntryId.MINE, clean);
         shelf.write(target, text);
         if (old != null && !old.equals(target)) {
             shelf.delete(old);
-            if (!onServer) {
-                renamed.accept(old, target);   // 我的某条改了名:id 就是名字,他绑着它的那些绑定得重新指过去
-            }
+            renamed.accept(old, target);   // 某条改了名:id 就是名字,他绑着它的那些绑定得重新指过去
         }
         if (old != null) {
-            return Done.of(null, shelf == library.server());
+            return Done.ok();
         }
         // 新建的:id 由服务端按名字起,客户端要凭它把新条目绑给当前同伴,所以随答复明说
         JsonObject created = new JsonObject();
         created.addProperty(CREATED, target.toString());
-        return new Done(null, shelf == library.server(), created);
+        return new Done(null, created);
     }
 
     // ---- 皮肤:文件夹里的 png,用时才签 ----
@@ -515,7 +487,7 @@ public final class LibraryDesk {
     // ---- 模型档案与钥匙串 ----
 
     /** 每位主人自己的偏好;只认认得的字段。 */
-    private String prefs(UUID owner, String op, JsonObject body) {
+    private String prefs(String op, JsonObject body) {
         switch (op) {
             case LIST:
                 return null;
@@ -534,11 +506,10 @@ public final class LibraryDesk {
     // ---- 接进来的 MCP 服务器 ----
 
     /**
-     * 接进来的 MCP 服务器的行:内容库共有的几项,加连接状态。管理员看到服务器提供的那几台的全貌(地址、命令行、请求头、授权网址);别人
-     * 只有名字、连没连上、有几个工具;自己的那几台是完整的。{@code connect} 是条目主人的"连不连"(写在条目里),
-     * 和 {@code enabled}(玩家自己的开关,只管他的同伴看不看得到这台的工具)是两回事。
+     * 接进来的 MCP 服务器的行:内容库共有的几项,加连接状态与配置的全貌(地址、命令行、请求头、授权网址)。{@code connect} 是条目的
+     * "连不连"(写在条目里),和 {@code enabled}(主人自己的开关,只管他的同伴看不看得到这台的工具)是两回事。
      */
-    private void mcpRows(UUID owner, boolean admin, JsonArray out) {
+    private void mcpRows(JsonArray out) {
         rows(sources.library(McpClientConfig.KIND), out, (entry, row) -> {
             McpServerSpec spec;
             try {
@@ -555,18 +526,16 @@ public final class LibraryDesk {
             row.addProperty("status", status.name());
             row.addProperty("connected", status == McpConnections.Status.CONNECTED);
             row.addProperty("toolCount", handle == null ? 0 : handle.toolCount());
-            if (admin || entry.group() == Library.Group.MINE) {
-                row.add("spec", spec.toJson());
-                row.addProperty("error", handle == null ? "" : handle.error());
-                if (handle != null && handle.authUrl() != null) {
-                    row.addProperty("authUrl", handle.authUrl());
-                }
-                JsonArray tools = new JsonArray();
-                if (handle != null) {
-                    handle.toolNames().forEach(tools::add);
-                }
-                row.add("tools", tools);
+            row.add("spec", spec.toJson());
+            row.addProperty("error", handle == null ? "" : handle.error());
+            if (handle != null && handle.authUrl() != null) {
+                row.addProperty("authUrl", handle.authUrl());
             }
+            JsonArray tools = new JsonArray();
+            if (handle != null) {
+                handle.toolNames().forEach(tools::add);
+            }
+            row.add("tools", tools);
         });
     }
 
@@ -634,28 +603,20 @@ public final class LibraryDesk {
     }
 
     /**
-     * 接进来的 MCP 服务器的操作:内容库那一套,外加条目主人的连上与断开({@link #CONNECT}、{@link #DISCONNECT},服务器提供的只有管理员)
-     * 和交回授权回调网址({@link #AUTH})。stdio 类起的是服务器机器上的进程,只有管理员能加。库变了连接跟着变。
+     * 接进来的 MCP 服务器的操作:内容库那一套,外加条目的连上与断开({@link #CONNECT}、{@link #DISCONNECT})
+     * 和交回授权回调网址({@link #AUTH})。库变了连接跟着变。
      */
-    private Done mcpClient(UUID owner, boolean admin, String op, JsonObject body) {
+    private Done mcpClient(String op, JsonObject body) {
         if (AUTH.equals(op)) {
             return Done.problem(McpOAuth.complete(string(body, "url")));
         }
         Done done;
         if (CONNECT.equals(op) || DISCONNECT.equals(op)) {
-            done = connect(owner, admin, CONNECT.equals(op), body);
-        } else if (COPY.equals(op) && !admin && isStdio(sources.library(McpClientConfig.KIND).server()
-                .get(EntryId.parse(string(body, "id"))))) {
-            // 复制过来就是他名下的一台 stdio,等于让服务器替他起进程
-            done = Done.problem("only a server admin may add a stdio MCP server");
+            done = connect(CONNECT.equals(op), body);
         } else {
-            done = contentLibrary(owner, admin, McpClientConfig.KIND, op, body, b -> {
+            done = contentLibrary(McpClientConfig.KIND, op, body, b -> {
                 try {
-                    McpServerSpec spec = McpServerSpec.parse(string(b, "name"), b);
-                    if (spec.isStdio() && !admin) {
-                        throw new IllegalArgumentException("only a server admin may add a stdio MCP server");
-                    }
-                    return spec.write();
+                    return McpServerSpec.parse(string(b, "name"), b).write();
                 } catch (IllegalArgumentException refused) {
                     throw refused;
                 } catch (RuntimeException unreadable) {
@@ -669,25 +630,8 @@ public final class LibraryDesk {
         return done;
     }
 
-    /** 这一条是不是 stdio 类的;读不通的当不是(它连不起来)。 */
-    private static boolean isStdio(Shelf.Item item) {
-        if (item == null) {
-            return false;
-        }
-        try {
-            return McpServerSpec.read(item.id().name(), item.text()).isStdio();
-        } catch (RuntimeException unreadable) {
-            return false;
-        }
-    }
-
-    private Done connect(UUID owner, boolean admin, boolean on, JsonObject body) {
-        boolean onServer = GROUP_SERVER.equals(string(body, "group"));
-        if (onServer && !admin) {
-            return Done.problem("only a server admin may connect or disconnect the server's servers");
-        }
-        Library library = sources.library(McpClientConfig.KIND);
-        Shelf shelf = onServer ? library.server() : library.mine();
+    private Done connect(boolean on, JsonObject body) {
+        Shelf shelf = sources.library(McpClientConfig.KIND).shelf();
         EntryId id = EntryId.parse(string(body, "id"));
         Shelf.Item item = id == null ? null : shelf.get(id);
         if (item == null) {
@@ -700,11 +644,11 @@ public final class LibraryDesk {
             return Done.problem("unreadable MCP server");
         }
         shelf.write(id, spec.withEnabled(on).write());
-        return Done.of(null, shelf == library.server());
+        return Done.ok();
     }
 
     /** 模型档案的行:内容库共有的几项加档案的字段,和这个服务有没有 key。 */
-    private void providerRows(UUID owner, boolean admin, JsonArray out) {
+    private void providerRows(JsonArray out) {
         Keys keys = sources.providers().keys();
         rows(sources.library(ProviderLibrary.KIND), out, (entry, row) -> {
             ConnectionProfile profile;
@@ -722,7 +666,7 @@ public final class LibraryDesk {
     /** 钥匙串页与 {@code /numen key} 补全列的服务商:档案里用到的、已存过 key 的。 */
     public Set<String> keyServices() {
         Set<String> services = new TreeSet<>();
-        for (Library.Entry entry : sources.library(ProviderLibrary.KIND).effective()) {
+        for (Library.Entry entry : sources.library(ProviderLibrary.KIND).entries()) {
             try {
                 String service = ProviderLibrary.read(entry.text()).provider();
                 if (service != null && EntryId.segment(service)) {

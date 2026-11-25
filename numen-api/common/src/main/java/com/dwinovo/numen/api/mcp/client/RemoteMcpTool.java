@@ -4,7 +4,6 @@ import com.dwinovo.numen.api.agent.llm.ToolOutcome;
 import com.dwinovo.numen.api.agent.tool.NumenTool;
 import com.dwinovo.numen.api.agent.tool.ToolCall;
 import com.dwinovo.numen.api.agent.tool.ToolHints;
-import com.dwinovo.numen.api.library.Library;
 import com.dwinovo.numen.mcp.client.McpCaller;
 import com.dwinovo.numen.mcp.client.McpToolName;
 import com.dwinovo.numen.mcp.protocol.Tool;
@@ -36,7 +35,6 @@ import java.util.concurrent.Executor;
 public final class RemoteMcpTool implements NumenTool {
 
     private final String entryId;
-    private final Library.Group group;
     private final McpCaller link;
     private final String remoteName;
     private final String qualifiedName;
@@ -47,14 +45,12 @@ public final class RemoteMcpTool implements NumenTool {
 
     /**
      * @param entryId    它所属的那台服务器在库里的名字({@code 命名空间:名字})
-     * @param group      那台服务器在内置组还是在我的组:玩家用自己的同名条目盖过内置的、或关掉它,这些工具就不再给他的同伴看
      * @param main       大脑所在的主线程:调用的结果经它回来
      * @param takenNames 本批已用掉的模型侧工具名;构造时会把自己这个加进去(见 {@link McpToolName}）
      */
-    public RemoteMcpTool(String serverName, String entryId, Library.Group group, McpCaller link, Tool tool,
+    public RemoteMcpTool(String serverName, String entryId, McpCaller link, Tool tool,
                          Executor main, Set<String> takenNames) {
         this.entryId = entryId;
-        this.group = group;
         this.main = main;
         this.link = link;
         this.remoteName = tool.name();
@@ -67,11 +63,6 @@ public final class RemoteMcpTool implements NumenTool {
     /** 它所属的那台服务器在库里的名字。 */
     public String entryId() {
         return entryId;
-    }
-
-    /** 那台服务器在哪一组。 */
-    public Library.Group group() {
-        return group;
     }
 
     @Override

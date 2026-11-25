@@ -2,14 +2,12 @@ package com.dwinovo.numen.api.library;
 
 /**
  * 库里一条的名字:命名空间加名字,写成 {@code 命名空间:名字}(像数据包的 {@code 命名空间:路径})。
- * 同一个库里内置与我的同名(两段都相同)时我的优先。玩家自己建的条目放在 {@link #MINE} 下。
+ * 随模组带来的条目在各自来源的命名空间下,主人自己建的条目放在 {@link #MINE} 下。
  */
 public record EntryId(String namespace, String name) {
 
-    /** 玩家自己建的条目习惯放的命名空间。 */
+    /** 主人自己建的条目习惯放的命名空间。 */
     public static final String MINE = "my";
-    /** 管理员自己往内置里加的条目习惯放的命名空间。 */
-    public static final String SERVER = "server";
 
     public EntryId {
         if (!segment(namespace) || !segment(name)) {
@@ -17,7 +15,7 @@ public record EntryId(String namespace, String name) {
         }
     }
 
-    /** 玩家自己建的条目。 */
+    /** 主人自己建的条目。 */
     public static EntryId mine(String name) {
         return new EntryId(MINE, name);
     }

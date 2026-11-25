@@ -34,7 +34,7 @@ import java.util.function.Supplier;
  * 本节还没有条目时,灰字换成空状态的话。节与节之间一道细线。
  *
  * <p>行照 Telegram 设置里的列表行:名字一行、说明淡字一行,行与行之间一道从文字左缘起的细线,
- * 悬停浅底。点行就是编辑(只读预设行点了是克隆);右键一行弹菜单:编辑、克隆、给她用、删除
+ * 悬停浅底。点行就是编辑;右键一行弹菜单:编辑、给她用、删除
  * ——删除标红放最下面,点了仍先过确认卡。当前同伴在用的那条在行右端挂一枚强调色的勾,
  * 和 Telegram 列表里选中项一个样子;换绑、解绑在右键菜单里,即时生效,不用遣散重召。
  */
@@ -42,27 +42,16 @@ public final class LibraryListPanel<T> {
 
     /** 一行的展示数据(每帧按条目现算,绑定标记等活状态即时反映)。
      *  {@code marked}:null = 没有选中的同伴(不谈绑定);TRUE = 当前同伴在用(行尾勾);FALSE = 没在用。
-     *  {@code preset}=只读行(玩家对服务器提供的只读):点行复制到我的,菜单里没有编辑与删除。
-     *  {@code canClone}=菜单里有"复制到我的"(服务器提供的行:管理员的可编辑,玩家的只读,都能复制)。
      *  {@code toggle}=该行有行尾开关(库配了行开关时;不是库条目的行没有)。 */
-    public record Row(String name, String meta, boolean metaDanger, Boolean marked, boolean preset, boolean canClone,
-                      boolean toggle) {
+    public record Row(String name, String meta, boolean metaDanger, Boolean marked, boolean toggle) {
 
         public Row(String name, String meta, boolean metaDanger, Boolean marked) {
-            this(name, meta, metaDanger, marked, false, false, true);
-        }
-
-        public Row(String name, String meta, boolean metaDanger, Boolean marked, boolean preset) {
-            this(name, meta, metaDanger, marked, preset, preset, true);
-        }
-
-        public Row(String name, String meta, boolean metaDanger, Boolean marked, boolean preset, boolean canClone) {
-            this(name, meta, metaDanger, marked, preset, canClone, true);
+            this(name, meta, metaDanger, marked, true);
         }
 
         /** 这一行不是库里的条目(排队中的签名):没有行尾开关。 */
         public Row withoutToggle() {
-            return new Row(name, meta, metaDanger, marked, preset, canClone, false);
+            return new Row(name, meta, metaDanger, marked, false);
         }
     }
 
@@ -70,8 +59,8 @@ public final class LibraryListPanel<T> {
     public record Add(String label, Runnable run) {}
 
     /**
-     * 列表里的一节。{@code about} 是标题下这一节的说明,一直在;{@code emptyAbout} 是本节没有条目时换上的话(都可空);
-     * {@code add} 空 = 本节没有新建行;{@code always} = 没有条目也显示本节(显示新建行或空状态的话)。
+     * 列表里的一节。{@code title} 空 = 没有节标题(整张表就一节时);{@code about} 是标题下这一节的说明,一直在;{@code emptyAbout}
+     * 是本节没有条目时换上的话(都可空);{@code add} 空 = 本节没有新建行;{@code always} = 没有条目也显示本节(显示新建行或空状态的话)。
      */
     public record Section(String id, String title, String about, String emptyAbout, Add add, boolean always) {}
 
@@ -115,10 +104,10 @@ public final class LibraryListPanel<T> {
             new com.dwinovo.numen.api.client.ui.widget.InlineAlert();
     private final Supplier<List<T>> source;
     private final Function<T, Row> rowOf;
-    /** 条目属于哪一节({@link Section#id});每次重读时现取节的清单(管理员与否随时变)。 */
+    /** 条目属于哪一节({@link Section#id});每次重读时现取节的清单。 */
     private Function<T, String> groupOf;
     private Supplier<List<Section>> sections = List::of;
-    /** 某一行右键菜单里除了通用几项以外的(如管理员采用自带内容的新版)。 */
+    /** 某一行右键菜单里除了通用几项以外的(如采用自带内容的新版)。 */
     private Function<T, List<PopupMenu.Item>> extraMenu;
     private final Function<T, String> deleteMessage;
     private final Consumer<T> onDeleteConfirmed;
@@ -143,8 +132,6 @@ public final class LibraryListPanel<T> {
     // 可选的行内开关(MCP 服务器的启停):画在行右端。
     private java.util.function.Predicate<T> toggleOn;
     private Consumer<T> toggleFlip;
-    // 可选的克隆动作(人设库):菜单里的"克隆",也是预设行点下去做的事。
-    private Consumer<T> onClone;
     // 可选的绑定动作:给当前同伴用;onUnbind 为 null 的库不许解绑(必须有一个)。
     private Consumer<T> onBind;
     private Consumer<T> onUnbind;
@@ -182,35 +169,23 @@ public final class LibraryListPanel<T> {
         this.onEdit = onEdit;
     }
 
-    /**
-     * 内容库的两节:"服务器提供"(服务器目录里的;管理员多一行为所有人新建;没有条目时不显示)与"我的"(总在)。房主就是这台
-     * 服务器,他的"我的"就是服务器目录那一份,服务端给他的行全是"我的",只有一节,也没有"为所有人新建"。
-     * 各页只给自己的新建行文案、"我的"空状态的话和两个新建动作;{@code addKey} 为空 = 这库不能新建(技能)。
-     * 节的 id 就是 {@link #SERVER}/{@link #MINE},条目按它归节。
-     */
-    public static Supplier<List<Section>> shelves(String addKey, String emptyKey,
-                                                  Runnable onAdd, Runnable onAddServer) {
-        return () -> {
-            Add addServer = onAddServer != null && ClientCompanions.admin() && !ClientCompanions.host()
-                    ? new Add(t(ModLanguageData.Keys.LIBRARY_ADD_SERVER), onAddServer) : null;
-            Add addMine = addKey == null ? null : new Add(t(addKey), onAdd);
-            return List.of(
-                    new Section(SERVER, t(ModLanguageData.Keys.LIBRARY_SERVER),
-                            t(ModLanguageData.Keys.LIBRARY_SERVER_ABOUT), null, addServer, false),
-                    new Section(MINE, t(ModLanguageData.Keys.LIBRARY_MINE),
-                            t(ModLanguageData.Keys.LIBRARY_MINE_ABOUT),
-                            t(ClientCompanions.host() ? emptyKey + ".host" : emptyKey), addMine, true));
-        };
-    }
-
-    public static final String SERVER = "server";
-    public static final String MINE = "mine";
+    /** 整张表就一节的那一节的 id。 */
+    private static final String ONLY = "";
 
     public LibraryListPanel<T> withToggle(String labelKey, Supplier<Boolean> get, Consumer<Boolean> set) {
         this.toggleLabelKey = labelKey;
         this.toggleGet = get;
         this.toggleSet = set;
         return this;
+    }
+
+    /**
+     * 内容库的列表:一张表一节,没有节标题,条目排在新建行上面。各页只给自己的新建行文案、空状态的话和新建动作;
+     * {@code addKey} 为空 = 这库不能新建(技能)。
+     */
+    public LibraryListPanel<T> withList(String addKey, String emptyKey, Runnable onAdd) {
+        return withSections(e -> ONLY, () -> List.of(new Section(ONLY, null, null, t(emptyKey),
+                addKey == null ? null : new Add(t(addKey), onAdd), true)));
     }
 
     /** 条目按节排开:{@code groupOf} 给每个条目所在节的 id,节的清单与顺序由 {@code sections} 定。 */
@@ -249,9 +224,8 @@ public final class LibraryListPanel<T> {
         return this;
     }
 
-    /** 克隆成可编辑副本并刷新列表:右键菜单里的"克隆",也是只读预设行点下去做的事。 */
     /**
-     * 列表读的是服务器上这一种库:它的版本一变这一帧就重读,没变就一直用手里这份;服务端推来的表带着"没办成"的原因时
+     * 列表读的是这一种库的表:它的版本一变这一帧就重读,没变就一直用手里这份;答复带着"没办成"的原因时
      * (存不下、排不进队……)在列表顶上亮一条错误,不让玩家以为办成了。
      */
     public LibraryListPanel<T> following(String kind) {
@@ -259,11 +233,6 @@ public final class LibraryListPanel<T> {
         this.version = () -> library.version(kind);
         this.revision = () -> library.revision(kind);
         this.problem = () -> library.problem(kind);
-        return this;
-    }
-
-    public LibraryListPanel<T> withClone(Consumer<T> onClone) {
-        this.onClone = onClone;
         return this;
     }
 
@@ -421,7 +390,7 @@ public final class LibraryListPanel<T> {
                 if (sec.id().equals(groupOf.apply(e))) mine.add(e);
             }
             if (mine.isEmpty() && !sec.always() && sec.add() == null) continue;
-            next.add(new Line<>(Kind.HEADING, null, sec, null, 0));
+            if (sec.title() != null) next.add(new Line<>(Kind.HEADING, null, sec, null, 0));
             for (T e : mine) {
                 next.add(new Line<>(Kind.ITEM, e, sec, keyOf(e), 0));
             }
@@ -601,15 +570,11 @@ public final class LibraryListPanel<T> {
             toggleFlip.accept(e);
             return true;
         }
-        if (rowOf.apply(e).preset()) {   // 只读行:点行 = 复制到我的
-            if (onClone != null) clone(e);
-            return true;
-        }
         if (onEdit != null) onEdit.accept(e);
         return true;
     }
 
-    /** 这一行的右键菜单:编辑、克隆、给她用/不再使用,删除标红放最下面、前面一道分隔线。 */
+    /** 这一行的右键菜单:编辑、给她用/不再使用,删除标红放最下面、前面一道分隔线。 */
     private List<PopupMenu.Item> menuItems(T e) {
         Row row = rowOf.apply(e);
         List<PopupMenu.Item> items = new ArrayList<>();
@@ -617,12 +582,9 @@ public final class LibraryListPanel<T> {
             items.addAll(extraMenu.apply(e));
             if (!items.isEmpty()) items.add(PopupMenu.SEPARATOR);
         }
-        if (onEdit != null && !row.preset()) {
+        if (onEdit != null) {
             items.add(new PopupMenu.Item(Sprites.EDIT, t(ModLanguageData.Keys.EDIT_TITLE), false,
                     () -> onEdit.accept(e)));
-        }
-        if (onClone != null && row.canClone()) {
-            items.add(new PopupMenu.Item(Sprites.COPY, t("numen.menu.clone"), false, () -> clone(e)));
         }
         if (onBind != null && row.marked() != null) {
             if (!row.marked()) {
@@ -640,17 +602,11 @@ public final class LibraryListPanel<T> {
                 }));
             }
         }
-        if (deleteMessage != null && !row.preset()) {
+        if (deleteMessage != null) {
             if (!items.isEmpty()) items.add(PopupMenu.SEPARATOR);
             items.add(new PopupMenu.Item(Sprites.DELETE, t("numen.dismiss.delete"), true, () -> askDelete(e)));
         }
         return items;
-    }
-
-    private void clone(T e) {
-        onClone.accept(e);
-        refresh();
-        noticeSuccess(t("numen.gui.list.cloned"));
     }
 
     private void askDelete(T e) {

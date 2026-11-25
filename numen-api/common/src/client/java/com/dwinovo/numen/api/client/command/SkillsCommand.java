@@ -18,8 +18,8 @@ import java.util.List;
 /**
  * {@code /skills} —— 技能面板:一行一个,回车开关可见性。
  *
- * <p>与设置页的技能管理<b>同源</b>:两边读的都是服务器上的技能表(库协议 {@code skill}),开关由服务端判——
- * 只有管理员拨得动。没有第二份状态,也就没有要对齐的东西。
+ * <p>与设置页的技能管理<b>同源</b>:两边读的都是这台电脑上的技能表(库协议 {@code skill})。
+ * 没有第二份状态,也就没有要对齐的东西。
  *
  * <p>对着一只分享来的同伴时,列的是她用得了的技能——她创建者的那一份({@link ClientLibraries#skillsOf}),只看不能拨:
  * 她的技能由创建者管理、在他的电脑上,这里看不到,面板只说这一件事。
@@ -73,7 +73,7 @@ final class SkillsCommand implements PopupCommand {
         @Override
         public List<SelectPanel.Row> rows() {
             List<SelectPanel.Row> out = new ArrayList<>();
-            for (ClientLibraries.Skill skill : ClientLibraries.skillsEffective()) {
+            for (ClientLibraries.Skill skill : ClientLibraries.skills()) {
                 String desc = skill.description() == null || skill.description().isBlank()
                         ? "" : skill.description();
                 out.add(new SelectPanel.Row(skill.name(), desc, skill.enabled()));
@@ -86,7 +86,7 @@ final class SkillsCommand implements PopupCommand {
 
         @Override
         public boolean activate(int index) {
-            List<ClientLibraries.Skill> all = ClientLibraries.skillsEffective();
+            List<ClientLibraries.Skill> all = ClientLibraries.skills();
             if (index < 0 || index >= all.size()) {
                 return false;   // 空库时那条占位行:按了也没有东西可开关
             }

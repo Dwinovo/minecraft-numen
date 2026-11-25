@@ -101,30 +101,17 @@ public final class LibraryTables {
         send.accept(new LibraryRequestPayload(kind, op, body.toString()));
     }
 
-    /**
-     * 删一条;这一行马上从表里消失,服务端的真表一到以它为准。
-     *
-     * @param server 删的是"服务器提供"里的那一条(只有管理员办得成);默认删我的
-     */
-    public void delete(String kind, String id, boolean server) {
-        pending.computeIfAbsent(kind, k -> new PendingChanges<>()).put(rowKey(id, server), null);
+    /** 删一条;这一行马上从表里消失,真表一到以它为准。 */
+    public void delete(String kind, String id) {
+        pending.computeIfAbsent(kind, k -> new PendingChanges<>()).put(id, null);
         edits.merge(kind, 1L, Long::sum);
         JsonObject body = new JsonObject();
         body.addProperty("id", id);
-        if (server) {
-            body.addProperty("group", "server");
-        }
         send.accept(new LibraryRequestPayload(kind, "delete", body.toString()));
     }
 
-    /** 服务器提供的与我的可以有同名的两行,所以一行的身份是名字加组。 */
-    private static String rowKey(String id, boolean server) {
-        return (server ? "server:" : "mine:") + id;
-    }
-
     private static String rowKey(JsonElement row) {
-        JsonObject o = row.getAsJsonObject();
-        return rowKey(o.get("id").getAsString(), o.has("group") && "server".equals(o.get("group").getAsString()));
+        return row.getAsJsonObject().get("id").getAsString();
     }
 
     /** 服务端推来一张表。 */

@@ -10,9 +10,8 @@ import com.google.gson.JsonObject;
 import java.util.List;
 
 /**
- * 一位玩家的模型档案库:库的一种({@link #KIND}),一份档案一个 JSON 文件——{@code provider/<命名空间>/<名字>.json}。玩家看到
- * "内置"(服务器目录里,Numen 或插件随包带来的推荐配置,管理员可改)与"我的"两组,同名时我的优先,存储、开关、同步都是
- * {@link Library} 这一套;一位同伴选定其中一条,她的请求就跑在那条档案的后端上。
+ * 主人的模型档案库:库的一种({@link #KIND}),一份档案一个 JSON 文件——{@code provider/<命名空间>/<名字>.json}。Numen 或插件随包带来的
+ * 推荐配置与主人自己写的在同一个货架里,存储、开关、同步都是 {@link Library} 这一套;一位同伴选定其中一条,她的请求就跑在那条档案的后端上。
  *
  * <p>档案<b>不含 key</b>:只写用哪个服务商、哪个型号这些。key 按服务商存在钥匙串里({@link Keys}),
  * 所以一条内置档案填上对应服务商的 key 就能用,jar 里永远没有 key。没填 key 的档案在第一次请求时给出一条诚实的错误
@@ -21,7 +20,7 @@ import java.util.List;
  * <p>档案只存玩家填的东西({@link ConnectionProfile});能力(上下文、思考档位、协议、缺省地址)一律经 {@link ModelCatalog}
  * 解析到型号目录里查,档案、界面、压缩阈值、请求都从那一个解析结果取。
  *
- * <p>线程:服务端主线程。
+ * <p>线程:大脑的线程。
  */
 public final class ProviderLibrary {
 
@@ -50,7 +49,7 @@ public final class ProviderLibrary {
         return keys;
     }
 
-    /** 此刻在用的档案(没关掉的),内置在前我的在后。 */
+    /** 此刻在用的档案(没关掉的)。 */
     public List<Entry> list() {
         return library.active().stream().map(ProviderLibrary::entry).filter(java.util.Objects::nonNull).toList();
     }
@@ -79,26 +78,26 @@ public final class ProviderLibrary {
         return catalog.resolve(entry.profile().withApiKey(keys.find(entry.profile().provider())));
     }
 
-    /** 新建我的档案:只有名字必填,其余可以空。重名自动加 _2 后缀。 */
+    /** 新建档案:只有名字必填,其余可以空。重名自动加 _2 后缀。 */
     public Entry create(String name, ConnectionProfile profile) {
-        EntryId id = library.mine().unique(EntryId.MINE, EntryId.clean(name, "profile"));
-        return entry(library.mine().write(id, write(profile)));
+        EntryId id = library.shelf().unique(EntryId.MINE, EntryId.clean(name, "profile"));
+        return entry(library.shelf().write(id, write(profile)));
     }
 
-    /** 改我的档案(同一个 id);没有这一条(或它是内置的)是 {@code null}。改名走另一条:删旧建新,id 随之更换。 */
+    /** 改档案(同一个 id);没有这一条是 {@code null}。改名走另一条:删旧建新,id 随之更换。 */
     public Entry update(String id, ConnectionProfile profile) {
         EntryId entry = EntryId.parse(id);
-        if (entry == null || library.mine().get(entry) == null) {
+        if (entry == null || library.shelf().get(entry) == null) {
             return null;
         }
-        return entry(library.mine().write(entry, write(profile)));
+        return entry(library.shelf().write(entry, write(profile)));
     }
 
-    /** 删我的档案。绑定跟着同伴走,这里不管;内置的由管理员在服务器目录里删。 */
+    /** 删档案。绑定跟着同伴走,这里不管。 */
     public void remove(String id) {
         EntryId entry = EntryId.parse(id);
         if (entry != null) {
-            library.mine().delete(entry);
+            library.shelf().delete(entry);
         }
     }
 
@@ -106,7 +105,7 @@ public final class ProviderLibrary {
         return entry(entry.item());
     }
 
-    /** 一个文件读成档案;管理员手写坏了的文件记一笔并当作没有,不连累别的档案。 */
+    /** 一个文件读成档案;手写坏了的文件记一笔并当作没有,不连累别的档案。 */
     private static Entry entry(Shelf.Item item) {
         try {
             return new Entry(item.id().toString(), item.id().name(), read(item.text()));

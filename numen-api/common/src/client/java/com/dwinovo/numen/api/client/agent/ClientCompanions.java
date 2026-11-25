@@ -54,10 +54,6 @@ public final class ClientCompanions {
     private static final Transcripts TRANSCRIPTS = new Transcripts();
     /** 服务端收下了我们的报到(版本对得上):它推的东西我们读得懂。 */
     private static boolean served;
-    /** 这位玩家能不能改服务器上的配置(插件的开关)。 */
-    private static boolean admin;
-    /** 这位玩家是不是这台服务器的房主。 */
-    private static boolean host;
     /** 服务端发来的落过盘的会话(成员表与名字),整份。 */
     private static List<Conversation> saved = List.of();
     private static final LibraryTables LIBRARY = new LibraryTables(ClientCompanions::route);
@@ -120,15 +116,6 @@ public final class ClientCompanions {
         return served;
     }
 
-    public static boolean admin() {
-        return admin;
-    }
-
-    /** 我是这台服务器的房主:他的"我的"皮肤文件夹就是服务器那一个。 */
-    public static boolean host() {
-        return host;
-    }
-
     /**
      * 这台客户端的玩家(服务端认的那个 UUID):她的创建者是不是我、这项绑定是不是我绑的,都拿它比。没在世界里是 {@code null}
      * (客户端还没起来时也是:这时谁都不是"我")。
@@ -165,7 +152,7 @@ public final class ClientCompanions {
             NumenNetwork.sendToServer(request);
             return;
         }
-        LibraryDesk.Result result = ClientMachines.get().desk().handle(viewer(), true, request.kind(), request.op(),
+        LibraryDesk.Result result = ClientMachines.get().desk().handle(viewer(), request.kind(), request.op(),
                 com.google.gson.JsonParser.parseString(request.json()).getAsJsonObject());
         long answerNow = result.later() == null ? request.request() : 0;
         LIBRARY.onPayload(new LibraryPayload(request.kind(), result.entries(),
@@ -231,8 +218,6 @@ public final class ClientCompanions {
 
     static void onHelloAck(HelloAckPayload p) {
         served = true;
-        admin = p.admin();
-        host = p.host();
         ClientSeats.open(viewer());
         // 召唤卡、设置页要用的这几张表先要来;页面打开时再要一次拿最新的
         for (String kind : List.of(LibraryDesk.PERSONA, LibraryDesk.PROVIDER, LibraryDesk.PREFS, LibraryDesk.SKILL,
@@ -254,7 +239,5 @@ public final class ClientCompanions {
         LIBRARY.clear();
         McpAuthPrompt.clear();
         served = false;
-        admin = false;
-        host = false;
     }
 }

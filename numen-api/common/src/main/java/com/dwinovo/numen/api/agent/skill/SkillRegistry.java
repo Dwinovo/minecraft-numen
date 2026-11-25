@@ -141,7 +141,7 @@ public final class SkillRegistry {
             for (SkillInfo info : shipped) {
                 next.put(info.name(), new Parsed(info, new EntryId(BUNDLED_SPACE, info.name()), true));
             }
-            for (Library.Entry entry : library.effective()) {
+            for (Library.Entry entry : library.entries()) {
                 SkillInfo info = read(entry.path());
                 if (info != null) {
                     next.put(info.name(), new Parsed(info, entry.id(), false));

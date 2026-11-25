@@ -7,9 +7,9 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * 接进来的 MCP 服务器要 OAuth 授权时,谁去开浏览器:服务端没有浏览器,授权网址作为那台服务器状态的一项推给管理员客户端
- * ({@link ClientLibraries.McpClientRow#authUrl}),由<b>让它接上的那一端</b>去开——别的管理员的客户端上不会无端弹出浏览器。
- * 授权完成后的回调网址回到服务端:浏览器就在服务器那台机器上时回环地址直接接住,不在时管理员把地址栏的网址贴回设置页。
+ * 接进来的 MCP 服务器要 OAuth 授权时,谁去开浏览器:授权网址作为那台服务器状态的一项出现在表里
+ * ({@link ClientLibraries.McpClientRow#authUrl}),由<b>让它接上的那一端</b>去开,不会无端弹出浏览器。
+ * 授权完成后的回调网址回到这台电脑:回环地址直接接住,接不住时主人把地址栏的网址贴回设置页。
  *
  * <p>线程:客户端主线程。
  */
@@ -30,7 +30,7 @@ public final class McpAuthPrompt {
         EXPECTING.removeIf(name -> {
             ClientLibraries.McpClientRow row = ClientLibraries.mcpClients().stream()
                     .filter(r -> r.name().equals(name)).findFirst().orElse(null);
-            if (row == null || !row.full()) {
+            if (row == null) {
                 return true;
             }
             if (row.authUrl() != null) {

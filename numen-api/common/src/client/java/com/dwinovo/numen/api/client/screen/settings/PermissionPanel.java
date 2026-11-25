@@ -169,7 +169,7 @@ public final class PermissionPanel {
 
     /** 一行:名单里的名字,下面一行小字是哪只同伴的。能删(右键)。 */
     private static LibraryListPanel.Row row(ClientLibraries.PermissionListed r) {
-        return new LibraryListPanel.Row(r.entry(), r.name(), false, null, false, false);
+        return new LibraryListPanel.Row(r.entry(), r.name(), false, null);
     }
 
     // ---- 宿主转发面 ----

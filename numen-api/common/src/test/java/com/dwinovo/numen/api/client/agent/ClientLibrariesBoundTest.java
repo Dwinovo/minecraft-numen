@@ -19,8 +19,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * 她绑的条目在这台客户端看不看得到,按"谁绑的 + 条目"认:我绑的是我叠起来之后在用的那一条;她的另一位主人绑的,只有服务器提供的
- * 那一条我也看得到——他"我的"里的我看不到,我"我的"里同名的是另一条。她用得了的技能在创建者的电脑上:分享来的这里看不到。
+ * 她绑的条目在这台客户端看不看得到,按"谁绑的 + 条目"认:我绑的是我库里的那一条;她的另一位主人绑的在他的电脑上,
+ * 我库里同名的是另一条。她用得了的技能在创建者的电脑上:分享来的这里看不到。
  */
 @Tag("mc")
 class ClientLibrariesBoundTest {
@@ -34,13 +34,11 @@ class ClientLibrariesBoundTest {
         NumenRoster.instance().clear();
     }
 
-    private static JsonObject row(String id, boolean server, boolean paired, String text) {
+    private static JsonObject row(String id, String text) {
         JsonObject o = new JsonObject();
         o.addProperty("id", id);
         o.addProperty("name", EntryId.parse(id).name());
-        o.addProperty("group", server ? LibraryDesk.GROUP_SERVER : LibraryDesk.GROUP_MINE);
         o.addProperty("enabled", true);
-        o.addProperty("paired", paired);
         o.addProperty("text", text);
         return o;
     }
@@ -78,7 +76,7 @@ class ClientLibrariesBoundTest {
     }
 
     private static JsonObject skill(String id, String name, String description, boolean enabled) {
-        JsonObject o = row(id, false, false, "");
+        JsonObject o = row(id, "");
         o.addProperty("skill", name);
         o.addProperty("description", description);
         o.addProperty("enabled", enabled);
@@ -87,28 +85,19 @@ class ClientLibrariesBoundTest {
 
     @Test
     void whatIBoundIsTheEntryISee() {
-        personas(row("numen:冷面", true, false, "服务器的"), row("my:小焰", false, false, "我的"));
+        personas(row("numen:冷面", "自带的"), row("my:小焰", "我的"));
 
         assertEquals("我的", ClientLibraries.persona(bound(ME, "my:小焰"), ME).text());
-        assertEquals("服务器的", ClientLibraries.persona(bound(ME, "numen:冷面"), ME).text());
+        assertEquals("自带的", ClientLibraries.persona(bound(ME, "numen:冷面"), ME).text());
         assertNull(ClientLibraries.persona(bound(ME, "my:不存在"), ME), "删掉了");
     }
 
     @Test
-    void anotherOwnersOwnEntryIsNotMineOfTheSameName() {
-        personas(row("my:小焰", false, false, "我写的小焰"));
+    void anotherOwnersEntryIsNotMineOfTheSameName() {
+        personas(row("my:小焰", "我写的小焰"), row("numen:冷面", "自带的"));
 
         assertNull(ClientLibraries.persona(bound(FRIEND, "my:小焰"), ME),
                 "朋友绑的是他库里的那一条:我库里同名的不是它,不能拿来当她的人设");
-    }
-
-    @Test
-    void anotherOwnersServerEntryIsTheServerOneEvenWhenMineCoversIt() {
-        personas(row("numen:冷面", true, true, "服务器的"), row("numen:冷面", false, true, "我改过的"));
-
-        assertEquals("服务器的", ClientLibraries.persona(bound(FRIEND, "numen:冷面"), ME).text(),
-                "朋友绑的在他的库里解析;我能看到的只有服务器提供的那一条,我盖在上面的同名的不算");
-        assertEquals("我改过的", ClientLibraries.persona(bound(ME, "numen:冷面"), ME).text(),
-                "我自己绑的,是我叠起来之后算数的那一条");
+        assertNull(ClientLibraries.persona(bound(FRIEND, "numen:冷面"), ME), "自带的也一样:他那份在他的电脑上");
     }
 }

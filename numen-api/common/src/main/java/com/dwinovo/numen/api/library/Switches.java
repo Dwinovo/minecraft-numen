@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.library;
 
 /**
- * 玩家对库里各条的开关,记在他自己的偏好里;默认全开。按库的目录名与条目名记,内置与我的同名的共用一个开关。
+ * 主人对库里各条的开关,记在他自己的偏好里;默认全开。按库的目录名与条目名记。
  */
 public interface Switches {
 

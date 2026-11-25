@@ -35,17 +35,14 @@ public final class McpFormPanel {
     private final UiRoot ui = new UiRoot();
     private final Consumer<Draft> onSave;
     private final Runnable onCancel;
-    /** stdio 类起的是服务器机器上的进程,只有管理员能加:不是管理员就没有类型这一行。 */
-    private final boolean allowStdio;
 
     private Draft draft = new Draft();
     private TextField nameField, targetField;
     private int formX, formY, formW, formH;
 
-    public McpFormPanel(Consumer<Draft> onSave, Runnable onCancel, boolean allowStdio) {
+    public McpFormPanel(Consumer<Draft> onSave, Runnable onCancel) {
         this.onSave = onSave;
         this.onCancel = onCancel;
-        this.allowStdio = allowStdio;
         Minecraft mc = Minecraft.getInstance();
         ui.setClipboard(() -> mc.keyboardHandler.getClipboard(),
                 s -> mc.keyboardHandler.setClipboard(s));
@@ -73,14 +70,12 @@ public final class McpFormPanel {
         nameField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
-        // 类型行:自标注按钮循环 http ↔ stdio(草稿字段全保,行标签/占位符随切换);只有管理员能选 stdio。
-        if (allowStdio) {
-            Button typeBtn = ui.add(new Button(
-                    t(draft.stdio ? "numen.mcp.type_stdio" : "numen.mcp.type_http"),
-                    Button.Style.NORMAL, this::onTypeToggle));
-            typeBtn.setBounds(x, ry, w, NumenStyle.CONTROL_H);
-            ry += NumenStyle.CONTROL_H + 5;   // 钮的底边下面留一道缝,下一行的标签才不压在钮上
-        }
+        // 类型行:自标注按钮循环 http ↔ stdio(草稿字段全保,行标签/占位符随切换)。
+        Button typeBtn = ui.add(new Button(
+                t(draft.stdio ? "numen.mcp.type_stdio" : "numen.mcp.type_http"),
+                Button.Style.NORMAL, this::onTypeToggle));
+        typeBtn.setBounds(x, ry, w, NumenStyle.CONTROL_H);
+        ry += NumenStyle.CONTROL_H + 5;   // 钮的底边下面留一道缝,下一行的标签才不压在钮上
 
         ry = label(x, ry, draft.stdio ? "numen.mcp.form_command" : "numen.mcp.form_url");
         targetField = ui.add(new TextField(draft.target, v -> draft.target = v)

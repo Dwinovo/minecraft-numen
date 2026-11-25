@@ -22,9 +22,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 服务器上那几种库在界面眼里的样子:{@link LibraryTables} 里最近一次读到的整表,读成界面直接用的小记录。真源在服务器——
- * 这里不存、不缓存,每次现读;存和删经 {@link ClientCompanions#library()} 发给服务端,谁能做什么由它判。
- * 看不到的东西(普通玩家看不到的 key、地址、令牌)服务端编码时就没有,这里读不出来也就谈不上泄露。
+ * 这台电脑上那几种库在界面眼里的样子:{@link LibraryTables} 里最近一次读到的整表,读成界面直接用的小记录。
+ * 这里不存、不缓存,每次现读;存和删经 {@link ClientCompanions#library()} 交给 {@code LibraryDesk} 办。
  */
 public final class ClientLibraries {
 
@@ -41,23 +40,16 @@ public final class ClientLibraries {
     // ---- 内容库(人设、模型档案、技能、声线、接进来的 MCP 服务器)共有的几项 ----
 
     /**
-     * 一行内容库条目共有的几项:服务器提供的还是我的、玩家有没有把它关掉、另一组有没有同名的、是不是 jar 自带的、它和 jar 的关系
-     * (改过没有、有没有新版、来源卸载了没有)。房主只有"我的"一组:他看到的行没有一行是 {@code server}。
+     * 一行内容库条目共有的几项:主人有没有把它关掉、是不是 jar 自带的、它和 jar 的关系(改过没有、有没有新版、来源卸载了没有)。
      *
      * @param id 库里的名字({@code 命名空间:名字})
      */
-    public record Base(String id, String name, boolean server, boolean enabled, boolean paired, boolean shipped,
-                       boolean modified, boolean update, boolean gone) {}
-
-    /** 叠起来之后算数的:服务器提供的被我的同名盖着时,服务器提供的那一行不算。 */
-    private static boolean effective(Base b) {
-        return !(b.server() && b.paired());
-    }
+    public record Base(String id, String name, boolean enabled, boolean shipped, boolean modified, boolean update,
+                       boolean gone) {}
 
     private static Base base(JsonObject o) {
-        return new Base(text(o, "id"), text(o, "name"), "server".equals(text(o, "group")),
-                !o.has("enabled") || o.get("enabled").getAsBoolean(), flag(o, "paired"), flag(o, "shipped"),
-                flag(o, "modified"), flag(o, "update"), flag(o, "gone"));
+        return new Base(text(o, "id"), text(o, "name"), !o.has("enabled") || o.get("enabled").getAsBoolean(),
+                flag(o, "shipped"), flag(o, "modified"), flag(o, "update"), flag(o, "gone"));
     }
 
     private static boolean flag(JsonObject o, String key) {
@@ -77,7 +69,6 @@ public final class ClientLibraries {
         }
     }
 
-    /** 服务器提供的在前,我的在后。 */
     public static List<Persona> personas() {
         List<Persona> out = new ArrayList<>();
         for (JsonElement e : entries(LibraryDesk.PERSONA)) {
@@ -87,12 +78,12 @@ public final class ClientLibraries {
         return out;
     }
 
-    /** 选人设时能选的:叠起来之后算数的、没被玩家关掉的。 */
+    /** 选人设时能选的:没被关掉的。 */
     public static List<Persona> personasInUse() {
-        return personas().stream().filter(p -> effective(p.base()) && p.base().enabled()).toList();
+        return personas().stream().filter(p -> p.base().enabled()).toList();
     }
 
-    /** 她绑的这条人设在我看到的库里是哪一条;我看不到的是 {@code null}(见 {@link #seen})。 */
+    /** 她绑的这条人设在我的库里是哪一条;不是我绑的、或库里没有是 {@code null}(见 {@link #seen})。 */
     public static Persona persona(Bound bound, java.util.UUID viewer) {
         for (Persona p : personas()) {
             if (seen(p.base(), bound, viewer)) {
@@ -105,23 +96,19 @@ public final class ClientLibraries {
     // ---- 她绑的条目在我这里看不看得到 ----
 
     /**
-     * 库里的这一行是不是她绑的那一条。绑定的条目在<b>绑的那个人</b>看到的库里解析:我绑的,就是我叠起来之后在用的那一条;别人绑的,
-     * 只有服务器提供的那一条我也看得到(房主看到的每一行都在服务器目录里)——他"我的"里的我看不到,我"我的"里同名的是另一条。
+     * 库里的这一行是不是她绑的那一条。绑定的条目在<b>绑的那个人</b>的库里解析:我绑的,就是我这台电脑上库里的那一条;别人绑的在他的电脑上,
+     * 我库里同名的是另一条。
      *
      * @param viewer 这台客户端的玩家
      */
     private static boolean seen(Base row, Bound bound, java.util.UUID viewer) {
-        if (!row.id().equals(bound.id().toString())) {
-            return false;
-        }
-        return bound.by().equals(viewer) ? effective(row) : row.server() || ClientCompanions.host();
+        return row.id().equals(bound.id().toString()) && bound.by().equals(viewer);
     }
 
     // ---- 模型档案 ----
 
     /**
-     * {@code full} 是档案的全部内容(含地址、代理),只有看得到它的人有:管理员看服务器提供的、人人看自己的;
-     * 别人看服务器提供的只有厂家、型号。{@code keySource}:这位玩家用这份档案会用谁的 key——{@code mine}、{@code server},没有是空串。
+     * {@code full} 是档案的全部内容(含地址、代理);读不通的条目是 {@code null}。{@code keySource}:用这份档案会用谁的 key,没有是空串。
      */
     public record Provider(Base base, String provider, String model, ProviderLibrary.Entry full, String keySource) {
 
@@ -140,20 +127,18 @@ public final class ClientLibraries {
 
     public static List<Provider> providers() {
         List<Provider> out = new ArrayList<>();
-        boolean admin = ClientCompanions.admin();
         for (JsonElement e : entries(LibraryDesk.PROVIDER)) {
             JsonObject o = e.getAsJsonObject();
             Base base = base(o);
-            boolean visible = admin || !base.server();
             out.add(new Provider(base, text(o, "provider"), text(o, "model"),
-                    visible && !flag(o, "unreadable") ? new ProviderLibrary.Entry(base.id(), base.name(),
+                    !flag(o, "unreadable") ? new ProviderLibrary.Entry(base.id(), base.name(),
                             ProviderLibrary.profileFromJson(o)) : null,
                     text(o, "keySource") == null ? "" : text(o, "keySource")));
         }
         return out;
     }
 
-    /** 她绑的这份档案在我看到的库里是哪一条;我看不到的、被我关掉的是 {@code null}(见 {@link #seen})。 */
+    /** 她绑的这份档案在我的库里是哪一条;不是我绑的、被我关掉的是 {@code null}(见 {@link #seen})。 */
     public static Provider provider(Bound bound, java.util.UUID viewer) {
         for (Provider p : providers()) {
             if (p.base().enabled() && seen(p.base(), bound, viewer)) {
@@ -163,9 +148,9 @@ public final class ClientLibraries {
         return null;
     }
 
-    /** 选模型档案时能选的:叠起来之后算数的、没被玩家关掉的。 */
+    /** 选模型档案时能选的:没被关掉的。 */
     public static List<Provider> providersInUse() {
-        return providers().stream().filter(p -> effective(p.base()) && p.base().enabled()).toList();
+        return providers().stream().filter(p -> p.base().enabled()).toList();
     }
 
     // ---- 钥匙串 ----
@@ -422,7 +407,6 @@ public final class ClientLibraries {
         }
     }
 
-    /** 服务器提供的在前,我的在后。 */
     public static List<Skill> skills() {
         List<Skill> out = new ArrayList<>();
         for (JsonElement e : entries(LibraryDesk.SKILL)) {
@@ -432,16 +416,11 @@ public final class ClientLibraries {
         return out;
     }
 
-    /** 叠起来之后算数的技能,含被玩家关掉的(开关面板要列出来让他再打开)。 */
-    public static List<Skill> skillsEffective() {
-        return skills().stream().filter(s -> effective(s.base())).toList();
-    }
-
     /** 她用得了的一个技能,给命令补全与 {@code /skills} 看的:名字与描述。 */
     public record HerSkill(String name, String description) {}
 
     /**
-     * 这只同伴用得了的技能:她的大脑在我这台电脑上,就是我技能库里叠起来算数、没关掉的;分享来的她,技能在她创建者的电脑上,
+     * 这只同伴用得了的技能:她的大脑在我这台电脑上,就是我技能库里没关掉的;分享来的她,技能在她创建者的电脑上,
      * 这里看不到,是空的(界面不能把它说成"她没有技能")。没指明哪一只({@code null}:会话没有单一的主)给的是我自己技能库里的。
      *
      * @param viewer 这台客户端的玩家
@@ -452,7 +431,7 @@ public final class ClientLibraries {
         if (her != null && her.sharedWith(viewer)) {
             return out;
         }
-        for (Skill skill : skillsEffective()) {
+        for (Skill skill : skills()) {
             if (skill.enabled()) {
                 out.add(new HerSkill(skill.name(), skill.description()));
             }
@@ -505,7 +484,6 @@ public final class ClientLibraries {
         }
     }
 
-    /** 服务器提供的在前,我的在后。 */
     public static List<Voice> voices() {
         List<Voice> out = new ArrayList<>();
         for (JsonElement e : entries(LibraryDesk.VOICE)) {
@@ -515,13 +493,13 @@ public final class ClientLibraries {
         return out;
     }
 
-    /** 选声线时能选的:叠起来之后算数的、没被玩家关掉的。 */
+    /** 选声线时能选的:没被关掉的。 */
     public static List<Voice> voicesInUse() {
-        return voices().stream().filter(v -> effective(v.base()) && v.base().enabled() && v.profile() != null).toList();
+        return voices().stream().filter(v -> v.base().enabled() && v.profile() != null).toList();
     }
 
     /**
-     * 她绑的这条声线在我看到的库里是哪一条;我看不到的、被我关掉的、读不通的是 {@code null}(见 {@link #seen})——别的主人"我的"里的
+     * 她绑的这条声线在我的库里是哪一条;不是我绑的、被我关掉的、读不通的是 {@code null}(见 {@link #seen})——别的主人库里的
      * 声线这台客户端不念,由他的客户端念。
      */
     public static Voice voice(Bound bound, java.util.UUID viewer) {
@@ -578,8 +556,7 @@ public final class ClientLibraries {
     // ---- 接进来的 MCP 服务器 ----
 
     /**
-     * 一台接进来的 MCP 服务器。{@code spec}(地址、命令行、请求头)管理员看服务器提供的、人人看自己的,别人看服务器提供的只有名字、连没连上、
-     * 工具数。{@code connect} 是条目主人的"连不连",{@code base.enabled} 是玩家自己的开关(只管他的同伴看不看得到它的工具)。
+     * 一台接进来的 MCP 服务器。{@code connect} 是条目的"连不连",{@code base.enabled} 是主人自己的开关(只管他的同伴看不看得到它的工具)。
      */
     public record McpClientRow(Base base, boolean connect, boolean connected, int toolCount,
                                McpServerSpec spec, McpConnections.Status status, List<String> tools,
@@ -591,11 +568,6 @@ public final class ClientLibraries {
 
         public String name() {
             return base.name();
-        }
-
-        /** 看得到配置的全貌。 */
-        public boolean full() {
-            return spec != null;
         }
     }
 
@@ -614,7 +586,7 @@ public final class ClientLibraries {
                 o.getAsJsonArray("tools").forEach(t -> tools.add(t.getAsString()));
             }
             out.add(new McpClientRow(base, flag(o, "connect"), flag(o, "connected"), count,
-                    o.has("spec") ? McpServerSpec.parse(base.name(), o.getAsJsonObject("spec")) : null,
+                    McpServerSpec.parse(base.name(), o.getAsJsonObject("spec")),
                     status, tools, text(o, "error") == null ? "" : text(o, "error"), text(o, "authUrl")));
         }
         return out;

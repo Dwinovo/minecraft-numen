@@ -9,9 +9,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 主人电脑上她的大脑要用的各种库的出处:每种库在这台电脑上只有一份货架({@link Shelf}),随模组带来的默认内容(人设、模型档案、声线、
- * 接进来的 MCP 服务器的推荐配置……)开张时同步进去({@link Shipped#sync}),玩家自己写的、改的也在这一份里——{@link Library} 的"服务器目录"与"我的"
- * 在这里是同一个货架({@link Library#merged}),条目是随模组带来的、改过了,还是自己的,看清单({@link Shipped.Manifest})。
- * 各库的消费方(人设、模型档案、声线、技能、MCP 工具)拿同一种库的同一份 {@link Library},读写的是同一个对象。
+ * 接进来的 MCP 服务器的推荐配置……)开张时同步进去({@link Shipped#sync}),主人自己写的、改的也在这一份里;条目是随模组带来的、改过了,
+ * 还是自己的,看清单({@link Shipped.Manifest})。各库的消费方(人设、模型档案、声线、技能、MCP 工具)拿同一种库的同一份 {@link Library},读写的是同一个对象。
  *
  * <p>随模组发布的技能与内置模块不在这里:它们在服务端,客户端从座位上的目录知道名字、用到时才取(见 {@code SkillRegistry.Bundled}、
  * {@code HerModules.Builtins})。
@@ -45,8 +44,7 @@ public final class LibraryHub {
     /** 这种库。 */
     public Library library(LibraryKind kind) {
         return libraries.computeIfAbsent(kind.dir(), dir -> {
-            Shelf shelf = shelf(kind);
-            return new Library(kind, shelf, shelf, switches, manifest);
+            return new Library(kind, shelf(kind), switches, manifest);
         });
     }
 

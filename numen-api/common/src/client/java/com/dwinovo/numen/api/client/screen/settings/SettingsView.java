@@ -100,14 +100,9 @@ public final class SettingsView {
     private static final int ITEM_H = 20;
     private static final int GROUP_GAP = 7;
 
-    // ---- 内容库(模型档案、人设、技能、MCP 工具)共有的几样:分组、说明里的标记、给管理员的新版处理 ----
+    // ---- 内容库(模型档案、人设、技能、MCP 工具)共有的几样:说明里的标记、自带内容的新版处理 ----
 
-    /** 条目在列表里属于哪一节:服务器提供的归"服务器提供",其余归"我的"。 */
-    private static String groupOf(ClientLibraries.Base b) {
-        return b.server() ? LibraryListPanel.SERVER : LibraryListPanel.MINE;
-    }
-
-    /** 说明行:关着、自带、改过、有新版、来源卸载了、盖着/被盖着,这些标记在前,各库自己的说明在后。 */
+    /** 说明行:关着、自带、改过、有新版、来源卸载了,这些标记在前,各库自己的说明在后。 */
     private static String meta(ClientLibraries.Base b, String detail) {
         List<String> tags = new ArrayList<>();
         if (!b.enabled()) tags.add(I18n.get(ModLanguageData.Keys.LIBRARY_OFF));
@@ -115,23 +110,13 @@ public final class SettingsView {
         if (b.modified()) tags.add(I18n.get(ModLanguageData.Keys.LIBRARY_MODIFIED));
         if (b.update()) tags.add(I18n.get(ModLanguageData.Keys.LIBRARY_UPDATE));
         if (b.gone()) tags.add(I18n.get(ModLanguageData.Keys.LIBRARY_GONE));
-        if (b.paired()) tags.add(I18n.get(b.server() ? ModLanguageData.Keys.LIBRARY_COVERED
-                : ModLanguageData.Keys.LIBRARY_COVERS));
         return tags.isEmpty() ? detail : String.join(" · ", tags) + " · " + detail;
     }
 
-    /** 这一条当前这位玩家能不能改、删:自己的人人能,服务器提供的只有管理员(玩家对服务器提供的只读,想改先复制到我的)。 */
-    private static boolean editable(ClientLibraries.Base b) {
-        return !b.server() || ClientCompanions.admin();
-    }
-
-    /** 请求体:库里的名字,和它在哪一组。 */
+    /** 请求体:库里的名字。 */
     private static JsonObject target(ClientLibraries.Base b) {
         JsonObject body = new JsonObject();
         body.addProperty("id", b.id());
-        if (b.server()) {
-            body.addProperty("group", "server");
-        }
         return body;
     }
 
@@ -139,19 +124,16 @@ public final class SettingsView {
         ClientCompanions.library().request(kind, op, target(b));
     }
 
-    /** 玩家自己的开关:关掉的条目他的同伴看不到(开关记在他自己的偏好里)。 */
+    /** 主人自己的开关:关掉的条目他的同伴看不到(开关记在他自己的偏好里)。 */
     private static void flip(String kind, ClientLibraries.Base b) {
         request(kind, b.enabled() ? Libraries.DISABLE : Libraries.ENABLE, b);
     }
 
     /**
-     * 管理员对 jar 自带条目的右键菜单(房主的"我的"里自带的也是):jar 又带来新版时,采用新版或保留自己的(这一版不再提示);改过的,可以"恢复默认"——丢掉
+     * jar 自带条目的右键菜单:jar 又带来新版时,采用新版或保留自己的(这一版不再提示);改过的,可以"恢复默认"——丢掉
      * 自己的改动、取回 jar 里的这一版。
      */
     private static List<PopupMenu.Item> updateMenu(String kind, ClientLibraries.Base b) {
-        if (!ClientCompanions.admin()) {
-            return List.of();   // 有新版、改过这两样只有服务器目录里 jar 自带的条目才会有,房主的"我的"里也一样
-        }
         List<PopupMenu.Item> items = new ArrayList<>();
         if (b.update()) {
             items.add(new PopupMenu.Item(Sprites.CHECK, I18n.get(ModLanguageData.Keys.LIBRARY_ACCEPT), false,
@@ -193,7 +175,7 @@ public final class SettingsView {
     private LibraryListPanel<ClientLibraries.Provider> profileList;
 
     /**
-     * 模型档案:服务器目录里自带的只读,想改先复制到我的;我的可以改、删;每一条可以由玩家自己关掉。
+     * 模型档案:自带的与自己写的在同一张表里,都能改、删;每一条可以关掉。
      * key 不在档案里:表单上输入的 key 按厂家存进钥匙串(见 {@link ClientLibraries#saveKey})。
      */
     private LibraryListPanel<ClientLibraries.Provider> profileList() {
@@ -207,17 +189,15 @@ public final class SettingsView {
                         // 行尾勾 = 当前同伴走这份档案(召唤后也能换,即时生效)
                         Boolean marked = bound(Slot.PROVIDER, e.id());
                         return new LibraryListPanel.Row(e.name() == null ? "" : e.name(), meta(e.base(), detail),
-                                !e.hasKey(), marked, e.base().server(), e.base().server());
+                                !e.hasKey(), marked);
                     },
                     e -> Component.translatable(ModLanguageData.Keys.PROVIDER_DELETE_CONFIRM,
                             e.name() == null ? "" : e.name()).getString(),
-                    e -> ClientCompanions.library().delete(LibraryDesk.PROVIDER, e.id(), false),
+                    e -> ClientCompanions.library().delete(LibraryDesk.PROVIDER, e.id()),
                     this::beginEditProvider)
-                    .withSections(e -> groupOf(e.base()),
-                            LibraryListPanel.shelves(ModLanguageData.Keys.PROVIDER_ADD, ModLanguageData.Keys.PROVIDER_EMPTY,
-                                    this::beginNewProvider, null))
+                    .withList(ModLanguageData.Keys.PROVIDER_ADD, ModLanguageData.Keys.PROVIDER_EMPTY,
+                            this::beginNewProvider)
                     .withMenu(e -> updateMenu(LibraryDesk.PROVIDER, e.base()))
-                    .withClone(e -> request(LibraryDesk.PROVIDER, LibraryDesk.COPY, e.base()))
                     .withRowToggle(e -> e.base().enabled(), e -> flip(LibraryDesk.PROVIDER, e.base()))
                     // 换绑走她的绑定(下一次请求即生效);不许解绑——同伴必须有端点
                     .withBind(e -> {
@@ -230,11 +210,11 @@ public final class SettingsView {
         return profileList;
     }
 
-    // ---- 声线列表:同一底盘,服务器提供/我的两组,加标题行全局开关与绑定 ----
+    // ---- 声线列表:同一底盘,加标题行全局开关与绑定 ----
     private LibraryListPanel<ClientLibraries.Voice> voiceListPanel;
 
     /**
-     * 声线:服务端的一种库(服务器提供的管理员配,我的本人配),她用哪条记在她的绑定里。条目里没有 key——key 按服务存在这台电脑的钥匙串里,
+     * 声线:这台电脑上的一种库,她用哪条记在她的绑定里。条目里没有 key——key 按服务存在这台电脑的钥匙串里,
      * 没填的那行标红提醒。全局开关是这台电脑自己的设置。
      */
     private LibraryListPanel<ClientLibraries.Voice> voiceListPanel() {
@@ -258,18 +238,14 @@ public final class SettingsView {
                         if (noKey) line += " · " + I18n.get(ModLanguageData.Keys.VOICE_NO_KEY, voice.keyService());
                         // 行尾勾 = 本同伴正在用的声线;右键菜单里换绑,或不再使用(闭嘴)。
                         Boolean marked = bound(Slot.VOICE, e.id());
-                        return new LibraryListPanel.Row(e.name(), meta(e.base(), line), noKey, marked,
-                                !editable(e.base()), e.base().server());
+                        return new LibraryListPanel.Row(e.name(), meta(e.base(), line), noKey, marked);
                     },
                     e -> Component.translatable(ModLanguageData.Keys.VOICE_DELETE_CONFIRM,
                             e.name() == null ? "" : e.name()).getString(),
-                    e -> ClientCompanions.library().delete(LibraryDesk.VOICE, e.id(), e.base().server()),
+                    e -> ClientCompanions.library().delete(LibraryDesk.VOICE, e.id()),
                     this::beginEditVoice)
-                    .withSections(e -> groupOf(e.base()),
-                            LibraryListPanel.shelves(ModLanguageData.Keys.VOICE_ADD, ModLanguageData.Keys.VOICE_EMPTY,
-                                    () -> beginNewVoice(false), () -> beginNewVoice(true)))
+                    .withList(ModLanguageData.Keys.VOICE_ADD, ModLanguageData.Keys.VOICE_EMPTY, this::beginNewVoice)
                     .withMenu(e -> updateMenu(LibraryDesk.VOICE, e.base()))
-                    .withClone(e -> request(LibraryDesk.VOICE, LibraryDesk.COPY, e.base()))
                     .withRowToggle(e -> e.base().enabled(), e -> flip(LibraryDesk.VOICE, e.base()))
                     // 换绑/解绑走她的绑定,下一句话就用新声线
                     .withBind(
@@ -311,8 +287,6 @@ public final class SettingsView {
     // ---- voice section state (mirrors the model-config section: list / form / delete-confirm) ----
     private boolean addingVoice;
     private String voiceEditId;
-    /** 正在编辑的是"服务器提供"里的那一条(只有管理员),不是我的。 */
-    private boolean voiceEditServer;
     // ---- 声线表单:NumenUI VoiceFormPanel(后端切行/滚动/试听/胶囊) ----
     private VoiceFormPanel voiceForm;
     private VoiceFormPanel.Draft voiceDraft = VoiceFormPanel.freshDraft();
@@ -322,16 +296,14 @@ public final class SettingsView {
     // Persona library form state (mirrors the MCP add/edit/delete flow).
     private boolean addingPersona;
     private String personaEditId;          // non-null = editing this persona; null = creating
-    private boolean personaEditServer;    // the one being edited is a built-in persona (admin only)
     // ---- 人格表单:NumenUI PersonaFormPanel(名称 + 多行正文编辑器) ----
     private PersonaFormPanel personaForm;
     private PersonaFormPanel.Draft personaDraft = new PersonaFormPanel.Draft();
 
     // ---- MCP 分区:NumenUI McpFormPanel + LibraryListPanel(行内启停/状态点/tooltip) ----
     private boolean addingMcp;
-    /** 正在编辑的那台 MCP 服务器在库里的名字和它在哪一组;新建是 null。 */
+    /** 正在编辑的那台 MCP 服务器在库里的名字;新建是 null。 */
     private String mcpEditId;
-    private boolean mcpEditServer;
     private McpFormPanel mcpForm;
     /** 把授权完成后的回调网址贴回来的那张小卡。 */
     private boolean pastingAuth;
@@ -579,7 +551,7 @@ public final class SettingsView {
         leaving = false;
         pushPx = 0f;
         if (sttPanel != null) sttPanel.reseed();   // 进分区从已存配置重播种
-        // 列表面板按进页时的身份(管理员还是普通玩家)搭,每次进页重搭;服务器上的表要最新的
+        // 列表面板每次进页重搭;表要最新的
         profileList = null;
         personaListPanel = null;
         mcpListPanel = null;
@@ -589,12 +561,10 @@ public final class SettingsView {
         switch (s) {
             case PROVIDER -> {
                 ClientCompanions.library().ask(LibraryDesk.PROVIDER);
-                // 档案表单要的厂家名单:管理员才编辑档案,目录与端点解析在服务端
-                if (ClientCompanions.admin()) {
-                    ClientCompanions.library().ask(LibraryDesk.CATALOG);
-                }
+                // 档案表单要的厂家名单
+                ClientCompanions.library().ask(LibraryDesk.CATALOG);
             }
-            // 人设是服务器上他目录里的 .md 文件:进页先让服务端重扫,外部编辑器的修改即时可见。
+            // 人设是库目录里的 .md 文件:进页先重扫,外部编辑器的修改即时可见。
             case PERSONA -> ClientCompanions.library().request(LibraryDesk.PERSONA, LibraryDesk.RELOAD, new JsonObject());
             case MCP -> ClientCompanions.library().ask(LibraryDesk.MCP_CLIENT);
             case SKILLS -> ClientCompanions.library().ask(LibraryDesk.SKILL);
@@ -742,9 +712,6 @@ public final class SettingsView {
         if (voiceEditId != null) {
             body.addProperty("id", voiceEditId);
         }
-        if (voiceEditServer) {
-            body.addProperty("group", "server");
-        }
         if (voiceEditId == null && host.uuid() != null) {
             // 从某个同伴的设置页新建声线 = 给这只配音:新条目的 id 随答复回来,直接绑给发请求时的那只同伴
             UUID companion = host.uuid();
@@ -773,10 +740,9 @@ public final class SettingsView {
         if (addingVoice) formCard(Component.translatable(ModLanguageData.Keys.VOICE_TITLE), voiceForm()::render);
     }
 
-    private void beginNewVoice(boolean server) {
+    private void beginNewVoice() {
         addingVoice = true;
         voiceEditId = null;
-        voiceEditServer = server;
         voiceDraft = VoiceFormPanel.freshDraft();
         host.rebuild();
     }
@@ -788,7 +754,6 @@ public final class SettingsView {
         var voice = e.profile();
         addingVoice = true;
         voiceEditId = e.id();
-        voiceEditServer = e.base().server();
         var d = new VoiceFormPanel.Draft();
         d.backend = voice.backend();
         d.name = nv(e.name());
@@ -809,7 +774,7 @@ public final class SettingsView {
 
     // ---- Persona section: a library of reusable personas; apply one to the active companion ----
 
-    // ---- 人格列表:通用 LibraryListPanel + 服务器提供/我的两组 + 复制到我的 + 标题行 ↻ 重扫 ----
+    // ---- 人格列表:通用 LibraryListPanel + 标题行 ↻ 重扫 ----
     private LibraryListPanel<ClientLibraries.Persona> personaListPanel;
 
     private LibraryListPanel<ClientLibraries.Persona> personaListPanel() {
@@ -821,17 +786,13 @@ public final class SettingsView {
                         String detail = p.text().replace('\n', ' ');
                         // 行尾勾 = 本同伴的人设
                         Boolean marked = bound(Slot.PERSONA, p.id());
-                        return new LibraryListPanel.Row(p.name(), meta(p.base(), detail), false, marked,
-                                !editable(p.base()), p.base().server());
+                        return new LibraryListPanel.Row(p.name(), meta(p.base(), detail), false, marked);
                     },
                     p -> Component.translatable("numen.persona.delete_confirm", p.name()).getString(),
-                    p -> ClientCompanions.library().delete(LibraryDesk.PERSONA, p.id(), p.base().server()),
+                    p -> ClientCompanions.library().delete(LibraryDesk.PERSONA, p.id()),
                     this::beginEditPersona)
-                    .withSections(p -> groupOf(p.base()),
-                            LibraryListPanel.shelves("numen.persona.add", "numen.persona.empty",
-                                    () -> beginNewPersona(false), () -> beginNewPersona(true)))
+                    .withList("numen.persona.add", "numen.persona.empty", this::beginNewPersona)
                     .withMenu(p -> updateMenu(LibraryDesk.PERSONA, p.base()))
-                    .withClone(p -> request(LibraryDesk.PERSONA, LibraryDesk.COPY, p.base()))
                     .withRowToggle(p -> p.base().enabled(), p -> flip(LibraryDesk.PERSONA, p.base()))
                     // 换绑 = 她的人设绑定(活切,聊天流插分隔记号);解绑回默认人设
                     .withBind(
@@ -853,22 +814,18 @@ public final class SettingsView {
         return personaListPanel;
     }
 
-    private void beginNewPersona(boolean server) {
+    private void beginNewPersona() {
         addingPersona = true;
         personaEditId = null;
-        personaEditServer = server;
         personaDraft = new PersonaFormPanel.Draft();
         host.rebuild();
     }
 
     /** 存一条人设:{@code id} 为 null 是新建。服务端存,改名时它把在用的同伴一起改指。 */
-    private static void savePersona(String id, String name, String text, boolean server) {
+    private static void savePersona(String id, String name, String text) {
         JsonObject body = new JsonObject();
         if (id != null) {
             body.addProperty("id", id);
-        }
-        if (server) {
-            body.addProperty("group", "server");
         }
         body.addProperty("name", name);
         body.addProperty("text", text);
@@ -894,7 +851,7 @@ public final class SettingsView {
     }
 
     private void onPersonaSave(PersonaFormPanel.Draft d) {
-        savePersona(personaEditId, d.name.trim(), d.text.trim(), personaEditServer);
+        savePersona(personaEditId, d.name.trim(), d.text.trim());
         addingPersona = false;
         personaEditId = null;
         personaDraft = new PersonaFormPanel.Draft();
@@ -926,38 +883,25 @@ public final class SettingsView {
 
     private LibraryListPanel<ClientLibraries.McpClientRow> mcpListPanel;
 
-    private void beginNewMcp(boolean server) {
+    private void beginNewMcp() {
         addingMcp = true;
         mcpEditId = null;
-        mcpEditServer = server;
         mcpDraft = new McpFormPanel.Draft();
         host.rebuild();
     }
 
-    /** 这一台的配置(地址、令牌、命令行)当前这位玩家能不能看、改:自己的人人能,服务器提供的只有管理员。 */
-    private static boolean mcpOwned(ClientLibraries.McpClientRow h) {
-        return editable(h.base());
-    }
-
-    /**
-     * 接进来的 MCP 服务器:服务器提供的(管理员配的)和我的两组。自己能改的那几台,行尾开关是"连不连";别人的(服务器提供的、对玩家)是自己的开关,
-     * 只管他的同伴看不看得到它的工具。玩家只能加 http 类的,stdio 起的是服务器机器上的进程,只有管理员能加。
-     */
+    /** 接进来的 MCP 服务器:行尾开关是"连不连"。 */
     private LibraryListPanel<ClientLibraries.McpClientRow> mcpListPanel() {
         if (mcpListPanel == null) {
             mcpListPanel = new LibraryListPanel<ClientLibraries.McpClientRow>(
                     ClientLibraries::mcpClients,
                     h -> new LibraryListPanel.Row(h.name(), meta(h.base(), mcpMeta(h)),
-                            h.status() == com.dwinovo.numen.mcp.client.McpConnections.Status.FAILED, null,
-                            !mcpOwned(h), h.base().server()),
+                            h.status() == com.dwinovo.numen.mcp.client.McpConnections.Status.FAILED, null),
                     h -> Component.translatable("numen.mcp.delete_confirm", h.name()).getString(),
-                    h -> ClientCompanions.library().delete(LibraryDesk.MCP_CLIENT, h.id(), h.base().server()),
+                    h -> ClientCompanions.library().delete(LibraryDesk.MCP_CLIENT, h.id()),
                     this::beginEditMcp)
-                    .withSections(h -> groupOf(h.base()),
-                            LibraryListPanel.shelves("numen.mcp.add", "numen.mcp.empty",
-                                    () -> beginNewMcp(false), () -> beginNewMcp(true)))
+                    .withList("numen.mcp.add", "numen.mcp.empty", this::beginNewMcp)
                     .withMenu(h -> updateMenu(LibraryDesk.MCP_CLIENT, h.base()))
-                    .withClone(h -> request(LibraryDesk.MCP_CLIENT, LibraryDesk.COPY, h.base()))
                     .withTitleAction(I18n.get("numen.mcp.paste_auth"), () -> {
                         pastingAuth = true;
                         host.rebuild();
@@ -965,13 +909,8 @@ public final class SettingsView {
                     .withRowIcon(8, (surface, h, ix, iy, size) ->
                             surface.fillRect(ix + 1, iy + 1, 6, 6, mcpDotColor(h)))
                     .withRowToggle(
-                            h -> mcpOwned(h) ? h.status() != com.dwinovo.numen.mcp.client.McpConnections.Status.DISABLED
-                                    : h.base().enabled(),
+                            h -> h.status() != com.dwinovo.numen.mcp.client.McpConnections.Status.DISABLED,
                             h -> {
-                                if (!mcpOwned(h)) {
-                                    flip(LibraryDesk.MCP_CLIENT, h.base());
-                                    return;
-                                }
                                 var st = h.status();
                                 // 连接中/等授权/已连接 → 断开;禁用/失败 → (重)连(失败的点一下即重试)
                                 boolean on = st == com.dwinovo.numen.mcp.client.McpConnections.Status.CONNECTED
@@ -1022,7 +961,7 @@ public final class SettingsView {
                     () -> {
                         addingMcp = false;
                         host.rebuild();
-                    }, ClientCompanions.admin());
+                    });
         }
         return mcpForm;
     }
@@ -1036,7 +975,7 @@ public final class SettingsView {
         String clientId = "";
         if (mcpEditId != null) {
             var original = ClientLibraries.mcpClients().stream()
-                    .filter(h -> h.id().equals(mcpEditId) && h.base().server() == mcpEditServer && h.full())
+                    .filter(h -> h.id().equals(mcpEditId))
                     .findFirst();
             connect = original.map(ClientLibraries.McpClientRow::connect).orElse(true);
             clientId = original.map(h -> h.spec().clientId()).orElse("");
@@ -1057,9 +996,6 @@ public final class SettingsView {
         // 改了名:服务端存新名字的同时把旧的摘掉
         if (mcpEditId != null) {
             body.addProperty("id", mcpEditId);
-        }
-        if (mcpEditServer) {
-            body.addProperty("group", "server");
         }
         ClientCompanions.library().put(LibraryDesk.MCP_CLIENT, body);
         McpAuthPrompt.expect(name);
@@ -1097,8 +1033,7 @@ public final class SettingsView {
     private LibraryListPanel<ClientLibraries.Skill> skillsListPanel;
 
     /**
-     * 技能:服务器提供的(Numen 与各插件随包带来的,同步在服务器目录里)和我的两组。人人能开关(记在自己的偏好里)、能复制到我的、
-     * 能让服务器重扫;技能是目录,改它拿编辑器改文件。
+     * 技能:Numen 与各插件随包带来的和自己放进去的在同一张表里。能开关(记在自己的偏好里)、能重扫;技能是目录,改它拿编辑器改文件。
      */
     private LibraryListPanel<ClientLibraries.Skill> skillsListPanel() {
         if (skillsListPanel == null) {
@@ -1107,16 +1042,13 @@ public final class SettingsView {
                     sk -> {
                         String desc = sk.description() == null || sk.description().isBlank()
                                 ? I18n.get("numen.skill.no_desc") : sk.description();
-                        return new LibraryListPanel.Row(sk.name(), meta(sk.base(), desc), false, null, false,
-                                sk.base().server());
+                        return new LibraryListPanel.Row(sk.name(), meta(sk.base(), desc), false, null);
                     },
                     null, null, null)
-                    .withSections(sk -> groupOf(sk.base()),
-                            LibraryListPanel.shelves(null, "numen.skill.empty", null, null))
+                    .withList(null, "numen.skill.empty", null)
                     .withMenu(sk -> updateMenu(LibraryDesk.SKILL, sk.base()))
-                    .withClone(sk -> request(LibraryDesk.SKILL, LibraryDesk.COPY, sk.base()))
                     .withRowToggle(ClientLibraries.Skill::enabled, sk -> flip(LibraryDesk.SKILL, sk.base()))
-                    // 技能目录在服务器上:往里放了新的,↻ 让服务器重扫
+                    // 往技能目录里放了新的,↻ 重扫
                     .withHeaderAction(Sprites.REFRESH, I18n.get(ModLanguageData.Keys.LIBRARY_RELOAD),
                             () -> ClientCompanions.library().request(LibraryDesk.SKILL, LibraryDesk.RELOAD, new JsonObject()))
                     .following(LibraryDesk.SKILL);
@@ -1147,7 +1079,7 @@ public final class SettingsView {
             pluginsListPanel = new LibraryListPanel<ClientLibraries.Plugin>(
                     ClientLibraries::plugins,
                     p -> new LibraryListPanel.Row(p.name(), pluginMeta(p),
-                            p.status() == PluginRoster.Status.FAILED, null, false, false, p.toggle()),
+                            p.status() == PluginRoster.Status.FAILED, null, p.toggle()),
                     null, null, null)
                     .withSections(p -> p.source().name(), () -> List.of(
                             new LibraryListPanel.Section(PluginRoster.Source.BUNDLED.name(),
@@ -1408,9 +1340,6 @@ public final class SettingsView {
     }
 
     private String mcpMeta(ClientLibraries.McpClientRow h) {
-        if (!h.full()) {
-            return I18n.get(h.connected() ? "numen.mcp.connected" : "numen.mcp.disabled", "mcp", h.toolCount());
-        }
         String type = h.spec().isStdio() ? "stdio" : "http";
         return switch (h.status()) {
             case CONNECTED -> I18n.get("numen.mcp.connected", type, h.toolCount());
@@ -1424,14 +1353,12 @@ public final class SettingsView {
     private List<Component> mcpTooltip(ClientLibraries.McpClientRow h) {
         List<Component> lines = new ArrayList<>();
         lines.add(Component.literal(h.name()));
-        if (h.full()) {
-            var spec = h.spec();
-            lines.add(Nb.colored(spec.isStdio() ? spec.command() : spec.url(), TXT_MUTED));
-            if (h.status() == com.dwinovo.numen.mcp.client.McpConnections.Status.FAILED && !h.error().isBlank()) {
-                lines.add(Nb.colored(h.error(), FAIL));
-            } else if (!h.tools().isEmpty()) {
-                lines.add(Nb.colored(String.join(", ", h.tools()), TXT_MUTED));
-            }
+        var spec = h.spec();
+        lines.add(Nb.colored(spec.isStdio() ? spec.command() : spec.url(), TXT_MUTED));
+        if (h.status() == com.dwinovo.numen.mcp.client.McpConnections.Status.FAILED && !h.error().isBlank()) {
+            lines.add(Nb.colored(h.error(), FAIL));
+        } else if (!h.tools().isEmpty()) {
+            lines.add(Nb.colored(String.join(", ", h.tools()), TXT_MUTED));
         }
         return lines;
     }
@@ -1451,7 +1378,6 @@ public final class SettingsView {
     private void beginEditPersona(ClientLibraries.Persona p) {
         addingPersona = true;
         personaEditId = p.id();
-        personaEditServer = p.base().server();
         var d = new PersonaFormPanel.Draft();
         d.name = p.name();
         d.text = p.text();
@@ -1466,7 +1392,7 @@ public final class SettingsView {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         loadPalette();
         if (button != 0) {
-            // 右键只有条目库的行认(弹出编辑/克隆/删除菜单);首页、退出途中、表单开着时都不接
+            // 右键只有条目库的行认(弹出编辑/删除菜单);首页、退出途中、表单开着时都不接
             LibraryListPanel<?> lib = section == null || leaving || formActive() ? null : libraryOf(section);
             return lib != null && lib.mouseClicked(mouseX, mouseY, button);
         }
@@ -1568,7 +1494,6 @@ public final class SettingsView {
         var spec = row.spec();
         addingMcp = true;
         mcpEditId = row.id();
-        mcpEditServer = row.base().server();
         var d = new McpFormPanel.Draft();
         d.stdio = spec.isStdio();
         d.name = spec.name();

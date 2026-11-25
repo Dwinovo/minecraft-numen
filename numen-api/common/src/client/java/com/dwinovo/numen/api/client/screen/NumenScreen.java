@@ -1980,7 +1980,7 @@ public final class NumenScreen extends Screen {
             }
         }
         if (button == 1 && !modalOpen() && tab == Tab.SETTINGS && settings.mouseClicked(mouseX, mouseY, button)) {
-            return true;   // 右键设置里条目库的一行:编辑、克隆、删除
+            return true;   // 右键设置里条目库的一行:编辑、删除
         }
         if (button == 1 && !modalOpen() && tab == Tab.CHAT && conv != null) {   // 右键一条话:复制、引用回复
             var picked = chatView.bubbleAt(mouseX, mouseY);
