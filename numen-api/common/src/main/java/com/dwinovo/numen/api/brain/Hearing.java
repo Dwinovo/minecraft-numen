@@ -68,13 +68,15 @@ public final class Hearing {
         }
         // 引的那句里可能有 @,那是别人当时的话,不算他这次叫谁
         Mentions.Routing routing = Mentions.route(Quote.parse(text).body(), members);
+        // 先拨号落盘再送话:她收到这句时,<audience> 上的发言号就是这一句的
+        conv = rooms.spoke(conv);
         String tag = rooms.tagOf(conv);
         Spoken spoken = new Spoken(speaker.getUUID(), tag == null ? Venue.PANEL : Venue.CHAT, tag);
         String who = EntityLabel.shown(speaker.getUUID(), speaker.getGameProfile().getName());
         String heard = overheard(who + " → " + addressees(routing, members), text);
         for (Mentions.Member m : members) {
             if (routing.awake().contains(m.uuid())) {
-                ServerSeats.hear(m.uuid(), query(text, who, tag == null ? null : GROUP, others(members, m)), spoken);
+                ServerSeats.hear(m.uuid(), query(text, who, tag == null ? null : GROUP, tag == null ? null : rooms.audienceLine(conv, m.uuid())), spoken);
             } else {
                 ServerSeats.tell(m.uuid(), EventTypes.TALK, heard);
             }
@@ -97,9 +99,12 @@ public final class Hearing {
     }
 
     /** 主人的话(会叫醒她)交给模型的那一条:带说话人的身份,私聊与群里还带说话的地方。 */
-    private static EventQueue.Entry query(String text, String who, String venue, String others) {
+    private static EventQueue.Entry query(String text, String who, String venue, String audience) {
         long day = ServerSeats.dayTime();
-        String body = venue == null ? EventQueue.query(text, day, who) : EventQueue.query(text, day, who, venue, others);
+        String body = venue == null ? EventQueue.query(text, day, who) : EventQueue.query(text, day, who, venue);
+        if (audience != null) {
+            body += "\n" + audience;
+        }
         return new EventQueue.Entry(EventTypes.QUERY, body, System.currentTimeMillis(), false);
     }
 
@@ -117,16 +122,5 @@ public final class Hearing {
             }
         }
         return String.join(", ", names);
-    }
-
-    /** 群里除她以外在场的人;只有她一个是 {@code null}。 */
-    private static String others(List<Mentions.Member> members, Mentions.Member her) {
-        List<String> names = new ArrayList<>();
-        for (Mentions.Member m : members) {
-            if (!m.uuid().equals(her.uuid())) {
-                names.add(m.name());
-            }
-        }
-        return names.isEmpty() ? null : String.join(", ", names);
     }
 }

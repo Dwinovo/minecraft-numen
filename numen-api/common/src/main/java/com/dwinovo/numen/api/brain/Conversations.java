@@ -6,6 +6,7 @@ import com.dwinovo.numen.api.agent.conversation.Mentions;
 import com.dwinovo.numen.api.agent.conversation.Quote;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
+import com.dwinovo.numen.api.event.NumenEvents;
 import com.dwinovo.numen.api.home.Homes;
 import com.dwinovo.numen.api.seat.ServerSeats;
 import com.dwinovo.numen.api.library.JsonLibrary;
@@ -274,6 +275,22 @@ public final class Conversations extends JsonLibrary<Conversation> {
      */
     public void dissolve(Conversation conv) {
         remove(conv.id());
+    }
+
+    /** 他在这个会话里又说了一句:发言号拨一、落盘(单聊没有落盘的记录,不拨)。返回拨过之后的会话。 */
+    public Conversation spoke(Conversation conv) {
+        return get(conv.id()) != null ? save(conv.spoken()) : conv;
+    }
+
+    /** 这句话旁挂的 {@code <audience>} 一行:群里除她以外还听得见的人与发言号;单聊没有。 */
+    public String audienceLine(Conversation conv, UUID companion) {
+        List<String> names = new ArrayList<>();
+        for (UUID m : membersAlive(conv)) {
+            if (!m.equals(companion)) {
+                names.add(roster.name(m));
+            }
+        }
+        return names.isEmpty() ? null : Audience.line(conv.turn(), NumenEvents.escape(String.join(", ", names)));
     }
 
     private Conversation save(Conversation conv) {

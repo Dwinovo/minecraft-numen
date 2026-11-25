@@ -320,11 +320,10 @@ public final class EventQueue {
     /**
      * 同 {@link #query(String, long, String)},另带这句话是在哪儿说的({@link ConvoLog#venueAttr});她的回话回到那里。
      *
-     * @param venue  {@code whisper} 或 {@code group}
-     * @param others 群里除她以外在场的人;不是群是 {@code null}
+     * @param venue {@code whisper} 或 {@code group}
      */
-    public static String query(String words, long dayTime, String speaker, String venue, String others) {
-        return "<query" + EventClock.stamp(dayTime) + ConvoLog.speakerAttr(speaker) + ConvoLog.venueAttr(venue, others) + ">"
+    public static String query(String words, long dayTime, String speaker, String venue) {
+        return "<query" + EventClock.stamp(dayTime) + ConvoLog.speakerAttr(speaker) + ConvoLog.venueAttr(venue) + ">"
                 + words + "</query>";
     }
 

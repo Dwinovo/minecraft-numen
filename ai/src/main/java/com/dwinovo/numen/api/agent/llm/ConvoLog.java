@@ -473,15 +473,10 @@ public final class ConvoLog {
 
     /**
      * 一句话是在哪儿说的:{@code <query>} 开标签上多的那个属性(带前面的空格)。{@code venue} 是 {@code whisper}(私聊她)、
-     * {@code group}(她所在的群里)之一;面板说的话(默认)不带。{@code others} 是群里除她以外在场的人的名字,没有就不带。
+     * {@code group}(她所在的群里)之一;面板说的话(默认)不带。群里还有谁听得见由 {@code <audience>} 那一行说({@code Audience})。
      */
-    public static String venueAttr(String venue, String others) {
-        String attr = " venue=\"" + venue + "\"";
-        if (others != null && !others.isBlank()) {
-            attr += " with=\"" + others.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;")
-                    .replace(">", "&gt;") + "\"";
-        }
-        return attr;
+    public static String venueAttr(String venue) {
+        return " venue=\"" + venue + "\"";
     }
 
     /**

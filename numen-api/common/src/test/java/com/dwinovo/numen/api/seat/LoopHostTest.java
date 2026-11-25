@@ -227,7 +227,7 @@ class LoopHostTest {
                 com.dwinovo.numen.api.brain.Venue.WHISPER, null);
 
         seats.publish(HER, new EventQueue.Entry(EventTypes.QUERY,
-                EventQueue.query("你好", 6000, "player@abcdef (Friend)", "whisper", null), 5L, false), whisper);
+                EventQueue.query("你好", 6000, "player@abcdef (Friend)", "whisper"), 5L, false), whisper);
 
         until("her program reached the body", () -> world.programs.running.containsKey("call-2"));
         assertEquals(FRIEND, world.programs.keepers.get("call-2"), "the program acts for the one she is answering");
