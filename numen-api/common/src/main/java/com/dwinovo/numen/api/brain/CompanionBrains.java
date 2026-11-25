@@ -13,6 +13,7 @@ import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.api.network.payload.RequestStatePayload;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
 import com.dwinovo.numen.api.program.LocalPrograms;
+import com.dwinovo.numen.api.seat.ServerSeats;
 import com.dwinovo.numen.api.text.ServerLang;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -71,7 +72,7 @@ public final class CompanionBrains {
         CompanionRegistry registry = CompanionRegistry.get(server);
         Function<UUID, Conversations> roomsOf = who -> Conversations.of(server, who);
         CompanionLoop loop = new CompanionLoop(new CompanionLoop.Parts(companion, owner, home, server, mind,
-                new LocalPrograms(server),
+                new LocalPrograms(server, ServerSeats.transport()),
                 toolsOf(server, owner),
                 () -> NumenPlayer.findByUuid(server, companion),
                 () -> {

@@ -232,6 +232,7 @@ public final class RemoteCompanions {
 
     /** 断线:服务端推来的东西都不算数了。 */
     public static void disconnected() {
+        com.dwinovo.numen.api.client.seat.ClientSeats.close();
         COMPANIONS.clear();
         TRANSCRIPTS.clear();
         MemoryFiles.reset();

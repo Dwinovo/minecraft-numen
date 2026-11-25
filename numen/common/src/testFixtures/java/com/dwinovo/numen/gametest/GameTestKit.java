@@ -784,8 +784,8 @@ public final class GameTestKit {
     static final class Programs implements com.dwinovo.numen.api.program.ProgramHost {
 
         private final net.minecraft.server.MinecraftServer server;
-        private final com.dwinovo.numen.api.program.LoopbackTransport transport =
-                new com.dwinovo.numen.api.program.LoopbackTransport();
+        private final com.dwinovo.numen.api.seat.LoopbackTransport transport =
+                new com.dwinovo.numen.api.seat.LoopbackTransport();
         private final java.util.Map<String, java.util.function.Consumer<com.dwinovo.numen.api.agent.loop.Program.Outcome>>
                 waiting = new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -845,6 +845,89 @@ public final class GameTestKit {
         /** 让这个"客户端"从此不再答复反向请求(扮一个卡住的客户端):程序里的客户端函数要等到时限才以失败结束。 */
         void silence() {
             transport.silence();
+        }
+    }
+
+    /**
+     * 主人客户端的座位,扮的:服务端经真实的网络入口发给主人的座位消息({@link #received},分片先拼回)由 {@link #pump} 交给座位的客户端一端,
+     * 客户端的消息照线上的样子经服务端真实的入口({@code ServerSeats.received})回去;客户端函数在 {@link #pump} 所在的线程上执行。
+     * 服务端从包进到包出的路——认主人、坐座位、量大小、反向请求、答复——都真走一遍,只是没有网线。
+     */
+    static final class OwnerSeat {
+
+        final com.dwinovo.numen.api.seat.SeatClient client;
+        private final net.minecraft.server.level.ServerPlayer owner;
+        private final com.dwinovo.numen.api.network.Fragments.Inbox inbox =
+                new com.dwinovo.numen.api.network.Fragments.Inbox(com.dwinovo.numen.api.network.Wire.TO_CLIENT);
+        private final java.util.Queue<Runnable> main = new java.util.concurrent.ConcurrentLinkedQueue<>();
+        /** 收到的 {@code client/call} 请求数,和下行的片数。 */
+        int clientCalls;
+        int fragments;
+        private java.util.concurrent.CompletableFuture<com.dwinovo.numen.api.seat.Opened> opening;
+
+        /**
+         * 他坐上她的座位:名册认他是她的创建者(座位只认创建者),他的客户端照 {@code Replies.hello} 报到,座位开出去;
+         * 开成了({@link #seated})要靠 {@link #pump} 把答复交回来。
+         */
+        static OwnerSeat sit(NumenPlayer her, net.minecraft.server.level.ServerPlayer owner, String name) {
+            com.dwinovo.numen.api.entity.CompanionRegistry.get(owner.getServer()).put(her.getUUID(),
+                    new com.dwinovo.numen.api.entity.CompanionRegistry.Entry(name, owner.getUUID(),
+                            net.minecraft.world.level.Level.OVERWORLD, her.blockPosition()));
+            com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
+            OwnerSeat seat = new OwnerSeat(owner);
+            seat.opening = seat.client.open(her.getUUID(), 0);
+            return seat;
+        }
+
+        /** 座位坐上了。 */
+        boolean seated() {
+            return opening.isDone() && !opening.isCompletedExceptionally();
+        }
+
+        /** 用完:座位上的人走了,名册上的她除掉。 */
+        void leave(net.minecraft.server.level.ServerPlayer player, NumenPlayer her) {
+            com.dwinovo.numen.api.entity.CompanionRegistry.get(player.getServer()).remove(her.getUUID());
+            GameTestKit.leave(player);
+        }
+
+        OwnerSeat(net.minecraft.server.level.ServerPlayer owner) {
+            this.owner = owner;
+            this.client = new com.dwinovo.numen.api.seat.SeatClient(main::add,
+                    java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor(), message ->
+                    com.dwinovo.numen.api.seat.ServerSeats.received(com.dwinovo.numen.api.network.Fragments.crossed(
+                            com.dwinovo.numen.api.network.Wire.TO_SERVER,
+                            com.dwinovo.numen.api.network.payload.SeatPayload.TO_SERVER_CODEC,
+                            com.dwinovo.numen.api.network.payload.SeatPayload.frame(
+                                    com.dwinovo.numen.api.network.Wire.TO_SERVER, message)), owner));
+        }
+
+        /** 这一刻服务端发来的座位消息交给客户端,客户端主线程上排着的活做掉。 */
+        void pump() {
+            for (net.minecraft.network.protocol.common.custom.CustomPacketPayload payload : received(owner)) {
+                if (payload instanceof com.dwinovo.numen.api.network.payload.FragmentPayload piece) {
+                    fragments++;
+                    io.netty.buffer.ByteBuf wire = io.netty.buffer.Unpooled.buffer();
+                    com.dwinovo.numen.api.network.payload.FragmentPayload.TO_CLIENT_CODEC.encode(wire, piece);
+                    payload = com.dwinovo.numen.api.network.NumenNetwork.assembled(inbox,
+                            com.dwinovo.numen.api.network.payload.FragmentPayload.TO_CLIENT_CODEC.decode(wire));
+                }
+                if (payload instanceof com.dwinovo.numen.api.network.payload.SeatPayload seat) {
+                    com.dwinovo.numen.mcp.rpc.RpcMessage message;
+                    try {
+                        message = seat.message();
+                    } catch (com.dwinovo.numen.mcp.rpc.RpcException unreadable) {
+                        throw new IllegalStateException("the server sent a message the client cannot read", unreadable);
+                    }
+                    if (message instanceof com.dwinovo.numen.mcp.rpc.RpcMessage.Request request
+                            && request.method().equals(com.dwinovo.numen.api.seat.SeatMethods.CLIENT_CALL)) {
+                        clientCalls++;
+                    }
+                    client.receive(message);
+                }
+            }
+            for (Runnable task; (task = main.poll()) != null; ) {
+                task.run();
+            }
         }
     }
 

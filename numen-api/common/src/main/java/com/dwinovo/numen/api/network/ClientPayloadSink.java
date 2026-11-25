@@ -36,4 +36,5 @@ public final class ClientPayloadSink {
     public static volatile Consumer<LibraryPayload> library = p -> {};
     public static volatile Consumer<com.dwinovo.numen.api.network.payload.ExportChunkPayload> export = p -> {};
     public static volatile Consumer<com.dwinovo.numen.api.network.payload.SkinHandoverPayload> skinHandover = p -> {};
+    public static volatile Consumer<com.dwinovo.numen.api.network.payload.SeatPayload> seat = p -> {};
 }

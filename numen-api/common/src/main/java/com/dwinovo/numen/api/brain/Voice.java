@@ -15,7 +15,7 @@ import net.minecraft.network.chat.Component;
  * </ul>
  * 外部大脑替她说的话以后也走这一处。
  */
-final class Voice {
+public final class Voice {
 
     private Voice() {}
 
@@ -42,7 +42,7 @@ final class Voice {
      *
      * @param conversation 会话名;只有 {@link Venue#CHAT} 用
      */
-    static Component line(Venue venue, String name, String conversation, String said) {
+    public static Component line(Venue venue, String name, String conversation, String said) {
         return switch (venue) {
             case WHISPER -> Component.translatable("commands.message.display.incoming", name, said)
                     .withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC);

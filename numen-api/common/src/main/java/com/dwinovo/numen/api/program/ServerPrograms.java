@@ -8,7 +8,6 @@ import com.dwinovo.numen.api.store.SerialExecutor;
 import com.dwinovo.numen.api.Internal;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.event.NumenEvents;
-import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.platform.ServerLifecycle;
 import com.dwinovo.numen.api.script.Modules;
 
@@ -108,7 +107,7 @@ public final class ServerPrograms {
     public static void run(NumenPlayer her, UUID companion, UUID owner, Request request, ClientTransport transport,
                            CallObserver observer, Consumer<Program.Outcome> done) {
         MainQueue.Lane lane = QUEUE.lane();
-        ClientCalls client = new ClientCalls(her, companion, lane, transport, () -> ticks);
+        ClientCalls client = new ClientCalls(companion, lane, transport, () -> ticks);
         Running running = new Running(companion, owner, request.programId(), lane, client);
         String refused;
         synchronized (RUNNING) {
@@ -160,13 +159,14 @@ public final class ServerPrograms {
      * 服务端自己起的一段程序(管理员的 {@code /numen drive}、重启后再跑的那一行):用她的模块;
      * 它调的客户端函数照样向她的主人的客户端发反向请求(主人不在线就是一条失败)。整张回执经 {@code receipt} 交回一次。
      *
-     * @param tag 程序编号的前缀,日志里认它
+     * @param tag       程序编号的前缀,日志里认它
+     * @param transport 反向请求怎么到主人的客户端
      */
-    public static void launch(NumenPlayer her, String tag, String code, CallObserver observer,
-                              Consumer<String> receipt) {
+    public static void launch(NumenPlayer her, String tag, String code, ClientTransport transport,
+                              CallObserver observer, Consumer<String> receipt) {
         UUID owner = her.getOwnerUuid() != null ? her.getOwnerUuid() : her.getUUID();
         run(her, her.getUUID(), owner, new Request(tag + "-" + UUID.randomUUID(), code, Modules.of(her.getUUID()),
-                false), NetworkTransport.INSTANCE, observer, outcome -> receipt.accept(outcome.receipt()));
+                false), transport, observer, outcome -> receipt.accept(outcome.receipt()));
     }
 
     /** 能不能再开一段:不能就是给模型的那句话。 */
@@ -299,18 +299,11 @@ public final class ServerPrograms {
         }
     }
 
-    /** 这位玩家断线了:等他的客户端答复的反向请求都失败,他没收完的分片消息丢掉。 */
-    public static void clientLeft(UUID player) {
-        NetworkTransport.INSTANCE.ownerLeft(player);
-        NumenNetwork.disconnected(player);
-    }
-
     /** 服务器停了:所有程序收掉,排着的调用作废。 */
     private static void dropAll() {
         RUNNING.values().forEach(r -> r.program.cancel(false));
         RUNNING.clear();
         LANES.clear();
         QUEUE.clear();
-        NetworkTransport.INSTANCE.clear();
     }
 }

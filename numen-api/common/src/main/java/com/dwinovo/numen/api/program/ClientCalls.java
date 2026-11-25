@@ -3,8 +3,6 @@ package com.dwinovo.numen.api.program;
 import com.dwinovo.numen.script.ApiReply;
 import com.dwinovo.numen.script.ErrorKind;
 import com.dwinovo.numen.script.Invocation;
-import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.network.payload.ClientCallPayload;
 import com.dwinovo.numen.api.sdk.Dispatcher;
 
 import java.util.ArrayList;
@@ -28,7 +26,6 @@ final class ClientCalls implements ProgramCalls {
     /** 一个在等的反向请求:什么时候算超时、是哪次调用、结果交给谁。 */
     private record Pending(long deadline, Invocation invocation, Consumer<String> done) {}
 
-    private final NumenPlayer her;
     private final UUID companion;
     private final MainQueue.Lane lane;
     private final ClientTransport transport;
@@ -39,8 +36,7 @@ final class ClientCalls implements ProgramCalls {
     private final Map<String, Pending> pending = new LinkedHashMap<>();
     private boolean closed;
 
-    ClientCalls(NumenPlayer her, UUID companion, MainQueue.Lane lane, ClientTransport transport, LongSupplier ticks) {
-        this.her = her;
+    ClientCalls(UUID companion, MainQueue.Lane lane, ClientTransport transport, LongSupplier ticks) {
         this.companion = companion;
         this.lane = lane;
         this.transport = transport;
@@ -49,8 +45,8 @@ final class ClientCalls implements ProgramCalls {
 
     @Override
     public void execute(String callId, Invocation invocation, Consumer<String> done, Runnable sent) {
-        ClientCallPayload request = new ClientCallPayload(companion, callId, invocation.function(),
-                invocation.args().toString());
+        ClientTransport.Request request = new ClientTransport.Request(companion, callId, invocation.function(),
+                invocation.args());
         lane.post(() -> {
             synchronized (this) {
                 if (closed) {
@@ -60,7 +56,7 @@ final class ClientCalls implements ProgramCalls {
                 pending.put(callId, new Pending(ticks.getAsLong() + ProgramLimits.CLIENT_ANSWER_TICKS, invocation,
                         done));
             }
-            transport.request(her, request, reply -> answered(callId, reply));
+            transport.request(request, reply -> answered(callId, reply));
             sent.run();
         });
     }

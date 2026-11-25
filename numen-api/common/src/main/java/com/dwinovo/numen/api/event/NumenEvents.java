@@ -268,6 +268,15 @@ public final class NumenEvents {
         WATCHERS.add(watcher);
     }
 
+    /** 送到她手里的每一条事件(没有归在跑的程序的)也交给它们:座位把同样的条目送给主人的客户端。 */
+    private static final List<java.util.function.BiConsumer<UUID, EventQueue.Entry>> DELIVERED =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** 听送到她手里的每一条事件,按同伴。 */
+    public static void onDelivered(java.util.function.BiConsumer<UUID, EventQueue.Entry> sink) {
+        DELIVERED.add(sink);
+    }
+
     /** task_finished 里写着是哪件活、收尾成什么样的属性:{@link #taskFinished} 按它写,{@link #finishOf} 按它读。 */
     private static final String TASK_ID = "id";
     private static final String STATUS = "status";
@@ -340,6 +349,7 @@ public final class NumenEvents {
      */
     public static void deliver(NumenPlayer companion, EventQueue.Entry entry) {
         UUID uuid = companion.getUUID();
+        DELIVERED.forEach(sink -> sink.accept(uuid, entry));
         var brain = CompanionLoops.get(uuid);
         if (brain.isEmpty()) {
             Constants.LOG.warn("[numen-event] {} kind={} has no brain; nobody receives this event", uuid, entry.type());

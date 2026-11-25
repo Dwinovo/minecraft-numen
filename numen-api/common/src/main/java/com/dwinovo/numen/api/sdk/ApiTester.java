@@ -7,7 +7,7 @@ import com.dwinovo.numen.script.ScriptRun;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.agent.loop.Program;
 import com.dwinovo.numen.api.program.CallObserver;
-import com.dwinovo.numen.api.program.LoopbackTransport;
+import com.dwinovo.numen.api.seat.LoopbackTransport;
 import com.dwinovo.numen.api.program.ServerPrograms;
 import com.dwinovo.numen.api.script.BuiltinModules;
 import com.dwinovo.numen.api.script.Modules;

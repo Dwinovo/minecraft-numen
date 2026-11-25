@@ -1,9 +1,8 @@
 package com.dwinovo.numen.api.network;
 
-import com.dwinovo.numen.api.network.payload.ClientCallPayload;
-import com.dwinovo.numen.api.network.payload.ClientCallResultPayload;
 import com.dwinovo.numen.api.network.payload.CompanionListPayload;
 import com.dwinovo.numen.api.network.payload.FragmentPayload;
+import com.dwinovo.numen.api.network.payload.SeatPayload;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -14,7 +13,6 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,8 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("mc")
 class FragmentsTest {
 
-    private static final UUID A = UUID.fromString("11111111-1111-1111-1111-111111111111");
-    private static final ResourceLocation KIND = ResourceLocation.fromNamespaceAndPath("numen_api", "client_call_result");
+    private static final ResourceLocation KIND = ResourceLocation.fromNamespaceAndPath("numen_api", "seat_to_server");
 
     private static byte[] bytes(int n) {
         byte[] out = new byte[n];
@@ -107,37 +104,37 @@ class FragmentsTest {
 
     // ---- 发送:没超的不分片,超了才分 ----
 
-    private static ClientCallResultPayload answer(int replyChars) {
-        return new ClientCallResultPayload(A, "call_1", "-".repeat(replyChars));
+    private static SeatPayload answer(int replyChars) {
+        return new SeatPayload(SeatPayload.TO_SERVER, "-".repeat(replyChars));
     }
 
-    private static List<CustomPacketPayload> sent(ClientCallResultPayload p) {
-        return Fragments.packets(Wire.TO_SERVER, ClientCallResultPayload.STREAM_CODEC, p, Unpooled::buffer);
+    private static List<CustomPacketPayload> sent(SeatPayload p) {
+        return Fragments.packets(Wire.TO_SERVER, SeatPayload.TO_SERVER_CODEC, p, Unpooled::buffer);
     }
 
     @Test
     void aMessageThatFitsOnePacketGoesAsItselfWithNoFragmentAtAll() {
-        ClientCallResultPayload small = answer(100);
+        SeatPayload small = answer(100);
         List<CustomPacketPayload> packets = sent(small);
         assertEquals(1, packets.size());
         assertSame(small, packets.get(0));
 
         // 正好装满一个包的边界:还是它自己;多一个字节才分片
         int fill = Wire.TO_SERVER.bytes() - 200;
-        while (Wire.size(ClientCallResultPayload.STREAM_CODEC, answer(fill), Unpooled::buffer) < Wire.TO_SERVER.bytes()) {
+        while (Wire.size(SeatPayload.TO_SERVER_CODEC, answer(fill), Unpooled::buffer) < Wire.TO_SERVER.bytes()) {
             fill++;
         }
-        ClientCallResultPayload exact = answer(fill);
-        assertEquals(Wire.TO_SERVER.bytes(), Wire.size(ClientCallResultPayload.STREAM_CODEC, exact, Unpooled::buffer));
+        SeatPayload exact = answer(fill);
+        assertEquals(Wire.TO_SERVER.bytes(), Wire.size(SeatPayload.TO_SERVER_CODEC, exact, Unpooled::buffer));
         assertSame(exact, sent(exact).get(0));
-        ClientCallResultPayload over = answer(fill + 1);
+        SeatPayload over = answer(fill + 1);
         assertTrue(sent(over).get(0) instanceof FragmentPayload, "one byte over the packet is cut");
     }
 
     @Test
     void aBigAnswerGoesUpAsFragmentsAndComesBackEqual() {
-        ClientCallResultPayload big = answer(400_000);
-        assertEquals(big, Fragments.crossed(Wire.TO_SERVER, ClientCallResultPayload.STREAM_CODEC, big));
+        SeatPayload big = answer(400_000);
+        assertEquals(big, Fragments.crossed(Wire.TO_SERVER, SeatPayload.TO_SERVER_CODEC, big));
         List<CustomPacketPayload> packets = sent(big);
         assertTrue(packets.size() > 10, "" + packets.size());
         assertTrue(packets.stream().allMatch(p -> p instanceof FragmentPayload));
@@ -146,13 +143,13 @@ class FragmentsTest {
     @Test
     void aBigRequestGoesDownAsFragmentsWhenItIsOverTheDownwardPacketAndNotBefore() {
         String code = "x".repeat(Wire.TO_CLIENT.bytes() + 10);
-        ClientCallPayload big = new ClientCallPayload(A, "call_1#2", "gt.gt_big.echo", "{\"code\":\"" + code + "\"}");
-        assertEquals(big, Fragments.crossed(Wire.TO_CLIENT, ClientCallPayload.STREAM_CODEC, big));
-        assertTrue(Fragments.packets(Wire.TO_CLIENT, ClientCallPayload.STREAM_CODEC, big, Unpooled::buffer).size() > 1);
+        SeatPayload big = new SeatPayload(SeatPayload.TO_CLIENT, code);
+        assertEquals(big, Fragments.crossed(Wire.TO_CLIENT, SeatPayload.TO_CLIENT_CODEC, big));
+        assertTrue(Fragments.packets(Wire.TO_CLIENT, SeatPayload.TO_CLIENT_CODEC, big, Unpooled::buffer).size() > 1);
 
-        ClientCallPayload fits = new ClientCallPayload(A, "call_1#3", "gt.gt_big.echo", "{\"code\":\"x\"}");
+        SeatPayload fits = new SeatPayload(SeatPayload.TO_CLIENT, "x");
         assertEquals(List.of(fits),
-                Fragments.packets(Wire.TO_CLIENT, ClientCallPayload.STREAM_CODEC, fits, Unpooled::buffer));
+                Fragments.packets(Wire.TO_CLIENT, SeatPayload.TO_CLIENT_CODEC, fits, Unpooled::buffer));
     }
 
     /** 内容有界的包不分片:装不下是填它的代码错了,仍然当场抛(见 WireTest)。 */

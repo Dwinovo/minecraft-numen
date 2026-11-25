@@ -9,6 +9,9 @@ import com.dwinovo.numen.api.sdk.Doc;
 import com.dwinovo.numen.api.sdk.Example;
 import com.dwinovo.numen.api.sdk.Fn;
 import com.dwinovo.numen.api.sdk.SdkFixture;
+import com.dwinovo.numen.api.seat.ClientCallsOnly;
+import com.dwinovo.numen.api.seat.LoopbackTransport;
+import com.dwinovo.numen.api.seat.Seats;
 import com.dwinovo.numen.api.sdk.ServerCall;
 import com.google.gson.JsonElement;
 import org.junit.jupiter.api.BeforeAll;
@@ -80,16 +83,15 @@ class ServerProgramsTest {
 
     /** 反向请求停在这里,测试决定什么时候答。 */
     private static final class Held implements ClientTransport {
-        record Request(String callId, String function, Consumer<String> done) {}
+        record Pending(String callId, String function, Consumer<String> done) {}
 
-        final List<Request> held = new CopyOnWriteArrayList<>();
+        final List<Pending> held = new CopyOnWriteArrayList<>();
         /** 传输被告知不再要答复的调用编号。 */
         final List<String> cancelled = new CopyOnWriteArrayList<>();
 
         @Override
-        public void request(com.dwinovo.numen.api.entity.NumenPlayer her,
-                            com.dwinovo.numen.api.network.payload.ClientCallPayload request, Consumer<String> done) {
-            held.add(new Request(request.callId(), request.function(), done));
+        public void request(Request request, Consumer<String> done) {
+            held.add(new Pending(request.callId(), request.function(), done));
         }
 
         @Override
@@ -436,14 +438,15 @@ class ServerProgramsTest {
     }
 
     @Test
-    void aClientFunctionWhenTheOwnersClientCannotBeReachedFailsAtItsLine() {
+    void aClientFunctionWhenNoClientSitsAtHerSeatFailsAtItsLine() {
         UUID companion = UUID.randomUUID();
         Started program = start(companion, companion, """
                 local ok, err = pcall(gt.gt_mix.twice, 1)
                 return err.kind .. "|" .. err.message
-                """, NetworkTransport.INSTANCE);
+                """, new Seats(new ClientCallsOnly(), Runnable::run).transport());
         pumpUntil(() -> program.result.get() != null);
-        assertEquals("failed|gt.gt_mix.twice runs on your owner's client, and its owner is not connected",
+        assertEquals("failed|gt.gt_mix.twice runs on your owner's client, and its owner's client has not opened her "
+                + "seat, so nothing there can answer",
                 program.returned().getAsString());
     }
 }

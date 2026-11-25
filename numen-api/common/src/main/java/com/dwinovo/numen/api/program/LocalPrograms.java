@@ -14,19 +14,22 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 /**
- * 服务端大脑把她的程序交给本进程里的 {@link ServerPrograms}:没有网络,没有包,模块直接读主人目录里的文件
- * ({@link Modules#of})。结局和 {@link ServerPrograms#run} 一样在服务端主线程上交回。
+ * 服务端大脑把她的程序交给本进程里的 {@link ServerPrograms}:程序不过网络,模块直接读主人目录里的文件
+ * ({@link Modules#of});程序里的客户端函数经 {@link ClientTransport} 问主人的客户端。结局和 {@link ServerPrograms#run} 一样在服务端主线程上交回。
  *
  * <p>线程:都在服务端主线程上。
  */
 public final class LocalPrograms implements ProgramHost {
 
     private final MinecraftServer server;
+    private final ClientTransport transport;
     /** 等答复的程序;切断后晚到的结果换一个收件人({@link #afterwards}),不等了的摘掉。 */
     private final Map<String, Consumer<Program.Outcome>> waiting = new ConcurrentHashMap<>();
 
-    public LocalPrograms(MinecraftServer server) {
+    /** @param transport 程序里的客户端函数怎么到主人的客户端 */
+    public LocalPrograms(MinecraftServer server, ClientTransport transport) {
         this.server = server;
+        this.transport = transport;
     }
 
     @Override
@@ -44,7 +47,7 @@ public final class LocalPrograms implements ProgramHost {
         waiting.put(programId, done);
         ServerPrograms.run(her, companion, entry.owner(),
                 new ServerPrograms.Request(programId, code, Modules.of(companion), true),
-                NetworkTransport.INSTANCE, CallObserver.NONE, outcome -> answered(programId, outcome));
+                transport, CallObserver.NONE, outcome -> answered(programId, outcome));
     }
 
     private void answered(String programId, Program.Outcome outcome) {

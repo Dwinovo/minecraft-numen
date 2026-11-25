@@ -3,7 +3,9 @@ package com.dwinovo.numen.api.brain;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
 import com.dwinovo.numen.api.entity.Companions;
 import com.dwinovo.numen.api.mcp.server.McpMode;
+import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.program.ServerPrograms;
+import com.dwinovo.numen.api.seat.ServerSeats;
 import net.minecraft.server.MinecraftServer;
 
 import java.util.List;
@@ -65,7 +67,8 @@ public final class OwnerPresence {
      */
     public static void playerLeft(MinecraftServer server, UUID person) {
         CompanionLoops.clientLeft(person);
-        ServerPrograms.clientLeft(person);
+        ServerSeats.left(person);
+        NumenNetwork.disconnected(person);
         Predicate<UUID> others = inGame(server).and(who -> !who.equals(person));
         collectAbsent(server, person, others);
     }

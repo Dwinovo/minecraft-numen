@@ -266,15 +266,16 @@ public final class NumenNetwork {
                 com.dwinovo.numen.api.network.payload.ConversationsPayload.STREAM_CODEC,
                 com.dwinovo.numen.api.network.payload.ConversationsPayload::handle);
 
-        // S→C: a running program calls a function only the owner's client can answer; C→S: the answer.
-        toClient(
-                com.dwinovo.numen.api.network.payload.ClientCallPayload.TYPE,
-                com.dwinovo.numen.api.network.payload.ClientCallPayload.STREAM_CODEC,
-                com.dwinovo.numen.api.network.payload.ClientCallPayload::handle);
+        // 座位:主人客户端上的大脑与服务端上的身体之间唯一的通道,JSON-RPC 装在这一种包里,两个方向各一个种类(见 seat 包)。
+        // 上行在网络线程上处理:解码在那里做,请求交给座位自己的处理线程,不等服务器刻。
         toServer(
-                com.dwinovo.numen.api.network.payload.ClientCallResultPayload.TYPE,
-                com.dwinovo.numen.api.network.payload.ClientCallResultPayload.STREAM_CODEC,
-                com.dwinovo.numen.api.network.payload.ClientCallResultPayload::handle);
+                com.dwinovo.numen.api.network.payload.SeatPayload.TO_SERVER,
+                com.dwinovo.numen.api.network.payload.SeatPayload.TO_SERVER_CODEC,
+                com.dwinovo.numen.api.seat.ServerSeats::received, Execution.NETWORK);
+        toClient(
+                com.dwinovo.numen.api.network.payload.SeatPayload.TO_CLIENT,
+                com.dwinovo.numen.api.network.payload.SeatPayload.TO_CLIENT_CODEC,
+                com.dwinovo.numen.api.network.payload.SeatPayload::handle);
 
         // S→C: 同伴在等主人点头的那条征询(或撤回)——答复框与轮廓只照它画(见 ConsentDesk)。
         toClient(

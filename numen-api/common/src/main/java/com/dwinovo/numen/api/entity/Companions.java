@@ -706,6 +706,7 @@ public final class Companions {
             }
             CompanionStateWatch.forget(uuid);   // 背包镜像同理:这个 UUID 不会再回来了
             com.dwinovo.numen.api.brain.CompanionLoops.dismissed(server, uuid);   // 大脑收掉,她的家删掉
+            com.dwinovo.numen.api.seat.ServerSeats.dismissed(uuid);   // 座位收掉,发件箱不再留
         }
         syncRosterToKeepers(server, tell);
     }

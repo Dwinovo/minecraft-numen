@@ -7,6 +7,7 @@ import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.event.NumenEvents;
 import com.dwinovo.numen.api.program.CallObserver;
 import com.dwinovo.numen.api.program.ServerPrograms;
+import com.dwinovo.numen.api.seat.ServerSeats;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.server.MinecraftServer;
@@ -107,7 +108,7 @@ public final class TaskPersistence {
         // 再跑,和她写的程序走同一个入口。受理了,它干完时的 task_finished 照常送到她手里;没受理(读不通、调用被拒、准备没过)就是
         // 这件活没接回来,程序的回执说为什么
         boolean[] accepted = {false};
-        ServerPrograms.launch(companion, REPLAY_CALL_ID + "-" + taskName, left.lua(), new CallObserver() {
+        ServerPrograms.launch(companion, REPLAY_CALL_ID + "-" + taskName, left.lua(), ServerSeats.transport(), new CallObserver() {
             @Override
             public void replied(String callId, String reply) {
                 ApiReply.Parsed parsed = ApiReply.parse(reply);

@@ -277,7 +277,8 @@ public final class NumenCommands {
         String program = StringArgumentType.getString(ctx, "program");
         MinecraftServer server = caller.getServer();
         server.tell(new TickTask(server.getTickCount(), () -> com.dwinovo.numen.api.program.ServerPrograms.launch(her,
-                "drive", program, com.dwinovo.numen.api.program.CallObserver.NONE, receipt -> report(caller, her, receipt))));
+                "drive", program, com.dwinovo.numen.api.seat.ServerSeats.transport(),
+                com.dwinovo.numen.api.program.CallObserver.NONE, receipt -> report(caller, her, receipt))));
         return 1;
     }
 

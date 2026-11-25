@@ -40,6 +40,7 @@ public final class ClientPayloadHandlers {
                         System.currentTimeMillis()));
         ClientPayloadSink.locations = ClientPayloadHandlers::handleLocations;
         ClientPayloadSink.uiAction = ClientPayloadHandlers::handleUiAction;
+        ClientPayloadSink.seat = com.dwinovo.numen.api.client.seat.ClientSeats::received;
         com.dwinovo.numen.api.client.agent.RemoteCompanions.install();
     }
 
@@ -54,6 +55,8 @@ public final class ClientPayloadHandlers {
             onRoster.add(e.uuid());
         }
         NumenRoster.instance().replaceAll(p.worldId(), snapshot);
+        com.dwinovo.numen.api.client.seat.ClientSeats.sit(
+                com.dwinovo.numen.api.client.agent.RemoteCompanions.viewer(), NumenRoster.instance());
 
         // 遣散的那只在服务端的家、会话里的位置都由服务端收;这里只放掉我们这头她的视图
         for (UUID gone : before.keySet()) {

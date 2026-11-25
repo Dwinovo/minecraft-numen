@@ -39,11 +39,11 @@ import com.dwinovo.numen.api.gametest.OwnerLine;
 import com.dwinovo.numen.api.network.Fragments;
 import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.Wire;
-import com.dwinovo.numen.api.network.payload.ClientCallPayload;
-import com.dwinovo.numen.api.network.payload.ClientCallResultPayload;
 import com.dwinovo.numen.api.network.payload.ConsentRequestPayload;
 import com.dwinovo.numen.api.network.payload.FragmentPayload;
-import com.dwinovo.numen.api.program.ClientEndpoint;
+import com.dwinovo.numen.api.network.payload.SeatPayload;
+import com.dwinovo.numen.api.seat.SeatClient;
+import com.dwinovo.numen.api.seat.ServerSeats;
 import com.dwinovo.numen.api.permission.ConsentDesk;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -145,6 +145,8 @@ final class Attempt {
     private ServerPlayer owner;
     /** 主人的连接:服务端发给主人的模组载荷停在它的队列里,每刻开头取走处理。 */
     private OwnerLine ownerLine;
+    /** 主人客户端上的座位一端:服务端要主人客户端执行的函数在它上面答。 */
+    private SeatClient seat;
     private NumenPlayer her;
     private CompanionLoop loop;
     private String promptHash = "";
@@ -210,6 +212,14 @@ final class Attempt {
         // 大脑先于场景:搭场景时发生的事(一只女仆死了)直接进她的收件箱,在主人开口前就叫醒她
         CompanionRegistry.get(server).put(her.getUUID(), new CompanionRegistry.Entry(HER_NAME, owner.getUUID(),
                 level.dimension(), her.blockPosition()));
+        seat = new SeatClient(mail::add, java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor(), message ->
+                ServerSeats.received(Fragments.crossed(Wire.TO_SERVER, SeatPayload.TO_SERVER_CODEC,
+                        SeatPayload.frame(Wire.TO_SERVER, message)), owner));
+        seat.open(her.getUUID(), 0).whenComplete((opened, failed) -> {
+            if (failed != null) {
+                LOG.warn("[numen-bench] her seat did not open: {}", failed.toString());
+            }
+        });
         loop = CompanionBrains.create(server, her.getUUID(), owner.getUUID(), new Home(home.resolve("her"), io), mind,
                 new OwnerEnd(), () -> true, () -> false, () -> EventQueue.DEFAULT_LEVEL, bound -> NumenPrompts.DEFAULT_PERSONA);
         loop.bind(com.dwinovo.numen.api.brain.Slot.PERSONA, new Bound(owner.getUUID(), BENCH_PERSONA));
@@ -540,7 +550,7 @@ final class Attempt {
 
     /**
      * 主人客户端收到这个包会做什么,这里照做;别的包(名册、定位、状态、调试画线、界面动作)这里用不着。分片的消息先拼回;
-     * 服务端要主人客户端执行的函数({@code ClientCall})由客户端执行体答,答复照网络上的样子上行,交给服务端真实的入口。
+     * 服务端要主人客户端执行的函数({@code ClientCall})经座位({@code client/call})由客户端一端答,答复照网络上的样子上行,交给服务端真实的入口。
      */
     private void downlink(CustomPacketPayload payload) {
         UUID uuid = her.getUUID();
@@ -551,9 +561,13 @@ final class Attempt {
                     downlink(whole);
                 }
             }
-            case ClientCallPayload p when p.entityUuid().equals(uuid) -> ClientEndpoint.handle(
-                    wire(ClientCallPayload.STREAM_CODEC, p), result -> ClientCallResultPayload.handle(
-                            Fragments.crossed(Wire.TO_SERVER, ClientCallResultPayload.STREAM_CODEC, result), owner));
+            case SeatPayload p -> {
+                try {
+                    seat.receive(p.message());
+                } catch (com.dwinovo.numen.mcp.rpc.RpcException unreadable) {
+                    throw new IllegalStateException("the server sent a seat message the client cannot read", unreadable);
+                }
+            }
             case ConsentRequestPayload p when p.companion().equals(uuid) ->
                     consent(wire(ConsentRequestPayload.STREAM_CODEC, p));
             default -> { }

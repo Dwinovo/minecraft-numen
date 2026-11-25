@@ -10,29 +10,20 @@ import com.dwinovo.numen.api.sdk.Fn;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.api.entity.CompanionFactory;
 import com.dwinovo.numen.api.entity.NumenPlayer;
-import com.dwinovo.numen.api.network.Fragments;
-import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.Wire;
-import com.dwinovo.numen.api.network.payload.ClientCallPayload;
-import com.dwinovo.numen.api.network.payload.ClientCallResultPayload;
-import com.dwinovo.numen.api.network.payload.FragmentPayload;
 import com.dwinovo.numen.api.program.CallObserver;
-import com.dwinovo.numen.api.program.ClientEndpoint;
-import com.dwinovo.numen.api.program.NetworkTransport;
 import com.dwinovo.numen.api.program.ServerPrograms;
+import com.dwinovo.numen.api.seat.ServerSeats;
 import com.dwinovo.numen.api.script.Modules;
 import com.dwinovo.numen.api.task.CompanionTickDispatcher;
 import com.dwinovo.numen.api.task.TaskRecord;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.world.Difficulty;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
@@ -472,31 +463,31 @@ public class ScriptGameTests {
     }
 
     /**
-     * 程序里的客户端函数向主人的连接发 {@code ClientCallPayload}:主人的连接是 {@code OwnerLine}(没有客户端),这里扮他的客户端答
-     * ({@code ClientEndpoint}),答复经上行的处理函数回到服务端。服务端从包进到包出的路——认主人、量大小、反向请求、答复——
-     * 都真走一遍,只是没有网线。
+     * 程序里的客户端函数经座位向主人的连接发 {@code client/call}:主人的连接是 {@code OwnerLine}(没有客户端),这里扮他的客户端
+     * ({@code OwnerSeat})坐上她的座位、答复,答复经服务端真实的上行入口回来。服务端从包进到包出的路——认主人、坐座位、量大小、
+     * 反向请求、答复——都真走一遍,只是没有网线。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
     public static void a_client_function_is_asked_over_the_owners_connection_and_answered_by_his_client(
             GameTestHelper helper) {
         NumenPlayer her = spawnAt(helper, "gametest_wire", new BlockPos(2, 2, 2), false);
         ServerPlayer owner = presentOwner(helper, her, "gametest_wire_owner");
-        com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
+        OwnerSeat seat = OwnerSeat.sit(her, owner, "gametest_wire");
         AtomicReference<Program.Outcome> result = new AtomicReference<>();
-        ServerPrograms.run(her, her.getUUID(), owner.getUUID(), new ServerPrograms.Request("wire-" + UUID.randomUUID(),
-                """
-                local me = numen.status.self()
-                local words = gt.gt_client.hello()
-                return me.name .. ":" .. words
-                """, Modules.of(her.getUUID()), true), NetworkTransport.INSTANCE, CallObserver.NONE, result::set);
 
         steps(helper)
                 .thenWaitUntil(() -> {
-                    for (CustomPacketPayload payload : received(owner)) {
-                        if (payload instanceof ClientCallPayload call) {
-                            ClientEndpoint.handle(call, answer -> ClientCallResultPayload.handle(answer, owner));
-                        }
-                    }
+                    seat.pump();
+                    helper.assertTrue(seat.seated(), "her seat is not open");
+                })
+                .thenExecute(() -> ServerPrograms.run(her, her.getUUID(), owner.getUUID(),
+                        new ServerPrograms.Request("wire-" + UUID.randomUUID(), """
+                        local me = numen.status.self()
+                        local words = gt.gt_client.hello()
+                        return me.name .. ":" .. words
+                        """, Modules.of(her.getUUID()), true), ServerSeats.transport(), CallObserver.NONE, result::set))
+                .thenWaitUntil(() -> {
+                    seat.pump();
                     helper.assertTrue(result.get() != null, "the receipt has not come back");
                 })
                 .thenExecute(() -> {
@@ -507,7 +498,7 @@ public class ScriptGameTests {
                             "the program did not run with its client function answered over the wire: " + receipt);
                     helper.assertTrue(result.get().calls().size() == 2,
                             "the calls' outcomes did not come back: " + receipt);
-                    leave(owner);
+                    seat.leave(owner, her);
                     CompanionFactory.despawn(helper.getLevel().getServer(), her);
                 })
                 .thenSucceed();
@@ -542,15 +533,15 @@ public class ScriptGameTests {
     public static void recipe_sources_are_merged_and_a_missing_one_is_named(GameTestHelper helper) {
         NumenPlayer her = spawnAt(helper, "gametest_sourced", new BlockPos(2, 2, 2), false);
         ServerPlayer owner = presentOwner(helper, her, "gametest_sourced_owner");
-        com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
+        OwnerSeat seat = OwnerSeat.sit(her, owner, "gametest_sourced");
         NumenPlugins.register("gtk", numen -> numen.knowledgeSource(com.dwinovo.numen.api.knowledge.KnowledgeKind.RECIPES,
                 "which machine does it", List.of("chance"), KnowledgeClient.class));
         NumenPlugins.registerForClientMod("gtm", "gametest_machine_mod", numen -> numen.knowledgeSource(
                 com.dwinovo.numen.api.knowledge.KnowledgeKind.RECIPES, "fluids", List.of("energy"),
                 KnowledgeClient.class));
         AtomicReference<Program.Outcome> result = new AtomicReference<>();
-        ServerPrograms.run(her, her.getUUID(), owner.getUUID(), new ServerPrograms.Request("sources-" + UUID.randomUUID(),
-                """
+        Runnable run = () -> ServerPrograms.run(her, her.getUUID(), owner.getUUID(),
+                new ServerPrograms.Request("sources-" + UUID.randomUUID(), """
                 local r = numen.inv.recipes("minecraft:stick")
                 local state = {}
                 for _, s in ipairs(r.sources) do
@@ -562,15 +553,16 @@ public class ScriptGameTests {
                   if x.category == "gt:press" then machine = x.sources[1] .. ":" .. x.category_name end
                 end
                 return table.concat(state, ",") .. "|" .. tostring(merged) .. "|" .. tostring(machine)
-                """, Modules.of(her.getUUID()), true), NetworkTransport.INSTANCE, CallObserver.NONE, result::set);
+                """, Modules.of(her.getUUID()), true), ServerSeats.transport(), CallObserver.NONE, result::set);
 
         steps(helper)
                 .thenWaitUntil(() -> {
-                    for (CustomPacketPayload payload : received(owner)) {
-                        if (payload instanceof ClientCallPayload call) {
-                            ClientEndpoint.handle(call, answer -> ClientCallResultPayload.handle(answer, owner));
-                        }
-                    }
+                    seat.pump();
+                    helper.assertTrue(seat.seated(), "her seat is not open");
+                })
+                .thenExecute(run)
+                .thenWaitUntil(() -> {
+                    seat.pump();
                     helper.assertTrue(result.get() != null, "the receipt has not come back");
                 })
                 .thenExecute(() -> {
@@ -582,7 +574,7 @@ public class ScriptGameTests {
                             "the sources were not merged and reported: " + said);
                     NumenPlugins.roster().withdraw("gtk");
                     NumenPlugins.roster().withdraw("gtm");
-                    leave(owner);
+                    seat.leave(owner, her);
                     CompanionFactory.despawn(helper.getLevel().getServer(), her);
                 })
                 .thenSucceed();
@@ -597,62 +589,55 @@ public class ScriptGameTests {
             GameTestHelper helper) {
         NumenPlayer her = spawnAt(helper, "gametest_padded", new BlockPos(2, 2, 2), false);
         ServerPlayer owner = presentOwner(helper, her, "gametest_pad_owner");
-        // 她的主人以名册为准(和模块库、技能库一样):按真实流程把她记进名册
-        com.dwinovo.numen.api.entity.CompanionRegistry.get(helper.getLevel().getServer()).put(her.getUUID(),
-                new com.dwinovo.numen.api.entity.CompanionRegistry.Entry("gametest_padded", owner.getUUID(),
-                        net.minecraft.world.level.Level.OVERWORLD, her.blockPosition()));
-        com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
-        received(owner);
+        // 她的主人以名册为准(和模块库、技能库一样):按真实流程把她记进名册,他的客户端坐上她的座位
+        OwnerSeat seat = OwnerSeat.sit(her, owner, "gametest_padded");
         AtomicReference<Program.Outcome> refused = new AtomicReference<>();
         AtomicReference<Program.Outcome> answered = new AtomicReference<>();
-        boolean[] sent = {false};
 
         steps(helper)
+                .thenWaitUntil(() -> {
+                    seat.pump();
+                    helper.assertTrue(seat.seated(), "her seat is not open");
+                })
                 .thenExecute(() -> {
                     helper.assertFalse(com.dwinovo.numen.api.sdk.ApiDocs.index(Modules.of(her.getUUID())).contains("gtcm.pad"),
                             "the index lists a client-only mod the owner's client did not report");
                     ServerPrograms.run(her, her.getUUID(), owner.getUUID(), new ServerPrograms.Request(
                             "padless-" + UUID.randomUUID(), "return pcall(gtcm.pad.read)", Modules.of(her.getUUID()), true),
-                            NetworkTransport.INSTANCE, CallObserver.NONE, refused::set);
+                            ServerSeats.transport(), CallObserver.NONE, refused::set);
                 })
                 .thenWaitUntil(() -> helper.assertTrue(refused.get() != null, "the refusal has not come back"))
                 .thenExecute(() -> {
                     String receipt = refused.get().receipt();
                     helper.assertTrue(receipt.contains("no_function") && receipt.contains("needs the gametest_pad_mod mod"),
                             "the missing mod was not named: " + receipt);
-                    helper.assertTrue(received(owner).stream().noneMatch(p -> p instanceof ClientCallPayload),
-                            "a call for a mod the client lacks was sent to it");
+                    seat.pump();
+                    helper.assertTrue(seat.clientCalls == 0, "a call for a mod the client lacks was sent to it");
                     // 主人的客户端报了它(版本在先,能力在后,到齐才算报到)
                     com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL,
                             java.util.Set.of("gtcm"));
-                    received(owner);
+                    seat.pump();
                     helper.assertTrue(com.dwinovo.numen.api.sdk.ApiDocs.index(Modules.of(her.getUUID())).contains("gtcm.pad"),
                             "the index does not list a client-only mod the owner's client reported");
                     ServerPrograms.run(her, her.getUUID(), owner.getUUID(), new ServerPrograms.Request(
                             "padded-" + UUID.randomUUID(), "return gtcm.pad.read()", Modules.of(her.getUUID()), true),
-                            NetworkTransport.INSTANCE, CallObserver.NONE, answered::set);
+                            ServerSeats.transport(), CallObserver.NONE, answered::set);
                 })
                 .thenWaitUntil(() -> {
-                    for (CustomPacketPayload payload : received(owner)) {
-                        if (payload instanceof ClientCallPayload call) {
-                            sent[0] = true;
-                            ClientEndpoint.handle(call, answer -> ClientCallResultPayload.handle(answer, owner));
-                        }
-                    }
+                    seat.pump();
                     helper.assertTrue(answered.get() != null, "the receipt has not come back");
                 })
                 .thenExecute(() -> {
-                    helper.assertTrue(sent[0] && answered.get().receipt().contains("returned: the pad"),
+                    helper.assertTrue(seat.clientCalls == 1 && answered.get().receipt().contains("returned: the pad"),
                             "the call did not reach the owner's client: " + answered.get().receipt());
-                    leave(owner);
-                    com.dwinovo.numen.api.entity.CompanionRegistry.get(helper.getLevel().getServer()).remove(her.getUUID());
+                    seat.leave(owner, her);
                     CompanionFactory.despawn(helper.getLevel().getServer(), her);
                 })
                 .thenSucceed();
     }
 
     /**
-     * 下行也分片:程序给客户端函数一段 1.5 MB 的文字,反向请求({@code ClientCallPayload})超过一个下行的包(1 MB),真实的
+     * 下行也分片:程序给客户端函数一段 1.5 MB 的文字,反向请求(座位上的一条 {@code client/call})超过一个下行的包(1 MB),真实的
      * {@code NumenNetwork.sendToPlayer} 把它切成片经主人的连接({@code OwnerLine})发出;这里扮主人的客户端,收件箱拼回、
      * 交给客户端执行体,答复经上行回到服务端,程序跑到最后。
      */
@@ -661,38 +646,29 @@ public class ScriptGameTests {
             GameTestHelper helper) {
         NumenPlayer her = spawnAt(helper, "gametest_big_request", new BlockPos(2, 2, 2), false);
         ServerPlayer owner = presentOwner(helper, her, "gametest_big_request_owner");
-        com.dwinovo.numen.api.brain.Replies.hello(owner, com.dwinovo.numen.api.brain.Presence.PROTOCOL);
+        OwnerSeat seat = OwnerSeat.sit(her, owner, "gametest_big_request");
         String text = "z".repeat(Wire.TO_CLIENT.bytes() + Wire.TO_CLIENT.bytes() / 2);
-        Fragments.Inbox inbox = new Fragments.Inbox(Wire.TO_CLIENT);
         AtomicReference<Program.Outcome> result = new AtomicReference<>();
-        int[] fragments = new int[1];
-        ServerPrograms.run(her, her.getUUID(), owner.getUUID(), new ServerPrograms.Request("big-" + UUID.randomUUID(),
-                "return gt.gt_client.length([==[" + text + "]==])", Modules.of(her.getUUID()), true),
-                NetworkTransport.INSTANCE, CallObserver.NONE, result::set);
 
         steps(helper)
                 .thenWaitUntil(() -> {
-                    for (CustomPacketPayload payload : received(owner)) {
-                        if (payload instanceof FragmentPayload piece) {
-                            fragments[0]++;
-                            ByteBuf wire = Unpooled.buffer();
-                            FragmentPayload.TO_CLIENT_CODEC.encode(wire, piece);
-                            payload = NumenNetwork.assembled(inbox, FragmentPayload.TO_CLIENT_CODEC.decode(wire));
-                        }
-                        if (payload instanceof ClientCallPayload call) {
-                            ClientEndpoint.handle(call, answer -> ClientCallResultPayload.handle(
-                                    Fragments.crossed(Wire.TO_SERVER, ClientCallResultPayload.STREAM_CODEC, answer),
-                                    owner));
-                        }
-                    }
+                    seat.pump();
+                    helper.assertTrue(seat.seated(), "her seat is not open");
+                })
+                .thenExecute(() -> ServerPrograms.run(her, her.getUUID(), owner.getUUID(),
+                        new ServerPrograms.Request("big-" + UUID.randomUUID(),
+                                "return gt.gt_client.length([==[" + text + "]==])", Modules.of(her.getUUID()), true),
+                        ServerSeats.transport(), CallObserver.NONE, result::set))
+                .thenWaitUntil(() -> {
+                    seat.pump();
                     helper.assertTrue(result.get() != null, "the receipt has not come back");
                 })
                 .thenExecute(() -> {
                     String receipt = result.get().receipt();
-                    helper.assertTrue(fragments[0] > 1, "the request did not come down as fragments: " + fragments[0]);
+                    helper.assertTrue(seat.fragments > 1, "the request did not come down as fragments: " + seat.fragments);
                     helper.assertTrue(receipt.contains("returned: " + text.length()),
                             "the program did not run to the end with the whole text: " + receipt);
-                    leave(owner);
+                    seat.leave(owner, her);
                     CompanionFactory.despawn(helper.getLevel().getServer(), her);
                 })
                 .thenSucceed();

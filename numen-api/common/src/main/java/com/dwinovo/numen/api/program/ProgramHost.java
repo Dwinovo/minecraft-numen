@@ -7,7 +7,7 @@ import java.util.function.Consumer;
 
 /**
  * 工具口({@code CompanionToolPort})把她的 Lua 程序交给谁去跑:一整段程序送去,结局({@link Program.Outcome})恰好交回一次;
- * 跑着的程序可以被叫停在调用之间、当场切断;身体上的活可以叫停。服务端大脑直接交给本进程里的 {@link ServerPrograms}
+ * 跑着的程序可以被叫停在调用之间、当场切断;身体上的活可以叫停。服务端大脑与座位直接交给本进程里的 {@link ServerPrograms}
  * ({@link LocalPrograms})。
  */
 public interface ProgramHost {
