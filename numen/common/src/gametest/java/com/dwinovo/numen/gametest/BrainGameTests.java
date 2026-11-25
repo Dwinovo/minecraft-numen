@@ -116,6 +116,123 @@ public class BrainGameTests {
         });
     }
 
+    /** 轨迹文件里的一行。只给这些用例读,不做通用的读取器。 */
+    record TraceRecord(com.google.gson.JsonObject json) {
+        String type() {
+            return json.get("type").getAsString();
+        }
+
+        long run() {
+            return json.get("run").getAsLong();
+        }
+
+        int n() {
+            return json.get("n").getAsInt();
+        }
+
+        String string(String key) {
+            return json.has(key) && json.get(key).isJsonPrimitive() ? json.get(key).getAsString() : null;
+        }
+
+        static List<TraceRecord> readAll(java.nio.file.Path file) throws java.io.IOException {
+            List<TraceRecord> out = new ArrayList<>();
+            if (!java.nio.file.Files.isRegularFile(file)) {
+                return out;
+            }
+            for (String line : java.nio.file.Files.readAllLines(file)) {
+                if (line.isBlank()) {
+                    continue;
+                }
+                com.google.gson.JsonObject o = com.google.gson.JsonParser.parseString(line).getAsJsonObject();
+                if (o.has("type") && "header".equals(o.get("type").getAsString())) {
+                    continue;
+                }
+                out.add(new TraceRecord(o));
+            }
+            return out;
+        }
+    }
+
+    /** 这一只轨迹里 {@code type} 那一类的记录。 */
+    private static List<TraceRecord> traceRecords(GameBrain brain, String type) {
+        try {
+            return TraceRecord.readAll(brain.host().trace().file()).stream().filter(r -> r.type().equals(type)).toList();
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
+    /** 寻路的"为什么"落到她自己的轨迹文件里:服务端的寻路经同一个进程里的登记找到她大脑那一头的轨迹。 */
+    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_brain")
+    public static void aPathThatGivesUpLandsInHerTrace(GameTestHelper helper) {
+        com.dwinovo.numen.api.agent.trace.TraceRecorders.record();
+        NumenPlayer her = spawnAt(helper, "gametest_stuck", new BlockPos(3, 2, 3), false);
+        GameBrain brain = GameBrain.sit(helper.getLevel().getServer(), her, new Scripted());
+        // 模板坐标先换成世界坐标:setBlock 收的是相对模板的,tick 里身体站在世界里
+        BlockPos feet = helper.absolutePos(new BlockPos(8, 1, 8));
+        // 四面与头顶围成基岩盒子:她出不去,这一趟必然收场并诊断出"没有路"
+        for (int dx = -2; dx <= 2; dx++) {
+            for (int dy = 0; dy <= 3; dy++) {
+                for (int dz = -2; dz <= 2; dz++) {
+                    boolean shell = dx == -2 || dx == 2 || dy == 0 || dy == 3 || dz == -2 || dz == 2;
+                    helper.getLevel().setBlockAndUpdate(feet.offset(dx, dy, dz),
+                            shell ? net.minecraft.world.level.block.Blocks.BEDROCK.defaultBlockState()
+                                    : net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+                }
+            }
+        }
+        her.teleportTo(helper.getLevel(), feet.getX() + 0.5, feet.getY(), feet.getZ() + 0.5, 0f, 0f);
+        BlockPos goal = feet.offset(12, 0, 0);
+
+        var nav = com.dwinovo.numen.nav.CompanionPorts.navigator(her,
+                        com.dwinovo.numen.nav.CompanionPorts.dangers(her), List.of())
+                .drive(com.dwinovo.numen.pathing.api.NavRequest.to(
+                        com.dwinovo.numen.pathing.search.Goals.at(goal),
+                        com.dwinovo.numen.pathing.spec.RouteSpec.defaults()));
+
+        succeedWhen(helper, () -> {
+            var status = nav.tick();
+            helper.assertTrue(!status.running(), "这一趟还没收场: " + status);
+            List<TraceRecord> paths = traceRecords(brain, "path");
+            helper.assertTrue(!paths.isEmpty(), "寻路的一条都没落进她的轨迹,结局是 " + status);
+            TraceRecord last = paths.get(paths.size() - 1);
+            helper.assertTrue(!"Arrived".equals(last.string("outcome")), "围死了却说到了: " + last.json());
+            helper.assertTrue(last.string("outcome") != null, "收场那条没结局: " + last.json());
+            brain.close();
+            CompanionFactory.despawn(helper.getLevel().getServer(), her);
+        });
+    }
+
+    /** 每一轮模型请求都留一份"她当时看到了什么":发出去的那份运行期状态原文,一字不多一字不少。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_brain")
+    public static void everyTurnLeavesWhatSheSawOnDisk(GameTestHelper helper) {
+        com.dwinovo.numen.api.agent.trace.TraceRecorders.record();
+        Scripted mind = new Scripted().say("看到了");
+        NumenPlayer her = spawnAt(helper, "gametest_seer", new BlockPos(3, 2, 3), false);
+        GameBrain brain = GameBrain.sit(helper.getLevel().getServer(), her, mind);
+        boolean[] spoken = {false};
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(brain.ready(), "her brain has not taken the seat");
+            if (!spoken[0]) {
+                brain.host().submitPrompt("你周围有什么");
+                spoken[0] = true;
+            }
+            List<TraceRecord> turns = traceRecords(brain, "turn");
+            helper.assertTrue(turns.size() == 1, "one turn, got " + turns.size());
+            TraceRecord turn = turns.get(0);
+            helper.assertTrue(turn.n() == 1, "the first turn of the run is 1, got " + turn.n());
+            helper.assertTrue(turn.run() > 0, "the turn does not carry its run");
+            String sent = mind.asked.get(0).messages().stream()
+                    .filter(m -> m instanceof ConvoState.Msg.User u && u.content().startsWith("<runtime_state>"))
+                    .map(m -> ((ConvoState.Msg.User) m).content()).findFirst().orElse("");
+            helper.assertTrue(!sent.isEmpty(), "the request did not carry a runtime_state at all");
+            helper.assertTrue(sent.equals(turn.string("runtime")), "what was recorded is not what was sent");
+            brain.close();
+            CompanionFactory.despawn(helper.getLevel().getServer(), her);
+        });
+    }
+
     /**
      * 装着客户端的玩家进服,什么也不用调:平台的登入响应自己把开场那包(协议号)发出去,客户端才有得报到。登入响应赶不上"玩家已在玩家表里"那一刻时
      * (Fabric 的登入事件发在原版登记玩家之前),开场就发不出去,她的程序里的客户端函数、她的大脑都找不到这位主人的客户端。
