@@ -18,3 +18,4 @@
 | 寻路 | [pathing/](pathing/README.md) | 从第一版 A* 到 0.1.5 | `numen:pathing` |
 | 测试 | [testing/](testing/README.md) | 各层测试测什么,GameTest 怎么写、不稳定怎么办 | 全部模块的 `test`、`gametest`、`e2e` |
 | 模型接入 | [llm/](llm/README.md) | 怎么接各家模型:零依赖自写、线格式适配、三种协议、思考方言、档案 | `ai` |
+| 界面 | [ui/](ui/README.md) | 主人看到的面板、气泡、聊天栏怎么展示 | `numen-api`(`client` 源码集)、`ui` |
