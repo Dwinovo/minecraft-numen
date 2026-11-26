@@ -1,6 +1,6 @@
 # 0003 头像右下角一个状态点,代替未读数与在线标记
 
-- 状态:已接受,已落地(待真机看)
+- 状态:已接受,已落地(待真机看);第 3 点的"消息通知"被 [0005](0005-no-dates-no-toasts.md) 修订
 - 日期:2026-11-26
 - 另见:[0001](0001-process-line-and-no-message-clock.md)、[control 0028](../control/0028-ask-user-question-tool.md)(她的提问)
 
