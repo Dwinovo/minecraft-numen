@@ -42,7 +42,6 @@ import net.minecraft.util.FormattedCharSequence;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -71,8 +70,8 @@ public final class ChatView {
     // ---- metrics ----
     private static final int LINE_H = 10;
     private static final int LABEL_H = 9;       // companion name line above its bubble
-    /** 时间戳放不进最后一行右侧时,单独占的一行(小字)。 */
-    private static final int TIME_H = 8;
+    /** 征询挂着时的倒计时放不进正文最后一行右侧,单独占的一行(小字)。 */
+    private static final int COUNTDOWN_H = 8;
     /** 新消息飞入:从下面 8px 淡入,220ms easeOut——Telegram 那种"升上来"。 */
     private static final int ENTER_MS = 220;
     private static final int ENTER_DY = 8;
@@ -109,7 +108,7 @@ public final class ChatView {
     private int TRACE_BAR;
     /** 主人话里 @ 到的名字。 */
     private int MENTION;
-    /** 气泡里的时间:她的、主人的(Telegram 的 msgInDateFg / msgOutDateFg)。 */
+    /** 引用条里那句和划掉的清单项用的淡字:她的、主人的(Telegram 的 msgInDateFg / msgOutDateFg)。 */
     private int IN_META, OUT_META;
     /** 未读角标上的数字色。 */
     private int ON_CTA;
@@ -605,14 +604,13 @@ public final class ChatView {
      *  {@code who} = the companion whose face goes on it (null on the owner's side);
      *  {@code by} 非空 = 这句是她的另一位主人说的,是他的名字——这时 {@code who} 是那位玩家,气泡和她的话一样画在左边、
      *  按人标名字和脸(脸是玩家的皮肤,不是同伴,点不开资料页);
-     *  {@code time} = 时间戳贴在气泡右下角(Telegram),放得进最后一行右侧就 {@code timeInline},
-     *  放不进单独占一小行;{@code entry} = 归并后的记录序号,新来的按它飞入(-1 = 不飞)。 */
+     *  {@code entry} = 归并后的记录序号,新来的按它飞入(-1 = 不飞)。 */
     private record Bubble(boolean own, String label, RichLayout.Laid text, int ink,
                           int maxLineW, int fill,
-                          boolean runEnd, UUID who, String time, boolean timeInline, int entry,
+                          boolean runEnd, UUID who, int entry,
                           String raw, Quote quote, String by) implements Block {
         Bubble withRunEnd(boolean on) {
-            return new Bubble(own, label, text, ink, maxLineW, fill, on, who, time, timeInline, entry, raw, quote, by);
+            return new Bubble(own, label, text, ink, maxLineW, fill, on, who, entry, raw, quote, by);
         }
 
         int rows() {
@@ -623,13 +621,13 @@ public final class ChatView {
     /**
      * 她的一份计划,画成她说的一条清单消息(Telegram 的清单消息):她的气泡底色,抬头一行强调色"计划 2/5",
      * 下面一项一行(长的折行),前面一个方格。{@code items} 留着比"是不是同一份";{@code rows} 是按这一刻的宽度
-     * 折好的行;{@code time}、{@code entry} 是第一次出现时的——同一份计划原地更新,不改它是哪一条。
+     * 折好的行;{@code entry} 是第一次出现时的——同一份计划原地更新,不改它是哪一条。
      */
     private record Checklist(UUID who, String label, List<com.dwinovo.numen.api.agent.tool.TodoTool.Item> items, String header,
-                             List<CheckRow> rows, int maxLineW, String time, boolean timeInline, int entry,
+                             List<CheckRow> rows, int maxLineW, int entry,
                              boolean runEnd) implements Block {
         Checklist withRunEnd(boolean on) {
-            return new Checklist(who, label, items, header, rows, maxLineW, time, timeInline, entry, on);
+            return new Checklist(who, label, items, header, rows, maxLineW, entry, on);
         }
     }
 
@@ -734,7 +732,7 @@ public final class ChatView {
      * 她的征询(Telegram 带内联按钮的消息):她那一侧的气泡里是清单,下面挂按钮,答完再挂一条结果。它不是对话记录
      * 里的一条,按到的时刻排进时间线,算在她的连发里;清单、按钮与结果条的画法和点法归 {@link ConsentMessage}。
      * {@code w} 是气泡与键盘共用的宽(Telegram 的键盘与气泡同宽,气泡被键盘撑宽);{@code label}、{@code runEnd}
-     * 与话的气泡同义;{@code timeInline} = 右下角那一小行放得进正文最后一行右侧(和话的气泡一样)。
+     * 与话的气泡同义;{@code timeInline} = 挂着时右下角的倒计时放得进正文最后一行右侧,放不进单独占一小行。
      */
     private record Consent(ConsentCards.Card card, String label, int w, boolean runEnd, boolean timeInline)
             implements Block {
@@ -753,8 +751,7 @@ public final class ChatView {
     private int heightOf(Block b) {
         return switch (b) {
             case Bubble bb -> (bb.label() != null ? LABEL_H : 0) + (bb.quote() != null ? QUOTE_H : 0)
-                    + bb.rows() * LINE_H + PAD_V * 2
-                    + (bb.time() != null && !bb.timeInline() ? TIME_H : 0);
+                    + bb.rows() * LINE_H + PAD_V * 2;
             case Checklist c -> (c.label() != null ? LABEL_H : 0) + checklistH(c);
             case Chip c -> (c.label() != null ? LABEL_H : 0) + c.rows().size() * LINE_H + PAD_V * 2;
             case Notice n -> n.lines().size() * LINE_H + SERVICE_PAD_V * 2;
@@ -765,26 +762,22 @@ public final class ChatView {
         };
     }
 
-    /** 清单气泡本身多高(不含上面的名字):抬头一行、每项折出的行、放不进最后一行的时间。 */
+    /** 清单气泡本身多高(不含上面的名字):抬头一行、每项折出的行。 */
     private static int checklistH(Checklist c) {
         int lines = 1;
         for (CheckRow r : c.rows()) lines += r.lines().size();
-        return lines * LINE_H + PAD_V * 2 + (c.time() != null && !c.timeInline() ? TIME_H : 0);
+        return lines * LINE_H + PAD_V * 2;
     }
 
-    /** 征询那条的气泡本身多高(不含上面的名字):清单,下面一小行是剩下的秒数(收起后是到的时刻)。 */
+    /** 征询那条的气泡本身多高(不含上面的名字):清单;挂着时放不进最后一行右侧的倒计时另占一小行。 */
     private static int consentBubbleH(Consent c) {
-        return PAD_V * 2 + ConsentMessage.listHeight(c.card()) + (c.timeInline() ? 0 : TIME_H);
+        return PAD_V * 2 + ConsentMessage.listHeight(c.card())
+                + (c.card().waiting() && !c.timeInline() ? COUNTDOWN_H : 0);
     }
 
     /** 征询收起后键盘下面那条服务消息(连同上面的缝)此刻多高:收起的那一刻从零长出来。 */
     private static int consentResultH(ConsentCards.Card card) {
         return Math.round((ConsentMessage.GAP + LINE_H + SERVICE_PAD_V * 2) * ConsentMessage.reveal(card));
-    }
-
-    /** 征询气泡右下角那一小行:挂着时是还剩几秒,收起后和别的气泡一样是时刻。 */
-    private static String consentMeta(ConsentCards.Card card) {
-        return card.waiting() ? ConsentMessage.countdown(card) : clock(card.arrivedAt());
     }
 
     /** 她的一条征询接进她的连发:连发的第一块才带名字。 */
@@ -795,8 +788,8 @@ public final class ChatView {
     }
 
     private Consent consent(ConsentCards.Card card, String label, int bubbleMaxW) {
-        // 右下角那一小行挤在正文最后一行右侧(Telegram):放得下就同一行,放不下自己占一小行
-        int tw = font.width(consentMeta(card)) + 6;
+        // 挂着时右下角的倒计时挤在正文最后一行右侧(Telegram):放得下就同一行,放不下自己占一小行;收起后没有它
+        int tw = card.waiting() ? font.width(ConsentMessage.countdown(card)) + 6 : 0;
         int last = ConsentMessage.lastRowWidth(font, card);
         int text = Math.max(ConsentMessage.listWidth(font, card), last + tw);
         int w = Math.min(bubbleMaxW, Math.max(text + PAD_H * 2, ConsentMessage.keyboardWidth(font, card)));
@@ -973,7 +966,7 @@ public final class ChatView {
                     if (other == null) {
                         out.add(bubble(true, null, rich(q.body(), true), TXT,
                                 OWN_FILL, innerW, null,
-                                clock(entry.ts()), msgIndex, q.body(), q.quoted() ? q : null, null));
+                                msgIndex, q.body(), q.quoted() ? q : null, null));
                         f.last = OWNER;
                     } else {
                         if (!f.unreadPlaced && entry.ts() > unreadSince) {
@@ -984,7 +977,7 @@ public final class ChatView {
                         // 她的另一位主人说的:和群里别人的话一样在左边,连发的第一块上标他的名字
                         out.add(bubble(false, other.uuid().equals(f.last) ? null : other.shown(), rich(q.body(), true), TXT,
                                 AI_FILL, innerW, other.uuid(),
-                                clock(entry.ts()), msgIndex, q.body(), q.quoted() ? q : null, other.shown()));
+                                msgIndex, q.body(), q.quoted() ? q : null, other.shown()));
                         f.last = other.uuid();
                     }
                 }
@@ -1009,7 +1002,7 @@ public final class ChatView {
                         boolean first = !who.equals(f.last);
                         out.add(bubble(false, first ? label(who) : null,
                                 rich(spoken, false), TXT, AI_FILL, innerW, who,
-                                clock(entry.ts()), msgIndex, spoken, null, null));
+                                msgIndex, spoken, null, null));
                         f.last = who;
                     }
                     for (LlmToolCall tc : turn.toolCalls()) {
@@ -1017,7 +1010,7 @@ public final class ChatView {
                         // 这次调用写下的计划是她的一条清单消息,画在这次调用之后
                         List<com.dwinovo.numen.api.agent.tool.TodoTool.Item> plan = PlanChecklist.of(tc, results.get(tc.id()));
                         if (plan != null) {
-                            checklist(f, who, msgIndex, entry.ts(), plan, innerW, done, failed, bubbleMaxW);
+                            checklist(f, who, msgIndex, plan, innerW, done, failed, bubbleMaxW);
                         }
                         // 主人答了她的提问:对话流里留一行服务消息,说他答了什么
                         List<com.dwinovo.numen.api.agent.tool.Questions.Answer> answered = com.dwinovo.numen.api.agent.tool.Questions.answersIn(results.get(tc.id()));
@@ -1062,7 +1055,7 @@ public final class ChatView {
                 // 光标是接在解析完的正文后面的一小段字:没写完的 Markdown 记号照字面显示,写完才变样式
                 Doc typing = l.caret ? rich(l.shown, false).withTail("_") : rich(l.shown, false);
                 out.add(bubble(false, first ? label(her) : null, typing, TXT,
-                        AI_FILL, innerW, her, null, -1, l.shown, null, null));
+                        AI_FILL, innerW, her, -1, l.shown, null, null));
                 f.last = her;
             }
             // 排着的话:主人一句话复制进每个醒着的成员的队列,按原文去重,画一次
@@ -1088,11 +1081,11 @@ public final class ChatView {
             Keeper other = waiting.getValue();
             if (other == null) {
                 out.add(bubble(true, null, Doc.plain("⌛ " + body), FAINT, QUEUED_FILL,
-                        innerW, null, null, -1, body, null, null));
+                        innerW, null, -1, body, null, null));
                 f.last = OWNER;
             } else {
                 out.add(bubble(false, other.uuid().equals(f.last) ? null : other.shown(), Doc.plain("⌛ " + body), FAINT,
-                        QUEUED_FILL, innerW, other.uuid(), null, -1, body, null, other.shown()));
+                        QUEUED_FILL, innerW, other.uuid(), -1, body, null, other.shown()));
                 f.last = other.uuid();
             }
         }
@@ -1164,7 +1157,7 @@ public final class ChatView {
     }
 
     private Bubble bubble(boolean own, String label, Doc body, int ink, int fill,
-                          int innerW, UUID who, String time, int entry,
+                          int innerW, UUID who, int entry,
                           String raw, Quote quote, String by) {
         RichLayout.Laid text = lay(body, innerW);
         int maxW = text.width();
@@ -1172,40 +1165,33 @@ public final class ChatView {
             maxW = Math.max(maxW, Math.min(innerW,
                     QUOTE_IN + Math.max(font.width(quote.who()), font.width(quote.snippet()))));
         }
-        boolean inline = false;
-        if (time != null) {
-            // 时间戳挤在最后一行右侧(Telegram):放得下就同一行,放不下自己占一小行
-            int tw = font.width(time) + 6;
-            inline = text.lastEnd() + tw <= innerW;
-            maxW = Math.max(maxW, inline ? text.lastEnd() + tw : tw);
-        }
-        return new Bubble(own, label, text, ink, maxW, fill, false, who, time, inline, entry, raw, quote, by);
+        return new Bubble(own, label, text, ink, maxW, fill, false, who, entry, raw, quote, by);
     }
 
     /**
      * 她写下一份计划:和她最近那条清单是同一份(内容一样、只是状态变了)就在那一条上原地更新,
      * 不往下挪;内容变了才是她新说的一条——先把攒着的过程收口,再接在后面。
      */
-    private void checklist(Feed f, UUID who, int entry, long ts, List<com.dwinovo.numen.api.agent.tool.TodoTool.Item> items, int innerW,
+    private void checklist(Feed f, UUID who, int entry, List<com.dwinovo.numen.api.agent.tool.TodoTool.Item> items, int innerW,
                            Set<String> done, Set<String> failed, int bubbleMaxW) {
         Integer at = f.plans.get(who);
         if (at != null) {
             Checklist prev = (Checklist) f.out.get(at);
             if (PlanChecklist.sameItems(prev.items(), items)) {
-                f.out.set(at, checklist(who, prev.label(), items, innerW, prev.time(), prev.entry()));
+                f.out.set(at, checklist(who, prev.label(), items, innerW, prev.entry()));
                 return;
             }
         }
         flushProcess(f, done, failed, bubbleMaxW);
         boolean first = !who.equals(f.last);
-        f.out.add(checklist(who, first ? label(who) : null, items, innerW, clock(ts), entry));
+        f.out.add(checklist(who, first ? label(who) : null, items, innerW, entry));
         f.plans.put(who, f.out.size() - 1);
         f.last = who;
     }
 
     /** 折好一份清单:做完的和划掉的字退成气泡里的淡字、加删除线,还要做的照常。 */
     private Checklist checklist(UUID who, String label, List<com.dwinovo.numen.api.agent.tool.TodoTool.Item> items, int innerW,
-                                String time, int entry) {
+                                int entry) {
         String header = I18n.get("numen.chat.plan", PlanChecklist.done(items), items.size());
         int maxW = font.width(header);
         List<CheckRow> rows = new ArrayList<>(items.size());
@@ -1219,23 +1205,7 @@ public final class ChatView {
             for (FormattedCharSequence l : lines) maxW = Math.max(maxW, BOX_COL + font.width(l));
             rows.add(new CheckRow(it.status(), lines));
         }
-        boolean inline = false;
-        if (time != null) {
-            // 时间和气泡一样贴右下角:放得进最后一项的右侧就同一行
-            int tw = font.width(time) + 6;
-            List<FormattedCharSequence> lastRow = rows.get(rows.size() - 1).lines();
-            int last = BOX_COL + (lastRow.isEmpty() ? 0 : font.width(lastRow.get(lastRow.size() - 1)));
-            inline = last + tw <= innerW;
-            maxW = Math.max(maxW, inline ? last + tw : tw);
-        }
-        return new Checklist(who, label, items, header, List.copyOf(rows), maxW, time, inline, entry, false);
-    }
-
-    /** {@code HH:mm},本机时区;没有时间戳的旧记录不标。 */
-    private static String clock(long ts) {
-        if (ts <= 0) return null;
-        LocalTime t = Instant.ofEpochMilli(ts).atZone(ZoneId.systemDefault()).toLocalTime();
-        return String.format("%02d:%02d", t.getHour(), t.getMinute());
+        return new Checklist(who, label, items, header, List.copyOf(rows), maxW, entry, false);
     }
 
     /** 日期小牌上的字:今天、昨天,再往前是几月几日,跨年带年。 */
@@ -1458,11 +1428,12 @@ public final class ChatView {
         int bubTop = y + (c.label() != null ? LABEL_H : 0);
         bubbleFrame(g, false, c.label(), card.companion(), false, c.runEnd(), x, y, bx, c.w(), bh, AI_FILL);
         ConsentMessage.drawList(g, font, card, bx + PAD_H, bubTop + PAD_V, c.w() - PAD_H * 2);
-        String meta = consentMeta(card);
-        int metaY = c.timeInline() ? ConsentMessage.lastRowTextY(font, card, bubTop + PAD_V)
-                : bubTop + PAD_V + ConsentMessage.listHeight(card);
-        draw(g, Nb.colored(meta, IN_META).getVisualOrderText(), bx + c.w() - PAD_H - font.width(meta), metaY);
         if (card.waiting()) {
+            String countdown = ConsentMessage.countdown(card);
+            int countdownY = c.timeInline() ? ConsentMessage.lastRowTextY(font, card, bubTop + PAD_V)
+                    : bubTop + PAD_V + ConsentMessage.listHeight(card);
+            draw(g, Nb.colored(countdown, IN_META).getVisualOrderText(),
+                    bx + c.w() - PAD_H - font.width(countdown), countdownY);
             g.fill(bx, bubTop + bh - 1, bx + Math.round(c.w() * ConsentMessage.timeLeft(card)), bubTop + bh,
                     ConsentMessage.tone());
         }
@@ -1509,9 +1480,8 @@ public final class ChatView {
 
     private void drawBubble(GuiGraphics g, Bubble b, int x, int y, int w) {
         int bw = b.maxLineW() + PAD_H * 2;
-        boolean timeLine = b.time() != null && !b.timeInline();
         int qh = b.quote() != null ? QUOTE_H : 0;
-        int bh = qh + b.rows() * LINE_H + PAD_V * 2 + (timeLine ? TIME_H : 0);
+        int bh = qh + b.rows() * LINE_H + PAD_V * 2;
         int bubTop = y + (b.label() != null ? LABEL_H : 0);
         // 自己的贴右缘(留出尾巴的宽);别人的在脸那一列右边(私聊那一列只有尾巴宽)
         int bx = b.own() ? x + w - TAIL - bw : x + EDGE + faceCol();
@@ -1529,14 +1499,6 @@ public final class ChatView {
         }
         int ty = bubTop + PAD_V + 1 + qh;
         drawRich(g, b.text(), bx + PAD_H, ty, b.ink());
-        ty += b.rows() * LINE_H;
-        if (b.time() != null) {
-            // 时间戳贴右下角:同一行就压在最后一行的右侧,否则在下面自己一小行
-            int tx = bx + bw - PAD_H - font.width(b.time());
-            int tyy = b.timeInline() ? ty - LINE_H + 1 : ty - 1;
-            // 时间戳用气泡自己那一档淡色(Telegram 出向、入向各一色)
-            draw(g, Nb.colored(b.time(), b.own() ? OUT_META : IN_META).getVisualOrderText(), tx, tyy);
-        }
     }
 
     /**
@@ -1582,10 +1544,6 @@ public final class ChatView {
                 draw(g, l, tx + BOX_COL, ty);
                 ty += LINE_H;
             }
-        }
-        if (c.time() != null) {
-            int tyy = c.timeInline() ? ty - LINE_H + 1 : ty - 1;
-            draw(g, Nb.colored(c.time(), IN_META).getVisualOrderText(), bx + bw - PAD_H - font.width(c.time()), tyy);
         }
     }
 
