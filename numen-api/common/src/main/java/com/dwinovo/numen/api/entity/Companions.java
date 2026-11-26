@@ -194,40 +194,30 @@ public final class Companions {
         return CompanionFactory.spawn(server, companionUuid, entry.name(), entry.owner(), level, null);
     }
 
-    /** 把登出的她叫回世界,回来的事告诉她({@link #welcomeBack})。注册表不认得她就什么也不做。 */
-    private static void bringBack(MinecraftServer server, UUID companionUuid) {
-        NumenPlayer body = respawn(server, companionUuid);
-        if (body != null) {
-            welcomeBack(server, body, Outside.NONE);
-        }
-    }
-
     /**
-     * 她回到了世界里。从登出回来的(名册记着她是什么时候离开的)或从"留在外面"回来的:解开停牌,留下一条回来的事实——
-     * 因为什么离开、过了多久、此刻在哪;被服务器请出去的另有离开时那条事实,不再重复。本来就在世界里的什么也不做。
+     * 主人下令下线的她被再召唤回来:留下一条回来的事实——过了多久、此刻在哪,大脑据此解开下线时的停牌。
+     * 跟着主人上线回来的不说(主人上线不叫醒她);被服务器请出去的另有离开时那条事实,不再重复。
      */
     private static void welcomeBack(MinecraftServer server, NumenPlayer body, Outside was) {
+        if (was.why() != Attendance.Why.OWNER) {
+            return;
+        }
         UUID uuid = body.getUUID();
         CompanionRegistry reg = CompanionRegistry.get(server);
         CompanionRegistry.Entry entry = reg.find(uuid);
         long leftAt = entry == null ? -1L : entry.leftAt();
-        if (!was.isOutside() && leftAt < 0) {
+        if (leftAt < 0) {
             return;
         }
-        if (leftAt >= 0) {
-            reg.markLeftAt(uuid, -1L);
-            if (!was.server()) {
-                com.dwinovo.numen.api.event.NumenEvents.emit(body, com.dwinovo.numen.api.agent.inbox.EventTypes.RETURNED,
-                        java.util.Map.of("cause", was.why() == Attendance.Why.OWNER ? "owner_ordered" : "owner_absent"),
-                        returnedText(body, was, server.overworld().getGameTime() - leftAt), false);
-            }
-        }
+        reg.markLeftAt(uuid, -1L);
+        com.dwinovo.numen.api.event.NumenEvents.emit(body, com.dwinovo.numen.api.agent.inbox.EventTypes.RETURNED, null,
+                returnedText(body, server.overworld().getGameTime() - leftAt), false);
     }
 
-    /** 回来那条事件的话:为什么离开、过了多久、落在哪;背包与位置都是离开时的样子。 */
-    static String returnedText(NumenPlayer body, Outside was, long awayTicks) {
-        String why = was.why() == Attendance.Why.OWNER ? "your owner sent you offline" : "your owner was not in the game, so you were put away";
-        return "You are back in the world: " + why + "; about " + awayWords(awayTicks) + " passed in the game. You are in "
+    /** 回来那条事件的话:过了多久、落在哪;背包与位置都是离开时的样子。 */
+    static String returnedText(NumenPlayer body, long awayTicks) {
+        return "You are back in the world: your owner sent you offline and has summoned you again; about "
+                + awayWords(awayTicks) + " passed in the game. You are in "
                 + body.level().dimension().location() + " "
                 + com.dwinovo.numen.api.sdk.Positions.literal(body.blockPosition())
                 + "; your inventory and position are as you left them, nobody moved you.";
@@ -346,18 +336,10 @@ public final class Companions {
         NumenPlayer body = NumenPlayer.findByUuid(server, companionUuid);
         boolean ownerPresent = com.dwinovo.numen.api.owner.OwnerPresence.present(companionUuid);
         switch (Attendance.move(entry.outside(), ownerPresent, body != null)) {
-            case BRING -> bringBack(server, companionUuid);
-            case LOG_OUT -> logOut(server, body);
+            case BRING -> respawn(server, companionUuid);
+            case LOG_OUT -> dormant(server, body);   // 主人不在场时大脑本来就待命(Hold.AWAY),不用另外停牌
             case STAY -> { }
         }
-    }
-
-    /**
-     * 她登出世界:名册记下离开的时刻,身体存档离场。主人不在场时大脑本来就待命({@code Hold.AWAY}),不用另外停牌。
-     */
-    private static void logOut(MinecraftServer server, NumenPlayer body) {
-        CompanionRegistry.get(server).markLeftAt(body.getUUID(), server.overworld().getGameTime());
-        dormant(server, body);
     }
 
     /**
@@ -635,6 +617,7 @@ public final class Companions {
                 reg.markOutside(uuid, Outside.byOwner());
                 NumenPlayer body = NumenPlayer.findByUuid(server, uuid);
                 if (body != null) {
+                    reg.markLeftAt(uuid, server.overworld().getGameTime());   // 再召唤回来时据此告诉她离开了多久
                     com.dwinovo.numen.api.event.NumenEvents.orderedOffline(body);
                 }
             }

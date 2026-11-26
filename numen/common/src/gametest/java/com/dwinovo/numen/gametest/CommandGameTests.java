@@ -244,8 +244,7 @@ public class CommandGameTests {
     }
 
     /**
-     * 主人不在场她就像真玩家一样登出:不在玩家表里、名册还有她、背包随存档留着;主人回来,她落在离开时的位置、背包原样,
-     * 收件箱里留着一条回来的事实。
+     * 主人不在场她就像真玩家一样登出:不在玩家表里、名册还有她、背包随存档留着;主人回来,她落在离开时的位置、背包原样。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
     public static void she_logs_out_with_her_absent_owner_and_returns_with_him_where_she_was(GameTestHelper helper) {
@@ -282,11 +281,6 @@ public class CommandGameTests {
                     helper.assertTrue(back.blockPosition().equals(where), "she did not return where she left: "
                             + back.blockPosition() + " vs " + where);
                     helper.assertTrue(back.getInventory().countItem(Items.DIAMOND) == 3, "her backpack changed");
-                    var told = GameTestKit.events(back);
-                    helper.assertTrue(told.stream().anyMatch(entry ->
-                                    entry.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.RETURNED)
-                                            && entry.text().contains("owner_absent")),
-                            "she was not told she was back: " + told);
                     com.dwinovo.numen.api.entity.Companions.dismiss(server, back);
                     leave(returned.get());
                 })
@@ -329,8 +323,7 @@ public class CommandGameTests {
                     helper.assertTrue(back.getInventory().countItem(Items.DIAMOND) == 2, "her backpack changed");
                     helper.assertTrue(!registry.find(id).outside().isOutside(), "the roster still says she is out");
                     helper.assertTrue(GameTestKit.events(back).stream().anyMatch(entry ->
-                                    entry.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.RETURNED)
-                                            && entry.text().contains("owner_ordered")),
+                                    entry.type().equals(com.dwinovo.numen.api.agent.inbox.EventTypes.RETURNED)),
                             "she was not told she was back: " + GameTestKit.events(back));
                     com.dwinovo.numen.api.entity.Companions.dismiss(server, back);
                     leave(owner);

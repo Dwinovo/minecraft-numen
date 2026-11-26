@@ -43,7 +43,7 @@ public final class CompanionRegistry extends SavedData {
      *  {@code outside} = 她被留在外面(主人下令下线的,或被外面的人或插件请出了服务器的,后者带当时说的理由),在主人再召唤她之前不重建。
      *  {@code sharedWith} = 创建者把她分享给了谁(不含创建者自己);{@code owner} 加上这些人就是她的主人表,只存在这一处,
      *  见 {@code docs/adr/runtime/0006-keepers-ownership-use-provenance.md}。
-     *  {@code leftAt} = 她被 Numen 登出世界那一刻的游戏时间(overworld 的 gameTime),回来时据此告诉她离开了多久;-1 = 没有这回事。
+     *  {@code leftAt} = 主人下令她下线那一刻的游戏时间(overworld 的 gameTime),再召唤回来时据此告诉她离开了多久;-1 = 没有这回事。
      *  死亡不进名册:她死了就由原版重生流程当场重生,没有"死着等复活"的状态;老存档里的 {@code diedAt}、{@code deathCause}
      *  读档时被忽略,下一次存盘就不再写。 */
     public record Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos,
@@ -301,7 +301,7 @@ public final class CompanionRegistry extends SavedData {
         setDirty();
     }
 
-    /** 记下她被登出世界的游戏时间;{@code -1} 是她回到了世界。 */
+    /** 记下主人下令她下线的游戏时间;{@code -1} 是她回到了世界。 */
     public void markLeftAt(UUID uuid, long gameTime) {
         Entry e = entries.get(uuid);
         if (e == null) return;
