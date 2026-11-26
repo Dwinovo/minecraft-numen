@@ -58,7 +58,7 @@ import java.util.function.Supplier;
  * bubbles, the companion's replies left-aligned bubbles — both with their real
  * skin avatar — and her run of thoughts and tool calls is one quiet process line
  * (click to open the step rail). Date chips, the unread bar and system notes (persona change /
- * compaction / empty hint) are Telegram service messages: a centred translucent box, white text. Scrolling is eased ({@link Anim#approach}) and
+ * compaction) are Telegram service messages: a centred translucent box, white text. Scrolling is eased ({@link Anim#approach}) and
  * pins to the bottom while the owner hasn't scrolled away.
  *
  * <p>Blocks are rebuilt every frame from the loop's PHYSICAL transcript (exactly
@@ -287,10 +287,31 @@ public final class ChatView {
     private final List<Long> born = new ArrayList<>();
     private long frameNow;
 
-    public ChatView(Font font, Supplier<Conversation> conv) {
+    /** 招呼页上的建议:点一条 = 主人把这句话发出去,和在输入行里打字发送走同一个入口。 */
+    private final java.util.function.Consumer<String> say;
+
+    public ChatView(Font font, Supplier<Conversation> conv, java.util.function.Consumer<String> say) {
         this.font = font;
         this.conv = conv;
+        this.say = say;
     }
+
+    // ---- 招呼页:和她还没说过话的单人会话,聊天区正中是她的大头像、名字、一句招呼和几条建议 ----
+    private static final int WELCOME_FACE = 78;     // 左栏头像(26)的三倍
+    private static final int WELCOME_GAP = 8, WELCOME_LINE_GAP = 4, WELCOME_CHIPS_GAP = 10;
+    private static final int CHIP_H = 18, CHIP_PAD_H = 12, CHIP_GAP = 6, CHIP_ROW_GAP = 6, CHIP_SHADOW = 2;
+    private static final int WELCOME_MAX_W = 300;
+    /** 出现、消失与悬停的趋近量程与速率(趋近到半个单位内就落定,所以量程取大)。 */
+    private static final float WELCOME_FULL = 10f, WELCOME_RATE = 12f, CHIP_RATE = 18f;
+    private static final String[] SUGGESTIONS = {
+            "numen.chat.welcome.follow", "numen.chat.welcome.nearby",
+            "numen.chat.welcome.wood", "numen.chat.welcome.inventory"};
+    /** 招呼页此刻露出几成(0..{@link #WELCOME_FULL}),随"是不是一条消息也没有"趋近,第一句话发出去时淡出、不硬切。 */
+    private float welcomeShown;
+    /** 这一帧招呼页是不是该在场(单人会话、没有可见消息);点击只认在场的。 */
+    private boolean welcomeOn;
+    private final float[] chipHover = new float[SUGGESTIONS.length];
+    private final int[][] chipRect = new int[SUGGESTIONS.length][];
 
     /** 就他俩时是她;否则 null。 */
     private UUID solo() {
@@ -323,6 +344,8 @@ public final class ChatView {
         splits.clear();
         laid.clear();
         born.clear();
+        welcomeShown = 0f;
+        java.util.Arrays.fill(chipHover, 0f);
     }
 
     /**
@@ -403,6 +426,9 @@ public final class ChatView {
         List<Block> blocks = build(bubbleMaxW(w));
         keepViewOnPrepend(blocks);
         renderBlocks(g, x, y, w, h, blocks, dt);
+        welcomeOn = !group && blocks.isEmpty();
+        welcomeShown = Anim.approach(welcomeShown, welcomeOn ? WELCOME_FULL : 0f, WELCOME_RATE, dt);
+        if (welcomeShown > 0f) drawWelcome(g, x, y, w, h, dt);
         // 看过 = 视图停在底部时的最后一条;翻上去后来的话算未读,挂在"回到最新"钮上,左栏角标也据此消
         Conversation c = conv.get();
         var latest = ConversationPreview.last(c);
@@ -586,6 +612,15 @@ public final class ChatView {
             if (q != null && mx >= h.x() && mx < h.x() + h.w() && my >= h.y() && my < h.y() + PAD_V + QUOTE_H) {
                 jumpToQuoted(h.index(), q);
                 return true;
+            }
+        }
+        if (welcomeOn) {
+            for (int i = 0; i < SUGGESTIONS.length; i++) {
+                int[] r = chipRect[i];
+                if (r != null && mx >= r[0] && mx < r[0] + r[2] && my >= r[1] && my < r[1] + r[3]) {
+                    say.accept(I18n.get(SUGGESTIONS[i]));
+                    return true;
+                }
             }
         }
         loadPalette();
@@ -1132,9 +1167,6 @@ public final class ChatView {
             }
         }
         if (compacting) notice(out, I18n.get("numen.chat.compacting"), bubbleMaxW);
-        if (out.isEmpty()) {
-            notice(out, I18n.get("numen.chat.empty", conv.get().displayName(NumenRoster.instance()::name)), bubbleMaxW);
-        }
         settleRuns(out);
         settleTicks(out, opening);
         return out;
@@ -1566,6 +1598,60 @@ public final class ChatView {
     /** 征询那条的按钮从哪一行起:名字、气泡下面隔一道缝。画和点都照它。 */
     private static int consentKeysTop(Consent c, int y) {
         return y + (c.label() != null ? LABEL_H : 0) + consentBubbleH(c) + ConsentMessage.GAP;
+    }
+
+    /**
+     * 招呼页:聊天区正中竖排她的大头像(和左栏同一张脸)、名字、一句招呼、一排折行的建议。方角、现在的主题色;
+     * 整页随 {@link #welcomeShown} 淡入并从下面 {@link #ENTER_DY}px 升上来(消失时反过来),建议悬停时底与字向强调色走一程。
+     */
+    private void drawWelcome(GuiGraphics g, int x, int y, int w, int h, float dt) {
+        float e = Anim.easeOutCubic(welcomeShown / WELCOME_FULL);
+        String name = conv.get().displayName(NumenRoster.instance()::name);
+        String greeting = I18n.get("numen.chat.welcome.greeting");
+        int[] widths = new int[SUGGESTIONS.length];
+        String[] labels = new String[SUGGESTIONS.length];
+        for (int i = 0; i < SUGGESTIONS.length; i++) {
+            labels[i] = I18n.get(SUGGESTIONS[i]);
+            widths[i] = font.width(labels[i]) + CHIP_PAD_H * 2;
+        }
+        List<List<Integer>> rows = com.dwinovo.numen.api.client.ui.ChipFlow.rows(
+                widths, CHIP_GAP, Math.min(WELCOME_MAX_W, w - SB_W - 16));
+        int rowsH = rows.size() * CHIP_H + (rows.size() - 1) * CHIP_ROW_GAP;
+        int total = WELCOME_FACE + WELCOME_GAP + LINE_H + WELCOME_LINE_GAP + LINE_H + WELCOME_CHIPS_GAP + rowsH;
+        int mid = x + (w - SB_W) / 2;
+        int top = y + Math.max(4, (h - total) / 2);
+        UiTheme t = UiTheme.current();
+        g.enableScissor(x, y, x + w, y + h);
+        g.pose().pushPose();
+        g.pose().translate(0, Math.round(ENTER_DY * (1f - e)), 0);
+        g.setColor(1f, 1f, 1f, Math.max(0.02f, e));
+        com.dwinovo.numen.api.client.skin.ConversationFaces.draw(g, conv.get(), mid - WELCOME_FACE / 2, top, WELCOME_FACE);
+        int ty = top + WELCOME_FACE + WELCOME_GAP;
+        Component bold = Component.literal(name).withStyle(net.minecraft.ChatFormatting.BOLD);
+        Nb.text(g, font, bold, mid - font.width(bold) / 2, ty, TXT);
+        ty += LINE_H + WELCOME_LINE_GAP;
+        Nb.text(g, font, greeting, mid - font.width(greeting) / 2, ty, MUTED);
+        int cy = ty + LINE_H + WELCOME_CHIPS_GAP;
+        for (List<Integer> row : rows) {
+            int rowW = (row.size() - 1) * CHIP_GAP;
+            for (int i : row) rowW += widths[i];
+            int cx = mid - rowW / 2;
+            for (int i : row) {
+                boolean hot = welcomeOn && hoverX >= cx && hoverX < cx + widths[i] && hoverY >= cy && hoverY < cy + CHIP_H;
+                chipHover[i] = Anim.approach(chipHover[i], hot ? WELCOME_FULL : 0f, CHIP_RATE, dt);
+                float k = chipHover[i] / WELCOME_FULL;
+                g.fill(cx, cy + CHIP_SHADOW, cx + widths[i], cy + CHIP_H + CHIP_SHADOW, 0x14000000);
+                g.fill(cx, cy, cx + widths[i], cy + CHIP_H, NumenStyle.mixColor(t.band(), t.accent(), 0.14f * k));
+                Nb.text(g, font, labels[i], cx + CHIP_PAD_H, cy + (CHIP_H - 8) / 2,
+                        NumenStyle.mixColor(t.onBand(), t.accent(), k));
+                chipRect[i] = new int[]{cx, cy, widths[i], CHIP_H};
+                cx += widths[i] + CHIP_GAP;
+            }
+            cy += CHIP_H + CHIP_ROW_GAP;
+        }
+        g.setColor(1f, 1f, 1f, 1f);
+        g.pose().popPose();
+        g.disableScissor();
     }
 
     /** 一行的服务消息(日期牌、未读消息)。对话里的日期牌和翻页时浮在顶上的是同一枚。 */
