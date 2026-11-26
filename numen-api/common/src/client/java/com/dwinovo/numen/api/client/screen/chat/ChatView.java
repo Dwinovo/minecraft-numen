@@ -57,7 +57,7 @@ import java.util.function.Supplier;
  * The chat transcript as a conversation: the owner's messages are right-aligned
  * bubbles, the companion's replies left-aligned bubbles — both with their real
  * skin avatar — and her run of thoughts and tool calls is one quiet process line
- * (click to open the step rail). Date chips, the unread bar and system notes (persona change /
+ * (click to open the step rail). Date chips and system notes (persona change /
  * compaction) are Telegram service messages: a centred translucent box, white text. Scrolling is eased ({@link Anim#approach}) and
  * pins to the bottom while the owner hasn't scrolled away.
  *
@@ -330,7 +330,6 @@ public final class ChatView {
         lastMaxScroll = 0;
         jumpShown = 0f;
         barDragging = false;
-        unreadSince = -1;
         scrollPos = 0;
         scrollTarget = 0;
         pinBottom = true;
@@ -348,11 +347,6 @@ public final class ChatView {
         java.util.Arrays.fill(chipHover, 0f);
     }
 
-    /**
-     * 打开这个会话那一刻主人看到哪了:之后她说的第一句前面横一条"未读消息",打开时停在那儿,不停在最底。
-     * 这次看的时候那条一直在(Telegram 也是离开才消)。-1 = 下一帧现取;{@link Long#MAX_VALUE} = 打开时没有未读。
-     */
-    private long unreadSince = -1;
     /** 对话里搜(Ctrl+F):小写的查询词,null = 没在搜。 */
     private String query;
     /** 这一帧命中的块:下标和离内容顶多远,从上到下。 */
@@ -418,22 +412,17 @@ public final class ChatView {
         frameNow = now;
         updateLive(dt, now);
         advanceFolds(dt);
-        if (unreadSince < 0) {
-            Conversation opened = conv.get();
-            long seen = Conversations.instance().lastSeen(opened);
-            unreadSince = ConversationPreview.unread(opened, seen) > 0 ? seen : Long.MAX_VALUE;
-        }
         List<Block> blocks = build(bubbleMaxW(w));
         keepViewOnPrepend(blocks);
         renderBlocks(g, x, y, w, h, blocks, dt);
         welcomeOn = !group && blocks.isEmpty();
         welcomeShown = Anim.approach(welcomeShown, welcomeOn ? WELCOME_FULL : 0f, WELCOME_RATE, dt);
         if (welcomeShown > 0f) drawWelcome(g, x, y, w, h, dt);
-        // 看过 = 视图停在底部时的最后一条;翻上去后来的话算未读,挂在"回到最新"钮上,左栏角标也据此消
+        // 看过 = 视图停在底部时的最后一条;翻上去后来的话还没看过,"回到最新"钮据此浮出,左栏状态点也据此消
         Conversation c = conv.get();
         var latest = ConversationPreview.last(c);
         if (pinBottom && latest != null) Conversations.instance().markSeen(c, latest.ts());
-        renderJump(g, x, y, h, dt, ConversationPreview.unread(c, Conversations.instance().lastSeen(c)));
+        renderJump(g, x, y, h, dt, ConversationPreview.unseen(c, Conversations.instance().lastSeen(c)));
     }
 
     /** 上一帧记录最老那条的编号和内容总高:往上翻出更早的一页接在最前面时,据此把视图挪开新长出来的高度。 */
@@ -457,9 +446,9 @@ public final class ChatView {
         topContent = content;
     }
 
-    /** "回到最新"钮:翻上去超过半屏、或底下有没看过的话就浮出;从底边滑上来,顶上压一枚未读数。 */
-    private void renderJump(GuiGraphics g, int x, int y, int h, float dt, int unread) {
-        boolean want = lastMaxScroll - scrollTarget > h / 2 || unread > 0;
+    /** "回到最新"钮:翻上去超过半屏、或底下有没看过的话就浮出;从底边滑上来。 */
+    private void renderJump(GuiGraphics g, int x, int y, int h, float dt, boolean unseen) {
+        boolean want = lastMaxScroll - scrollTarget > h / 2 || unseen;
         jumpShown = Anim.approach(jumpShown, want ? 1f : 0f, 16f, dt);
         if (jumpShown <= 0.02f) return;
         int right = barX() + SB_W;
@@ -470,11 +459,6 @@ public final class ChatView {
                 AI_FILL, AI_BORDER);
         Sprites.draw(g, Sprites.CHEVRON_DOWN, jumpX + (JUMP - Sprites.CHEVRON_W) / 2, jumpY + (JUMP - Sprites.CHEVRON_H) / 2,
                 Sprites.CHEVRON_W, Sprites.CHEVRON_H, MUTED);
-        if (unread > 0) {
-            String n = UnreadBadge.label(unread);
-            int bw = UnreadBadge.width(font, n);
-            UnreadBadge.draw(g, font, n, jumpX + (JUMP - bw) / 2, jumpY - UnreadBadge.H / 2, MENTION, ON_CTA);
-        }
         g.disableScissor();
     }
 
@@ -487,12 +471,6 @@ public final class ChatView {
         if (pinBottom) scrollTarget = lastMaxScroll;
         scrollTarget = Math.clamp(scrollTarget, 0, lastMaxScroll);
         if (snapNext) {
-            // 有未读:停在"未读消息"那条上(上面留一点),不停在最底
-            int bar = unreadBarOffset(blocks);
-            if (bar >= 0) {
-                scrollTarget = Math.clamp(bar - 6, 0, lastMaxScroll);
-                pinBottom = scrollTarget >= lastMaxScroll;
-            }
             scrollPos = scrollTarget;
             snapNext = false;
         }
@@ -578,9 +556,8 @@ public final class ChatView {
 
     /** Toggle the fold of a completed tool chip under the mouse. */
     public boolean mouseClicked(double mx, double my) {
-        // 钮连同顶上的角标一起算点中
         if (jumpShown > 0.5f && mx >= jumpX && mx < jumpX + JUMP
-                && my >= jumpY - UnreadBadge.H / 2 && my < jumpY + JUMP && my < gy + gh) {
+                && my >= jumpY && my < jumpY + JUMP && my < gy + gh) {
             pinToBottom();
             return true;
         }
@@ -646,7 +623,7 @@ public final class ChatView {
 
     // ---- blocks ----
 
-    private sealed interface Block permits Bubble, Checklist, Process, Notice, Divider, UnreadBar, Consent {}
+    private sealed interface Block permits Bubble, Checklist, Process, Notice, Divider, Consent {}
 
     /** One spoken message. {@code label} non-null = companion side (name above the bubble);
      *  {@code runEnd} = 这一块是这个人连发的最后一块(群里脸贴它旁边,气泡带尾巴);
@@ -800,7 +777,6 @@ public final class ChatView {
     private record Divider(String text) implements Block {}
 
     /** "未读消息"那一条服务消息:打开时还没看过的第一句上面。 */
-    private record UnreadBar() implements Block {}
 
     /**
      * 她的征询(Telegram 带内联按钮的消息):她那一侧的气泡里是清单,下面挂按钮,答完再挂一条结果。它不是对话记录
@@ -828,7 +804,6 @@ public final class ChatView {
             case Process p -> (p.label() != null ? LABEL_H : 0) + p.height();
             case Notice n -> n.lines().size() * LINE_H + SERVICE_PAD_V * 2;
             case Divider ignored -> LINE_H + SERVICE_PAD_V * 2;
-            case UnreadBar ignored -> LINE_H + SERVICE_PAD_V * 2;
             case Consent c -> (c.label() != null ? LABEL_H : 0) + consentBubbleH(c) + ConsentMessage.GAP
                     + ConsentMessage.keyboardHeight(font, c.card(), c.w()) + consentResultH(c.card());
         };
@@ -899,16 +874,6 @@ public final class ChatView {
         }
     }
 
-    /** "未读消息"那条的顶边离内容顶多远;没有那条是 -1。 */
-    private int unreadBarOffset(List<Block> blocks) {
-        int y = TOP_PAD;
-        for (int i = 0; i < blocks.size(); i++) {
-            if (blocks.get(i) instanceof UnreadBar) return y;
-            y += heightOf(blocks.get(i)) + gapAfter(blocks, i);
-        }
-        return -1;
-    }
-
     /** 第 {@code i} 块下面留多宽:同一个人接着说(Telegram 连发几乎贴着)是窄缝,否则拉开。 */
     private static int gapAfter(List<Block> blocks, int i) {
         if (i + 1 >= blocks.size()) return BLOCK_GAP;
@@ -934,7 +899,6 @@ public final class ChatView {
         UUID processWho;
         int processEntry = -1;
         UUID last;
-        boolean unreadPlaced;
         /** 每只她最近那条清单消息在 {@code out} 里的位置:同一份计划改了状态就换掉那一块。 */
         final java.util.Map<UUID, Integer> plans = new java.util.HashMap<>();
     }
@@ -1045,11 +1009,6 @@ public final class ChatView {
                                 msgIndex, q.body(), q.quoted() ? q : null, null));
                         f.last = OWNER;
                     } else {
-                        if (!f.unreadPlaced && entry.ts() > unreadSince) {
-                            out.add(new UnreadBar());   // 打开时还没看过的第一句:别人说的都算
-                            f.unreadPlaced = true;
-                            f.last = null;
-                        }
                         // 她的另一位主人说的:和群里别人的话一样在左边,连发的第一块上标他的名字
                         out.add(bubble(false, other.uuid().equals(f.last) ? null : other.shown(), rich(q.body(), true), TXT,
                                 AI_FILL, innerW, other.uuid(),
@@ -1070,11 +1029,6 @@ public final class ChatView {
                     String spoken = ChatDisplayModes.current().assistantText(turn.content());
                     if (!spoken.isBlank()) {
                         flushProcess(f, bubbleMaxW);   // 开口说话把过程收口
-                        if (!f.unreadPlaced && entry.ts() > unreadSince) {
-                            out.add(new UnreadBar());   // 打开时还没看过的第一句
-                            f.unreadPlaced = true;
-                            f.last = null;
-                        }
                         boolean first = !who.equals(f.last);
                         out.add(bubble(false, first ? label(who) : null,
                                 rich(spoken, false), TXT, AI_FILL, innerW, who,
@@ -1553,7 +1507,6 @@ public final class ChatView {
         switch (b) {
             case Divider d -> drawDayChip(g, d.text(), x, y, w);
             case Notice n -> drawService(g, n.lines(), x, y, w);
-            case UnreadBar ignored -> drawDayChip(g, I18n.get("numen.chat.unread_bar"), x, y, w);
             case Bubble bb -> drawBubble(g, bb, x, y, w);
             case Checklist c -> drawChecklist(g, c, x, y);
             case Process p -> drawProcess(g, p, x, y);

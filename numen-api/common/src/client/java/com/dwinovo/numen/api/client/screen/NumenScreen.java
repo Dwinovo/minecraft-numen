@@ -102,7 +102,7 @@ public final class NumenScreen extends Screen {
     // ---- palette: static but REFRESHABLE — the theme picker calls repaint() and every
     // constant re-reads UiTheme.current() (single active theme, shared by all instances). ----
     private static int BORDER, ACCENT, TXT, TXT_MUTED, TXT_FAINT, ON_BAND, ON_BAND_FAINT,
-            CTA, ON_CTA, FIELD, OK, RUN, FAIL;
+            CTA, ON_CTA, FIELD, FAIL;
     static { repaint(); }
 
     /** Re-read every palette constant from the current theme (called after a theme switch). */
@@ -118,8 +118,6 @@ public final class NumenScreen extends Screen {
         CTA = t.cta();
         ON_CTA = t.onCta();
         FIELD = t.field();
-        OK = t.ok();
-        RUN = t.run();
         FAIL = t.fail();
     }
     /** 图标格边长:与名字那一行的字齐高。 */
@@ -1694,7 +1692,7 @@ public final class NumenScreen extends Screen {
         items.add(new PopupMenu.Item(com.dwinovo.numen.api.client.ui.mc.Sprites.PIN,
                 I18n.get(convos.pinned(c) ? "numen.menu.unpin" : "numen.menu.pin"), false, () -> convos.togglePin(c)));
         var last = com.dwinovo.numen.api.client.screen.chat.ConversationPreview.last(c);
-        if (last != null && com.dwinovo.numen.api.client.screen.chat.ConversationPreview.unread(c, convos.lastSeen(c)) > 0) {
+        if (last != null && com.dwinovo.numen.api.client.screen.chat.ConversationPreview.unseen(c, convos.lastSeen(c))) {
             items.add(new PopupMenu.Item(com.dwinovo.numen.api.client.ui.mc.Sprites.READ, I18n.get("numen.menu.read"),
                     false, () -> convos.markSeen(c, last.ts())));
         }
@@ -2646,16 +2644,9 @@ public final class NumenScreen extends Screen {
             if (!when.isEmpty()) {
                 txt(g, Component.literal(when), textRight - font.width(when), ay + 6, fade(active ? dimColor : TXT_FAINT, a));
             }
-            // 未读角标(Telegram):她在别的会话里说了话,这一行右边一枚强调色计数;当前这行没有
             int previewRight = textRight;
-            int unread = railUnread(c);
-            if (unread > 0) {
-                String n = com.dwinovo.numen.api.client.screen.chat.UnreadBadge.label(unread);
-                int bx = textRight - com.dwinovo.numen.api.client.screen.chat.UnreadBadge.width(font, n);
-                com.dwinovo.numen.api.client.screen.chat.UnreadBadge.draw(g, font, n, bx, ay + 16, fade(CTA, a), fade(ON_CTA, a));
-                previewRight = bx - 4;
-            } else if (Conversations.instance().pinned(c)) {
-                // 置顶的行没有未读时右端挂一枚置顶图标(Telegram 同一个位置)
+            if (Conversations.instance().pinned(c)) {
+                // 置顶的行右端挂一枚置顶图标(Telegram 同一个位置)
                 int px = textRight - ICON_N;
                 com.dwinovo.numen.api.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.api.client.ui.mc.Sprites.PIN,
                         px, ay + 16, ICON_N, fade(dimColor, a));
@@ -2691,32 +2682,9 @@ public final class NumenScreen extends Screen {
             }
             g.disableScissor();
             }
-            // 状态点、等点头的"!"都是一只同伴的事;会话行上只有脸
-            if (her == null) continue;
-            var outside = NumenRoster.instance().outside(her);
-            if (outside.isOutside()) {                                // 留在外面、不在世界里 — 灰罩;被请出服务器的再加"×",细节在抬头第二行
-                g.fill(fx, fy, fx + RAIL_AV, fy + RAIL_AV, fade(0xB0101010, a));
-                if (outside.server()) {
-                    txt(g, Component.literal("×"), fx + (RAIL_AV - font.width("×")) / 2, fy + (RAIL_AV - 8) / 2, fade(CTA, a));
-                }
-            } else {
-                int d = fx + RAIL_AV - 6, e2 = fy + RAIL_AV - 6;     // status LED, bottom-right
-                g.fill(d, e2, d + 5, e2 + 5, fade(statusColor(her), a));
-                Nb.border(g, d, e2, 5, 5, 1, fade(BORDER, a));
-            }
-            if (com.dwinovo.numen.api.client.consent.ConsentCards.pending(her) != null) {
-                // 她在等主人点头:脸的右上角一枚"!",没选中她的时候也看得见
-                int bx = fx + RAIL_AV - 7, by = fy - 1;
-                g.fill(bx, by, bx + 8, by + 10, fade(CTA, a));
-                txt(g, Component.literal("!"), bx + (8 - font.width("!")) / 2 + 1, by + 1, fade(ON_CTA, a));
-            }
+            // 状态(灰脸、右下角的点)在脸之上、字之后画,不被行里别的东西盖住
+            com.dwinovo.numen.api.client.skin.StatusDot.draw(g, c, sameAs(c, conv), fx, fy, RAIL_AV, a);
         }
-    }
-
-    /** 左栏这一行的未读数:当前对着的那行没有(正看着)。行尾的角标和分组标签上的数都数它。 */
-    private int railUnread(Conversation c) {
-        return sameAs(c, conv) ? 0 : com.dwinovo.numen.api.client.screen.chat.ConversationPreview.unread(
-                c, Conversations.instance().lastSeen(c));
     }
 
     // ---- 分组标签条(Telegram 的 Chat Folders):☰ 与搜索框那一条下面一排标签 ----
@@ -2746,7 +2714,7 @@ public final class NumenScreen extends Screen {
     private record RailSlide(List<Conversation> items, String folder, int scroll, int dir, long startMs) {}
 
     /** 标签条上的一格:{@code x} 已经减去横滚。 */
-    private record FolderTab(String id, String label, int unread, int x, int w, int labelW) {}
+    private record FolderTab(String id, String label, int x, int w, int labelW) {}
 
     private float folderTarget() {
         return narrow() ? 0f : FOLDER_H;
@@ -2777,32 +2745,14 @@ public final class NumenScreen extends Screen {
         };
     }
 
-    /**
-     * 这个分组里有几个会话有未读——Telegram 标签上的数是"几个会话",不是几条。内置的三个(全部、私聊、群聊)
-     * 不挂数:数只在会话行上,栏窄时标签得完整装得下;自建的分组才挂。
-     */
-    private int folderUnread(String id) {
-        Conversations convos = Conversations.instance();
-        if (convos.customFolder(id) == null) return 0;
-        int n = 0;
-        for (Conversation c : convos.all()) {
-            if (convos.inFolder(id, c) && railUnread(c) > 0) n++;
-        }
-        return n;
-    }
-
     private List<FolderTab> folderTabs() {
         List<FolderTab> out = new ArrayList<>();
         int x = railX + 3 + FOLDER_EDGE - Math.round(folderScroll);
         for (String id : Conversations.instance().folderIds()) {
             String label = folderLabel(id);
-            int unread = folderUnread(id);
             int lw = font.width(label);
-            int w = FOLDER_TAB_PAD * 2 + lw + (unread > 0
-                    ? 3 + com.dwinovo.numen.api.client.screen.chat.UnreadBadge.width(font,
-                            com.dwinovo.numen.api.client.screen.chat.UnreadBadge.label(unread))
-                    : 0);
-            out.add(new FolderTab(id, label, unread, x, w, lw));
+            int w = FOLDER_TAB_PAD * 2 + lw;
+            out.add(new FolderTab(id, label, x, w, lw));
             x += w;
         }
         return out;
@@ -2963,11 +2913,6 @@ public final class NumenScreen extends Screen {
             int overlap = Math.min(barL + barW, lx + tab.labelW()) - Math.max(barL, lx);
             float k = Math.max(0f, overlap) / (float) Math.max(1, Math.max(barW, tab.labelW()));
             txt(g, Component.literal(tab.label()), lx, ty + 4, UiTheme.mix(TXT_MUTED, t.accent(), k));
-            if (tab.unread() > 0) {
-                com.dwinovo.numen.api.client.screen.chat.UnreadBadge.draw(g, font,
-                        com.dwinovo.numen.api.client.screen.chat.UnreadBadge.label(tab.unread()),
-                        lx + tab.labelW() + 3, ty + 2, CTA, ON_CTA);
-            }
         }
         g.fill(barL, ty + FOLDER_H - 2, barL + barW, ty + FOLDER_H, CTA);
         g.disableScissor();
@@ -3049,16 +2994,6 @@ public final class NumenScreen extends Screen {
     /** 第一行(可见的)的顶边:☰ 那一条、分组标签条下面,列表从上往下排(Telegram),不居中。 */
     private int railStartY() {
         return top + RAIL_TOP + folderStripH();
-    }
-
-    /** idle = green, working/compacting = amber, queued = gold; faint if no loop yet. */
-    private int statusColor(UUID u) {
-        return ClientCompanions.get(u).map(loop -> {
-            var status = loop.status();
-            if (status.busy()) return RUN;   // 等模型、跑工具、整理记忆、身体有后台任务
-            if (!status.queuedPreview().isEmpty()) return CTA;
-            return OK;
-        }).orElse(TXT_FAINT);
     }
 
     private static PlayerSkin skinFor(UUID u) {

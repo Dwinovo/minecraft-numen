@@ -9,8 +9,6 @@ import com.dwinovo.numen.api.client.agent.NumenRoster;
 import com.dwinovo.numen.api.client.hud.TalkHint;
 import com.dwinovo.numen.api.client.screen.Nb;
 import com.dwinovo.numen.api.client.screen.UiTheme;
-import com.dwinovo.numen.api.client.screen.chat.ConversationPreview;
-import com.dwinovo.numen.api.client.screen.chat.UnreadBadge;
 import com.dwinovo.numen.api.client.ui.Anim;
 import com.dwinovo.numen.api.client.ui.NumenStyle;
 import com.dwinovo.numen.api.client.ui.TextWrap;
@@ -232,14 +230,11 @@ public class CompanionWheelScreen extends Screen {
             ConversationFaces.draw(g, entries.get(i), -half, -half, AVATAR);
             g.pose().popPose();
 
-            // 未读角标:Telegram 窄栏的画法,贴头像右下角。画在缩放之外——像素字缩放一点点就糊
-            Conversation c = entries.get(i);
-            int unread = ConversationPreview.unread(c, Conversations.instance().lastSeen(c));
-            if (unread > 0 && open > 0.4f) {
-                String n = UnreadBadge.label(unread);
-                int corner = Math.round((half + 2) * scale);
-                UnreadBadge.draw(g, this.font, n, Math.round(ax) + corner - UnreadBadge.width(this.font, n),
-                        Math.round(ay) + corner - UnreadBadge.H, th.cta(), th.onCta());
+            // 状态:画在缩放之外,按缩放后的头像框摆——标记缩放一点点就糊
+            if (open > 0.4f) {
+                int face = Math.round(AVATAR * scale);
+                com.dwinovo.numen.api.client.skin.StatusDot.draw(g, entries.get(i), false,
+                        Math.round(ax) - face / 2, Math.round(ay) - face / 2, face, 1f);
             }
         }
 

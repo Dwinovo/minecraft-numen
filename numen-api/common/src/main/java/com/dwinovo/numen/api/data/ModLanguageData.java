@@ -932,7 +932,6 @@ public final class ModLanguageData {
         adder.add("numen.menu.use", "Use for her");
         adder.add("numen.menu.stop_using", "Stop using");
         adder.add("numen.chat.reply_to", "Reply to %s");
-        adder.add("numen.chat.unread_bar", "Unread messages");
         adder.add("numen.chat.find", "Search this chat");
         adder.add("numen.chat.find_none", "No results");
         adder.add("numen.profile.persona", "Persona");
@@ -1712,7 +1711,6 @@ public final class ModLanguageData {
         adder.add("numen.menu.use", "给她用");
         adder.add("numen.menu.stop_using", "不再使用");
         adder.add("numen.chat.reply_to", "回复 %s");
-        adder.add("numen.chat.unread_bar", "未读消息");
         adder.add("numen.chat.find", "在对话里搜索");
         adder.add("numen.chat.find_none", "没有结果");
         adder.add("numen.profile.persona", "人设");

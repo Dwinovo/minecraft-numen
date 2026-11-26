@@ -26,8 +26,8 @@ public final class ConversationPreview {
     /** 一行:显示文本(多人会话里带说话人),和它的时间戳。 */
     public record Line(String text, long ts) {}
 
-    /** {@code saidAt} = 别人(她们、她的另一位主人)每句可见的话的时间戳,升序;数未读只比大小,不每帧重新解析。 */
-    private record Cached(int lines, Line line, List<Long> saidAt) {}
+    /** {@code lastSaid} = 别人(她们、她的另一位主人)最后一句可见的话的时间戳,没有是 0;和看过的时刻比大小,不每帧重新解析。 */
+    private record Cached(int lines, Line line, long lastSaid) {}
 
     private static final Map<String, Cached> CACHE = new HashMap<>();
 
@@ -38,13 +38,9 @@ public final class ConversationPreview {
         return cached(c).line();
     }
 
-    /** {@code since} 之后别人说了几句——她们,和她的另一位主人(本机玩家自己的话不算未读)。 */
-    public static int unread(Conversation c, long since) {
-        int n = 0;
-        for (long ts : cached(c).saidAt()) {
-            if (ts > since) n++;
-        }
-        return n;
+    /** {@code since} 之后别人说过话没有——她们,和她的另一位主人(本机玩家自己的话不算)。 */
+    public static boolean unseen(Conversation c, long since) {
+        return cached(c).lastSaid() > since;
     }
 
     private static Cached cached(Conversation c) {
@@ -61,18 +57,18 @@ public final class ConversationPreview {
         // 说话的不止她和我:群,或者她不止一位主人——最后一句得标是谁说的
         boolean group = her == null || NumenRoster.instance().severalKeepers(her);
         Line out = null;
-        List<Long> saidAt = new java.util.ArrayList<>();
+        long lastSaid = 0;
         for (Transcript.Entry e : merged) {
             if (e.ts() <= 0) {
                 continue;
             }
             if (e.msg() instanceof ConvoState.Msg.Assistant a
                     && !ChatDisplayModes.current().assistantText(a.turn().content()).isBlank()) {
-                saidAt.add(e.ts());
+                lastSaid = Math.max(lastSaid, e.ts());
             } else if (e.msg() instanceof ConvoState.Msg.User u
                     && NumenRoster.instance().otherSpeaker(e.companion(), u.content(), me) != null
                     && !ChatDisplayModes.current().userText(u.content()).isBlank()) {
-                saidAt.add(e.ts());
+                lastSaid = Math.max(lastSaid, e.ts());
             }
         }
         for (int i = merged.size() - 1; i >= 0 && out == null; i--) {
@@ -94,7 +90,7 @@ public final class ConversationPreview {
                 }
             }
         }
-        Cached fresh = new Cached(total, out, List.copyOf(saidAt));
+        Cached fresh = new Cached(total, out, lastSaid);
         CACHE.put(c.id(), fresh);
         return fresh;
     }

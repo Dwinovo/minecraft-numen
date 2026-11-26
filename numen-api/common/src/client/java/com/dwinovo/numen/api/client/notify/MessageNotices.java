@@ -11,9 +11,8 @@ import com.dwinovo.numen.api.client.data.ClientPrefs;
 import com.dwinovo.numen.api.client.screen.Nb;
 import com.dwinovo.numen.api.client.screen.NumenScreen;
 import com.dwinovo.numen.api.client.screen.UiTheme;
-import com.dwinovo.numen.api.client.screen.chat.ConversationPreview;
-import com.dwinovo.numen.api.client.screen.chat.UnreadBadge;
 import com.dwinovo.numen.api.client.skin.ConversationFaces;
+import com.dwinovo.numen.api.client.skin.StatusDot;
 import com.dwinovo.numen.api.client.ui.NumenStyle;
 import com.dwinovo.numen.api.client.ui.mc.McDrawSurface;
 import net.minecraft.Util;
@@ -27,8 +26,7 @@ import java.util.UUID;
  * 消息通知(Telegram Desktop 的桌面通知):她说了话、主人又没在面板里看着那个会话,右下角弹一张小卡——
  * 头像(群是群头像)、会话名、那句话,几秒后自己淡掉。排队、合并、时序在 {@link NoticeStack},这里接线和画。
  *
- * <p>卡片就是左栏的一行:脸、名字、最后一句、未读角标,尺寸与配色和左栏同一套,未读数问
- * {@link ConversationPreview}——和左栏那枚角标是同一个数。
+ * <p>卡片就是左栏的一行:脸、名字、最后一句,尺寸与配色和左栏同一套,脸上的状态点和左栏是同一个({@link StatusDot})。
  *
  * <p>点一下打开面板并切到那个会话,右键收掉(Telegram 同样)。游戏里没开界面时鼠标被视角占着,
  * 卡片只看不点;开着任何界面时它画在界面上面、能点。客户端主线程专用。
@@ -112,7 +110,7 @@ public final class MessageNotices {
         g.pose().popPose();
     }
 
-    /** 一张卡:和左栏一行同一个摆法——脸、名字一行、最后一句一行,未读数的角标贴右端。 */
+    /** 一张卡:和左栏一行同一个摆法——脸、名字一行、最后一句一行,脸上同一套状态。 */
     private static void drawCard(GuiGraphics g, Font font, Said s, int x, int y, float opacity, boolean hot) {
         UiTheme t = UiTheme.current();
         var surface = new McDrawSurface(g, font);
@@ -122,18 +120,12 @@ public final class MessageNotices {
         int fx = x + (H - AV) / 2, fy = y + (H - AV) / 2;
         NumenStyle.box(surface, fx - 1, fy - 1, AV + 2, AV + 2, t.field(), t.border());
         ConversationFaces.draw(g, s.conv(), fx, fy, AV);
+        StatusDot.draw(g, s.conv(), false, fx, fy, AV, opacity);
         int tx = fx + AV + 6, right = x + W - 5;
         Nb.text(g, font, Nb.clip(font, s.conv().displayName(NumenRoster.instance()::name), right - tx),
                 tx, y + 6, t.onBand());
-        // 同一个会话合成一张:只画最新那句,攒了几句看角标;一句的时候不挂
-        int unread = ConversationPreview.unread(s.conv(), Conversations.instance().lastSeen(s.conv()));
+        // 同一个会话合成一张:只画最新那句
         int textRight = right;
-        if (unread > 1) {
-            String n = UnreadBadge.label(unread);
-            int bx = right - UnreadBadge.width(font, n);
-            UnreadBadge.draw(g, font, n, bx, y + 16, t.cta(), t.onCta());
-            textRight = bx - 4;
-        }
         int lx = tx, ly = y + 18;
         if (s.who() != null) {
             // 群里先写谁说的,用强调色(Telegram 通知里的作者名)
