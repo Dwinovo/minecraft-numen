@@ -1,6 +1,6 @@
 # 0003 头像右下角一个状态点,代替未读数与在线标记
 
-- 状态:已接受,在落地
+- 状态:已接受,已落地(待真机看)
 - 日期:2026-11-26
 - 另见:[0001](0001-process-line-and-no-message-clock.md)、[control 0028](../control/0028-ask-user-question-tool.md)(她的提问)
 
