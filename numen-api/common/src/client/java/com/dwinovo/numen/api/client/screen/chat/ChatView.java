@@ -26,6 +26,7 @@ import com.dwinovo.numen.api.client.screen.UiTheme;
 import com.dwinovo.numen.api.client.ui.Anim;
 import com.dwinovo.numen.api.client.ui.NumenStyle;
 import com.dwinovo.numen.api.client.ui.markdown.Markdown;
+import com.dwinovo.numen.api.data.ModLanguageData;
 import com.dwinovo.numen.api.client.ui.richtext.Doc;
 import com.dwinovo.numen.api.client.ui.richtext.RichLayout;
 import com.dwinovo.numen.api.entity.Keeper;
@@ -55,8 +56,8 @@ import java.util.function.Supplier;
 /**
  * The chat transcript as a conversation: the owner's messages are right-aligned
  * bubbles, the companion's replies left-aligned bubbles — both with their real
- * skin avatar — and a run of consecutive tool calls folds into one chip
- * (click to expand once done). Date chips, the unread bar and system notes (persona change /
+ * skin avatar — and her run of thoughts and tool calls is one quiet process line
+ * (click to open the step rail). Date chips, the unread bar and system notes (persona change /
  * compaction / empty hint) are Telegram service messages: a centred translucent box, white text. Scrolling is eased ({@link Anim#approach}) and
  * pins to the bottom while the owner hasn't scrolled away.
  *
@@ -90,7 +91,22 @@ public final class ChatView {
     private static final int SB_W = 4;          // scrollbar width
     private static final int EDGE = 2;          // left inset so the avatar FRAME (-2px) clears the scissor
     private static final int OPP_MARGIN = 24;   // kept clear on the far side of a bubble
-    private static final int ICON_W = 11;       // chip status-icon column
+    private static final int ICON_W = 11;       // 过程里一步前面的状态图标列
+    /** 过程块:收起那一行与调用那一行的高、步骤线离块左缘与步骤正文的距离、步骤之间的缝、点开的代码与回执的内缩。 */
+    private static final int HEAD_H = LINE_H + 4;
+    private static final int STEP_GAP = 4;
+    private static final int RAIL_X = 5;
+    private static final int RAIL_W = 2;
+    private static final int STEP_X = RAIL_X + RAIL_W + 7;
+    private static final int BODY_PAD = 2;
+    private static final int DETAIL_IN = ICON_W;
+    /** 代码与回执的淡底里字离底边的距离。 */
+    private static final int BOX_IN = 3;
+    /** 展开、收起的趋近:量程 {@link #FOLD_FULL}(趋近到半个单位内就落定,所以量程取大),每秒的速率。 */
+    private static final float FOLD_FULL = 10f;
+    private static final float FOLD_RATE = 16f;
+    /** "思考中"的高光扫过一遍用多久。 */
+    private static final int SHIMMER_MS = 1400;
     private static final float SCROLL_RATE = 14f;
     /** Typewriter reveal speed (chars/s) and the max lag before it jumps to catch up. */
     private static final float REVEAL_CPS = 80f;
@@ -102,9 +118,9 @@ public final class ChatView {
     // ---- palette: re-read from the CURRENT theme each frame (loadPalette), so the
     // Settings picker recolours the transcript live. Field names keep the constant
     // convention — they behave as constants within a frame. ----
-    private int TOOL, MUTED, FAINT, OK, RUN, FAIL, TXT;
-    private int AI_FILL, AI_BORDER, OWN_FILL, QUEUED_FILL, CHIP_FILL;
-    /** 机器行的左缘竖线色(工具/思考过程共用)。 */
+    private int MUTED, FAINT, OK, RUN, FAIL, TXT;
+    private int AI_FILL, AI_BORDER, OWN_FILL, QUEUED_FILL;
+    /** 过程步骤线的竖线色。 */
     private int TRACE_BAR;
     /** 主人话里 @ 到的名字。 */
     private int MENTION;
@@ -117,7 +133,6 @@ public final class ChatView {
 
     private void loadPalette() {
         UiTheme t = UiTheme.current();
-        TOOL = t.textDim();
         MUTED = t.textDim();
         FAINT = t.faint();
         OK = t.ok();
@@ -128,7 +143,6 @@ public final class ChatView {
         AI_BORDER = t.aiBorder();
         OWN_FILL = t.ownFill();
         QUEUED_FILL = t.queuedFill();
-        CHIP_FILL = t.chipFill();
         TRACE_BAR = t.surfaceBorder();
         MENTION = t.accent();
         IN_META = t.inMeta();
@@ -214,8 +228,13 @@ public final class ChatView {
         String shown = "";
         boolean caret;
     }
-    /** Completed tool-call groups the user clicked open (keyed by the group's first call id). */
+    /**
+     * 主人点开的:一段过程({@code proc#她#第一步的记录序号})和一次调用的代码与回执({@code call#调用号})。
+     * 开合只随点击变,过程在跑、收了都不自己动。
+     */
     private final Set<String> expandedGroups = new HashSet<>();
+    /** 每个开合此刻展开了几成(0..{@link #FOLD_FULL}),按 {@link #expandedGroups} 趋近;收完的从表里去掉。 */
+    private final Map<String, Float> folds = new HashMap<>();
     /**
      * 排版缓存:同一段字、同一宽度只 split 一次。块每帧重建是为了活着的东西(转圈、在飞的字)不用另设
      * 失效,但 font.split 是这一路里最贵的一步——历史消息每帧重排一遍,思考一长整个界面就卡。
@@ -228,15 +247,6 @@ public final class ChatView {
                     return size() > 1024;
                 }
             };
-    /** 思考正文压成一行的缓存(正则 + 拷贝,每帧对几 KB 的思考跑一遍也不便宜)。同样 LRU。 */
-    private final java.util.Map<String, String> flattened =
-            new java.util.LinkedHashMap<>(64, 0.75f, true) {
-                @Override
-                protected boolean removeEldestEntry(java.util.Map.Entry<String, String> e) {
-                    return size() > 256;
-                }
-            };
-
     private record SplitKey(Component text, int width) {}
 
     private List<FormattedCharSequence> split(Component text, int width) {
@@ -308,10 +318,10 @@ public final class ChatView {
         lastFrameMs = 0;
         live.clear();
         expandedGroups.clear();
+        folds.clear();
         ticked.clear();
         splits.clear();
         laid.clear();
-        flattened.clear();
         born.clear();
     }
 
@@ -384,6 +394,7 @@ public final class ChatView {
         lastFrameMs = now;
         frameNow = now;
         updateLive(dt, now);
+        advanceFolds(dt);
         if (unreadSince < 0) {
             Conversation opened = conv.get();
             long seen = Conversations.instance().lastSeen(opened);
@@ -586,9 +597,12 @@ public final class ChatView {
             if (b instanceof Consent c && my >= cy && my < cy + bh) {
                 return ConsentMessage.click(font, c.card(), gx + EDGE + faceCol(), consentKeysTop(c, cy), c.w(), mx, my);
             }
-            if (b instanceof Chip c && c.foldKey() != null && my >= cy && my < cy + bh) {
-                if (!expandedGroups.add(c.foldKey())) expandedGroups.remove(c.foldKey());
-                return true;
+            if (b instanceof Process p && my >= cy && my < cy + bh) {
+                String key = processClickKey(p, cy, my);
+                if (key != null) {
+                    if (!expandedGroups.add(key)) expandedGroups.remove(key);
+                    return true;
+                }
             }
             cy += bh + gapAfter(blocks, i);
         }
@@ -597,7 +611,7 @@ public final class ChatView {
 
     // ---- blocks ----
 
-    private sealed interface Block permits Bubble, Checklist, Chip, Notice, Divider, UnreadBar, Consent {}
+    private sealed interface Block permits Bubble, Checklist, Process, Notice, Divider, UnreadBar, Consent {}
 
     /** One spoken message. {@code label} non-null = companion side (name above the bubble);
      *  {@code runEnd} = 这一块是这个人连发的最后一块(群里脸贴它旁边,气泡带尾巴);
@@ -714,13 +728,38 @@ public final class ChatView {
         return null;
     }
 
-    /** A run of tool calls (or a reasoning block). {@code foldKey} non-null = finished group,
-     *  clickable to expand/fold. {@code who} = 干这些活的那只;{@code label} non-null = 她这一轮连发
-     *  的第一块,名字画在它上面——多人会话里工具行也得认得出是谁的;{@code runEnd} = 连发的最后一块,群里脸贴它旁边。 */
-    private record Chip(List<ChipRow> rows, String foldKey, String label, UUID who, int entry,
-                        boolean runEnd) implements Block {
-        Chip withRunEnd(boolean on) { return new Chip(rows, foldKey, label, who, entry, on); }
+    /**
+     * 她连着的思考与工具调用:收起是一行安静的字({@code head}),点开是一根线串起的步骤({@code rows})。
+     * 只有一次调用、没有思考({@code single})时没有那一行,画出来就是那一步。{@code key} 是这段过程的开合键
+     * (single 时没有,开合在那一步自己的键上);{@code open} 是此刻展开了几成(0..1);{@code bodyH} 是此刻露出的步骤区高度。
+     * {@code who} = 干这些活的那只;{@code label} non-null = 她这一轮连发的第一块,名字画在它上面——多人会话里
+     * 也得认得出是谁的;{@code runEnd} = 连发的最后一块,群里脸贴它旁边;{@code width} = 步骤线与每一步占的宽。
+     */
+    private record Process(Head head, String key, boolean single, float open, List<StepRow> rows, int bodyH,
+                           int width, String label, UUID who, int entry, boolean runEnd) implements Block {
+        Process withRunEnd(boolean on) {
+            return new Process(head, key, single, open, rows, bodyH, width, label, who, entry, on);
+        }
+
+        int height() {
+            return single ? bodyH : HEAD_H + bodyH;
+        }
     }
+
+    /**
+     * 收起那一行:{@code lab} 是左边的字(思考中、这次调用读作什么、已处理 N 秒),{@code secs} 是它后面走动的秒数
+     * (定格后已并进 {@code lab},为空),{@code sum} 是在想时这段思考的第一句。{@code shimmer} = 在想,字上有高光扫过;
+     * {@code fail} = 这一行是失败色。
+     */
+    private record Head(String lab, boolean shimmer, String secs, String sum, boolean fail) {}
+
+    /**
+     * 步骤线上的一步,{@code y} 离步骤区顶多远。思考:{@code lines} 是保留换行折好的淡字。调用:{@code lines} 是那一句
+     * (一行),{@code callKey} 是它的开合键,点开是折好的代码与回执。{@code secs} 在这一步右边。{@code h} 含展开的那一截
+     * 此刻露出的高度。
+     */
+    private record StepRow(ProcessLine.Step step, int y, int h, List<FormattedCharSequence> lines, String secs,
+                           String callKey, List<FormattedCharSequence> code, List<FormattedCharSequence> receipt) {}
 
     /** 日期分隔:一天的第一条上面一枚居中的服务消息(今天 / 昨天 / 几月几日)。 */
     private record Divider(String text) implements Block {}
@@ -739,8 +778,6 @@ public final class ChatView {
         Consent withRunEnd(boolean on) { return new Consent(card, label, w, on, timeInline); }
     }
 
-    private record ChipRow(String icon, int iconColor, FormattedCharSequence text) {}
-
     /** 居中的提示(整理过记忆、换了人设、清空、中断之类)画成服务消息;长的按气泡宽折行,{@code lines} 是折好的。 */
     private record Notice(List<FormattedCharSequence> lines) implements Block {}
 
@@ -753,7 +790,7 @@ public final class ChatView {
             case Bubble bb -> (bb.label() != null ? LABEL_H : 0) + (bb.quote() != null ? QUOTE_H : 0)
                     + bb.rows() * LINE_H + PAD_V * 2;
             case Checklist c -> (c.label() != null ? LABEL_H : 0) + checklistH(c);
-            case Chip c -> (c.label() != null ? LABEL_H : 0) + c.rows().size() * LINE_H + PAD_V * 2;
+            case Process p -> (p.label() != null ? LABEL_H : 0) + p.height();
             case Notice n -> n.lines().size() * LINE_H + SERVICE_PAD_V * 2;
             case Divider ignored -> LINE_H + SERVICE_PAD_V * 2;
             case UnreadBar ignored -> LINE_H + SERVICE_PAD_V * 2;
@@ -779,6 +816,7 @@ public final class ChatView {
     private static int consentResultH(ConsentCards.Card card) {
         return Math.round((ConsentMessage.GAP + LINE_H + SERVICE_PAD_V * 2) * ConsentMessage.reveal(card));
     }
+
 
     /** 她的一条征询接进她的连发:连发的第一块才带名字。 */
     private void consent(Feed f, ConsentCards.Card card, int bubbleMaxW) {
@@ -853,14 +891,11 @@ public final class ChatView {
      * ——请求里临时挂载、从未入过记录的东西(如 {@code <current_task>})混进来的话,
      * 画出来的会是一条<b>从未存在过</b>的消息。
      */
-    /** 过程里的一段:一次思考({@code live} = 还在往外流),或一次工具调用。 */
-    private record Piece(String thought, boolean live, LlmToolCall call) {}
-
     /** 一次 build 的手头:输出、她攒着的这一段过程与它的主人、连发的上一位。 */
     private static final class Feed {
         final List<Block> out = new ArrayList<>();
-        /** 她连着的思考和工具调用,中间没开口说话:收口时合成一行。 */
-        final List<Piece> process = new ArrayList<>();
+        /** 她连着的思考和工具调用,中间没开口说话:收口时合成一块过程。 */
+        final List<ProcessLine.Step> process = new ArrayList<>();
         UUID processWho;
         int processEntry = -1;
         UUID last;
@@ -869,7 +904,7 @@ public final class ChatView {
         final java.util.Map<UUID, Integer> plans = new java.util.HashMap<>();
     }
 
-    private static void addPiece(Feed f, UUID who, int entry, Piece p) {
+    private static void addStep(Feed f, UUID who, int entry, ProcessLine.Step p) {
         if (f.process.isEmpty()) {
             f.processWho = who;
             f.processEntry = entry;
@@ -884,10 +919,12 @@ public final class ChatView {
         Set<String> done = new HashSet<>();
         Set<String> failed = new HashSet<>();
         Map<String, String> results = new HashMap<>();
+        Map<String, Long> resultAt = new HashMap<>();
         for (Transcript.Entry e : source) {
             if (e.msg() instanceof ConvoState.Msg.Tool t) {
                 done.add(t.toolCallId());
                 results.put(t.toolCallId(), t.content());
+                resultAt.put(t.toolCallId(), e.ts());
                 // 成败判据的单一真源(展示层不猜字符串)。
                 if (com.dwinovo.numen.api.agent.llm.ToolOutcome.failed(t.content())) {
                     failed.add(t.toolCallId());
@@ -916,21 +953,25 @@ public final class ChatView {
         // 算在她的连发里;提示行打断。f.last == null = 连发已断。
         int msgIndex = -1;
         LocalDate lastDay = null;
+        // 前一条记录的时刻:一步思考从它算起,到她这一轮的时刻为止
+        long lastTs = 0;
         // 她的征询按到的时刻排进时间线。只在和她的私聊里:征询问的是她的身体
         List<ConsentCards.Card> asks = ConsentCards.history(solo());
         int asked = 0;
         for (Transcript.Entry entry : source) {
             msgIndex++;
             ConvoState.Msg msg = entry.msg();
+            long prevTs = lastTs;
+            if (entry.ts() > 0) lastTs = entry.ts();
             while (asked < asks.size() && entry.ts() > 0 && asks.get(asked).arrivedAt() <= entry.ts()) {
-                flushProcess(f, done, failed, bubbleMaxW);
+                flushProcess(f, bubbleMaxW);
                 consent(f, asks.get(asked++), bubbleMaxW);
             }
             // 日期分隔:换了一天,先收口、插一枚日期小牌、连发断开
             if (entry.ts() > 0) {
                 LocalDate day = Instant.ofEpochMilli(entry.ts()).atZone(ZoneId.systemDefault()).toLocalDate();
                 if (!day.equals(lastDay)) {
-                    flushProcess(f, done, failed, bubbleMaxW);
+                    flushProcess(f, bubbleMaxW);
                     out.add(new Divider(dayLabel(day)));
                     f.last = null;
                     lastDay = day;
@@ -938,7 +979,7 @@ public final class ChatView {
             }
             switch (msg) {
                 case ConvoState.Msg.User u -> {
-                    flushProcess(f, done, failed, bubbleMaxW);
+                    flushProcess(f, bubbleMaxW);
                     if (ConvoLog.PERSONA_DIVIDER.equals(u.content())) {
                         notice(out, I18n.get("numen.chat.persona_changed"), bubbleMaxW);
                         f.last = null;
@@ -984,16 +1025,16 @@ public final class ChatView {
                 case ConvoState.Msg.Assistant a -> {
                     UUID who = entry.companion();
                     // 换了一只:前一只攒着的过程先收口,两只的活不折进同一行
-                    if (!who.equals(f.processWho)) flushProcess(f, done, failed, bubbleMaxW);
+                    if (!who.equals(f.processWho)) flushProcess(f, bubbleMaxW);
                     AssistantTurn turn = a.turn();
                     // 思考在说话之前;它和前后的工具调用同属"她在干活",并进同一段过程
                     String reasoned = turn.reasoning();
                     if (reasoned != null && !reasoned.isBlank()) {
-                        addPiece(f, who, msgIndex, new Piece(reasoned, false, null));
+                        addStep(f, who, msgIndex, ProcessLine.Step.thought(reasoned, prevTs, entry.ts()));
                     }
                     String spoken = ChatDisplayModes.current().assistantText(turn.content());
                     if (!spoken.isBlank()) {
-                        flushProcess(f, done, failed, bubbleMaxW);   // 开口说话把过程收口
+                        flushProcess(f, bubbleMaxW);   // 开口说话把过程收口
                         if (!f.unreadPlaced && entry.ts() > unreadSince) {
                             out.add(new UnreadBar());   // 打开时还没看过的第一句
                             f.unreadPlaced = true;
@@ -1006,16 +1047,17 @@ public final class ChatView {
                         f.last = who;
                     }
                     for (LlmToolCall tc : turn.toolCalls()) {
-                        addPiece(f, who, msgIndex, new Piece(null, false, tc));
+                        addStep(f, who, msgIndex, ProcessLine.Step.call(tc, entry.ts(), resultAt.getOrDefault(tc.id(), 0L),
+                                !done.contains(tc.id()), failed.contains(tc.id()), results.get(tc.id())));
                         // 这次调用写下的计划是她的一条清单消息,画在这次调用之后
                         List<com.dwinovo.numen.api.agent.tool.TodoTool.Item> plan = PlanChecklist.of(tc, results.get(tc.id()));
                         if (plan != null) {
-                            checklist(f, who, msgIndex, plan, innerW, done, failed, bubbleMaxW);
+                            checklist(f, who, msgIndex, plan, innerW, bubbleMaxW);
                         }
                         // 主人答了她的提问:对话流里留一行服务消息,说他答了什么
                         List<com.dwinovo.numen.api.agent.tool.Questions.Answer> answered = com.dwinovo.numen.api.agent.tool.Questions.answersIn(results.get(tc.id()));
                         if (!answered.isEmpty()) {
-                            flushProcess(f, done, failed, bubbleMaxW);
+                            flushProcess(f, bubbleMaxW);
                             String said = answered.stream().map(x -> "「" + x.answer() + "」").collect(java.util.stream.Collectors.joining());
                             notice(out, I18n.get(com.dwinovo.numen.api.data.ModLanguageData.Keys.QUESTION_ANSWERED, said), bubbleMaxW);
                             f.last = null;
@@ -1024,7 +1066,7 @@ public final class ChatView {
                 }
                 case ConvoState.Msg.Tool ignored -> { /* result drives done/fail, not a block */ }
                 case ConvoState.Msg.Halt h -> {
-                    flushProcess(f, done, failed, bubbleMaxW);
+                    flushProcess(f, bubbleMaxW);
                     // 有结构化原因就按当前语言说;老日志只有当时存下的那句
                     String why = h.code() == null ? h.reason()
                             : CauseWords.text(new com.dwinovo.numen.api.agent.loop.Cause(h.code(), h.args()));
@@ -1043,14 +1085,14 @@ public final class ChatView {
         for (UUID her : Conversations.instance().membersAlive(conv.get())) {
             CompanionView lp = ClientCompanions.get(her).orElse(null);
             if (lp == null || !java.util.Objects.equals(lp.conversation(), tag)) continue;
-            if (!her.equals(f.processWho)) flushProcess(f, done, failed, bubbleMaxW);
+            if (!her.equals(f.processWho)) flushProcess(f, bubbleMaxW);
             // 在飞的思考流接在她这段过程末尾;回合落库后由落库的那段接管,永不双份。
             String liveReasoning = lp.liveReasoning();
-            if (!liveReasoning.isBlank()) addPiece(f, her, -1, new Piece(liveReasoning, true, null));
+            if (!liveReasoning.isBlank()) addStep(f, her, -1, ProcessLine.Step.liveThought(liveReasoning, lastTs));
             // The in-flight reply, typed out live (chunk stream → CompanionView.livePartial).
             Live l = live.get(her);
             if (l != null && (!l.shown.isEmpty() || l.caret)) {
-                flushProcess(f, done, failed, bubbleMaxW);
+                flushProcess(f, bubbleMaxW);
                 boolean first = !her.equals(f.last);
                 // 光标是接在解析完的正文后面的一小段字:没写完的 Markdown 记号照字面显示,写完才变样式
                 Doc typing = l.caret ? rich(l.shown, false).withTail("_") : rich(l.shown, false);
@@ -1069,7 +1111,7 @@ public final class ChatView {
             }
             compacting |= status.phase() == com.dwinovo.numen.api.agent.loop.Phase.COMPACT;
         }
-        flushProcess(f, done, failed, bubbleMaxW);
+        flushProcess(f, bubbleMaxW);
         // 挂着的那条(和记录里最后一条之后才到的)排在她这段过程后面
         while (asked < asks.size()) {
             consent(f, asks.get(asked++), bubbleMaxW);
@@ -1131,7 +1173,7 @@ public final class ChatView {
             Block b = out.get(i);
             if (b instanceof Bubble bb && bb.runEnd() != end) out.set(i, bb.withRunEnd(end));
             else if (b instanceof Checklist c && c.runEnd() != end) out.set(i, c.withRunEnd(end));
-            else if (b instanceof Chip c && c.runEnd() != end) out.set(i, c.withRunEnd(end));
+            else if (b instanceof Process p && p.runEnd() != end) out.set(i, p.withRunEnd(end));
             else if (b instanceof Consent c && c.runEnd() != end) out.set(i, c.withRunEnd(end));
         }
     }
@@ -1141,7 +1183,7 @@ public final class ChatView {
         return switch (b) {
             case Bubble bb -> bb.own() ? OWNER : bb.who();
             case Checklist c -> c.who();
-            case Chip c -> c.who();
+            case Process p -> p.who();
             case Consent c -> c.card().companion();
             default -> null;
         };
@@ -1173,7 +1215,7 @@ public final class ChatView {
      * 不往下挪;内容变了才是她新说的一条——先把攒着的过程收口,再接在后面。
      */
     private void checklist(Feed f, UUID who, int entry, List<com.dwinovo.numen.api.agent.tool.TodoTool.Item> items, int innerW,
-                           Set<String> done, Set<String> failed, int bubbleMaxW) {
+                           int bubbleMaxW) {
         Integer at = f.plans.get(who);
         if (at != null) {
             Checklist prev = (Checklist) f.out.get(at);
@@ -1182,7 +1224,7 @@ public final class ChatView {
                 return;
             }
         }
-        flushProcess(f, done, failed, bubbleMaxW);
+        flushProcess(f, bubbleMaxW);
         boolean first = !who.equals(f.last);
         f.out.add(checklist(who, first ? label(who) : null, items, innerW, entry));
         f.plans.put(who, f.out.size() - 1);
@@ -1294,85 +1336,155 @@ public final class ChatView {
     }
 
     /**
-     * 收口她这一段过程(连着的思考和工具调用,中间没开口):合成<b>一行</b>,点开才看每一步。
-     * 过程是旁白不是话,一轮干活只占一行,正文留给她说的话。在跑时这一行是转圈 + 眼下在干什么;
-     * 干完是"思考过程 · N 步 · 用了哪些",有一步失败整行标失败色。只有一次调用、没有思考时
-     * 那一行就是调用本身,没什么可展开的。
+     * 收口她这一段过程(连着的思考和工具调用,中间没开口):合成一块。过程是旁白不是话,一轮干活在对话里只占安静的一行,
+     * 点开才是每一步;只有一次调用、没有思考时不包这一层,那一块就是调用本身。
      */
-    private void flushProcess(Feed f, Set<String> done, Set<String> failed, int chipMaxW) {
-        List<Piece> ps = f.process;
-        if (ps.isEmpty()) return;
-        int textW = chipMaxW - PAD_H * 2 - ICON_W;
-        long t = System.currentTimeMillis();
-        List<LlmToolCall> calls = new ArrayList<>();
-        boolean thought = false;
-        for (Piece pc : ps) {
-            if (pc.call() != null) calls.add(pc.call());
-            else thought = true;
-        }
-        boolean liveThought = ps.get(ps.size() - 1).live();
-        LlmToolCall runningCall = null;
-        for (LlmToolCall tc : calls) {
-            if (!done.contains(tc.id())) { runningCall = tc; break; }
-        }
-        List<ChipRow> rows = new ArrayList<>();
-        String foldKey = null;
-        if (!thought && calls.size() == 1) {
-            rows.add(toolRow(calls.get(0), done, failed, t, textW));
-        } else {
-            foldKey = "proc#" + f.processWho + "#" + f.processEntry;
-            boolean open = expandedGroups.contains(foldKey);
-            boolean running = liveThought || runningCall != null;
-            // 收起时的颜色跟这段过程最后一步走:中途失败、后来改对了的一段不算失败;哪一步失败了,展开逐行各有 ✗ / ✔
-            boolean lastFail = !calls.isEmpty() && failed.contains(calls.get(calls.size() - 1).id());
-            String head = running
-                    ? (liveThought ? I18n.get("numen.chat.reasoning_now") : toolLine(runningCall))
-                    : processSummary(thought, calls);
-            rows.add(new ChipRow(running ? SPIN[(int) ((t / 120) % 4)] : (open ? "▾" : "▸"), running ? RUN : MUTED,
-                    Nb.colored(Nb.clip(font, head, textW), lastFail && !running ? FAIL : TOOL).getVisualOrderText()));
-            if (open) {
-                for (Piece pc : ps) {
-                    if (pc.call() != null) {
-                        rows.add(toolRow(pc.call(), done, failed, t, textW));
-                        continue;
-                    }
-                    String flat = flattened.computeIfAbsent(pc.thought(), s -> s.replaceAll("\\s+", " ").trim());
-                    for (FormattedCharSequence line : split(Nb.colored(flat, FAINT), textW)) {
-                        rows.add(new ChipRow(" ", MUTED, line));
-                    }
-                }
-            }
-        }
+    private void flushProcess(Feed f, int maxW) {
+        if (f.process.isEmpty()) return;
         boolean first = !f.processWho.equals(f.last);
-        f.out.add(new Chip(List.copyOf(rows), foldKey, first ? label(f.processWho) : null,
-                f.processWho, f.processEntry, false));
+        f.out.add(process(List.copyOf(f.process), f.processWho, f.processEntry, first ? label(f.processWho) : null, maxW));
         f.last = f.processWho;
-        ps.clear();
+        f.process.clear();
         f.processWho = null;
         f.processEntry = -1;
     }
 
-    /** 干完的一段过程的摘要:"思考过程 · N 步 · 用了哪些",没有的那半不写。 */
-    private String processSummary(boolean thought, List<LlmToolCall> calls) {
-        List<String> parts = new ArrayList<>();
-        if (thought) parts.add(I18n.get("numen.chat.reasoning"));
-        if (!calls.isEmpty()) {
-            parts.add(I18n.get("numen.chat.steps", calls.size()));
-            for (LlmToolCall tc : calls) {
-                String name = ToolWords.label(tc.name());
-                if (!parts.contains(name)) parts.add(name);
-            }
-        }
-        return String.join(" · ", parts);
+    /** 一次调用点开的开合键。 */
+    private static String callKey(LlmToolCall call) {
+        return "call#" + call.id();
     }
 
-    private ChipRow toolRow(LlmToolCall tc, Set<String> done, Set<String> failed, long t, int textW) {
-        boolean running = !done.contains(tc.id());
-        boolean fail = failed.contains(tc.id());
-        String icon = running ? SPIN[(int) ((t / 120) % 4)] : (fail ? "✗" : "✔");
-        int ic = running ? RUN : (fail ? FAIL : OK);
-        return new ChipRow(icon, ic,
-                Nb.colored(Nb.clip(font, toolLine(tc), textW), fail ? FAIL : TOOL).getVisualOrderText());
+    /** 这个开合此刻展开了几成(0..1)。 */
+    private float fold(String key) {
+        return folds.getOrDefault(key, 0f) / FOLD_FULL;
+    }
+
+    /** 开合各按主人点开的状态朝展开或收起趋近一步;收完的从表里去掉。 */
+    private void advanceFolds(float dt) {
+        for (String key : expandedGroups) folds.putIfAbsent(key, 0f);
+        folds.replaceAll((key, v) -> Anim.approach(v, expandedGroups.contains(key) ? FOLD_FULL : 0f, FOLD_RATE, dt));
+        folds.entrySet().removeIf(e -> e.getValue() <= 0f && !expandedGroups.contains(e.getKey()));
+    }
+
+    private Process process(List<ProcessLine.Step> steps, UUID who, int entry, String label, int maxW) {
+        long now = System.currentTimeMillis();
+        boolean single = ProcessLine.single(steps);
+        String key = single ? callKey(steps.get(0).call()) : "proc#" + who + "#" + entry;
+        float open = single ? 1f : fold(key);
+        List<StepRow> rows = open > 0f ? stepRows(steps, single, maxW, now) : List.of();
+        int rowsH = 0;
+        for (StepRow r : rows) rowsH += r.h() + (r == rows.get(rows.size() - 1) ? 0 : STEP_GAP);
+        int bodyH = single ? rowsH : Math.round((rowsH + BODY_PAD * 2) * open);
+        return new Process(single ? null : head(steps, now), key, single, open, rows, bodyH, maxW, label, who, entry, false);
+    }
+
+    /**
+     * 收起那一行写什么。在想:"思考中"、已用的秒数、这段思考的第一句;在跑一次调用:这次调用读作的那一句(工具名加它自己说的
+     * 那句话)、已用的秒数;收了:有调用是"已处理 N 秒",只有思考是"已思考 N 秒",最后一步失败是失败色。秒数是整段从第一步
+     * 开始算起的。
+     */
+    private Head head(List<ProcessLine.Step> steps, long now) {
+        ProcessLine.Step current = ProcessLine.current(steps);
+        long total = ProcessLine.seconds(ProcessLine.totalMillis(steps, now));
+        if (current == null) {
+            String key = ProcessLine.hasCalls(steps) ? ModLanguageData.Keys.CHAT_PROCESS_WORKED
+                    : ModLanguageData.Keys.CHAT_PROCESS_THOUGHT;
+            return new Head(I18n.get(key, total), false, "", "", ProcessLine.lastFailed(steps));
+        }
+        String secs = steps.get(0).start() > 0 ? I18n.get(ModLanguageData.Keys.CHAT_PROCESS_SECS, total) : "";
+        return current.isCall()
+                ? new Head(toolLine(current.call()), true, secs, "", false)
+                : new Head(I18n.get("numen.chat.reasoning_now"), true, secs, ProcessLine.firstLine(current.thought()), false);
+    }
+
+    /** 一步右边写的秒数;记录里没有时刻的不写。 */
+    private static String secsOf(ProcessLine.Step s, long now) {
+        return s.start() > 0 ? I18n.get(ModLanguageData.Keys.CHAT_PROCESS_SECS, ProcessLine.seconds(s.millis(now))) : "";
+    }
+
+    /** 一步的字离块左缘多远:步骤线旁的步骤让出线的位置,单独一步贴着左缘。 */
+    private static int stepX(boolean single) {
+        return single ? 4 : STEP_X;
+    }
+
+    /** 一步占的宽:块宽去掉左边让出的和右边留的边。 */
+    private static int stepW(int width, boolean single) {
+        return width - stepX(single) - 4;
+    }
+
+    /**
+     * 排出步骤线上的每一步:思考是保留换行折好的淡字,调用是状态加那一句;点开的调用再带上折好的代码与回执,
+     * 高度按它展开了几成算。{@code y} 是从步骤区顶往下数的。
+     */
+    private List<StepRow> stepRows(List<ProcessLine.Step> steps, boolean single, int width, long now) {
+        int w = stepW(width, single);
+        int secsW = 0;
+        for (ProcessLine.Step s : steps) secsW = Math.max(secsW, font.width(secsOf(s, now)));
+        secsW += secsW > 0 ? 6 : 0;
+        List<StepRow> rows = new ArrayList<>(steps.size());
+        int y = 0;
+        for (ProcessLine.Step s : steps) {
+            String secs = secsOf(s, now);
+            StepRow row;
+            if (!s.isCall()) {
+                List<FormattedCharSequence> lines = wrap(s.thought().stripTrailing(), MUTED, w - secsW);
+                row = new StepRow(s, y, lines.size() * LINE_H, lines, secs, null, List.of(), List.of());
+            } else {
+                String key = callKey(s.call());
+                float detail = fold(key);
+                List<FormattedCharSequence> code = List.of();
+                List<FormattedCharSequence> receipt = List.of();
+                int h = HEAD_H;
+                if (detail > 0f) {
+                    int inner = w - DETAIL_IN - BOX_IN * 2;
+                    code = wrap(ProcessLine.code(s.call()), TXT, inner);
+                    receipt = s.receipt() == null ? List.of() : wrap(s.receipt(), s.failed() ? FAIL : TXT, inner);
+                    h += Math.round(detailH(code, receipt) * detail);
+                }
+                List<FormattedCharSequence> line = List.of(Nb.colored(
+                        Nb.clip(font, toolLine(s.call()), w - ICON_W - secsW), s.failed() ? FAIL : TXT).getVisualOrderText());
+                row = new StepRow(s, y, h, line, secs, key, code, receipt);
+            }
+            rows.add(row);
+            y += row.h() + STEP_GAP;
+        }
+        return rows;
+    }
+
+    /** 一段文字按宽折行,保留它自己的换行(空行也占一行);颜色烙在每一行上。 */
+    private List<FormattedCharSequence> wrap(String text, int color, int width) {
+        List<FormattedCharSequence> out = new ArrayList<>();
+        for (String line : text.split("\\R", -1)) {
+            List<FormattedCharSequence> cut = split(Nb.colored(line, color), Math.max(1, width));
+            if (cut.isEmpty()) out.add(FormattedCharSequence.EMPTY);
+            else out.addAll(cut);
+        }
+        return out;
+    }
+
+    /** 点开的调用完全展开有多高:"代码"小标题与它的块,有回执再加"回执"小标题与它的块。 */
+    private static int detailH(List<FormattedCharSequence> code, List<FormattedCharSequence> receipt) {
+        int h = 2 + LINE_H + code.size() * LINE_H + 4;
+        if (!receipt.isEmpty()) h += 2 + LINE_H + receipt.size() * LINE_H + 4;
+        return h + 2;
+    }
+
+    /**
+     * 点在这一块的 {@code my} 高度上,翻动哪个开合:收起那一行翻整段过程;步骤线上的一次调用翻它的代码与回执
+     * (只在步骤区露出的时候);都不是返回 null。
+     */
+    private String processClickKey(Process p, int cy, double my) {
+        int top = cy + (p.label() != null ? LABEL_H : 0);
+        if (my < top) return null;
+        if (!p.single()) {
+            if (my < top + HEAD_H) return p.key();
+            if (p.open() < 0.5f) return null;
+            top += HEAD_H + BODY_PAD;
+        }
+        for (StepRow r : p.rows()) {
+            if (r.callKey() != null && my >= top + r.y() && my < top + r.y() + HEAD_H) return r.callKey();
+        }
+        return null;
     }
 
     // ---- drawing ----
@@ -1382,7 +1494,7 @@ public final class ChatView {
         int entry = switch (b) {
             case Bubble bb -> bb.entry();
             case Checklist c -> c.entry();
-            case Chip c -> c.entry();
+            case Process p -> p.entry();
             default -> -1;
         };
         // 征询不是记录里的一条:按它到的时刻飞入
@@ -1412,7 +1524,7 @@ public final class ChatView {
             case UnreadBar ignored -> drawDayChip(g, I18n.get("numen.chat.unread_bar"), x, y, w);
             case Bubble bb -> drawBubble(g, bb, x, y, w);
             case Checklist c -> drawChecklist(g, c, x, y);
-            case Chip c -> drawChip(g, c, x, y);
+            case Process p -> drawProcess(g, p, x, y);
             case Consent c -> drawConsent(g, c, x, y, w);
         }
     }
@@ -1577,39 +1689,142 @@ public final class ChatView {
     }
 
     /**
-     * 机器行(工具调用 / 思考过程)——刻意长得<b>不像对话</b>:左缘一条竖线 +
-     * 极淡底,没有气泡的实底、描边与头像。过程与话分得开,读者才不会把旁白
-     * 当成模型的输出。几何取自 {@link NumenStyle} 的 TRACE_* 令牌。
+     * 她干活的过程——刻意长得<b>不像对话</b>:没有气泡底色与描边。收起是一行安静的字(在想、在跑哪一步、已处理多久),
+     * 点开是一根左边的竖线串起每一步,每步右边是它用的秒数;点一次调用再展开它的代码与回执。
+     * 开合与展开的那一截按 {@link #folds} 的几成裁出来,不是硬切。
      */
-    private void drawChip(GuiGraphics g, Chip c, int x, int y) {
-        int maxW = 0;
-        for (ChipRow r : c.rows()) maxW = Math.max(maxW, font.width(r.text()));
+    private void drawProcess(GuiGraphics g, Process p, int x, int y) {
         int cx = x + EDGE + faceCol();
-        if (c.label() != null) {
+        if (p.label() != null) {
             // 她这一组的第一块:名字在上——和气泡同一套,谁在干活一眼认得出
-            draw(g, Nb.colored(c.label(), nameColor(c.who())).getVisualOrderText(), cx + 2, y);
+            draw(g, Nb.colored(p.label(), nameColor(p.who())).getVisualOrderText(), cx + 2, y);
             y += LABEL_H;
         }
-        if (group && c.runEnd()) {
+        if (group && p.runEnd()) {
             // 这一组的最后一块:脸贴在它的底部
-            int ch0 = c.rows().size() * LINE_H + PAD_V * 2;
-            int avX = x + EDGE, avY = y + ch0 - AV;
-            CompanionFace.draw(g, c.who(), KnownSkins.of(c.who()), avX, avY, AV);
-            face(g, c.who(), avX, avY);
+            int avX = x + EDGE, avY = y + p.height() - AV;
+            CompanionFace.draw(g, p.who(), KnownSkins.of(p.who()), avX, avY, AV);
+            face(g, p.who(), avX, avY);
         }
-        int cw = NumenStyle.TRACE_INDENT + ICON_W + maxW + PAD_H;
-        int ch = c.rows().size() * LINE_H + PAD_V * 2;
-        // 极淡底衬出块的范围(半透明再减半),左缘竖线是"这是过程"的记号
-        int faintFill = (CHIP_FILL & 0xFFFFFF) | (((CHIP_FILL >>> 24) / 2) << 24);
-        g.fill(cx, y, cx + cw, y + ch, faintFill);
-        g.fill(cx, y, cx + NumenStyle.TRACE_BAR_W, y + ch, TRACE_BAR);
-        int ty = y + PAD_V + 1;
-        for (ChipRow r : c.rows()) {
-            draw(g, Nb.colored(r.icon(), r.iconColor()).getVisualOrderText(),
-                    cx + NumenStyle.TRACE_INDENT, ty);
-            draw(g, r.text(), cx + NumenStyle.TRACE_INDENT + ICON_W, ty);
-            ty += LINE_H;
+        if (p.single()) {
+            drawSteps(g, p, cx, y);
+            return;
         }
+        drawHead(g, p, cx, y);
+        if (p.bodyH() > 0) {
+            int top = y + HEAD_H;
+            g.enableScissor(cx, top, cx + p.width(), top + p.bodyH());
+            g.fill(cx + RAIL_X, top, cx + RAIL_X + RAIL_W, top + p.bodyH(), TRACE_BAR);
+            drawSteps(g, p, cx, top + BODY_PAD);
+            g.disableScissor();
+        }
+    }
+
+    /** 收起的那一行:转动的小箭头、字(在跑的有高光扫过)、走动的秒数、在想时这段思考的第一句。 */
+    private void drawHead(GuiGraphics g, Process p, int cx, int y) {
+        Head h = p.head();
+        if (hoverX >= cx && hoverX < cx + p.width() && hoverY >= y && hoverY < y + HEAD_H) {
+            g.fill(cx, y, cx + p.width(), y + HEAD_H, (TXT & 0xFFFFFF) | 0x0A000000);
+        }
+        // 小箭头:收起朝右,点开朝下,中间转过去
+        var pose = g.pose();
+        pose.pushPose();
+        pose.translate(cx + 8, y + HEAD_H / 2f, 0);
+        pose.mulPose(com.mojang.math.Axis.ZP.rotationDegrees(-90f * (1f - p.open())));
+        Sprites.draw(g, Sprites.CHEVRON_DOWN, -Sprites.CHEVRON_W / 2, -Sprites.CHEVRON_H / 2,
+                Sprites.CHEVRON_W, Sprites.CHEVRON_H, MUTED);
+        pose.popPose();
+        int tx = cx + 16;
+        int ty = y + 3;
+        int room = cx + p.width() - 4 - tx;
+        int secsW = h.secs().isEmpty() ? 0 : font.width(h.secs()) + 6;
+        String lab = Nb.clip(font, h.lab(), room - secsW);
+        int color = h.fail() ? FAIL : MUTED;
+        if (h.shimmer()) shimmer(g, lab, tx, ty, MUTED, TXT);
+        else Nb.text(g, font, lab, tx, ty, color);
+        int sx = tx + font.width(lab) + 6;
+        if (!h.secs().isEmpty()) {
+            Nb.text(g, font, h.secs(), sx, ty, FAINT);
+            sx += font.width(h.secs()) + 6;
+        }
+        if (!h.sum().isEmpty() && cx + p.width() - 4 - sx > 0) {
+            Nb.text(g, font, Nb.clip(font, h.sum(), cx + p.width() - 4 - sx), sx, ty, FAINT);
+        }
+    }
+
+    /** 一段字,一道高光从左扫到右:每个字在 {@code base} 与 {@code hi} 之间按离高光多远取色。 */
+    private void shimmer(GuiGraphics g, String text, int x, int y, int base, int hi) {
+        int n = text.codePointCount(0, text.length());
+        float pos = (frameNow % SHIMMER_MS) / (float) SHIMMER_MS * (n + 6) - 3;
+        int i = 0;
+        for (int at = 0; at < text.length(); i++) {
+            int cp = text.codePointAt(at);
+            String ch = new String(Character.toChars(cp));
+            float k = Math.max(0f, 1f - Math.abs(i - pos) / 3f);
+            Nb.text(g, font, ch, x, y, lerpColor(base, hi, k));
+            x += font.width(ch);
+            at += Character.charCount(cp);
+        }
+    }
+
+    private static int lerpColor(int a, int b, float k) {
+        int out = 0;
+        for (int shift = 0; shift <= 24; shift += 8) {
+            int ca = a >>> shift & 0xFF, cb = b >>> shift & 0xFF;
+            out |= Math.round(ca + (cb - ca) * k) << shift;
+        }
+        return out;
+    }
+
+    /** 步骤区里的各步,{@code top} 是第一步的顶边。 */
+    private void drawSteps(GuiGraphics g, Process p, int cx, int top) {
+        int sx = cx + stepX(p.single());
+        int sw = stepW(p.width(), p.single());
+        for (StepRow r : p.rows()) {
+            drawStep(g, r, sx, top + r.y(), sw);
+        }
+    }
+
+    private void drawStep(GuiGraphics g, StepRow r, int x, int y, int w) {
+        if (!r.step().isCall()) {
+            for (int i = 0; i < r.lines().size(); i++) draw(g, r.lines().get(i), x, y + 1 + i * LINE_H);
+            drawSecs(g, r, x + w, y + 1);
+            return;
+        }
+        ProcessLine.Step s = r.step();
+        boolean fail = s.failed();
+        String icon = s.running() ? SPIN[(int) ((frameNow / 120) % 4)] : (fail ? "✗" : "✔");
+        Nb.text(g, font, icon, x, y + 3, s.running() ? RUN : (fail ? FAIL : OK));
+        draw(g, r.lines().get(0), x + ICON_W, y + 3);
+        drawSecs(g, r, x + w, y + 3);
+        if (r.h() > HEAD_H) {
+            g.enableScissor(x, y + HEAD_H, x + w, y + r.h());
+            drawDetail(g, r, x + DETAIL_IN, y + HEAD_H, w - DETAIL_IN);
+            g.disableScissor();
+        }
+    }
+
+    private void drawSecs(GuiGraphics g, StepRow r, int right, int y) {
+        if (!r.secs().isEmpty()) Nb.text(g, font, r.secs(), right - font.width(r.secs()), y, FAINT);
+    }
+
+    /** 一次调用点开的内容:"代码"、程序;"回执"、结果原文(还没回来就没有这一段)。每段淡底一块,长行已折。 */
+    private void drawDetail(GuiGraphics g, StepRow r, int x, int y, int w) {
+        int dy = y + 2;
+        dy = drawBox(g, I18n.get(ModLanguageData.Keys.CHAT_PROCESS_CODE), r.code(), x, dy, w);
+        if (!r.receipt().isEmpty()) {
+            drawBox(g, I18n.get(ModLanguageData.Keys.CHAT_PROCESS_RECEIPT), r.receipt(), x, dy + 2, w);
+        }
+    }
+
+    /** 一行小标题加一块淡底的字;返回这一段下面的纵坐标。 */
+    private int drawBox(GuiGraphics g, String caption, List<FormattedCharSequence> lines, int x, int y, int w) {
+        Nb.text(g, font, caption, x, y, FAINT);
+        y += LINE_H;
+        int h = lines.size() * LINE_H + 4;
+        g.fill(x, y, x + w, y + h, (TXT & 0xFFFFFF) | 0x14000000);
+        for (int i = 0; i < lines.size(); i++) draw(g, lines.get(i), x + BOX_IN, y + 2 + i * LINE_H);
+        return y + h;
     }
 
     /**

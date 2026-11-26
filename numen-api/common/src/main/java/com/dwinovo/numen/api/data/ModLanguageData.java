@@ -338,6 +338,12 @@ public final class ModLanguageData {
         public static final String SCHEDULE_DELETE_TITLE = "numen.schedule.delete_title";
         public static final String SCHEDULE_DELETE_WARNING = "numen.schedule.delete_warning";
         public static final String CHAT_SCHEDULED = "numen.chat.scheduled";
+        /** 她干活的过程那一行:干完了(有调用 / 只有思考)、一步用了几秒,点开一次调用看的两小段。 */
+        public static final String CHAT_PROCESS_WORKED = "numen.chat.process_worked";
+        public static final String CHAT_PROCESS_THOUGHT = "numen.chat.process_thought";
+        public static final String CHAT_PROCESS_SECS = "numen.chat.process_secs";
+        public static final String CHAT_PROCESS_CODE = "numen.chat.process_code";
+        public static final String CHAT_PROCESS_RECEIPT = "numen.chat.process_receipt";
         /** 整理过记忆重试之后服务商仍说上下文超长:回合失败的话。 */
         public static final String CAUSE_CONTEXT_OVERFLOW = "numen.cause.context_overflow";
 
@@ -752,7 +758,6 @@ public final class ModLanguageData {
         adder.add("numen.voice.error.closed", "The connection was closed (%1$s)");
         adder.add("numen.voice.error.bad_wav", "The audio is not a valid WAV (%1$s)");
         adder.add("numen.voice.error.unknown", "Voice failed (%1$s: %2$s)");
-        adder.add("numen.chat.steps", "%s steps");
         adder.add("numen.chat.plan", "Plan %s/%s");
         // Tool-chip labels (convention: numen.tool.<tool name>; unknown/MCP tools fall back to the raw name).
         // 档案页上下文行的悬停:缓存读 / 缓存写 / 最近一轮命中率的前缀
@@ -910,7 +915,6 @@ public final class ModLanguageData {
         adder.add("numen.summon.mode",       "Mode");
         adder.add("numen.bubble.thinking",   "✦ Thinking");
         adder.add("numen.bubble.asking",     "⌛ Waiting for your OK");
-        adder.add("numen.chat.reasoning",    "Reasoning");
         adder.add("numen.chat.reasoning_now", "Thinking");
         adder.add("numen.pin.goal", "Goal");
         adder.add("numen.pin.goal_meta", "Turn %s · %s");
@@ -1355,6 +1359,11 @@ public final class ModLanguageData {
         adder.add(Keys.SCHEDULE_DELETE_TITLE, "Delete this schedule?");
         adder.add(Keys.SCHEDULE_DELETE_WARNING, "She stops hearing it; what she already heard stays in the chat.");
         adder.add(Keys.CHAT_SCHEDULED, "Scheduled");
+        adder.add(Keys.CHAT_PROCESS_WORKED, "Worked for %ss");
+        adder.add(Keys.CHAT_PROCESS_THOUGHT, "Thought for %ss");
+        adder.add(Keys.CHAT_PROCESS_SECS, "%ss");
+        adder.add(Keys.CHAT_PROCESS_CODE, "Code");
+        adder.add(Keys.CHAT_PROCESS_RECEIPT, "Receipt");
         adder.add(Keys.CMD_COMPACT_STARTED, "Compacting memory…");
         adder.add(Keys.CMD_COMPACT_QUEUED, "Compacting is queued; it starts when she finishes this turn");
         adder.add(Keys.CMD_GOAL, "Long-term goal: she keeps at it turn after turn");
@@ -1525,7 +1534,6 @@ public final class ModLanguageData {
         adder.add("numen.voice.error.closed", "连接被关闭了(%1$s)");
         adder.add("numen.voice.error.bad_wav", "音频不是有效的 WAV(%1$s)");
         adder.add("numen.voice.error.unknown", "语音出错了(%1$s:%2$s)");
-        adder.add("numen.chat.steps", "%s 步");
         adder.add("numen.chat.plan", "计划 %s/%s");
         // 工具 chip 标签(约定键 numen.tool.<工具名>;未知/MCP 工具回落原名)。
         // 档案页上下文行的悬停:缓存读 / 缓存写 / 最近一轮命中率的前缀
@@ -1683,7 +1691,6 @@ public final class ModLanguageData {
         adder.add("numen.summon.mode",       "模式");
         adder.add("numen.bubble.thinking",   "✦ 正在思考");
         adder.add("numen.bubble.asking",     "⌛ 等你点头");
-        adder.add("numen.chat.reasoning",    "思考过程");
         adder.add("numen.chat.reasoning_now", "思考中");
         adder.add("numen.pin.goal", "目标");
         adder.add("numen.pin.goal_meta", "第 %s 轮 · %s");
@@ -2127,6 +2134,11 @@ public final class ModLanguageData {
         adder.add(Keys.SCHEDULE_DELETE_TITLE, "删掉这条定时?");
         adder.add(Keys.SCHEDULE_DELETE_WARNING, "她不会再听到它;已经听到的还留在聊天里。");
         adder.add(Keys.CHAT_SCHEDULED, "定时");
+        adder.add(Keys.CHAT_PROCESS_WORKED, "已处理 %s 秒");
+        adder.add(Keys.CHAT_PROCESS_THOUGHT, "已思考 %s 秒");
+        adder.add(Keys.CHAT_PROCESS_SECS, "%s 秒");
+        adder.add(Keys.CHAT_PROCESS_CODE, "代码");
+        adder.add(Keys.CHAT_PROCESS_RECEIPT, "回执");
         adder.add(Keys.CMD_COMPACT_STARTED, "开始整理记忆…");
         adder.add(Keys.CMD_COMPACT_QUEUED, "整理记忆已排上,她手上这轮完就走");
         adder.add(Keys.CMD_GOAL, "长期目标:她会一轮接一轮做下去");
