@@ -300,9 +300,9 @@ public final class ChatView {
     }
 
     // ---- 招呼页:和她还没说过话的单人会话,聊天区正中是她的大头像、名字、一句招呼和几条建议 ----
-    private static final int WELCOME_FACE = 78;     // 左栏头像(26)的三倍
-    private static final int WELCOME_GAP = 8, WELCOME_LINE_GAP = 4, WELCOME_CHIPS_GAP = 10;
-    private static final int CHIP_H = 18, CHIP_PAD_H = 12, CHIP_GAP = 6, CHIP_ROW_GAP = 6, CHIP_SHADOW = 2;
+    private static final int WELCOME_FACE = 32;     // 皮肤一个像素正好 4 格,边缘不糊
+    private static final int WELCOME_GAP = 6, WELCOME_LINE_GAP = 2, WELCOME_CHIPS_GAP = 8;
+    private static final int CHIP_H = 14, CHIP_PAD_H = 6, CHIP_GAP = 3, CHIP_ROW_GAP = 3, CHIP_SHADOW = 2;
     private static final int WELCOME_MAX_W = 300;
     /** 出现、消失与悬停的趋近量程与速率(趋近到半个单位内就落定,所以量程取大)。 */
     private static final float WELCOME_FULL = 10f, WELCOME_RATE = 12f, CHIP_RATE = 18f;
