@@ -97,8 +97,6 @@ public record UiTheme(
     public int over() { return isDark() ? mix(band, 0xFFFFFFFF, 0.05f) : mix(band, 0xFF000000, 0.055f); }
     /** Queued prompt: a half-present owner bubble. */
     public int queuedFill() { return (ownFill & 0xFFFFFF) | 0x80000000; }
-    /** Tool chip: translucent wash — status, not a message(暗主题下用亮色洗)。 */
-    public int chipFill() { return isDark() ? 0x28FFFFFF : (border & 0xFFFFFF) | 0x22000000; }
     /** Sidebar card (plan panel): a fainter wash of the same tone. */
     public int cardFill() { return isDark() ? 0x14FFFFFF : (border & 0xFFFFFF) | 0x16000000; }
 
