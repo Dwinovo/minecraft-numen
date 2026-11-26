@@ -2,7 +2,7 @@ package com.dwinovo.numen.api.client.agent;
 
 /**
  * 一个会话此刻头像右下角该标哪一种:同一时刻只有一种,是"她此刻最需要你知道的那件事";什么都不标就是闲着、你都看过了。
- * 左栏、转盘、消息通知都按这一处算,画法在 {@code StatusDot}。纯 JVM,可单测。
+ * 左栏、转盘都按这一处算,画法在 {@code StatusDot}。纯 JVM,可单测。
  */
 public enum ConversationStatus {
     /** 什么都不标。 */

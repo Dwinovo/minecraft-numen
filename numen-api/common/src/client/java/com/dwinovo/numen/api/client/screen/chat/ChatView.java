@@ -41,9 +41,6 @@ import net.minecraft.network.chat.MutableComponent;
 import com.dwinovo.numen.api.client.ui.mc.Sprites;
 import net.minecraft.util.FormattedCharSequence;
 
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -86,7 +83,7 @@ public final class ChatView {
     /** 她的话是不带底色的正文:左边与名字对齐的缩进、上下各留的空,代替气泡的 {@code PAD_H}、{@code PAD_V}。 */
     private static final int LABEL_IN = 2;
     private static final int PLAIN_PAD_V = 2;
-    /** 块与块之间:换了人、日期牌、提示行前后拉开 {@code BLOCK_GAP};同一个人接连的块只隔 {@code RUN_GAP}。 */
+    /** 块与块之间:换了人、提示行前后拉开 {@code BLOCK_GAP};同一个人接连的块只隔 {@code RUN_GAP}。 */
     private static final int BLOCK_GAP = 6;
     private static final int RUN_GAP = 2;
     private static final int TOP_PAD = 2;
@@ -131,7 +128,7 @@ public final class ChatView {
     private int IN_META, OUT_META;
     /** 未读角标上的数字色。 */
     private int ON_CTA;
-    /** 服务消息(日期牌、未读消息、提示行)的半透明底与字(Telegram 的 msgServiceBg / msgServiceFg)。 */
+    /** 服务消息(未读消息、提示行)的半透明底与字(Telegram 的 msgServiceBg / msgServiceFg)。 */
     private int SERVICE_BG, SERVICE_FG;
 
     private void loadPalette() {
@@ -392,10 +389,6 @@ public final class ChatView {
                 && bb.raw().toLowerCase(java.util.Locale.ROOT).contains(query);
     }
 
-    /** 顶上浮着的日期牌:露出多少(0..1)、写的哪天(淡出的时候还要画它)。 */
-    private float dayShown;
-    private String floatingDay;
-
     /** Re-pin to the bottom (a message was just sent). */
     public void pinToBottom() {
         pinBottom = true;
@@ -500,11 +493,9 @@ public final class ChatView {
         int current = matchAt >= 0 ? matchBlocks.get(matchBlocks.size() - 1 - matchAt) : -1;
         g.enableScissor(x, y, x + w, y + h);
         int cy = y + TOP_PAD - Math.round(scrollPos);
-        String floatDay = null;
         for (int i = 0; i < blocks.size(); i++) {
             Block b = blocks.get(i);
             int bh = heightOf(b);
-            if (b instanceof Divider d && cy < y) floatDay = d.text();   // 已经翻过顶的最近那枚日期牌
             if (cy + bh > y && cy < y + h) {
                 int drawn = hits.size();
                 drawingIndex = i;
@@ -523,15 +514,6 @@ public final class ChatView {
                 }
             }
             cy += bh + gapAfter(blocks, i);
-        }
-        // 翻的时候顶上浮一枚眼前这一屏是哪天(Telegram),停下来一会儿淡出
-        boolean scrolling = frameNow - lastScrollMs < 900 || barDragging || Math.abs(scrollPos - scrollTarget) > 0.5f;
-        dayShown = Math.clamp(dayShown + (scrolling && floatDay != null ? dt : -dt) * 6f, 0f, 1f);
-        if (floatDay != null) floatingDay = floatDay;
-        if (dayShown > 0.02f && floatingDay != null) {
-            g.setColor(1f, 1f, 1f, dayShown);
-            drawDayChip(g, floatingDay, x, y + 3, w);
-            g.setColor(1f, 1f, 1f, 1f);
         }
         g.disableScissor();
 
@@ -626,7 +608,7 @@ public final class ChatView {
 
     // ---- blocks ----
 
-    private sealed interface Block permits Bubble, Checklist, Process, Notice, Divider, Consent {}
+    private sealed interface Block permits Bubble, Checklist, Process, Notice, Consent {}
 
     /** One spoken message. {@code label} non-null = companion side (name above the bubble);
      *  {@code runEnd} = 这一块是这个人连发的最后一块(群里脸贴它旁边,气泡带尾巴);
@@ -777,9 +759,6 @@ public final class ChatView {
     private record StepRow(ProcessLine.Step step, int y, int h, List<FormattedCharSequence> lines, String secs,
                            String callKey, List<FormattedCharSequence> code, List<FormattedCharSequence> receipt) {}
 
-    /** 日期分隔:一天的第一条上面一枚居中的服务消息(今天 / 昨天 / 几月几日)。 */
-    private record Divider(String text) implements Block {}
-
     /** "未读消息"那一条服务消息:打开时还没看过的第一句上面。 */
 
     /**
@@ -821,7 +800,6 @@ public final class ChatView {
             case Checklist c -> (c.label() != null ? LABEL_H : 0) + checklistH(c);
             case Process p -> (p.label() != null ? LABEL_H : 0) + p.height();
             case Notice n -> n.lines().size() * LINE_H + SERVICE_PAD_V * 2;
-            case Divider ignored -> LINE_H + SERVICE_PAD_V * 2;
             case Consent c -> (c.label() != null ? LABEL_H : 0) + consentBubbleH(c) + ConsentMessage.GAP
                     + ConsentMessage.keyboardHeight(font, c.card(), c.w()) + consentResultH(c.card());
         };
@@ -971,7 +949,6 @@ public final class ChatView {
         // "同一个人"按那只算,不按左右哪一侧——换了一只就得重新亮名字。工具行是她的活,
         // 算在她的连发里;提示行打断。f.last == null = 连发已断。
         int msgIndex = -1;
-        LocalDate lastDay = null;
         // 前一条记录的时刻:一步思考从它算起,到她这一轮的时刻为止
         long lastTs = 0;
         // 她的征询按到的时刻排进时间线。只在和她的私聊里:征询问的是她的身体
@@ -985,16 +962,6 @@ public final class ChatView {
             while (asked < asks.size() && entry.ts() > 0 && asks.get(asked).arrivedAt() <= entry.ts()) {
                 flushProcess(f, bubbleMaxW);
                 consent(f, asks.get(asked++), bubbleMaxW);
-            }
-            // 日期分隔:换了一天,先收口、插一枚日期小牌、连发断开
-            if (entry.ts() > 0) {
-                LocalDate day = Instant.ofEpochMilli(entry.ts()).atZone(ZoneId.systemDefault()).toLocalDate();
-                if (!day.equals(lastDay)) {
-                    flushProcess(f, bubbleMaxW);
-                    out.add(new Divider(dayLabel(day)));
-                    f.last = null;
-                    lastDay = day;
-                }
             }
             switch (msg) {
                 case ConvoState.Msg.User u -> {
@@ -1169,7 +1136,7 @@ public final class ChatView {
     /**
      * Telegram 的排法:群里别人的名字在这一组的第一块上面,脸贴在这一组的<b>最后一块</b>旁边(底部对齐),
      * 最后一块气泡还带一条小尾巴。建块时只知道"是不是第一块",所以"最后一块"在这儿补:同一个人连着的块算一组,
-     * 提示行、日期牌把组断开。
+     * 提示行把组断开。
      */
     private void settleRuns(List<Block> out) {
         for (int i = 0; i < out.size(); i++) {
@@ -1184,7 +1151,7 @@ public final class ChatView {
         }
     }
 
-    /** 这一块是谁的:主人用 {@link #OWNER} 代表;提示行、日期牌不是谁的。 */
+    /** 这一块是谁的:主人用 {@link #OWNER} 代表;提示行不是谁的。 */
     private static UUID speakerOf(Block b) {
         return switch (b) {
             case Bubble bb -> bb.own() ? OWNER : bb.who();
@@ -1254,17 +1221,6 @@ public final class ChatView {
             rows.add(new CheckRow(it.status(), lines));
         }
         return new Checklist(who, label, items, header, List.copyOf(rows), maxW, entry, false);
-    }
-
-    /** 日期小牌上的字:今天、昨天,再往前是几月几日,跨年带年。 */
-    private static String dayLabel(LocalDate day) {
-        LocalDate today = LocalDate.now(ZoneId.systemDefault());
-        if (day.equals(today)) return I18n.get(com.dwinovo.numen.api.data.ModLanguageData.Keys.CHAT_TODAY);
-        if (day.equals(today.minusDays(1))) return I18n.get(com.dwinovo.numen.api.data.ModLanguageData.Keys.CHAT_YESTERDAY);
-        if (day.getYear() == today.getYear()) {
-            return I18n.get(com.dwinovo.numen.api.data.ModLanguageData.Keys.CHAT_DATE_MD, day.getMonthValue(), day.getDayOfMonth());
-        }
-        return I18n.get(com.dwinovo.numen.api.data.ModLanguageData.Keys.CHAT_DATE_YMD, day.getYear(), day.getMonthValue(), day.getDayOfMonth());
     }
 
     /**
@@ -1525,7 +1481,6 @@ public final class ChatView {
 
     private void drawBlockBody(GuiGraphics g, Block b, int x, int y, int w) {
         switch (b) {
-            case Divider d -> drawDayChip(g, d.text(), x, y, w);
             case Notice n -> drawService(g, n.lines(), x, y, w);
             case Bubble bb -> drawBubble(g, bb, x, y, w);
             case Checklist c -> drawChecklist(g, c, x, y);
@@ -1625,11 +1580,6 @@ public final class ChatView {
         g.setColor(1f, 1f, 1f, 1f);
         g.pose().popPose();
         g.disableScissor();
-    }
-
-    /** 一行的服务消息(日期牌、未读消息)。对话里的日期牌和翻页时浮在顶上的是同一枚。 */
-    private void drawDayChip(GuiGraphics g, String text, int x, int y, int w) {
-        drawService(g, List.of(Nb.colored(text, SERVICE_FG).getVisualOrderText()), x, y, w);
     }
 
     /**

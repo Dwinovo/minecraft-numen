@@ -272,10 +272,7 @@ public final class ModLanguageData {
         public static final String HEADER_MORE            = "numen.header.more";
         public static final String MENU_PROFILE           = "numen.menu.profile";
         public static final String MENU_GROUP_INFO        = "numen.menu.group_info";
-        public static final String CHAT_TODAY             = "numen.chat.today";
-        public static final String CHAT_YESTERDAY         = "numen.chat.yesterday";
         public static final String CHAT_DATE_MD           = "numen.chat.date_md";
-        public static final String CHAT_DATE_YMD          = "numen.chat.date_ymd";
         /** 左栏最后一句里"你说的"那个前缀。 */
         public static final String RAIL_YOU               = "numen.rail.you";
         public static final String RAIL_EMPTY             = "numen.rail.empty";
@@ -432,8 +429,6 @@ public final class ModLanguageData {
         public static final String FOLDER_ADD_TO         = "numen.folder.add_to";
         public static final String FOLDER_NAME           = "numen.folder.name";
         public static final String FOLDER_CHATS          = "numen.folder.chats";
-        // 消息通知(右下角的小卡)
-        public static final String SETTINGS_MESSAGE_NOTICES = "numen.settings.message_notices";
         // 面板里的对话框卡的标题
         public static final String EDIT_COMPANION_TITLE = "numen.edit.companion_title";
         public static final String CONVO_EDIT_TITLE     = "numen.convo.edit_title";
@@ -888,10 +883,7 @@ public final class ModLanguageData {
         adder.add(Keys.HEADER_MORE,            "More");
         adder.add(Keys.MENU_PROFILE,           "View profile");
         adder.add(Keys.MENU_GROUP_INFO,        "View group info");
-        adder.add(Keys.CHAT_TODAY,             "Today");
-        adder.add(Keys.CHAT_YESTERDAY,         "Yesterday");
         adder.add(Keys.CHAT_DATE_MD,           "%s/%s");
-        adder.add(Keys.CHAT_DATE_YMD,          "%s/%s/%s");
         adder.add(Keys.RAIL_YOU,               "You");
         adder.add(Keys.RAIL_EMPTY,             "No messages yet");
         adder.add(Keys.RAIL_SEARCH,            "Search");
@@ -1191,7 +1183,6 @@ public final class ModLanguageData {
         adder.add(Keys.FOLDER_ADD_TO,         "Add to folder…");
         adder.add(Keys.FOLDER_NAME,           "Folder name");
         adder.add(Keys.FOLDER_CHATS,          "Chats in this folder");
-        adder.add(Keys.SETTINGS_MESSAGE_NOTICES, "Message notifications (a card for chats you aren't viewing)");
         adder.add(Keys.EDIT_COMPANION_TITLE,   "Edit companion");
         adder.add(Keys.CONVO_EDIT_TITLE,       "Edit conversation");
         adder.add(Keys.NOTICE_TIMER,           "⏱ %s: in %s s — %s");
@@ -1667,10 +1658,7 @@ public final class ModLanguageData {
         adder.add(Keys.HEADER_MORE,            "更多");
         adder.add(Keys.MENU_PROFILE,           "查看资料");
         adder.add(Keys.MENU_GROUP_INFO,        "查看群资料");
-        adder.add(Keys.CHAT_TODAY,             "今天");
-        adder.add(Keys.CHAT_YESTERDAY,         "昨天");
         adder.add(Keys.CHAT_DATE_MD,           "%s月%s日");
-        adder.add(Keys.CHAT_DATE_YMD,          "%s年%s月%s日");
         adder.add(Keys.RAIL_YOU,               "你");
         adder.add(Keys.RAIL_EMPTY,             "还没说过话");
         adder.add(Keys.RAIL_SEARCH,            "搜索");
@@ -1971,7 +1959,6 @@ public final class ModLanguageData {
         adder.add(Keys.FOLDER_ADD_TO,         "加入分组…");
         adder.add(Keys.FOLDER_NAME,           "分组名");
         adder.add(Keys.FOLDER_CHATS,          "包含的会话");
-        adder.add(Keys.SETTINGS_MESSAGE_NOTICES, "消息通知(没在看的会话里她说了话,右下角弹一张卡)");
         adder.add(Keys.EDIT_COMPANION_TITLE,   "编辑同伴");
         adder.add(Keys.CONVO_EDIT_TITLE,       "编辑会话");
         adder.add(Keys.NOTICE_TIMER,           "⏱ %s:%s 秒后 —— %s");

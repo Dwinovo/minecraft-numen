@@ -160,19 +160,6 @@ public class CompanionChatScreen extends Screen {
         }
     }
 
-    /**
-     * 此刻占着屏幕的那一块:输入卡连同它上面挂着的征询,{@code {左, 顶, 右}}。消息通知卡落在它旁边就得让开,
-     * 不能压住输入行。
-     */
-    public int[] occupied() {
-        int x = (this.width - INPUT_W) / 2;
-        int cardTop = this.height - 44 - 6 - (inputBar.height() - INPUT_H);
-        int top = cardTop;
-        ConsentCards.Card card = ConsentCards.pending(Conversations.instance().soloOf(conv));
-        if (card != null) top = consentTop(card, cardTop);
-        return new int[]{x - 8, top, x + INPUT_W + 8};
-    }
-
     /** 征询那张卡的顶边:贴着输入卡上沿往上摞。 */
     private int consentTop(ConsentCards.Card card, int cardTop) {
         int innerW = INPUT_W + 16 - 8;
