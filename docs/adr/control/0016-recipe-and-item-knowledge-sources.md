@@ -1,6 +1,6 @@
 # 0016 配方与物品知识:一个动词,多个来源;JEI 是主人客户端上的一个来源
 
-- 状态:已接受,已落地(实现说明见文末)
+- 状态:已接受,已落地(实现说明见文末);被 [0030](0030-vanilla-content-is-the-minecraft-plugin.md) 修订:不再有跨插件的来源登记,各插件查各自的
 - 日期:2026-10-31
 - 另见:control 0014(登记归属)、control 0015(KubeJS 联动)、调研 `jei_kubejs_info_research`(10-31)
 

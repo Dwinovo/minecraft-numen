@@ -41,7 +41,12 @@
    (`:numen:neoforge:runGameTestServer` → `:plugins:minecraft:neoforge:runGameTestServer` 等)一起改。旧存档、旧客户端不迁移(beta)。
 3. 函数、模块、帮助文字、插件说明、技能、提示词、测试里写到 `numen.move` 这类原版内容函数名的地方,全部改成 `minecraft.*`;
    写到引擎自己的组(`numen.mc` 等)的地方不动。
-4. 只动 1.21.1;其他版本分支以后移植时再说。
+4. **配方与物品知识各查各的,修订 [0016](0016-recipe-and-item-knowledge-sources.md)**:引擎里"一个动词、多个来源"的扩展点
+   (`KnowledgeKind`、来源登记表、合并结果)和 `numen.api.sources` 一起删掉,`numen.api` 这一组随之消失。Minecraft 插件的
+   `minecraft.inv.recipes`、`minecraft.inv.uses`、`minecraft.inv.info` 只答原版自己知道的;JEI、KubeJS、森罗厨房这些插件要提供配方或物品说明,就在自己的
+   命名空间下登记自己的查询函数(如 `jei.recipes`),说明写进各自的插件说明,她用 `ApiSearch` 找得到。用户:"改成 Minecraft 组下面的查询配方 API,
+   JEI 到时候自己也会提供自己的查询,这个还真没必要在这里登记了"。0016 当时怕的"两套并列"由 0029 解决了:她按插件读说明,知道每套查的是什么。
+5. 只动 1.21.1;其他版本分支以后移植时再说。
 
 ## 后果
 

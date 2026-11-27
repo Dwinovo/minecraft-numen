@@ -19,7 +19,7 @@ AI 怎么操控一个服务端玩家。网站上的长文是《怎么让 AI 操�
 | [0013](0013-mcp-on-upstream-libraries.md) | 10-20 | MCP 端点与客户端建在官方库上,独立成纯 JVM 模块 mcp | 被 0019 取代 |
 | [0014](0014-plugin-registrations-scoped.md) | 10-31 | 插件的登记归在插件名下:能撤回、能重登;函数由描述定义;受权动作是一块积木 | 已接受,已落地 |
 | [0015](0015-kubejs-bridge.md) | 10-31 | KubeJS 联动:脚本里写的插件和 Java 插件走同一扇门 | 已接受,已落地 |
-| [0016](0016-recipe-and-item-knowledge-sources.md) | 10-31 | 配方与物品知识:一个动词多个来源,JEI 是主人客户端上的来源 | 已接受,已落地 |
+| [0016](0016-recipe-and-item-knowledge-sources.md) | 10-31 | 配方与物品知识:一个动词多个来源,JEI 是主人客户端上的来源 | 被 0030 修订 |
 | [0017](0017-ranged-weapon-providers.md) | 10-31 | 远程武器:一个动词多个提供者,弓和弩是 Numen 自己的两个提供者 | 已接受,已落地 |
 | [0018](0018-agent-hooks-and-owner-schedules.md) | 11-01 | 插件经门只读订阅大脑事件;主人定时对她说一句话 | 已接受,已落地 |
 | [0019](0019-own-mcp-implementation.md) | 11-09 | MCP 自己实现、自己维护:主版本 2025-11-25,只实现用到的协议面 | 已接受,已落地 |
