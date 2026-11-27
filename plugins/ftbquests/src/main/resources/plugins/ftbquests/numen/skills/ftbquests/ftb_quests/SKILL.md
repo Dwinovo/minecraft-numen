@@ -1,11 +1,11 @@
 ---
 name: ftb_quests
-description: How FTB Quests and FTB Teams work — how quest progress is credited to a team, which tasks count when you do them, which must be handed in or done by someone else, how rewards are given, team invites and joining rules, what FTB Chunks claims allow you, and the quest_completed, quest_reward_auto and team_invite events you receive.
+description: How FTB Quests and FTB Teams work — how quest progress is credited to a team, which kinds of tasks count when you do them and which must be handed in or done by someone else, how rewards are given, team invites and joining rules, and what FTB Chunks claims allow you.
 ---
 
 # FTB Quests and Teams
 
-This world has FTB Quests installed. FTB treats you as a real player: the mobs you kill, what you carry and where you walk all count toward the quest progress of **the team you are in**, by FTB's own rules. The functions are in the `ftbquests` group; look up how to call them with ApiSearch (select:ftbquests.quest.submit) and the like.
+FTB treats you as a real player: the mobs you kill, what you carry and where you walk all count toward the quest progress of **the team you are in**, by FTB's own rules.
 
 ## Who gets the progress
 
@@ -14,32 +14,30 @@ Progress is counted per team only:
 - **In the same team as your owner**: what you do is what they do, and you advance the same quest book together.
 - **Not in the same team**: what you do counts for your own team only, and your owner's team does not move at all.
 
-The quest book is your owner's: the progress is their team's, and titles are shown in their language. The quest list says at the top whether you are in that team.
+The quest book is your owner's: the progress is their team's, and titles are shown in their language.
 
 ## Who can complete which task
 
-| Mark in the list | Meaning |
+| Kind of task | How it is completed |
 |---|---|
-| you can do it too | Kill, reach, or carry something — it counts when you do it |
-| hand in with submit | Needs "submit" in the book (handing in items, experience, or ticking a box); submitting takes things from **your inventory**, and what is handed in does not come back |
-| observation | The target has to be looked at in person; only the player themself can complete it |
-| task screen / crafted / modpack's scripts | Needs a task screen block, only counts at the moment of crafting, or is judged by the modpack's own scripts |
+| Kill, reach, carry | It counts when anyone in the team does it, you included |
+| Items, experience, checkbox | It has to be handed in ("submit" in the book); what is handed in is taken from the inventory of whoever submits and does not come back |
+| Observation | The target has to be looked at on the player's own screen; only the player themself can complete it |
+| Task screen, crafting, scripted | Done through a task screen block, counted only at the moment of crafting, or judged by the modpack's own scripts |
 
-Submitting a quest that is not unlocked is refused, and the receipt gives the reason; a submit receipt gives each task's progress before and after, and what your inventory actually lost.
+A quest that is not unlocked yet cannot be handed in.
 
 ## Rewards
 
 FTB's auto-claim works for you the same as for a human player:
 
-- **Personal rewards**: one for every online member, you included, straight into your inventory.
+- **Personal rewards**: one for every online member, you included, straight into the inventory.
 - **Team rewards**: given only to the one FTB counts as having completed the quest, which may be you or your owner.
-- What does not fit in a full inventory drops at your feet.
-
-When rewards are credited to you, you receive a `quest_reward_auto` event that says which rewards were claimed and how your inventory and experience actually changed at that moment. When the team completes a quest or a chapter you receive `quest_completed`, where `by` is the one FTB counts as having completed it.
+- What does not fit in a full inventory drops at the player's feet.
 
 ## Teams
 
-- When someone invites you to a team you receive `team_invite`, which says which team (`party`) and whether your owner is in it. Accept with `ftbquests.quest.join`; with several invites at once, name the one to join with `party`.
+- A team invite names the team (party) it is from.
 - You cannot join a new team while you are in another one; leave the old one first.
 
 ## Claims (FTB Chunks)

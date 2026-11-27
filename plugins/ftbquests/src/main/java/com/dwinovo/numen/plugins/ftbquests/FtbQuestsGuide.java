@@ -16,10 +16,9 @@ final class FtbQuestsGuide {
             ## How it fits together
             - `ftbquests.quest.list()` is your owner's book: the quests that can be worked on now, what each still needs and who can do it. It says whether you are in your owner's team; if not, what you do does not count for their book.
             - `ftbquests.quest.show(id)` is one quest in full: description, dependencies, tasks and rewards.
-            - `ftbquests.quest.submit(id)` hands in a quest's items, experience or checkmarks from your own inventory; they do not come back, and it does not ask your owner. Tasks of kind kill, reach or carry count when you simply do them; observation tasks are only for the player themself.
-            - `ftbquests.quest.join()` accepts a party invitation you have pending, so that you and your owner advance the same book. Join only when your owner agrees.
+            - `ftbquests.quest.submit(id)` hands in a quest's items, experience or checkmarks from your own inventory; they do not come back, and it does not ask your owner.
+            - `ftbquests.quest.join()` accepts a party invitation you have pending, so that you and your owner advance the same book.
             - Events arrive when a quest is completed, when a reward is given to you automatically, and when a team invites you.
-            - Read the `ftb_quests` skill for how progress is credited, rewards and the joining rules.
 
             ## Example
             ```lua

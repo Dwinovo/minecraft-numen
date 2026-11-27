@@ -15,9 +15,8 @@ final class YsmGuide {
 
             ## How it fits together
             - `ysm.model.options()` is where to start. It returns, at once, the model you wear now, every model you can switch to and the textures the current model brings.
-            - `ysm.model.switch(model)` changes your model. Write the model id exactly as `options` lists it, never the display name; for another texture of the same model, name one of its `textures` as well. You can wear exactly the models your owner is authorized for; a refusal comes from YSM, so don't retry it, tell your owner what was refused.
+            - `ysm.model.switch(model)` changes your model. Write the model id exactly as `options` lists it, never the display name; for another texture of the same model, name one of its `textures` as well. You can wear exactly the models your owner is authorized for; one outside that set is refused by YSM, and the call says so.
             - `ysm.model.emote(name)` plays one of the current model's emotes (`extra1` to `extra8` on most models; `ysm.model.emote("stop")` stops it). YSM does not tell the server which emotes a model has, so the call returns nothing and cannot check the name; each model brings its own, and an emote ends the moment you move or switch model.
-            - Read the `ysm_look` skill for the details of ids, textures, emote sounds and what the server cannot confirm.
 
             ## Example
             ```lua

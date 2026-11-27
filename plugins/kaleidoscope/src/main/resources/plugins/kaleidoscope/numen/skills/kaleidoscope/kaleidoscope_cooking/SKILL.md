@@ -1,19 +1,15 @@
 ---
 name: kaleidoscope_cooking
-description: How cooking works in Kaleidoscope Cookery — the stir-fry pot and the stockpot with their quirks and time limits, heat sources, oil, containers and utensils, the mod's four crops, the golden ratio and quality of flexible recipes, and which kitchen blocks cannot be used yet.
+description: How cooking works in Kaleidoscope Cookery — the stir-fry pot and the stockpot with their quirks and time limits, heat sources, oil, containers and utensils, the mod's four crops, and the golden ratio and quality of flexible recipes.
 ---
 
 # Kaleidoscope Cookery
 
-This world has Kaleidoscope Cookery installed. The cooking functions are in the `kaleidoscope.pot` group: `recipes` looks up the menu, `inspect` looks at a pot, `cook` makes one dish from start to finish,
-and the pot's single steps are `oil` to pour oil, `base` to add a soup base, `fill` to add ingredients, `lid` to put the lid on or take it off, `stir` to stir-fry, `plate` to serve. Look up how to call them with
-ApiSearch (select:kaleidoscope.pot.cook) and the like.
-
 ## Recipes
 
-- A modpack can add dishes and remove them, so the menu is whatever `recipes` returns.
-- Each line of `recipes` gives the dish's ingredients, its container (bowl, plate) and its utensil (spatula, lid).
-- Some dishes are **flexible recipes** (the receipt says flex recipe), see the golden ratio below; the rest are fixed recipes, and adding the listed amounts makes that dish.
+- A modpack can add dishes and remove them, so the menu differs from pack to pack.
+- Each dish has its ingredients, its container (bowl, plate) and its utensil (spatula, lid).
+- Some dishes are **flexible recipes**, see the golden ratio below; the rest are fixed recipes, and adding the listed amounts makes that dish.
 
 ## The two pots
 
@@ -23,12 +19,9 @@ ApiSearch (select:kaleidoscope.pot.cook) and the like.
 | Servings | One serving per pot | One pot serves several |
 | Rules | Needs oil | With the lid on, nothing goes in and nothing comes out; the moment the lid is on with ingredients inside, it starts stewing |
 
-- Both pots need **the block below them lit** (a stove or a campfire both work). Without fire the pot is completely still and no countdown runs; `inspect` shows `has_heat_source: false`.
+- Both pots need **the block below them lit** (a stove or a campfire both work). Without fire the pot is completely still and no countdown runs.
 - With no container in hand when the dish is done, it cannot be taken out and just waits to burn.
 - A burnt dish becomes "dark cuisine". A burnt stir-fry usually means there was no container in hand when it was done, or the spatula was not in hand while stirring.
-- One dish at a time: `cook` returns only when the dish is finished.
-
-The **steamer, chopping board, millstone and grill** are not connected yet; they cannot be used.
 
 ## Where ingredients come from
 
@@ -49,6 +42,5 @@ or carried a spatula at a time by dipping the spatula into an enamel basin. No o
 For a flexible recipe, **the same ingredients in different proportions give a different quality**: poor / normal / good / excellent. The quality sets how much hunger the dish restores and how long its status effects last.
 
 - The golden ratio is **set by the world seed together with the recipe, one set per save**; it means nothing in another save, and a ratio from someone else's guide does not apply either.
-- The amounts `recipes` gives are this save's golden ratio, and `cook` adds ingredients by it.
 - What counts is the **ratio**, not the total: 2:1 and 4:2 are the same quality, so with few ingredients the smaller amounts waste nothing.
 - A dish with a single ingredient is excellent however much goes in; one is enough.
