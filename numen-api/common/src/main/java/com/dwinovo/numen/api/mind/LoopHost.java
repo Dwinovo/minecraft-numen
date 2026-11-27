@@ -192,7 +192,8 @@ public final class LoopHost implements ClientContext {
         this.convo = new ConvoState(new RowJournal(writer, this::stamp, new RowJournal.Sink() {
             @Override
             public void rows(List<JsonObject> rows) {
-                parts.seat().appendRows(companion, conversation, rows);
+                parts.seat().appendRows(companion, Objects.requireNonNull(conversation,
+                        "her conversation record is not open: nothing is written before the seat is taken"), rows);
             }
 
             @Override

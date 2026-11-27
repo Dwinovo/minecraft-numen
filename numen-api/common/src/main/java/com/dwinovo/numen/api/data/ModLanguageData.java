@@ -1228,7 +1228,7 @@ public final class ModLanguageData {
         adder.add(Keys.PROFILE_EXPORT,         "Export her memory");
         adder.add(Keys.PROFILE_WIPE,           "Clear her memory");
         adder.add(Keys.WIPE_TITLE,             "Clear %s's memory?");
-        adder.add(Keys.WIPE_WARNING,           "Her chat log, notes and long-term goal are deleted and she is told so. She stays on your roster and keeps her body. This cannot be undone");
+        adder.add(Keys.WIPE_WARNING,           "Her notes and long-term goal are deleted, her conversation starts over in a new record (the old one stays on the server), and she is told so. She stays on your roster and keeps her body. This cannot be undone");
         adder.add(Keys.WIPE_CONFIRM,           "Clear");
         adder.add(Keys.LIBRARY_RESTORE,        "Restore default");
         adder.add(Keys.LIBRARY_RELOAD,         "Rescan the folder");
@@ -2003,7 +2003,7 @@ public final class ModLanguageData {
         adder.add(Keys.PROFILE_EXPORT,         "导出她的记忆");
         adder.add(Keys.PROFILE_WIPE,           "清空她的记忆");
         adder.add(Keys.WIPE_TITLE,             "清空「%s」的记忆?");
-        adder.add(Keys.WIPE_WARNING,           "她的对话记录、札记和长期目标会被删掉,并且告诉她。她还在你的名册里、身体不动。无法撤销");
+        adder.add(Keys.WIPE_WARNING,           "她的札记和长期目标会被删掉,对话从一份新的记录重新开始(旧的一份留在服务器上),并且告诉她。她还在你的名册里、身体不动。无法撤销");
         adder.add(Keys.WIPE_CONFIRM,           "清空");
         adder.add(Keys.LIBRARY_RESTORE,        "恢复默认");
         adder.add(Keys.LIBRARY_RELOAD,         "重新扫描目录");

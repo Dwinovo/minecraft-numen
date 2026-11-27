@@ -97,7 +97,7 @@ public class BrainGameTests {
             }
             helper.assertTrue(mind.asked.size() == 2, "the model was asked " + mind.asked.size() + " time(s)");
             List<ConvoState.Msg> t = brain.recorded().stream()
-                    .filter(m -> !(m instanceof ConvoState.Msg.User u && u.content().startsWith("<events>"))).toList();
+                    .filter(m -> !(m instanceof ConvoState.Msg.User u && u.content().startsWith("<events>") && !u.content().contains("<query"))).toList();
             helper.assertTrue(t.size() == 4 && t.get(0) instanceof ConvoState.Msg.User
                             && t.get(1) instanceof ConvoState.Msg.Assistant a && a.turn().hasToolCalls()
                             && t.get(2) instanceof ConvoState.Msg.Tool && t.get(3) instanceof ConvoState.Msg.Assistant,

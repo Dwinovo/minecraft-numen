@@ -47,6 +47,15 @@ class HomesTest {
     }
 
     @Test
+    void conversationRecordsLiveInTheWorldUnderOneLaneOfTheirOwn() {
+        UUID conversation = UUID.fromString("00000000-0000-0000-0000-0000000000d1");
+
+        assertEquals(Path.of("save", "numen", "conversations", conversation + ".jsonl"),
+                homes.conversations().file(conversation + ".jsonl"));
+        assertNotSame(homes.companion(HER).io().executor(), homes.conversations().io().executor());
+    }
+
+    @Test
     void allOfHerFilesShareHerLaneAndOthersDoNot() {
         Object herLane = homes.companion(HER).io().executor();
         assertSame(herLane, homes.companion(HER).io().executor(), "同一只同伴每次拿到的是同一条车道");
