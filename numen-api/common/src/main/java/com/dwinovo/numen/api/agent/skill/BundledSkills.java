@@ -20,6 +20,7 @@ import java.util.stream.Stream;
  *
  * <p>只读;线程:任何线程。
  */
+// TODO 技能改从 Numen 官网下载后删掉这个类:插件与模组不再随 jar 带技能
 public final class BundledSkills {
 
     private BundledSkills() {}

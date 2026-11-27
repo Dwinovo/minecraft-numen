@@ -151,6 +151,7 @@ public interface NumenApi {
      * @param root 你 jar 里的 {@code numen/} 目录
      * @throws IllegalArgumentException 同一个文件另一个来源也带了、模块名不合规矩或撞名、模块正文读不通
      */
+    // TODO 技能改从 Numen 官网下载后,这里不再收 skills/,插件 jar 里带的技能一起删掉
     void bundleContent(Path root);
 
     /**
