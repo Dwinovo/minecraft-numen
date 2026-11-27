@@ -166,4 +166,5 @@ Query forms:
 - `numen.api.help` 删了,`numen.api` 组里剩 `sources`;错误里的 `hint` 写成 `ApiSearch with query "select:<名字>"`(`ScriptEngine#lookUp`)。
 - 工具名:`Lua`、`Skill`、`TodoWrite`、`Memory`、`ApiSearch`;`ToolRegistry#resolve` 的宽松匹配改成不分大小写比较。
 - 她的模块:`numen.module`、`my.*`、`HerModules`、座位的 `modules/get` 与 `modules/builtin`、`Modules` 里她的一层都删了;`Modules` 现在只是随模组与插件发布的内置模块
-  按主人客户端提供的名字空间筛过的视图。每个模块的"战绩"(`Program.Used`、`ScriptCall.Tally`)没有读它的人了,留着没动。
+  按主人客户端提供的名字空间筛过的视图;只为她的模块存在的"战绩"(`Program.Used`、`ScriptCall.Tally`、`ScriptRun#modules`)也一并删了。
+- 本能一节末尾仍有一句"她自己下的事压过本能"(`NumenPrompts.INSTINCTS_OUTRO`),上面"按情况拼的部分"里漏写了它。
