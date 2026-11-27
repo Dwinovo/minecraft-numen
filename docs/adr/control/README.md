@@ -32,6 +32,7 @@ AI 怎么操控一个服务端玩家。网站上的长文是《怎么让 AI 操�
 | [0026](0026-ownership-is-asked-not-recorded.md) | 11-24 | "这是谁的"去问、不自己记:归属只剩四类,删掉放置记账、自然方块表与"说不清的" | 已接受,已落地;修订 0025;被 0027 修订 |
 | [0027](0027-permission-by-action-answered-by-many.md) | 11-24 | 权限按动作问一圈:八个动作,谁都可以回答(不许、要问、许、不表态),主人只有每个动作的档位与点出来的名单;规则语言、词、出厂规矩没有了 | 已接受,已落地(GameTest 与界面待验);修订 0025、0026 |
 | [0028](0028-ask-user-question-tool.md) | 11-26 | 她的提问工具 `AskUserQuestion`:参数、名字、说明、结局照 Claude Code 一字对齐;权限审批另是一回事 | 已接受,已落地 |
+| [0029](0029-claude-style-prompt-and-api-search.md) | 11-27 | 系统提示照 Claude Code 的写法、引擎不点名插件;查 API 换成工具 `ApiSearch`(照 ToolSearch);工具名统一大驼峰;先删掉她自己存的模块 | 已接受,未落地 |
 
 ## 沿着一件事看
 
