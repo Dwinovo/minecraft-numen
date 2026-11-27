@@ -105,7 +105,7 @@ class ProcessLineTest {
 
     @Test
     void aLuaCallShowsItsProgramAndOtherToolsTheirRawArguments() {
-        assertEquals("return numen.status.self()", ProcessLine.code(lua("c1", "return numen.status.self()")));
+        assertEquals("return minecraft.status.self()", ProcessLine.code(lua("c1", "return minecraft.status.self()")));
         LlmToolCall other = new LlmToolCall("c2", "TodoWrite", "{\"items\":[\"a\"]}");
         assertEquals("{\"items\":[\"a\"]}", ProcessLine.code(other));
     }

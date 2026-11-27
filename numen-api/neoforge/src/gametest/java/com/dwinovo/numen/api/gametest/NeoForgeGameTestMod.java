@@ -14,7 +14,7 @@ import net.neoforged.neoforge.event.RegisterGameTestsEvent;
  * "Failed to start the minecraft server" 就正常返回,进程退出码是 0,Gradle 当它成功了(Fabric 的加载器自己以非零码退出,没有这个问题)。
  * FML 把失败留在 {@link ModLoader#hasErrors()},退出时看它。
  */
-@Mod("numen_api_gametest")
+@Mod("numen_gametest")
 public final class NeoForgeGameTestMod {
 
     public NeoForgeGameTestMod(IEventBus modBus) {

@@ -96,9 +96,9 @@ class StackRefTest {
     @Test
     void whatIsNeitherSaysWhatItExpects() {
         BadValue number = assertThrows(BadValue.class, () -> codec().decode(4L));
-        assertTrue(number.getMessage().contains("numen.inv.items()"), number.getMessage());
+        assertTrue(number.getMessage().contains("the inventory listing"), number.getMessage());
         BadValue other = assertThrows(BadValue.class, () -> codec().decode(Map.of("id", "zombie@3f9a1c")));
-        assertTrue(other.getMessage().contains("numen.inv.items()"), other.getMessage());
+        assertTrue(other.getMessage().contains("the inventory listing"), other.getMessage());
         BadValue unknown = assertThrows(BadValue.class, () -> codec().decode(Map.of("item", "minecraft:no_such", "kind", "3f9a1c21")));
         assertTrue(unknown.getMessage().contains("field 'item'"), unknown.getMessage());
     }
@@ -129,6 +129,6 @@ class StackRefTest {
         inventory.setItem(2, new ItemStack(Items.DIRT));
         ApiError stale = assertThrows(ApiError.class, () -> named.in(inventory, REGISTRIES));
         assertEquals(ErrorKind.NOT_FOUND, stale.kind());
-        assertEquals("numen.inv.items()", stale.hint());
+        assertNull(stale.hint());
     }
 }

@@ -439,7 +439,7 @@ public final class NumenPlayer extends ServerPlayer {
 
     /**
      * 眼前的主人——<b>只在这一处算</b>:她此刻替他做事的那位 keeper({@link #keeperUuid};他不在游戏里是 {@code null})。
-     * 跟随的默认对象、说话时看向谁、{@code numen.status.owner} 报的是谁,都问这里。
+     * 跟随的默认对象、说话时看向谁、插件报出来的"我的主人"是谁,都问这里。
      */
     public ServerPlayer keeperAtHand() {
         UUID keeper = keeperUuid();

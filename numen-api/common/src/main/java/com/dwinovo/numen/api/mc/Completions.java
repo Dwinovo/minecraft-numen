@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * 补全引擎按她的来源给出的候选。帮助里"接下来能写什么"({@link BrigadierHelp})与写错时的"你是不是要写"
+ * 补全引擎按她的来源给出的候选。帮助里"接下来能写什么"(帮助)与写错时的"你是不是要写"
  * ({@link #didYouMean})都从这里取,候选全由各个参数类型与节点自己给,不维护同义词表。
  *
  * <h2>为什么不直接调 {@code getCompletionSuggestions}</h2>
@@ -72,7 +72,7 @@ public final class Completions {
      * 一行写不通时 {@code hint:} 那一句:出错那个位置上合法的候选里,和她写的那个词最接近的几个;
      * 一个都不够近,或者出错时这一行已经读完(缺东西,不是写错),是空串。
      */
-    static <S> String didYouMean(ParseResults<S> parse) {
+    public static <S> String didYouMean(ParseResults<S> parse) {
         ImmutableStringReader reader = parse.getReader();
         if (!reader.canRead()) {
             return "";

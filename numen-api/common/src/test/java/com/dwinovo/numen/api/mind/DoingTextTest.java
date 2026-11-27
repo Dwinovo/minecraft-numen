@@ -14,10 +14,10 @@ class DoingTextTest {
 
     @Test
     void aKeyWithATranslationIsTranslatedWithItsWords() {
-        Component text = DoingText.of(new LoopStatus.Doing("numen.activity.dig", List.of("oak_log", "3", "10")),
-                Set.of("numen.activity.dig")::contains);
+        Component text = DoingText.of(new LoopStatus.Doing("numen_minecraft.activity.dig", List.of("oak_log", "3", "10")),
+                Set.of("numen_minecraft.activity.dig")::contains);
         TranslatableContents contents = (TranslatableContents) text.getContents();
-        assertEquals("numen.activity.dig", contents.getKey());
+        assertEquals("numen_minecraft.activity.dig", contents.getKey());
         assertEquals(List.of("oak_log", "3", "10"), List.of(contents.getArgs()));
     }
 

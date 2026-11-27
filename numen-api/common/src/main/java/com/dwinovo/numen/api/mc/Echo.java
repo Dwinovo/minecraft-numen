@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.mc;
 
+import com.dwinovo.numen.api.entity.NumenPlayer;
 import net.minecraft.commands.CommandResultCallback;
 import net.minecraft.commands.CommandSource;
 import net.minecraft.network.chat.Component;
@@ -12,7 +13,7 @@ import java.util.List;
  * 执行一行第 0 层指令时来源的回话去处:指令说的每一句(成功的、失败的,以及执行期间直接对她说的,见 {@link #toHer})
  * 按顺序收下;结果由执行完的那一刻回调:成功与否、
  * 指令返回的数(分叉的指令每一支各回一次,有一支成功就算成功,数相加)。解析不通、抛了异常、被别的模组拦下时没有回调,
- * 就是没跑成。{@code numen.mc.run} 在指令跑完后把这些写成它的值({@link McApi});借服务器权威的那条路
+ * 就是没跑成。插件里跑指令的函数在指令跑完后把这些写成它的值;借服务器权威的那条路
  * ({@code OnHer})把指令说的话交回函数({@link #lines})。
  *
  * <p>成功的回话一律收下:原版按 {@code sendCommandFeedback} 决定要不要在聊天栏里给人看,那是给人看的开关,
@@ -32,6 +33,26 @@ public final class Echo implements CommandResultCallback {
     public Echo(boolean informAdmins) {
         this.informAdmins = informAdmins;
         this.source = new EchoSource(this);
+    }
+
+    /**
+     * 一行指令跑完的结果。
+     *
+     * @param lines     指令说的每一句,按顺序
+     * @param result    指令返回的数(各支相加)
+     * @param succeeded 跑成了:执行完有回调,且有一支成功
+     */
+    public record Outcome(List<String> lines, int result, boolean succeeded) {}
+
+    /**
+     * 以她的身份执行一行指令(和玩家在聊天栏里敲的是同一条路,加载器的指令事件照常),回话去处换成本类。过不过权限层、写不写得通是调用方的事。
+     * 执行期间服务端直接对她说的话也收进结果。
+     */
+    public static Outcome asHer(NumenPlayer her, String line) {
+        Echo echo = new Echo(her.shouldInformAdmins());
+        her.fakeClient().runCommand(echo::toHer, () -> her.getServer().getCommands().performPrefixedCommand(
+                her.createCommandSourceStack().withSource(echo.source()).withCallback(echo), line));
+        return new Outcome(echo.lines(), echo.result(), echo.succeeded());
     }
 
     /** 交给 {@code CommandSourceStack.withSource} 的来源:指令说的话都收进本回话。 */

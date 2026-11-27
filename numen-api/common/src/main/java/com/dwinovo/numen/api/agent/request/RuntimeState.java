@@ -213,16 +213,15 @@ public final class RuntimeState {
     /**
      * 她这一刻骑没骑着东西。与效果同一纪律:<b>只能现挂,不能进历史</b>——上下船是
      * 随时翻转的身体事实,沉进历史就成了理直气壮的错。没骑就一个字都不发。
-     * 有这一行,模型不会再对自己坐着的船发第二次 use entity,也知道坐在船上 {@code numen.move.walk} 驾船、别的走路要先下来
-     * ({@code numen.use.dismount()})。
+     * 有这一行,模型不会再对自己坐着的船发第二次点击,也知道坐在船上走路是驾船、别的走路要先下来。
      */
     private String ridingXml(BodySnapshot snapshot) {
         if (snapshot == null || !snapshot.loaded() || snapshot.vehicle().isEmpty()) {
             return "";
         }
         return "<riding>" + xml(snapshot.vehicle())
-                + ". numen.move.walk sails a boat over water; any other walk needs numen.use.dismount() to step off "
-                + "first — no need to click the vehicle again.</riding>";
+                + ". Walking sails a boat over water; any other walk needs you to step off first "
+                + "— no need to click the vehicle again.</riding>";
     }
 
     /**
@@ -269,7 +268,7 @@ public final class RuntimeState {
 
     static String renderInventory(BodySnapshot snapshot, NumenPlayer her) {
         // 物品与组件都相同的叠合成一种(Stacks.kinds,和选叠同一个"种"),每一种写成 StackLabel 的那句短话:装着钻石的潜影盒与空盒、
-        // 不同的药水各占一行。两种写出来一样(没有回答者说得出区别)就是同一行,件数加在一起;numen.inv.items() 里它们仍是两项
+        // 不同的药水各占一行。两种写出来一样(没有回答者说得出区别)就是同一行,件数加在一起;背包清单里它们仍是两项
         java.util.TreeMap<String, Integer> totals = new java.util.TreeMap<>();
         for (Stacks.Kind kind : Stacks.kinds(snapshot.items())) {
             totals.merge(StackLabel.of(her, kind.sample()), kind.count(), Integer::sum);
@@ -285,13 +284,13 @@ public final class RuntimeState {
         // 加起来(实测她把主手 64 个熔炉和清单里同一批数成了 128)。总数只有一处,手只指
         // 向它,结构上就没什么可重复计的。
         return "<inventory>Everything your body carries right now, totalled across all 36 backpack "
-                + "slots — trust it and do not spend a call on numen.status.self() to rediscover it. "
+                + "slots — trust it and do not spend a call to rediscover it. "
                 + "Stacks of one item that differ (a shulker box with contents, another potion) are listed apart, "
                 + "each with what is known about it in brackets after its id, as name={field=value}. A list or "
                 + "table in there with more than three entries shows the first three and how many more there are "
-                + "(…+2); the entry of that stack in numen.inv.items() has all of them under details. "
+                + "(…+2); the entry of that stack in the inventory listing has all of them under details. "
                 + "Naming only the item picks the one in your main hand, else the first slot; passing its entry of "
-                + "numen.inv.items() picks that one. "
+                + "the inventory listing picks that one. "
                 + "A newer result wins over this."
                 + "\ncarrying=" + (items.length() == 0 ? "nothing" : items)
                 + "\nempty slots=" + empty + " of " + snapshot.items().size()

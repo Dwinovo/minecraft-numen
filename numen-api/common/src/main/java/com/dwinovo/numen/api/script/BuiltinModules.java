@@ -17,8 +17,8 @@ import java.util.stream.Stream;
 
 /**
  * 随模组发布的 Lua 模块:Numen 与插件经 {@code NumenApi.bundleContent} 交来的 {@code numen/} 目录里的 {@code modules/<名字空间>/<组名><扩展名>}
- * (扩展名随脚本语言,{@link ScriptEngine#extension}),模块名是名字空间加组名({@code numen.work})。模块返回一张函数表,程序里
- * 以模块名直接用({@code numen.work.collect()});和第 ① 层的组同名的模块给那一组加函数。
+ * (扩展名随脚本语言,{@link ScriptEngine#extension}),模块名是名字空间加组名({@code plugin.work})。模块返回一张函数表,程序里
+ * 以模块名直接用({@code plugin.work.collect()});和第 ① 层的组同名的模块给那一组加函数。
  *
  * <p>它是 jar 里发的东西在进程里的一份登记:登记那一刻拦会坏事的,并给写法检查({@code ApiTester})与不带磁盘的文档读("只有出厂那一套"
  * 的 {@link Modules#factory})用。程序真正读的是服务器目录里同步出来的那一份,不是这里。

@@ -16,7 +16,7 @@ import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
- * 视线:从眼睛到一格方块、到一点,中间隔着什么。"看不看得见"只在这里判,答的是感知({@code numen.scan.sight});她点一格、挖一格
+ * 视线:从眼睛到一格方块、到一点,中间隔着什么。"看不看得见"只在这里判,答的是感知(插件里"看得见吗"的那个函数);她点一格、挖一格
  * 不问它,只看够不够得着({@link Mouse#reaches(BlockPos)})。
  *
  * <p>口径照原版准星拾取({@code BlockGetter.clip},{@code ClipContext.Block.OUTLINE},不看流体):沿射线逐格,按方块轮廓

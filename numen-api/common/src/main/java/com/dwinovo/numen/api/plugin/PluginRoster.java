@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.plugin;
 
+import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.api.NumenPlugin;
 import com.dwinovo.numen.api.NumenPlugins;
@@ -34,7 +35,7 @@ import java.util.function.Supplier;
  * 登记方没把 setup 交来的插件,翻到开同样要重启。不靠猜:要不要重启只看登记时的声明。
  *
  * <p>花名册里只有插件。引擎(Numen API)是宿主,它自己的登记走 {@link NumenPlugins#registerHost},不在这里、名单也管不着;
- * Numen 的内容(工具、任务、技能……)是插件之一,和别的插件一视同仁。
+ * 内置的 Minecraft 插件(工具、任务、技能……)和别的插件一视同仁。
  *
  * <p>线程:任何线程。状态读写在这个对象的锁里;装上与撤回另有一把生命周期锁串起来,插件的 setup 在生命周期锁里跑、不占状态锁
  * (界面读花名册不用等它)。
@@ -43,7 +44,7 @@ public final class PluginRoster {
 
     /** 插件随谁来的。 */
     public enum Source {
-        /** 随 Numen 的 jar 内嵌的(Numen 自己和它内嵌的联动)。 */
+        /** 随 Numen 的 jar 内嵌的(内置的 Minecraft 插件和它内嵌的联动):版本、作者随 Numen。 */
         BUNDLED,
         /** 单独的 jar。 */
         JAR,
@@ -71,7 +72,7 @@ public final class PluginRoster {
     /** 插件往 Numen 里加的东西,按种类记数。 */
     public enum Kind {
         API_GROUP, MODULE, SKILL, COMMAND, EVENT_LISTENER, EVENT_TYPE, GEAR_SOURCE, BODY_STATE, RANGED_WEAPON,
-        KNOWLEDGE_SOURCE, ANSWER
+        ANSWER
     }
 
     /** 加载器对一个模组的说法;没有的项是空串/空表。 */
@@ -387,7 +388,7 @@ public final class PluginRoster {
     }
 
     private Plugin plugin(String id, Entry e) {
-        Meta carrier = metaOf.apply(e.source == Source.BUNDLED ? NumenPlugins.NUMEN : id);
+        Meta carrier = metaOf.apply(e.source == Source.BUNDLED ? Constants.MOD_ID : id);
         Meta named = e.source == Source.BUNDLED && !e.target.isEmpty() ? metaOf.apply(e.target) : carrier;
         boolean off = disabled(id);
         boolean mismatch = e.status != Status.FAILED && off == (e.status == Status.LOADED);

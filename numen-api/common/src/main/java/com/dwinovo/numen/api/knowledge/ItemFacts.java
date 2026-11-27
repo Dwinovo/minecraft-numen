@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 一样物品原版本身给得出的事实({@code numen.inv.info} 的 {@code facts}):服务端读注册表与默认组件就有,不依赖任何模组。
+ * 一样物品原版本身给得出的事实(物品说明里的 {@code facts}):服务端读注册表与默认组件就有,不依赖任何模组。
  */
 @Doc("What the game itself says about an item.")
 public record ItemFacts(@Doc("The item id, minecraft:iron_ingot.") String item,

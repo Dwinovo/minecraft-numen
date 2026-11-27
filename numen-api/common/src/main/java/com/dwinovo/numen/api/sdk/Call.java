@@ -11,7 +11,7 @@ import java.util.Map;
  * ({@link LuaCodecs})写成字面量,不手拼字符串。
  *
  * <pre>{@code
- * throw new ApiError(ErrorKind.OUT_OF_REACH, "too far", Call.of("numen.work.dig", pos, Map.of("count", 1)));
+ * throw new ApiError(ErrorKind.OUT_OF_REACH, "too far", Call.of("plugin.work.dig", pos, Map.of("count", 1)));
  * }</pre>
  */
 public final class Call {
@@ -46,7 +46,7 @@ public final class Call {
         return ScriptEngine.IN_USE.call(fn.fullName(), objects, options);
     }
 
-    /** 一个名字(名字空间、组、函数)的说明怎么要:{@code ApiSearch with query "select:numen.work.dig"}。 */
+    /** 一个名字(名字空间、组、函数)的说明怎么要:{@code ApiSearch with query "select:plugin.work.dig"}。 */
     public static String help(String name) {
         return ScriptEngine.lookUp(name);
     }

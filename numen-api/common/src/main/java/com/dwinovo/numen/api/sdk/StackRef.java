@@ -14,7 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 点名的她带着的一样东西:物品 id,或 {@code numen.inv.items()} 交回的一项(一个 Stack,带 {@code item} 与 {@code kind})。只说了 id 是
+ * 点名的她带着的一样东西:物品 id,或背包清单交回的一项(一个 Stack,带 {@code item} 与 {@code kind})。只说了 id 是
  * 这种物品的哪一叠都行(取哪一叠见 {@link Stacks});给了一项就是那一种,那一种的叠挪到哪一格都认得。
  *
  * <p>落到 {@link Stacks.Which} 在收它的函数入口做({@link #in}),等主人点头、走路之前:她已经没有那一种了当场就说,往后只带着
@@ -41,8 +41,7 @@ public record StackRef(Item item, String kind) {
         }
         ItemStack there = Stacks.carried(inventory, item, kind, registries).orElseThrow(() -> new ApiError(ErrorKind.NOT_FOUND,
                 "you no longer carry the kind of " + BuiltInRegistries.ITEM.getKey(item) + " this entry of "
-                        + "numen.inv.items() names. Read numen.inv.items() again and pass the entry it returns",
-                Call.of("numen.inv.items")));
+                        + "the inventory listing names. Read the listing again and pass the entry it returns", null));
         return Stacks.Which.exactly(there);
     }
 
@@ -61,7 +60,7 @@ public record StackRef(Item item, String kind) {
             Map<String, Object> entry = LuaCodecs.table(value);
             if (entry == null || !entry.containsKey("item")) {
                 throw new BadValue("expected an item you carry: its id (\"minecraft:shulker_box\"), or one entry of "
-                        + "numen.inv.items() to name that exact kind; got " + BadValue.given(value));
+                        + "the inventory listing to name that exact kind; got " + BadValue.given(value));
             }
             Item item;
             try {

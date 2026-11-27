@@ -189,7 +189,7 @@ public final class ApiFunction {
         return name;
     }
 
-    /** 组的全名:{@code numen.work}。 */
+    /** 组的全名:{@code plugin.work}。 */
     public String groupName() {
         if (namespace == null) {
             throw new IllegalStateException(name + " is not registered in a group yet");
@@ -197,7 +197,7 @@ public final class ApiFunction {
         return namespace + "." + group;
     }
 
-    /** 脚本里的全名:{@code numen.work.dig}。 */
+    /** 脚本里的全名:{@code plugin.work.dig}。 */
     public String fullName() {
         return groupName() + "." + name;
     }

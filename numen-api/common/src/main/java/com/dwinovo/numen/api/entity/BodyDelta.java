@@ -37,7 +37,7 @@ public final class BodyDelta {
         for (NumenPlayer.BrokenGear g : gone) {
             parts.add("your " + BuiltInRegistries.ITEM.getKey(g.item()) + " broke while it was " + where(g.slot()));
         }
-        return "(" + String.join("; ", parts) + "; numen.inv.items() lists what you still carry)";
+        return "(" + String.join("; ", parts) + "; check your inventory for what you still carry)";
     }
 
     private static String where(EquipmentSlot slot) {

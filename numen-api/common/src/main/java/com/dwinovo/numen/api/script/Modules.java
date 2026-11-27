@@ -12,7 +12,7 @@ import java.util.UUID;
 
 /**
  * 一段程序能用的 Lua 模块:随模组与插件发布的内置模块({@link BuiltinModules}),每个返回一张函数表,程序里以模块名直接用
- * ({@code numen.work.collect()}),和第 ① 层的组同名的给那一组加函数。名字两段 {@code 名字空间.组}。目标模组只在客户端的联动带的模块,
+ * ({@code plugin.work.collect()}),和第 ① 层的组同名的给那一组加函数。名字两段 {@code 名字空间.组}。目标模组只在客户端的联动带的模块,
  * 主人的客户端没报它就不是她能用的({@link ClientMods})。
  *
  * <p>它就是程序的模块来源({@link ScriptCatalog.ModuleSource}):程序用到一个模块时才来读它。

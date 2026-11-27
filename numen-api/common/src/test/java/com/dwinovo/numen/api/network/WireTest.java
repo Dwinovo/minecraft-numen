@@ -93,7 +93,7 @@ class WireTest {
                 () -> Wire.TO_CLIENT.fit(CompanionListPayload.STREAM_CODEC, wrong,
                         () -> new net.minecraft.network.RegistryFriendlyByteBuf(Unpooled.buffer(),
                                 net.minecraft.core.RegistryAccess.EMPTY)));
-        assertTrue(e.getMessage().startsWith("numen_api:companion_list came to "), e.getMessage());
+        assertTrue(e.getMessage().startsWith("numen:companion_list came to "), e.getMessage());
     }
 
     /** 收的一方以整条消息的上限为防线:一个字段比整条消息还长,那不是 Numen 发的;比一个包长的字段(分片的消息里)读得下。 */

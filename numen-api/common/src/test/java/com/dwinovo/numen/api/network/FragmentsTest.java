@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("mc")
 class FragmentsTest {
 
-    private static final ResourceLocation KIND = ResourceLocation.fromNamespaceAndPath("numen_api", "seat_to_server");
+    private static final ResourceLocation KIND = ResourceLocation.fromNamespaceAndPath("numen", "seat_to_server");
 
     private static byte[] bytes(int n) {
         byte[] out = new byte[n];

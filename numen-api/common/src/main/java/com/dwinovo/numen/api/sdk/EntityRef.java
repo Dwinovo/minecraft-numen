@@ -65,7 +65,7 @@ public record EntityRef(String label) {
             if (id instanceof String s && EntityLabel.valid(s)) {
                 return new EntityRef(s);
             }
-            throw new BadValue("expected an entity: its id as numen.scan.entities lists it (\"zombie@3f9a1c\", a player is "
+            throw new BadValue("expected an entity: its id as the entity listing gives it (\"zombie@3f9a1c\", a player is "
                     + "\"player@ab12cd\": kind@ and 6 hex digits), or the Entity itself; got " + BadValue.given(value));
         }
 

@@ -48,7 +48,7 @@ import java.util.concurrent.CompletableFuture;
  *
  * <h2>sounds.json 占位</h2>
  * 引擎播放前要 {@code resolve()} 到一个 {@code sounds.json} 声音事件,
- * 否则直接拒播。资源里注册了 {@code numen_api:companion_voice},指向一个
+ * 否则直接拒播。资源里注册了 {@code numen:companion_voice},指向一个
  * <b>永远不会被读取</b>的原版 ogg（{@code minecraft:random/click},
  * 仅为通过资源存在性校验）并标记 {@code "stream": true}——stream 标记
  * 决定引擎走 streaming 路径,从而命中上面的取数替换。

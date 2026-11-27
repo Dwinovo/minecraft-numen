@@ -21,10 +21,6 @@ public class NumenNeoForgeClient {
     public NumenNeoForgeClient(IEventBus modBus) {
         // 下行 payload 的处理体住在客户端源码集,先挂进主源码集的挂点
         com.dwinovo.numen.api.client.ClientPayloadHandlers.install();
-        // 早先用 MOD_ID 当配置根,技能与 mcp_clients 落在了 config/numen_api/。
-        // 先把它们接过来,再让下面各个 init 去读——否则老玩家的配置会凭空消失。
-        com.dwinovo.numen.api.client.ConfigRootMigration.run(net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get());
-
         // 这台电脑自己的文件住在 config/numen/client/;旧版散放在 config/numen/ 根下的先接过来。
         // 根从 FML 拿,不问 Minecraft
         // (datagen 里模组照样构造,那时没有 Minecraft 实例)。

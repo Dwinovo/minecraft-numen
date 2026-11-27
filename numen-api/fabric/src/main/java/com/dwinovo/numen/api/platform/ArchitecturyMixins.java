@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Fabric 上 {@code numen_api.fabric.architectury.mixins.json} 的挂法:Architectury 在场才交出注入它的那条 mixin
+ * Fabric 上 {@code numen.fabric.architectury.mixins.json} 的挂法:Architectury 在场才交出注入它的那条 mixin
  * ({@code ArchitecturyPlayerHooksMixin}),不在场这份配置一条 mixin 都没有,也就不去找它的类。Fabric 的
  * {@code fabric.mod.json} 没有"某模组在场才挂"的写法,所以由这份配置的插件按加载器的模组清单答;NeoForge 上同一件事
  * 写在 {@code neoforge.mods.toml} 的 {@code requiredMods} 里。

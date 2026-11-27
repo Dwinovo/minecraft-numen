@@ -1255,7 +1255,6 @@ public final class ModLanguageData {
         adder.add(Keys.pluginAdds(PluginRoster.Kind.GEAR_SOURCE),    "%s gear source(s)");
         adder.add(Keys.pluginAdds(PluginRoster.Kind.BODY_STATE),     "%s body-state fragment(s)");
         adder.add(Keys.pluginAdds(PluginRoster.Kind.RANGED_WEAPON),  "%s ranged weapon(s)");
-        adder.add(Keys.pluginAdds(PluginRoster.Kind.KNOWLEDGE_SOURCE), "%s recipe/item knowledge source(s)");
         adder.add(Keys.pluginAdds(PluginRoster.Kind.ANSWER),         "%s answerer(s) to extension questions");
         adder.add(Keys.VOICE_FORM_SERVICE,     "Service (its key is kept on this computer)");
         adder.add(Keys.VOICE_NO_KEY,           "no %s key on this computer");
@@ -2032,7 +2031,6 @@ public final class ModLanguageData {
         adder.add(Keys.pluginAdds(PluginRoster.Kind.GEAR_SOURCE),    "%s 处穿戴来源");
         adder.add(Keys.pluginAdds(PluginRoster.Kind.BODY_STATE),     "%s 段身体状态");
         adder.add(Keys.pluginAdds(PluginRoster.Kind.RANGED_WEAPON),  "%s 种远程武器");
-        adder.add(Keys.pluginAdds(PluginRoster.Kind.KNOWLEDGE_SOURCE), "%s 个配方与物品知识来源");
         adder.add(Keys.pluginAdds(PluginRoster.Kind.ANSWER),         "%s 个扩展问题的回答者");
         adder.add(Keys.VOICE_FORM_SERVICE,     "服务商(它的 key 存在这台电脑上)");
         adder.add(Keys.VOICE_NO_KEY,           "这台电脑上没有 %s 的 key");

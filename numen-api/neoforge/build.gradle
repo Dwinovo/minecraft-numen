@@ -9,9 +9,9 @@ plugins {
 evaluationDependsOn(':numen-api:common')
 
 /*
- * GameTest 与评测在加载器这一层的支持(src/gametest,开发期的小模组 numen_api_gametest,不进发行 jar):把套件入口 GameTestSuites
+ * GameTest 与评测在加载器这一层的支持(src/gametest,开发期的小模组 numen_gametest,不进发行 jar):把套件入口 GameTestSuites
  * 登记给原版的 GameTest 框架,和给模拟主人的连接配频道表。用 Numen API 的都用得上(Numen、联动、评测、第三方插件),所以归 Numen API;
- * 各运行配置把它和 Numen API 的测试夹具声明成模组 numen_api_gametest。
+ * 各运行配置把它和 Numen API 的测试夹具声明成模组 numen_gametest。
  */
 sourceSets {
     gametest {
@@ -27,6 +27,9 @@ dependencies {
     jarJar("org.commonmark:commonmark-ext-gfm-strikethrough:${commonmark_version}") {
         version { strictly "[${commonmark_version},0.31)"; prefer commonmark_version }
     }
+    // 内置的 Minecraft 插件:作为内嵌模组(Jar-in-Jar)带进发行 jar,玩家装一个 Numen 就有原版的内容。引擎不认识它的任何类型,
+    // 这里只是把它的 jar 装进去,和装一个别的内嵌库没有两样。
+    jarJar(project(':plugins:minecraft:neoforge'))
     gametestCompileOnly rootProject.project(':numen-api:common').sourceSets.testFixtures.output
 }
 processGametestResources {

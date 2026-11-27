@@ -282,12 +282,12 @@ class InventoryBlockTest {
         assertTrue(block.endsWith("</inventory>"), block);
     }
 
-    /** 这一句是它存在的理由:省掉一整轮 numen.status.self()。 */
+    /** 这一句是它存在的理由:省掉一整轮重新查自己。 */
     @Test
     void itTellsHerNotToRediscoverThisWithATool() {
         assumeTrue(booted);
         String block = inventory(snapshot(0, ItemStack.EMPTY));
-        assertTrue(block.contains("numen.status.self()"), block);
+        assertTrue(block.contains("do not spend a call to rediscover it"), block);
     }
 
     // ==================== mainHand 本身 ====================

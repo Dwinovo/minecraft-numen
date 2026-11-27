@@ -45,13 +45,13 @@ public final class ApiDocs {
                 .toList();
     }
 
-    /** 一个不和组同名的模块的那一行:{@code numen.shape — 说明 cyl, sphere}。 */
+    /** 一个不和组同名的模块的那一行:{@code plugin.shape — 说明 cyl, sphere}。 */
     static String moduleLine(Modules.Module module, Map<String, Library> library) {
         return module.name() + " — " + (module.summary() == null ? "" : module.summary()) + " "
                 + String.join(", ", functionsOf(module.name(), library));
     }
 
-    /** 一个插件的一览里一组的那一行:{@code numen.work — 说明 dig, fish, collect, mine}(和组同名的模块的函数接在后面)。 */
+    /** 一个插件的一览里一组的那一行:{@code plugin.work — 说明 dig, fish, collect, mine}(和组同名的模块的函数接在后面)。 */
     static String groupLine(ApiRegistry.Group group, Map<String, Library> library) {
         List<String> names = new ArrayList<>();
         group.functions().forEach(f -> names.add(f.name()));
@@ -106,7 +106,7 @@ public final class ApiDocs {
 
     /**
      * 写错时 {@code usage:} 那一段:怎么调,接着缩进列出例子——例子就是正确的写法,照着改比读语法可靠。
-     * {@code numen.work.dig(blocks..., {count=…})}。
+     * {@code plugin.work.dig(blocks..., {count=…})}。
      */
     public static String usage(ApiFunction fn) {
         List<String> parts = new ArrayList<>();
@@ -208,7 +208,7 @@ public final class ApiDocs {
     /** 模块里定义的一个函数:定义它的模块,与它的定义。 */
     record Library(String module, ScriptEngine.Defined defined) {}
 
-    /** 模块里定义的函数:{@code 模块.函数}({@code numen.work.mine})→ 它,按模块名、模块里出现的顺序。 */
+    /** 模块里定义的函数:{@code 模块.函数}({@code plugin.work.mine})→ 它,按模块名、模块里出现的顺序。 */
     static Map<String, Library> library(Modules modules) {
         Map<String, Library> out = new LinkedHashMap<>();
         modules.all().forEach((name, module) -> {
@@ -270,7 +270,7 @@ public final class ApiDocs {
     }
 
     /**
-     * 这位主人的同伴此刻能用的名字空间,按名字排:有登记了的、不隐藏的组,或登记了说明(没有函数、只给别的插件多一类名词的插件也算),
+     * 这位主人的同伴此刻能用的名字空间:引擎自己的({@link com.dwinovo.numen.api.NumenPlugins#NUMEN})排头一个,其余的是插件,按名字排:有登记了的、不隐藏的组,或登记了说明(没有函数、只给别的插件多一类名词的插件也算),
      * 并且主人的客户端提供它(目标模组只在客户端的联动,主人的客户端没报它就不列,判据同 {@link #offered})。系统提示里的那一行就是它们。
      *
      * @param companion 她;不是谁的视图(只读随模组发布的文字)是 null,都列
@@ -279,7 +279,9 @@ public final class ApiDocs {
         return java.util.stream.Stream.concat(offered(companion).stream().map(ApiRegistry.Group::namespace),
                         ApiRegistry.guideNamespaces().stream()
                                 .filter(n -> com.dwinovo.numen.api.plugin.ClientMods.offered(companion, n)))
-                .distinct().sorted().toList();
+                .distinct().sorted(java.util.Comparator
+                        .comparing((String n) -> !n.equals(com.dwinovo.numen.api.NumenPlugins.NUMEN))
+                        .thenComparing(java.util.Comparator.naturalOrder())).toList();
     }
 
     private static JsonObject functionJson(ApiFunction fn) {

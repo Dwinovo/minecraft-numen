@@ -47,7 +47,7 @@ public final class ExternalHost implements McpHost {
     private static final ToolHints GET_REPLIES = new ToolHints("Wait for replies", true, false, false, false);
     private static final ToolHints ANSWER_CONSENT = new ToolHints("Answer consent", false, false, true, false);
 
-    private static final String ICON = "/numen_api_mcp_icon.png";
+    private static final String ICON = "/numen_mcp_icon.png";
 
     private final ExternalHands hands;
     private final McpChannels channels;

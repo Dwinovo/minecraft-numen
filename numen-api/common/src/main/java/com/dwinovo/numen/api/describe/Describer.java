@@ -7,7 +7,7 @@ import java.util.Map;
 /**
  * "这是什么"的一个回答者:只说它认得的那一样。她细看一样东西时被叫一次,认得就交回几个字段,不认得交回 null。登记时带的名字就是这些
  * 字段在结果里归在哪个名字下:{@code numen.answer(Questions.BLOCK, "smelter", 回答者)} 说的出现在
- * {@code numen.scan.block(pos).details.smelter}。
+ * {@code plugin.scan.block(pos).details.smelter}。
  *
  * <pre>{@code
  * numen.answer(Questions.BLOCK, "smelter", (her, pos) -> {

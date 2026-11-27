@@ -34,7 +34,7 @@ import java.util.function.Function;
  *
  * <h2>名字空间由登记者给出</h2>
  * 插件登记时写自己的 id(一般就是 mod id 或它的简写:{@code tlm}、{@code ftbquests}),拿到的那扇门只往这个名字空间里登记:组
- * {@code maid} 就是 {@code tlm.maid},模块 {@code skin.lua} 就是 {@code tlm.skin}。Numen API 自己的内容用 {@link #NUMEN}。
+ * {@code maid} 就是 {@code tlm.maid},模块 {@code skin.lua} 就是 {@code tlm.skin}。引擎自己的组({@code numen.task} 之类)在 {@link #NUMEN} 下,插件不借用它。
  *
  * <h2>时机不必你操心</h2>
  * 插件在自己模组的构造期登记就行。Numen API 内部该就绪的东西各有各的时机(工具注册表在
@@ -53,7 +53,7 @@ public final class NumenPlugins {
     /** 客户端接上来了没有。它同时就是"我现在是不是客户端"的答案。 */
     private static volatile boolean clientReady;
 
-    /** Numen API 自己的名字空间:Numen 与 Numen API 登记的组与模块都在它下面。 */
+    /** 引擎自己的名字空间:只有引擎({@link #registerHost})往里登记,插件各用自己的 id。 */
     public static final String NUMEN = "numen";
 
     private NumenPlugins() {}
@@ -344,20 +344,6 @@ public final class NumenPlugins {
             if (bundled.isPresent() && java.nio.file.Files.isDirectory(modules)) {
                 scope.add(com.dwinovo.numen.api.script.BuiltinModules.bundle(modules));
             }
-        }
-
-        @Override
-        public void knowledgeSource(com.dwinovo.numen.api.knowledge.KnowledgeKind kind, String provides,
-                                    java.util.List<String> notProvided, Class<?> function) {
-            open().add(com.dwinovo.numen.api.knowledge.KnowledgeSources.register(namespace, kind, provides, notProvided,
-                    function));
-        }
-
-        @Override
-        public void knowledgeSource(com.dwinovo.numen.api.knowledge.KnowledgeKind kind, String provides,
-                                    java.util.List<String> notProvided, com.dwinovo.numen.api.sdk.ApiFunction function) {
-            open().add(com.dwinovo.numen.api.knowledge.KnowledgeSources.register(namespace, kind, provides, notProvided,
-                    function));
         }
 
         @Override

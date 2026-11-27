@@ -104,8 +104,10 @@ class SeatCatalogTest {
     void theCatalogHoldsTheNamespacesTheBundledSkillsAndTheInstincts() {
         JsonObject catalog = SeatCatalog.of(HER);
         assertTrue(strings(catalog.get("namespaces")).contains("gt"), catalog.get("namespaces").toString());
-        assertEquals(strings(catalog.get("namespaces")).stream().sorted().toList(), strings(catalog.get("namespaces")),
-                "the namespaces are sorted, so the line in the prompt is byte-stable");
+        List<String> namespaces = strings(catalog.get("namespaces"));
+        assertEquals("numen", namespaces.get(0), "the engine's own namespace comes first, the plugins follow");
+        assertEquals(namespaces.subList(1, namespaces.size()).stream().sorted().toList(), namespaces.subList(1, namespaces.size()),
+                "the plugins are sorted, so the line in the prompt is byte-stable");
         assertFalse(catalog.has("api"), "the signatures are not shipped: ApiSearch reads them on the server");
         assertEquals(List.of("masonry"), names(catalog.get("skills"), "name"),
                 "bundled skills with a description, whatever the player's switch says");

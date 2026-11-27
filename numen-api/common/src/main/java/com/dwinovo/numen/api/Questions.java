@@ -56,7 +56,7 @@ public final class Questions {
 
     /**
      * 这只实体是谁的:每个回答者说它认得的那一类(原版的驯服记录、你的模组自己记的主人),是某个人的就交回那个人。没人回答就是没主人的。
-     * 权限层的归属、她每轮看四周、{@code numen.scan} 里的 owner 问的都是这一圈({@link Owners})。见 {@link EntityOwner}。
+     * 权限层的归属、她每轮看四周、感知函数里的 owner 问的都是这一圈({@link Owners})。见 {@link EntityOwner}。
      */
     public static final Question<EntityOwner> ENTITY_OWNER = Question.of("entity_owner");
 

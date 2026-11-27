@@ -77,25 +77,25 @@ public final class LuaCodecs {
 
     // ---- 共用的类 ----
 
-    /** 一个位置;方法与运算写在内置模块 {@code numen.shape} 里。 */
+    /** 一个位置;方法与运算写在内置模块 {@code minecraft.shape} 里。 */
     public static final ScriptType.Class POS = new ScriptType.Class("Pos",
             "A position. A cell's x, y, z are whole numbers; a body's or an entity's are decimals. Wherever a Pos is "
                     + "taken, anything with a pos field (a Block, an Entity, an Item) goes too, and decimals mean the "
                     + "cell they fall in (rounded down, as Minecraft does). p + q and p - q add and subtract, p == q "
-                    + "compares; numen.shape.pos(x, y, z) makes one.",
+                    + "compares.",
             null, List.of(ScriptType.field("x", ScriptType.NUMBER, null), ScriptType.field("y", ScriptType.NUMBER, null),
-                    ScriptType.field("z", ScriptType.NUMBER, null))).methodsIn("numen.shape");
+                    ScriptType.field("z", ScriptType.NUMBER, null))).methodsIn("minecraft.shape");
 
     /** 失败的调用抛出的错误值。 */
     public static final ScriptType.Class ERROR = new ScriptType.Class("Error",
-            "What a failed call raises. local ok, err = pcall(numen.work.dig, b) catches it; tostring(err) reads it. "
+            "What a failed call raises. local ok, err = pcall(plugin.work.dig, b) catches it; tostring(err) reads it. "
                     + "raise(kind, message, hint) raises one of your own.",
             null, List.of(
                     ScriptType.field("kind", ScriptType.STRING, "bad_argument, no_function, not_found, out_of_reach, "
                             + "no_path, no_material, needs_consent, denied, interrupted, timeout or failed."),
                     ScriptType.field("message", ScriptType.STRING, "What went wrong."),
                     ScriptType.optional("hint", ScriptType.STRING, "A next line to run."),
-                    ScriptType.optional("fn", ScriptType.STRING, "The function that failed, numen.work.dig."),
+                    ScriptType.optional("fn", ScriptType.STRING, "The function that failed, such as plugin.work.dig."),
                     ScriptType.optional("data", TABLE, "What the call knew when it failed (the "
                             + "nearest cell out of reach …).")));
 
@@ -107,26 +107,26 @@ public final class LuaCodecs {
     public static final int MAX_CELLS = 16384;
 
     /**
-     * 一串格:每一格是一个 Block(那一格要放的方块)或一个 Pos(只是那一格);方法写在内置模块 {@code numen.shape} 里。它可以带一个原点(形状函数
+     * 一串格:每一格是一个 Block(那一格要放的方块)或一个 Pos(只是那一格);方法写在内置模块 {@code minecraft.shape} 里。它可以带一个原点(形状函数
      * 画在哪、粘贴落在哪;转向、翻转、粘贴围着它),原点不在这串格的数据里,在值自己带的元表上。它也收 Region 的每个方法,当作正好有这些格的
      * 任意形状的选区。
      */
     public static final ScriptType.Class CELLS = ScriptType.Class.listOf("Cells",
             "A list of cells, each a Block (the block for that cell, written as /setblock takes it) or a Pos (just the "
-                    + "cell). numen.shape draws them; numen.shape.cells(list) makes Cells of any such list. Every Region "
+                    + "cell). The shape functions draw them. Every Region "
                     + "method works on Cells too (cells:set(\"stone\"), cells:faces(\"glass\")), taking them as the "
                     + "selection of exactly these cells.",
-            ScriptType.union(new ScriptType.Named("Block"), new ScriptType.Named("Pos"))).methodsIn("numen.shape");
+            ScriptType.union(new ScriptType.Named("Block"), new ScriptType.Named("Pos"))).methodsIn("minecraft.shape");
 
-    /** 一块带形状的选区:记着自己的形状参数,所以能照形状放大缩小;方法写在内置模块 {@code numen.shape} 里。 */
+    /** 一块带形状的选区:记着自己的形状参数,所以能照形状放大缩小;方法写在内置模块 {@code minecraft.shape} 里。 */
     public static final ScriptType.Class REGION = new ScriptType.Class("Region",
-            "A selection that knows its shape (WorldEdit's regions): numen.shape.cuboid, cyl, sphere, ellipsoid, poly and "
-                    + "convex make one, and so do the shape functions called without a pattern. :set, :walls, :faces and "
+            "A selection that knows its shape (WorldEdit's regions): the shape functions (cuboid, cyl, sphere, ellipsoid, poly and "
+                    + "convex) make one when called without a pattern. :set, :walls, :faces and "
                     + ":center draw it as Cells, :expand, :contract, :shift, :outset and :inset change it by its shape "
                     + "(each returns the changed Region), :cells lists its cells.",
             null, List.of(ScriptType.field("kind", ScriptType.choice(List.of("cuboid", "cyl", "ellipsoid", "poly",
                     "convex", "cells")), "What shape it is; cells is any shape given by its cells only, which cannot be "
-                    + "expanded or contracted."))).methodsIn("numen.shape");
+                    + "expanded or contracted."))).methodsIn("minecraft.shape");
 
     static {
         declare(POS, LuaCodecs.class);

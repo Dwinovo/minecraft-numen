@@ -66,7 +66,7 @@ public final class NumenEvents {
     public static void gotHungry(NumenPlayer companion, int foodLevel) {
         emit(companion, EventTypes.HUNGRY, null,
                 "you are hungry (" + foodLevel + "/20) and you do not eat on your own — "
-                        + "numen.inv.eat something from your inventory, or go get food",
+                        + "eat something from your inventory, or go get food",
                 true);
     }
 
@@ -80,8 +80,7 @@ public final class NumenEvents {
                 "your backpack is full: " + item + " x" + left.stack().getCount() + " at "
                         + com.dwinovo.numen.api.sdk.Positions.literal(left.pos()) + " did not fit and stayed on the ground, "
                         + "and anything else that does not stack onto what you carry stays on the ground too. Make room "
-                        + "with numen.inv.drop (what you can spare) or by putting things into a chest (numen.use.block "
-                        + "opens it, w:put fills it); then numen.work.collect picks up what is still on the ground.",
+                        + "by dropping what you can spare or by putting things into a chest; then pick up what is still on the ground.",
                 true);
     }
 

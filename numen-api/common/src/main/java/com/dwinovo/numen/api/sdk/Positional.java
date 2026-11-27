@@ -6,7 +6,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * 写在一个 {@code Optional} 组件上:它是可以不写的最后一个位置参数,不进选项表({@code numen.scan.entities("hostile")})。只能有一个,
+ * 写在一个 {@code Optional} 组件上:它是可以不写的最后一个位置参数,不进选项表({@code plugin.scan.entities("hostile")})。只能有一个,
  * 排在所有位置参数之后。
  */
 @Retention(RetentionPolicy.RUNTIME)

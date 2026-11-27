@@ -55,7 +55,7 @@ public abstract class TaskRecord<V> {
 
     private final long id;
     /**
-     * 这件活叫什么:派它的那个 API 函数的全名({@link ServerCall#fn()},{@code numen.work.dig})。{@code task_finished}、
+     * 这件活叫什么:派它的那个 API 函数的全名({@link ServerCall#fn()},{@code plugin.work.dig})。{@code task_finished}、
      * {@code <current_task>} 都写它。
      */
     private final String toolName;

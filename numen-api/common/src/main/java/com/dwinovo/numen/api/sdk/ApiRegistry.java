@@ -28,7 +28,7 @@ public final class ApiRegistry {
      */
     public record Group(String namespace, String name, String summary, List<ApiFunction> functions, boolean hidden) {
 
-        /** 组的全名:{@code numen.work}。 */
+        /** 组的全名:{@code plugin.work}。 */
         public String fullName() {
             return namespace + "." + name;
         }
@@ -170,12 +170,12 @@ public final class ApiRegistry {
         return List.copyOf(GROUPS.values());
     }
 
-    /** 这个全名的组({@code numen.work});没有是 null。 */
+    /** 这个全名的组({@code plugin.work});没有是 null。 */
     public static synchronized Group group(String fullName) {
         return GROUPS.get(fullName);
     }
 
-    /** 这个全名的函数({@code numen.work.dig});没有是 null。 */
+    /** 这个全名的函数({@code plugin.work.dig});没有是 null。 */
     public static synchronized ApiFunction function(String fullName) {
         int dot = fullName.lastIndexOf('.');
         Group group = dot < 0 ? null : GROUPS.get(fullName.substring(0, dot));

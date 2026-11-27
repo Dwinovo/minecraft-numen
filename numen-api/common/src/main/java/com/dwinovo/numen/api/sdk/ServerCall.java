@@ -68,7 +68,7 @@ public final class ServerCall {
         return callId;
     }
 
-    /** 调的函数的全名:{@code numen.work.dig};派下的活、回执都这样叫它。 */
+    /** 调的函数的全名:{@code plugin.work.dig};派下的活、回执都这样叫它。 */
     public String fn() {
         return function.fullName();
     }
@@ -121,10 +121,10 @@ public final class ServerCall {
         return e;
     }
 
-    /** 点名的实体此刻不在这一层世界里:当场失败,说它可能怎么了,下一步是重新看一眼附近。 */
+    /** 点名的实体此刻不在这一层世界里:当场失败,说它可能怎么了,下一步是重新看一眼附近(插件的函数,引擎不点名)。 */
     static ApiError notNear(EntityRef ref) {
         return new ApiError(ErrorKind.NOT_FOUND, ref + " is not near you — it died, left, or is in an unloaded "
-                + "chunk or another dimension", Call.of("numen.scan.entities"));
+                + "chunk or another dimension; look at what is near you again", null);
     }
 
     /**
@@ -136,8 +136,7 @@ public final class ServerCall {
             throw new ApiError(ErrorKind.OUT_OF_REACH, target.getName().getString() + " is "
                     + String.format(java.util.Locale.ROOT, "%.1f", her.distanceTo(target))
                     + " blocks away — out of reach from where you stand; walk to it first, then call this again",
-                    Call.of("numen.move.walk", target.blockPosition(), 2),
-                    Map.of("pos", target.blockPosition()));
+                    null, Map.of("pos", target.blockPosition()));
         }
     }
 
