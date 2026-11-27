@@ -25,7 +25,7 @@
 | 引擎的模组 id | `numen_api` | **`numen`**(玩家装的就是它;它的配置 `config/numen/`、世界里的 `numen/` 本来就叫 numen) |
 | 原版内容的模组 id | `numen` | **`numen_minecraft`** |
 | 原版内容的 Lua 命名空间、插件 id | `numen`(借用引擎的) | **`minecraft`**:`minecraft.move.walk`、`minecraft.work.dig` |
-| 引擎自己的 Lua 组 | `numen.mc`、`numen.permission`、`numen.task`、`numen.api` | 不变,仍在 `numen` 下:这是引擎自己的命名空间 |
+| 引擎自己的 Lua 组 | `numen.mc`、`numen.permission`、`numen.task`、`numen.api` | `numen.permission`、`numen.task`、`numen.api` 不变,仍在 `numen` 下:这是引擎自己的命名空间。**`numen.mc` 挪进插件,改叫 `minecraft.command`**:指令是 Minecraft 自己的机制(模组的指令也注册进原版的指令分发),算原版内容;引擎只留别的插件也要的通用部分(权限层、"她能不能跑这条"的答复),经引擎的公开 API 提供 |
 | 原版内容的代码目录 | `numen/`、`numen:pathing` | **`plugins/minecraft/`**、`plugins:minecraft:pathing`,和其他插件并排 |
 | 原版内容的 Java 包 | `com.dwinovo.numen` | **`com.dwinovo.numen.plugins.minecraft`** |
 | 原版内容的资源命名空间与翻译键 | `assets/numen/`、它自己的键 | `assets/numen_minecraft/`、键以 `numen_minecraft.` 起头;引擎的键照旧 `numen.` |
