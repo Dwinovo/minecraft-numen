@@ -103,38 +103,4 @@ class ScriptPluginTest {
         assertThrows(IllegalArgumentException.class,
                 () -> NumenPlugins.admit(PluginRoster.Source.SCRIPT, "gt_kjs_java", ""));
     }
-
-    /** 物品查询的说明必填(模型据此知道它答什么)、执行体必填、种类要认得、同一种不能写两次。 */
-    @Test
-    void aLookupNeedsItsProvidesAndBodyAndAKnownKind() {
-        ScriptPlugin plugin = new ScriptPlugin("gt_kjs_know_bad");
-
-        IllegalArgumentException noProvides = assertThrows(IllegalArgumentException.class,
-                () -> plugin.knowledgeSource("info", source -> source.run(item -> null)));
-        assertTrue(noProvides.getMessage().contains("provides"), noProvides.getMessage());
-        assertThrows(IllegalArgumentException.class, () -> plugin.knowledgeSource("info", source -> source.provides("x")));
-        IllegalArgumentException unknown = assertThrows(IllegalArgumentException.class,
-                () -> plugin.knowledgeSource("lore", source -> source.provides("x").run(item -> null)));
-        assertTrue(unknown.getMessage().contains("recipes, uses and info"), unknown.getMessage());
-        plugin.knowledgeSource("info", source -> source.provides("x").run(item -> null));
-        assertThrows(IllegalArgumentException.class,
-                () -> plugin.knowledgeSource("info", source -> source.provides("y").run(item -> null)));
-    }
-
-    /** 声明的查询经门登记成这个插件自己的 lookup 组里的函数,说明里写清它读不到什么;撤回之后不在。 */
-    @Test
-    void aDeclaredLookupIsAFunctionOfThePluginWithWhatItCannotSayAndWithdrawnWithIt() {
-        ScriptPlugin plugin = new ScriptPlugin("gt_kjs_know");
-        plugin.knowledgeSource("recipes", source -> source.provides("Pack machine recipes.").notProvided("chance", "energy")
-                .run(item -> List.of()));
-        NumenPlugins.admit(PluginRoster.Source.SCRIPT, "gt_kjs_know", "");
-        NumenPlugins.register("gt_kjs_know", plugin::setup);
-
-        var fn = ApiRegistry.function("gt_kjs_know.lookup.recipes");
-        assertNotNull(fn);
-        assertTrue(fn.summary().contains("It cannot say: chance, energy."), fn.summary());
-
-        NumenPlugins.roster().withdraw("gt_kjs_know");
-        assertNull(ApiRegistry.function("gt_kjs_know.lookup.recipes"));
-    }
 }

@@ -4,7 +4,6 @@ import com.dwinovo.numen.api.CompanionEvent;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.gear.GearSource;
-import com.dwinovo.numen.api.sdk.ApiFunction;
 import dev.latvian.mods.rhino.util.HideFromJS;
 
 import java.util.ArrayList;
@@ -17,7 +16,7 @@ import java.util.function.Function;
  * 脚本里声明的一个插件:往门里登记什么,只是一串记录。登记({@link #setup})把它们按序交给{@code NumenPlugins.register}拿到的那扇门——
  * 和 Java 插件的 setup 一样;撤回之后重登(管理员关了再开)再交一遍,所以声明时就读好的东西(函数的描述)不依赖那扇门。
  *
- * <p>脚本能做的就是门能做的:函数组、插件的说明、同伴事件、事件类型与发事件、身体状态片段、穿戴来源、知识来源(物品说明与配方)。动世界的事只能经函数里的
+ * <p>脚本能做的就是门能做的:函数组、插件的说明、同伴事件、事件类型与发事件、身体状态片段、穿戴来源。动世界的事只能经函数里的
  * {@link ScriptCall} 受权的几个动作,身体做了什么照常报告给模型。
  */
 public final class ScriptPlugin {
@@ -34,8 +33,6 @@ public final class ScriptPlugin {
 
     private final String namespace;
     private final List<Consumer<NumenApi>> registrations = new ArrayList<>();
-    /** 脚本里声明的查询函数(recipes、uses、info),装进这个插件的 {@code lookup} 组。 */
-    private final List<ApiFunction> lookups = new ArrayList<>();
     /** 这一次登记拿到的门;发事件用它(撤回之后它过期,发事件就抛)。 */
     private volatile NumenApi door;
     private Throwable failure;
@@ -62,24 +59,6 @@ public final class ScriptPlugin {
      */
     public void guide(String markdown) {
         registrations.add(numen -> numen.guide(markdown));
-    }
-
-    /**
-     * 一个物品查询:{@code kind} 是 {@code recipes}、{@code uses}、{@code info}(物品说明);{@code declare} 里写它({@link ScriptSource})。
-     * 模型读到的函数是这个插件自己的 {@code <名字空间>.lookup.<kind>}。
-     *
-     * @throws IllegalArgumentException 没有这种查询、同一种写了两次、说明或执行体没写
-     */
-    public void knowledgeSource(String kind, Consumer<ScriptSource> declare) {
-        if (!ScriptSource.KINDS.contains(kind)) {
-            throw new IllegalArgumentException("no lookup '" + kind + "'; the kinds are recipes, uses and info");
-        }
-        if (lookups.stream().anyMatch(f -> f.name().equals(kind))) {
-            throw new IllegalArgumentException("the lookup '" + kind + "' of plugin " + namespace + " is declared twice");
-        }
-        ScriptSource source = new ScriptSource(namespace, kind);
-        declare.accept(source);
-        lookups.add(source.build());
     }
 
     /**
@@ -138,9 +117,6 @@ public final class ScriptPlugin {
     void setup(NumenApi numen) {
         door = numen;
         registrations.forEach(registration -> registration.accept(numen));
-        if (!lookups.isEmpty()) {
-            numen.api("lookup", "What the plugin " + namespace + " knows about items.", List.copyOf(lookups));
-        }
     }
 
     @HideFromJS

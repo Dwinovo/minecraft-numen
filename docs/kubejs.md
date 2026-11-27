@@ -47,7 +47,6 @@ NumenEvents.register(event => {
 | `plugin.bodyState(body => 文字)` | 每轮从她身上读一段状态,拼进她看到的身体状态 |
 | `plugin.gear({slots(body){…}, kindsOf(body, stack){…}})` | 一个穿戴来源 |
 | `plugin.rangedWeapon(名字, weapon => …)` | 一种远程武器(枪、魔杖),攻击任务像用弓一样用它,见下一节 |
-| `plugin.knowledgeSource(种类, source => …)` | 一个物品查询:物品说明或配方,成为这个插件自己的 `<名字空间>.lookup.<种类>`(见下) |
 
 一个函数 `group.fn(名字, fn => …)` 里:`summary`(必填)、`param(名字, 类型, 说明)`、`option(名字, 类型, 说明, 不写时会怎样)`、`rest`、
 `returns(类型)`、`example`、`note`、`run(call => …)`。类型名:`string`、`integer`、`number`、`boolean`、`block`、`item`、`id`、`pos`,
@@ -55,33 +54,28 @@ NumenEvents.register(event => {
 
 ## 把整合包的知识交给她
 
-游戏自己的配方表她问 `minecraft.inv.recipes`、`minecraft.inv.uses`、`minecraft.inv.info`,JEI 她问 `jei.lookup.*`;**你的脚本**里的知识是这个插件自己的
-函数 `<名字空间>.lookup.recipes|uses|info`,她在插件说明里读到它。脚本里登记一个查询,写法同函数:
+整合包里的知识(物品说明、不在原版配方表里的机器配方……)就是这个插件自己的函数,和别的函数一样用 `plugin.group` 登记,她在插件说明里读到它们:
 
 ```js
 NumenEvents.register(event => {
   event.plugin('mypack', plugin => {
-    // 物品说明:整合包作者写给她的话
-    plugin.knowledgeSource('info', source => source
-      .provides('How the pack wants the item used.')
-      .run(item => item == 'mypack:flux_core'
-        ? ['Feed it to the Flux Press with a redstone signal; it is not a fuel.']
-        : []))
+    plugin.guide('# mypack
 
-    // 配方:不在原版配方表里的,比如脚本定义的机器
-    plugin.knowledgeSource('recipes', source => source
-      .provides('Recipes of the pack's Flux Press, which the recipe list does not hold.')
-      .notProvided('chance', 'energy')
-      .run(item => item == 'minecraft:stick'
-        ? [{category: 'mypack:flux_press', item: 'minecraft:stick', makes: 4, ingredients: ['oak_log'],
-            catalysts: ['mypack:flux_press']}]
-        : []))
+What the pack adds: `mypack.lookup.info(item)` says how the pack wants an item used.')
+    plugin.group('lookup', 'What the pack knows about items.', group => {
+      group.fn('info', fn => fn
+        .summary('How the pack wants the item used.')
+        .param('item', 'item', 'The item.')
+        .returns('string[]')
+        .run(call => call.arg('item') == 'mypack:flux_core'
+          ? ['Feed it to the Flux Press with a redstone signal; it is not a fuel.']
+          : []))
+    })
   })
 })
 ```
 
-`run` 收物品 id,`info` 返回一串说明文字;`recipes`、`uses` 返回一串配方对象,必填 `category`(配方类型或机器的 id)与 `item`(产出),
-可选 `id`、`makes`、`ingredients`、`catalysts`、`categoryName`、`alsoMakes`、`ticks`。`provides`(这个查询答什么)必填,成为函数的说明,她据此知道该不该问它。`notProvided` 如实写你给不了的字段(也写进说明),不写不猜。同一种查询一个插件写一次。
+游戏自己的配方表她问 `minecraft.inv.recipes`、`minecraft.inv.uses`、`minecraft.inv.info`;模组自己知道的,在那个模组的插件里有自己的函数。
 
 ## 动世界只能经受权的动作
 

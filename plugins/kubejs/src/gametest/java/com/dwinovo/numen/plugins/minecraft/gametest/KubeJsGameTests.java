@@ -234,20 +234,22 @@ public class KubeJsGameTests {
     private static final String KNOWLEDGE_BATCH = "numen_kubejs_knowledge";
     private static final String KNOWLEDGE_SCRIPT = "numen_gametest_knowledge.js";
 
-    /** 一个插件登记一个说明查询和一个配方查询。 */
+    /** 一个插件用普通的函数组登记两个物品查询:说明(字符串列表)与哪台机器做它(字符串)。 */
     private static final String KNOWLEDGE = """
             NumenEvents.register(event => {
               event.plugin('gt_pack', plugin => {
-                plugin.knowledgeSource('info', source => source
-                  .provides('How the pack wants items used.')
-                  .run(item => item == 'minecraft:stick' ? ['Feed sticks to the Flux Press.'] : []))
-                plugin.knowledgeSource('recipes', source => source
-                  .provides('Recipes of the pack machine.')
-                  .notProvided('chance')
-                  .run(item => item == 'minecraft:stick'
-                    ? [{category: 'gt_pack:press', item: 'minecraft:stick', makes: 4, ingredients: ['oak_log'],
-                        catalysts: ['gt_pack:flux_press']}]
-                    : []))
+                plugin.group('lookup', 'Test fixture: what the pack knows about items.', group => {
+                  group.fn('info', fn => fn
+                    .summary('How the pack wants the item used.')
+                    .param('item', 'item', 'The item.')
+                    .returns('string[]')
+                    .run(call => call.arg('item') == 'minecraft:stick' ? ['Feed sticks to the Flux Press.'] : []))
+                  group.fn('machine', fn => fn
+                    .summary('Which machine of the pack makes the item.')
+                    .param('item', 'item', 'The item.')
+                    .returns('string')
+                    .run(call => call.arg('item') == 'minecraft:stick' ? 'gt_pack:flux_press' : ''))
+                })
               })
             })
             """;
@@ -258,11 +260,11 @@ public class KubeJsGameTests {
     }
 
     /**
-     * 整合包作者在脚本里登记物品查询:她问 {@code gt_pack.lookup.info}、{@code gt_pack.lookup.recipes} 得到脚本写的说明与配方;
-     * 删了脚本、重载,查询撤回。从入口调(她的 Lua 程序、真的 {@code /reload})。
+     * 整合包作者在脚本里用普通的函数组登记物品查询:她调 {@code gt_pack.lookup.info}、{@code gt_pack.lookup.machine} 得到脚本写的答复;
+     * 删了脚本、重载,函数撤回。从入口调(她的 Lua 程序、真的 {@code /reload})。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = KNOWLEDGE_BATCH)
-    public static void a_script_registers_item_lookups_she_calls_as_functions_of_its_plugin(GameTestHelper helper) {
+    public static void a_script_registers_item_lookups_as_ordinary_functions(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         NumenPlayer her = spawnAt(helper, "gametest_kubejs_reader", new BlockPos(3, 2, 3), false);
         AtomicReference<ToolRun> run = new AtomicReference<>();
@@ -276,16 +278,11 @@ public class KubeJsGameTests {
         reload(server);
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(ApiRegistry.function("gt_pack.lookup.recipes") != null,
+                .thenWaitUntil(() -> helper.assertTrue(ApiRegistry.function("gt_pack.lookup.machine") != null,
                         "the script's lookups were not registered after /reload"))
                 .thenExecute(() -> run.set(lua(her, """
-                        local i = gt_pack.lookup.info('minecraft:stick')
-                        local r = gt_pack.lookup.recipes('minecraft:stick')
-                        local made
-                        for _, x in ipairs(r.recipes) do
-                          if x.category == 'gt_pack:press' then made = x.catalysts[1] end
-                        end
-                        return i.notes[1] .. '|' .. tostring(made)
+                        local notes = gt_pack.lookup.info('minecraft:stick')
+                        return notes[1] .. '|' .. gt_pack.lookup.machine('minecraft:stick')
                         """)))
                 .thenWaitUntil(() -> {
                     helper.assertTrue(run.get().receipt() != null && run.get().ranToTheEnd(),
@@ -304,7 +301,7 @@ public class KubeJsGameTests {
                     }
                     reload(server);
                 })
-                .thenWaitUntil(() -> helper.assertTrue(ApiRegistry.function("gt_pack.lookup.recipes") == null
+                .thenWaitUntil(() -> helper.assertTrue(ApiRegistry.function("gt_pack.lookup.machine") == null
                                 && ApiRegistry.function("gt_pack.lookup.info") == null,
                         "deleting the script did not withdraw its lookups"))
                 .thenExecute(() -> CompanionFactory.despawn(server, her))
