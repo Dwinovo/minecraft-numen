@@ -32,7 +32,7 @@ class BodyMirrorTest {
     @Test
     void aBodyJobComesFirst() {
         BodyMirror mirror = new BodyMirror();
-        mirror.take(new SeatState("", new BodyTask("t1", "minecraft.work.dig", false, "numen_minecraft.activity.dig", List.of("oak_log")), 0, 0));
-        assertEquals(new LoopStatus.Doing("numen_minecraft.activity.dig", List.of("oak_log")), mirror.doing("Lua", "Mine the iron vein"));
+        mirror.take(new SeatState("", new BodyTask("t1", "plugin.work.dig", false, "plugin.activity.dig", List.of("oak_log")), 0, 0));
+        assertEquals(new LoopStatus.Doing("plugin.activity.dig", List.of("oak_log")), mirror.doing("Lua", "Mine the iron vein"));
     }
 }

@@ -17,7 +17,7 @@ import net.minecraft.world.level.storage.LevelResource;
 
 /**
  * GameTest 的测试世界:每次开跑都从干净的世界目录开始;数据包定义的真实地形维度({@value #DIMENSION_ID} 主世界生成器、{@value #NETHER_ID} 下界生成器)
- * 只用来制作固定存档(规划评测的数据集,见 {@code plugins/minecraft/pathing/src/gametest/terrain/README.md}),存档里的地形不在运行时现场生成。
+ * 只用来制作固定存档(规划评测的数据集,见寻路模块的 gametest/terrain/README.md),存档里的地形不在运行时现场生成。
  */
 public final class TerrainWorld {
 

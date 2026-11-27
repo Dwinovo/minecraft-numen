@@ -28,7 +28,7 @@ class FeedTest {
     private static final UUID FRIEND = UUID.randomUUID();
 
     private static final CompanionState STATE = new CompanionState(Phase.MODEL, Hold.BLOCKED,
-            Cause.of(Cause.NO_KEY, "我的档案"), true, new LoopStatus.Doing("numen_minecraft.activity.dig", List.of("64")), 0.5,
+            Cause.of(Cause.NO_KEY, "我的档案"), true, new LoopStatus.Doing("plugin.activity.dig", List.of("64")), 0.5,
             List.of(new EventQueue.Preview("a1b2", "query", "<query>去挖矿</query>")), "numen.loop.compacting", null,
             goal(), 1200, new Usage(1, 2, 3, 4), new Usage(5, 6, 7, 8), 9000, 2, 41, 128000,
             // 档案是另一位主人绑的:绑的人与他的名字随状态上线

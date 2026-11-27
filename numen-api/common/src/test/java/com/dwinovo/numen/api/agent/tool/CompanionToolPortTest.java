@@ -146,7 +146,7 @@ class CompanionToolPortTest {
     };
 
     private static LlmToolCall program(String id) {
-        return new LlmToolCall(id, "Lua", ScriptTool.args("minecraft.work.dig({x = 1, y = 2, z = 3})", "Dig one block").toString());
+        return new LlmToolCall(id, "Lua", ScriptTool.args("plugin.work.dig({x = 1, y = 2, z = 3})", "Dig one block").toString());
     }
 
     private static Program.Outcome ended(String receipt) {
@@ -156,7 +156,7 @@ class CompanionToolPortTest {
     @Test
     void aProgramIsHandedOverWholeAndItsReceiptIsTheCallsResult() {
         port.run(List.of(program("c1")), sink);
-        assertEquals(List.of("run c1 minecraft.work.dig({x = 1, y = 2, z = 3})"), host.did);
+        assertEquals(List.of("run c1 plugin.work.dig({x = 1, y = 2, z = 3})"), host.did);
 
         host.deliver("c1", ended("{\"success\":true,\"message\":\"done\"}"));
         assertEquals(List.of("c1 {\"success\":true,\"message\":\"done\"}"), finished);
@@ -168,11 +168,11 @@ class CompanionToolPortTest {
         port.run(List.of(program("c1")), sink);
 
         assertEquals(List.of("c1"), port.cancel(true));
-        assertEquals(List.of("run c1 minecraft.work.dig({x = 1, y = 2, z = 3})", "cutOff c1 true", "afterwards c1",
+        assertEquals(List.of("run c1 plugin.work.dig({x = 1, y = 2, z = 3})", "cutOff c1 true", "afterwards c1",
                 "stopBody"), host.did, "the stop button cuts the program off and also stops the body");
         assertTrue(finished.isEmpty() && afterCut.isEmpty(), "the batch is void: nothing is handed to the model now");
 
-        String receipt = ToolOutcome.failure("The script stopped at line 1 (minecraft.work.dig) after 3 calls: this turn "
+        String receipt = ToolOutcome.failure("The script stopped at line 1 (plugin.work.dig) after 3 calls: this turn "
                 + "was cut off; t8 was stopped too.");
         host.deliver("c1", ended(receipt));
         assertEquals(List.of("c1 | " + receipt), afterCut, "the receipt the server wrote, as it is");

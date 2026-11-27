@@ -138,8 +138,8 @@ class NumenCommandsTest {
 
     @Test
     void driveTakesACompanionAndTheRestOfTheLineAsAProgram() {
-        assertEquals("minecraft.command.run(\"give @s minecraft:diamond 2\")",
-                runs("numen drive Aria minecraft.command.run(\"give @s minecraft:diamond 2\")").get("program").getResult());
+        assertEquals("plugin.command.run(\"give @s minecraft:diamond 2\")",
+                runs("numen drive Aria plugin.command.run(\"give @s minecraft:diamond 2\")").get("program").getResult());
         assertTrue(fails("numen drive Aria"), "a program is required");
         assertTrue(fails("numen drive Aria numen.task.status()", source(null).withPermission(0)), "drive is for ops");
     }

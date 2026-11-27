@@ -3,7 +3,7 @@ package com.dwinovo.numen.plugins.minecraft.build;
 import com.dwinovo.numen.script.ScriptType;
 import com.dwinovo.numen.api.sdk.BadValue;
 import com.dwinovo.numen.api.sdk.Codec;
-import com.dwinovo.numen.api.sdk.LuaCodecs;
+import com.dwinovo.numen.plugins.minecraft.tools.shape.ShapeTypes;
 import com.dwinovo.numen.api.sdk.Positions;
 import net.minecraft.core.BlockPos;
 
@@ -40,7 +40,12 @@ public record Design(List<Cell> cells) {
     public static final Codec<Design> CODEC = new Codec<>() {
         @Override
         public ScriptType type() {
-            return LuaCodecs.CELLS.type();
+            return ShapeTypes.CELLS.type();
+        }
+
+        @Override
+        public List<ScriptType.Class> classes() {
+            return List.of(ShapeTypes.CELLS, ShapeTypes.REGION);
         }
 
         @Override

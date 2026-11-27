@@ -87,7 +87,7 @@ class SeatsTest {
     private static Program.Outcome outcome(String message) {
         return new Program.Outcome("{\"success\":true,\"message\":\"" + message + "\"}",
                 new ScriptCall.Ending(ScriptCall.Status.OK, null),
-                List.of(new ScriptCall.Called("minecraft.status.self", "minecraft.status.self()", null, null)), null);
+                List.of(new ScriptCall.Called("plugin.status.self", "plugin.status.self()", null, null)), null);
     }
 
     // ---- 谁坐得上 ----
@@ -288,7 +288,7 @@ class SeatsTest {
         seats.bodyEntered(HER);
         get(client.open(HER, 0));
         world.programs.onCut = outcome("this turn was cut off");
-        CompletableFuture<ProgramResult> run = client.run(HER, 1, "p1", "minecraft.move.walk()", OWNER);
+        CompletableFuture<ProgramResult> run = client.run(HER, 1, "p1", "plugin.move.walk()", OWNER);
         await(() -> world.programs.running.containsKey("p1"));
 
         pipe.disconnect();

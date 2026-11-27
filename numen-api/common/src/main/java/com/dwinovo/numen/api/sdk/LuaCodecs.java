@@ -77,14 +77,13 @@ public final class LuaCodecs {
 
     // ---- 共用的类 ----
 
-    /** 一个位置;方法与运算写在内置模块 {@code minecraft.shape} 里。 */
+    /** 一个位置:只是数据(x、y、z),引擎和各插件共用;方法与运算不归任何插件给它加。 */
     public static final ScriptType.Class POS = new ScriptType.Class("Pos",
             "A position. A cell's x, y, z are whole numbers; a body's or an entity's are decimals. Wherever a Pos is "
                     + "taken, anything with a pos field (a Block, an Entity, an Item) goes too, and decimals mean the "
-                    + "cell they fall in (rounded down, as Minecraft does). p + q and p - q add and subtract, p == q "
-                    + "compares.",
+                    + "cell they fall in (rounded down, as Minecraft does).",
             null, List.of(ScriptType.field("x", ScriptType.NUMBER, null), ScriptType.field("y", ScriptType.NUMBER, null),
-                    ScriptType.field("z", ScriptType.NUMBER, null))).methodsIn("minecraft.shape");
+                    ScriptType.field("z", ScriptType.NUMBER, null)));
 
     /** 失败的调用抛出的错误值。 */
     public static final ScriptType.Class ERROR = new ScriptType.Class("Error",
@@ -100,39 +99,15 @@ public final class LuaCodecs {
                             + "nearest cell out of reach …).")));
 
     /**
-     * 一串格至多几格——{@link #CELLS} 这个值本身的性质:收一串格的函数(建造)一次最多收这么多,交回一串格的函数一次最多交回这么多,
+     * 一串格至多几格——一串格(每一格是一个 Block 或 Pos)这个值本身的性质:收一串格的函数(建造)一次最多收这么多,交回一串格的函数一次最多交回这么多,
      * 交回的值才能原样传给收它的函数。一栋正常房子五千到八千格;建造的盘料只盘交来的这一串,拆成几串交就是墙砌好了才发现屋顶的料不够,
      * 所以一栋房子要装得下。
      */
     public static final int MAX_CELLS = 16384;
 
-    /**
-     * 一串格:每一格是一个 Block(那一格要放的方块)或一个 Pos(只是那一格);方法写在内置模块 {@code minecraft.shape} 里。它可以带一个原点(形状函数
-     * 画在哪、粘贴落在哪;转向、翻转、粘贴围着它),原点不在这串格的数据里,在值自己带的元表上。它也收 Region 的每个方法,当作正好有这些格的
-     * 任意形状的选区。
-     */
-    public static final ScriptType.Class CELLS = ScriptType.Class.listOf("Cells",
-            "A list of cells, each a Block (the block for that cell, written as /setblock takes it) or a Pos (just the "
-                    + "cell). The shape functions draw them. Every Region "
-                    + "method works on Cells too (cells:set(\"stone\"), cells:faces(\"glass\")), taking them as the "
-                    + "selection of exactly these cells.",
-            ScriptType.union(new ScriptType.Named("Block"), new ScriptType.Named("Pos"))).methodsIn("minecraft.shape");
-
-    /** 一块带形状的选区:记着自己的形状参数,所以能照形状放大缩小;方法写在内置模块 {@code minecraft.shape} 里。 */
-    public static final ScriptType.Class REGION = new ScriptType.Class("Region",
-            "A selection that knows its shape (WorldEdit's regions): the shape functions (cuboid, cyl, sphere, ellipsoid, poly and "
-                    + "convex) make one when called without a pattern. :set, :walls, :faces and "
-                    + ":center draw it as Cells, :expand, :contract, :shift, :outset and :inset change it by its shape "
-                    + "(each returns the changed Region), :cells lists its cells.",
-            null, List.of(ScriptType.field("kind", ScriptType.choice(List.of("cuboid", "cyl", "ellipsoid", "poly",
-                    "convex", "cells")), "What shape it is; cells is any shape given by its cells only, which cannot be "
-                    + "expanded or contracted."))).methodsIn("minecraft.shape");
-
     static {
         declare(POS, LuaCodecs.class);
         declare(ERROR, LuaCodecs.class);
-        declare(CELLS, LuaCodecs.class);
-        declare(REGION, LuaCodecs.class);
         BY_CLASS.put(String.class, Builtin.STRING);
         BY_CLASS.put(Integer.class, Builtin.INTEGER);
         BY_CLASS.put(int.class, Builtin.INTEGER);
@@ -161,7 +136,7 @@ public final class LuaCodecs {
     }
 
     /** 帮助与系统提示里列出的共用类,按这个顺序:索引里有它们,一组的帮助不再重复。 */
-    public static final List<String> SHARED = List.of("Pos", "Block", "Entity", "Item", "Stack", "Cells", "Region", "Error");
+    public static final List<String> SHARED = List.of("Pos", "Block", "Entity", "Item", "Stack", "Error");
 
     /**
      * 登记一种类型的值转换(插件经 {@code NumenApi.codec} 来)。它声明的类一并登记。

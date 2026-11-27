@@ -5,6 +5,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.dwinovo.numen.plugins.minecraft.Constants;
+import com.dwinovo.numen.plugins.minecraft.tools.shape.ShapeTypes;
 import com.dwinovo.numen.script.ScriptType;
 import com.dwinovo.numen.api.permission.Listing;
 import com.dwinovo.numen.api.sdk.BadValue;
@@ -88,14 +90,14 @@ public sealed interface Where {
     /** 一团、一串表是一堆格子;带 {@code id} 没有坐标的表或一段实体身份的文字是一只实体;别的是一处(一格、一列、一个高度)。写回去照原样。 */
     @SuppressWarnings("unchecked")
     Codec<Where> CODEC = new Codec<>() {
-        private final Codec<EntityRef> entity = (Codec<EntityRef>) LuaCodecs.of(EntityRef.class, "numen");
-        private final Codec<Place> place = (Codec<Place>) LuaCodecs.of(Place.class, "numen");
-        private final Codec<Target> target = (Codec<Target>) LuaCodecs.of(Target.class, "numen");
+        private final Codec<EntityRef> entity = (Codec<EntityRef>) LuaCodecs.of(EntityRef.class, Constants.PLUGIN);
+        private final Codec<Place> place = (Codec<Place>) LuaCodecs.of(Place.class, Constants.PLUGIN);
+        private final Codec<Target> target = (Codec<Target>) LuaCodecs.of(Target.class, Constants.PLUGIN);
 
         @Override
         public ScriptType type() {
             return ScriptType.union(LuaCodecs.POS.type(), new ScriptType.Named("Block"), new ScriptType.Named("Entity"),
-                    LuaCodecs.of(ScanOps.Cluster.class, "numen").type(), LuaCodecs.CELLS.type(),
+                    LuaCodecs.of(ScanOps.Cluster.class, Constants.PLUGIN).type(), ShapeTypes.CELLS.type(),
                     ScriptType.table(ScriptType.field("x", ScriptType.NUMBER, null),
                             ScriptType.field("z", ScriptType.NUMBER, null)),
                     ScriptType.table(ScriptType.field("y", ScriptType.NUMBER, null)));

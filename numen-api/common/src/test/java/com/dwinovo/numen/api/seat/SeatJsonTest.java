@@ -29,15 +29,15 @@ class SeatJsonTest {
     private static Program.Outcome outcome() {
         return new Program.Outcome("{\"success\":false,\"message\":\"line 3: boom\"}",
                 new ScriptCall.Ending(ScriptCall.Status.ERROR, "failed"),
-                List.of(new ScriptCall.Called("minecraft.work.dig", "minecraft.work.dig(\"stone\")", "stone", "no_path"),
-                        new ScriptCall.Called("minecraft.status.self", "minecraft.status.self()", null, null)),
+                List.of(new ScriptCall.Called("plugin.work.dig", "plugin.work.dig(\"stone\")", "stone", "no_path"),
+                        new ScriptCall.Called("plugin.status.self", "plugin.status.self()", null, null)),
                 "your owner spoke; t8 keeps running");
     }
 
     @Test
     void aProgramResultComesBackEqualAndDoesNotCarryTheValuesThatStayInTheProcess() {
         ProgramResult result = new ProgramResult("p1", outcome(), 4, new SeatState("<runtime_state/>",
-                new BodyTask("t1", "minecraft.work.dig", false, "numen_minecraft.activity.dig", List.of("oak")), 77, 6000));
+                new BodyTask("t1", "plugin.work.dig", false, "plugin.activity.dig", List.of("oak")), 77, 6000));
         assertEquals(result, ProgramResult.fromJson(result.toJson()));
         Program.Outcome inProcess = new Program.Outcome("{\"success\":true,\"message\":\"m\"}",
                 new ScriptCall.Ending(ScriptCall.Status.OK, null), List.of(), null, 42, java.util.Map.of());

@@ -19,7 +19,7 @@ class ToolSummaryTest {
 
     @Test
     void aProgramReadsAsItsDescription() {
-        String args = ScriptTool.args("minecraft.work.dig({})", "Mine the iron vein\nto the east").toString();
+        String args = ScriptTool.args("plugin.work.dig({})", "Mine the iron vein\nto the east").toString();
         assertEquals("Mine the iron vein to the east", summary(new ScriptTool(), args));
     }
 
