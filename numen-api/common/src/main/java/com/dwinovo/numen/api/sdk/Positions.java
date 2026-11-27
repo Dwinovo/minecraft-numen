@@ -99,52 +99,9 @@ public final class Positions {
         throw new BadValue("expected " + POS_SHAPE + "; got " + BadValue.given(value));
     }
 
-    /**
-     * 一串格:一团(扫描交回的 Cluster,带着它每一格的 {@code blocks})、一串 Pos 或 Block(一项是一团的也展开)、或一格。至少一格。
-     *
-     * @throws BadValue 读不成,或一格都没有
-     */
-    public static List<BlockPos> cells(Object value) {
-        List<BlockPos> out = new ArrayList<>();
-        List<Object> items = items(value);
-        for (int i = 0; i < items.size(); i++) {
-            try {
-                out.add(cell(items.get(i)));
-            } catch (BadValue bad) {
-                throw items.size() == 1 ? bad : bad.in("item " + (i + 1));
-            }
-        }
-        if (out.isEmpty()) {
-            throw new BadValue("expected cells: a Cluster, Cells (a list of Pos or Blocks) or one cell; got "
-                    + BadValue.given(value));
-        }
-        return out;
-    }
-
-    /** 一团的那一串格;不是一团是 null。 */
-    public static List<?> clusterBlocks(Object value) {
-        return value instanceof Map<?, ?> map && map.get("blocks") instanceof List<?> blocks ? blocks : null;
-    }
-
-    /** 一串格的每一项:一团展开成它的每一格,一串逐项(一项是一团的也展开),别的就是它自己那一项。 */
+    /** 一串里的每一项:一串逐项,别的就是只有它自己那一项。 */
     public static List<Object> items(Object value) {
-        List<Object> out = new ArrayList<>();
-        List<?> blocks = clusterBlocks(value);
-        if (blocks != null) {
-            out.addAll(blocks);
-        } else if (value instanceof List<?> list) {
-            for (Object item : list) {
-                List<?> inner = clusterBlocks(item);
-                if (inner != null) {
-                    out.addAll(inner);
-                } else {
-                    out.add(item);
-                }
-            }
-        } else {
-            out.add(value);
-        }
-        return out;
+        return value instanceof List<?> list ? new ArrayList<>(list) : new ArrayList<>(List.of(value));
     }
 
     /** 一格写成脚本里的值:三个整数。 */

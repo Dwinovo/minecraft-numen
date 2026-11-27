@@ -5,6 +5,7 @@ import com.dwinovo.numen.api.sdk.BadValue;
 import com.dwinovo.numen.api.sdk.Codec;
 import com.dwinovo.numen.plugins.minecraft.tools.shape.ShapeTypes;
 import com.dwinovo.numen.api.sdk.Positions;
+import com.dwinovo.numen.plugins.minecraft.tools.Clusters;
 import net.minecraft.core.BlockPos;
 
 import java.util.ArrayList;
@@ -51,7 +52,7 @@ public record Design(List<Cell> cells) {
         @Override
         public Design decode(Object value) {
             List<Cell> cells = new ArrayList<>();
-            List<Object> items = Positions.items(value);
+            List<Object> items = Clusters.items(value);
             for (int i = 0; i < items.size(); i++) {
                 Object item = items.get(i);
                 try {

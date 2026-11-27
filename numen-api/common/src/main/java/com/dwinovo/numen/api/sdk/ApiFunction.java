@@ -315,7 +315,6 @@ public final class ApiFunction {
             }
             try {
                 if (p.role() == Role.REST) {
-                    // 一项是扫描交回的一团时,那一团的每一格各是一项
                     List<Object> items = Positions.items(given);
                     List<Object> out = new ArrayList<>(items.size());
                     for (int k = 0; k < items.size(); k++) {

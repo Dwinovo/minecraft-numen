@@ -31,6 +31,7 @@ public final class WorkApi {
     private WorkApi() {}
 
     public static void install(NumenApi numen) {
+        numen.codec(Selection.class, Selection.CODEC);
         numen.api("work", "Gathering where you stand: digging blocks within reach, fishing. minecraft.work.collect "
                 + "(library) walks to items lying on the ground and picks them up.", WorkApi.class);
     }
@@ -38,7 +39,7 @@ public final class WorkApi {
     /** 挖哪几格、至多几格。 */
     public record Dig(@Doc("What to dig, as many as you like: a Block from a query is dug only while that cell still "
             + "holds that block; a Pos is dug whatever it holds, air and fluid skipped; a Cluster from "
-            + "minecraft.scan.blocks is its blocks.") @Rest List<Target> blocks,
+            + "minecraft.scan.blocks is its blocks.") @Rest List<Selection> blocks,
                       @Doc("How many cells to dig at most (up to " + BlockActionOps.MAX_DIG_COUNT + ").")
                       @Omitted("dig every cell of it") Optional<Integer> count) {}
 
@@ -68,7 +69,8 @@ public final class WorkApi {
             + "the job with the reason.")
     @SeeAlso({"minecraft.move.walk", "minecraft.work.collect", "minecraft.scan.blocks", "numen.task.stop"})
     public static Job<DigCompanionTask.Dug> dig(ServerCall call, Dig args) {
-        return Job.of(BlockActionOps.dig(call, args.blocks(), args.count().orElse(null)));
+        return Job.of(BlockActionOps.dig(call, args.blocks().stream().flatMap(s -> s.targets().stream()).toList(),
+                args.count().orElse(null)));
     }
 
     /** 抛一竿:一次调用一竿,钓几条是程序里调几次。 */

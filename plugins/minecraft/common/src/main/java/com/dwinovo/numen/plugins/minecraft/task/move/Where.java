@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.dwinovo.numen.plugins.minecraft.Constants;
+import com.dwinovo.numen.plugins.minecraft.tools.Clusters;
 import com.dwinovo.numen.plugins.minecraft.tools.shape.ShapeTypes;
 import com.dwinovo.numen.script.ScriptType;
 import com.dwinovo.numen.api.permission.Listing;
@@ -105,10 +106,10 @@ public sealed interface Where {
 
         @Override
         public Where decode(Object value) {
-            if (Positions.clusterBlocks(value) != null
+            if (Clusters.blocks(value) != null
                     || value instanceof List<?> list && !list.isEmpty() && list.stream().allMatch(Map.class::isInstance)) {
                 List<Cell> items = new ArrayList<>();
-                for (Object item : Positions.items(value)) {
+                for (Object item : Clusters.items(value)) {
                     Target one = target.decode(item);
                     items.add(new Cell(one.cell(), one.block()));
                 }
