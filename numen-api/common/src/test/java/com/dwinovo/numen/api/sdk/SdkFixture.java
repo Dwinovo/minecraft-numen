@@ -19,8 +19,9 @@ public final class SdkFixture {
 
     static {
         com.dwinovo.numen.api.plugin.PluginRosterFixture.install();
-        if (ApiRegistry.group("numen.api") == null) {
+        if (ApiRegistry.group("numen.permission") == null) {
             CommonClass.registerApi();
+            CommonClass.registerBundledContent(bundled());
         }
     }
 
@@ -32,5 +33,32 @@ public final class SdkFixture {
     /** 登记一组测试函数(名字空间 {@link #NAMESPACE})。 */
     public static void register(String group, Class<?> functions) {
         ApiRegistry.register(NAMESPACE, group, "Test fixture.", functions);
+    }
+    /** 引擎自带的 numen/ 目录(类路径上有 numen/modules/numen 的那一个):单测里没有加载器,从类路径取。 */
+    private static java.nio.file.Path bundled() {
+        try {
+            var urls = SdkFixture.class.getClassLoader().getResources("numen");
+            while (urls.hasMoreElements()) {
+                java.net.URI uri = urls.nextElement().toURI();
+                java.nio.file.Path dir;
+                if ("jar".equals(uri.getScheme())) {
+                    java.nio.file.FileSystem fs;
+                    try {
+                        fs = java.nio.file.FileSystems.newFileSystem(uri, java.util.Map.of());
+                    } catch (java.nio.file.FileSystemAlreadyExistsException e) {
+                        fs = java.nio.file.FileSystems.getFileSystem(uri);
+                    }
+                    dir = fs.getPath("/numen");
+                } else {
+                    dir = java.nio.file.Path.of(uri);
+                }
+                if (java.nio.file.Files.isDirectory(dir.resolve("modules").resolve("numen"))) {
+                    return dir;
+                }
+            }
+        } catch (java.io.IOException | java.net.URISyntaxException e) {
+            throw new IllegalStateException(e);
+        }
+        throw new IllegalStateException("no numen/modules/numen on the class path");
     }
 }

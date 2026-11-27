@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 内置模块 {@code minecraft.shape} 与 {@code minecraft.scan} 里的值与方法,从她的入口跑:Pos 会加减、量距离、比较;选区画成 Cells,Cells 会挪、
+ * 内置模块 {@code minecraft.shape} 与 {@code minecraft.scan} 里的值与方法,从她的入口跑:选区画成 Cells,Cells 会挪、
  * 会转(方块的朝向跟着转)、会合、会减;一团会筛、会去掉几格。形状函数的格集合、选区的编辑、Cells 的变换与图案分别在
  * {@code ShapeGeometryTest}、{@code ShapeRegionTest}、{@code ShapeCellsTest}。
  */
@@ -29,16 +29,6 @@ class ShapeModuleTest {
         assertTrue(run.ok(), run.message());
         String message = run.message();
         return message.substring(message.indexOf("stdout:\n") + "stdout:\n".length());
-    }
-
-    @Test
-    void aPosAddsMeasuresAndCompares() {
-        String out = printed("""
-                local p = minecraft.shape.pos(1, 2, 3)
-                local q = p:offset(1, 0, -1)
-                print(q.x, q.y, q.z, p:dist(minecraft.shape.pos(4, 6, 3)), (p + q).x, (q - p).z, p == minecraft.shape.pos(1, 2, 3))
-                """);
-        assertTrue(out.startsWith("2\t2\t2\t5\t3\t-1\ttrue"), out);
     }
 
     @Test
@@ -60,7 +50,7 @@ class ShapeModuleTest {
                     {name = "oak_log[axis=x]", pos = {x = 0, y = 0, z = 2}}}):rotate(90)
                 print(c[1].name, c[1].pos.x, c[1].pos.z, c[2].name, c[2].pos.x, c[2].pos.z)
                 local s = c:shift(10, 1, 0)
-                print(s[1].pos.x, s[1].pos.y, s:shift(minecraft.shape.pos(1, 1, 1))[2].pos.z)
+                print(s[1].pos.x, s[1].pos.y, s:shift(numen.geometry.pos(1, 1, 1))[2].pos.z)
                 """);
         assertTrue(out.startsWith("oak_stairs[facing=east,half=top]\t0\t1\toak_log[axis=z]\t-2\t0\n10\t1\t1"), out);
     }
@@ -92,7 +82,7 @@ class ShapeModuleTest {
     @Test
     void aClusterFiltersAndLosesCells() {
         String out = printed("""
-                local function b(x) return {name = "minecraft:iron_ore", pos = minecraft.shape.pos(x, 0, 0)} end
+                local function b(x) return {name = "minecraft:iron_ore", pos = numen.geometry.pos(x, 0, 0)} end
                 local c = minecraft.scan.cluster({b(1), b(2), b(3)})
                 local f = c:filter(function(x) return x.pos.x ~= 1 end)
                 local m = c:minus({x = 2, y = 0, z = 0})

@@ -1,6 +1,7 @@
 package com.dwinovo.numen.plugins.minecraft.plugins;
 
-import com.dwinovo.numen.plugins.minecraft.ModJar;
+import com.dwinovo.numen.api.platform.Services;
+import com.dwinovo.numen.plugins.minecraft.Constants;
 import com.dwinovo.numen.plugins.ysm.Ysm;
 import com.dwinovo.numen.plugins.ysm.YsmHost;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
@@ -30,7 +31,7 @@ public final class Builtin {
     private Builtin() {}
 
     public static void registerAll() {
-        Gate gate = new Gate(FabricLoader.getInstance()::isModLoaded, ModJar::find);
+        Gate gate = new Gate(FabricLoader.getInstance()::isModLoaded, inJar -> Services.platform().modResource(Constants.MOD_ID, inJar));
         gate.open("yes_steve_model", "ysm", content -> () -> YsmOnFabric.install(content));
         gate.openClientMod("litematica", "litematica", content -> () -> LitematicaOnFabric.install(content));
         gate.openClientMod("jei", "jei", () -> JeiOnFabric::install);

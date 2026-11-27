@@ -26,7 +26,7 @@ public class NumenContentFabric implements ModInitializer {
 
         // Numen 的自带内容(技能、Lua 模块、默认人设)和联动的一样经插件那扇门交出去:jar 里的 numen/ 目录,
         // 服务器起来时同步进 config/numen/server/。Numen 是插件之一,没有特殊待遇。
-        java.nio.file.Path content = ModJar.find("numen");
+        java.nio.file.Path content = com.dwinovo.numen.api.platform.Services.platform().modResource(Constants.MOD_ID, "numen");
         if (content == null) {
             throw new IllegalStateException("[numen-content] no bundled numen/ dir found in jar");
         }

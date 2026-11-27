@@ -21,6 +21,7 @@ public class CommonClass {
 
         registerTools();
         registerApi();
+        registerBundledContent(Services.platform().modResource(Constants.MOD_ID, "numen"));
         wireTaskMachine();
         wireRegistrationChanges();
         com.dwinovo.numen.api.seat.ServerSeats.register();
@@ -74,6 +75,20 @@ public class CommonClass {
         ToolRegistry.register(new com.dwinovo.numen.api.agent.tool.ApiSearchTool());
         ToolRegistry.register(new com.dwinovo.numen.api.agent.tool.AskUserQuestionTool());
         Constants.LOG.info("[numen] registered {} tool(s)", ToolRegistry.size());
+    }
+
+    /**
+     * 引擎自带的内容(它 jar 里的 {@code numen/} 目录:{@code numen.geometry} 模块,每个位置都有的加减比较与挪动),和插件的自带内容走同一扇门
+     * ({@code NumenApi.bundleContent}),只是登记者是宿主。目录怎么从 jar 里取出来是加载器的事({@code IPlatformHelper#modResource}),
+     * 插件用的是同一个。
+     *
+     * @param root 引擎 jar 里的 {@code numen/} 目录
+     */
+    public static void registerBundledContent(java.nio.file.Path root) {
+        if (root == null) {
+            throw new IllegalStateException("[numen] no bundled numen/ dir found in the engine jar");
+        }
+        com.dwinovo.numen.api.NumenPlugins.registerHost(numen -> numen.bundleContent(root));
     }
 
     /**

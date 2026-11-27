@@ -41,7 +41,7 @@ public class NumenContentNeoForge {
     }
 
     private static void declareBundledContent() {
-        Path root = ModJar.find("numen");
+        Path root = com.dwinovo.numen.api.platform.Services.platform().modResource(Constants.MOD_ID, "numen");
         if (root == null) {
             throw new IllegalStateException("[numen-content] no bundled numen/ dir found in jar");
         }

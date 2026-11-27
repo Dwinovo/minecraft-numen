@@ -1,6 +1,7 @@
 package com.dwinovo.numen.plugins.minecraft.plugins;
 
-import com.dwinovo.numen.plugins.minecraft.ModJar;
+import com.dwinovo.numen.api.platform.Services;
+import com.dwinovo.numen.plugins.minecraft.Constants;
 import com.dwinovo.numen.plugins.ysm.Ysm;
 import com.dwinovo.numen.plugins.ysm.YsmHost;
 import net.minecraft.server.MinecraftServer;
@@ -30,7 +31,7 @@ public final class Builtin {
     private Builtin() {}
 
     public static void registerAll(IEventBus modBus) {
-        Gate gate = new Gate(ModList.get()::isLoaded, ModJar::find);
+        Gate gate = new Gate(ModList.get()::isLoaded, inJar -> Services.platform().modResource(Constants.MOD_ID, inJar));
         gate.open("yes_steve_model", "ysm", content -> () -> YsmOnNeoForge.install(content));
         gate.open("touhou_little_maid", "tlm",
                 content -> () -> com.dwinovo.numen.plugins.tlm.NumenTlm.install(modBus, content));

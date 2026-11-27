@@ -1,10 +1,6 @@
 -- Positions, selections and shapes, modelled on WorldEdit: Regions (cuboid, cyl, sphere, poly, convex) edited by their shape, shapes drawn as Cells, Cells you can turn, stack, move and paste.
 local M = {}
 
----@class Pos
-M.Pos = {}
-M.Pos.__index = M.Pos
-
 ---@class Cells
 M.Cells = {}
 M.Cells.__index = M.Cells
@@ -34,49 +30,14 @@ local function bad(message, hint, data)
   raise("bad_argument", message, hint, data)
 end
 
----A Pos at x, y, z.
----@param x number
----@param y number
----@param z number
----@return Pos
-function M.pos(x, y, z)
-  return setmetatable({x = x, y = y, z = z}, M.Pos)
-end
-
----This position moved by dx, dy, dz.
----@param dx number
----@param dy? number
----@param dz? number
----@return Pos
-function M.Pos:offset(dx, dy, dz)
-  return M.pos(self.x + dx, self.y + (dy or 0), self.z + (dz or 0))
-end
-
----Straight-line distance to another position (or anything with a pos).
----@param other Pos|Block|Entity
----@return number
-function M.Pos:dist(other)
-  local o = where(other)
-  return math.sqrt((self.x - o.x) ^ 2 + (self.y - o.y) ^ 2 + (self.z - o.z) ^ 2)
-end
-
-function M.Pos.__add(a, b)
-  local p, q = where(a), where(b)
-  return M.pos(p.x + q.x, p.y + q.y, p.z + q.z)
-end
-
-function M.Pos.__sub(a, b)
-  local p, q = where(a), where(b)
-  return M.pos(p.x - q.x, p.y - q.y, p.z - q.z)
-end
-
-function M.Pos.__eq(a, b)
-  return a.x == b.x and a.y == b.y and a.z == b.z
+-- a Pos at x, y, z: the engine's own (numen.geometry), the same for every Pos wherever it comes from
+local function pos(x, y, z)
+  return numen.geometry.pos(x, y, z)
 end
 
 -- a cell at p: a Block named name, or the Pos when there is no name
 local function cell(p, name)
-  local at = M.pos(p.x, p.y, p.z)
+  local at = pos(p.x, p.y, p.z)
   if name then
     return {name = name, pos = at}
   end
@@ -193,7 +154,7 @@ local function origin_of(list)
     return given
   end
   local lo = bounds_of(list)
-  return lo and M.pos(lo.x, lo.y, lo.z)
+  return lo and pos(lo.x, lo.y, lo.z)
 end
 
 ---Cells from a list of Blocks (a block to put in each cell) or Pos (just the cells): a scan's blocks, minecraft.build.diff's
@@ -207,7 +168,7 @@ function M.cells(list, origin)
     out[i] = c
   end
   local o = origin and cell_at(origin)
-  return cells_of(out, o and M.pos(o.x, o.y, o.z))
+  return cells_of(out, o and pos(o.x, o.y, o.z))
 end
 
 ---The point these cells turn, flip and paste about: where they were drawn (or given), else their smallest corner.
@@ -230,7 +191,7 @@ function M.Cells:shift(dx, dy, dz)
     out[i] = moved(c, {x = p.x + o.x, y = p.y + o.y, z = p.z + o.z})
   end
   local given = given_origin(self)
-  return cells_of(out, given and M.pos(given.x + o.x, given.y + o.y, given.z + o.z))
+  return cells_of(out, given and pos(given.x + o.x, given.y + o.y, given.z + o.z))
 end
 
 -- the cells of other by position: Cells, a list, or one Pos or Block
@@ -1017,7 +978,7 @@ function M.ellipsoid(center, radii)
   local c = cell_at(center)
   local r = radii_of(radii, 3, 0, "minecraft.shape.ellipsoid(pos, {4, 6, 4})")
   return region({kind = "ellipsoid", cx = c.x, cy = c.y, cz = c.z, rx = r[1], ry = r[2], rz = r[3],
-                 origin = M.pos(c.x, c.y, c.z)})
+                 origin = pos(c.x, c.y, c.z)})
 end
 
 ---A selection of the convex hull of at least four points that do not lie in one plane (a flat shape is a poly).
@@ -1058,7 +1019,7 @@ local function painted(list, pattern, origin)
     local p = c.pos or c
     local name = source(p.x, p.y, p.z)
     if name then
-      out[#out + 1] = {name = name, pos = M.pos(p.x, p.y, p.z)}
+      out[#out + 1] = {name = name, pos = pos(p.x, p.y, p.z)}
     end
   end
   return cells_of(out, origin)
@@ -1069,7 +1030,7 @@ end
 function M.Region:cells()
   local out = {}
   visit(self, function(x, y, z)
-    out[#out + 1] = M.pos(x, y, z)
+    out[#out + 1] = pos(x, y, z)
   end)
   return located(self, out)
 end
@@ -1088,7 +1049,7 @@ function M.Region:set(pattern)
   visit(self, function(x, y, z)
     local name = source(x, y, z)
     if name then
-      out[#out + 1] = {name = name, pos = M.pos(x, y, z)}
+      out[#out + 1] = {name = name, pos = pos(x, y, z)}
     end
   end)
   return located(self, out)
@@ -1196,7 +1157,7 @@ local function sides(r, pattern, faces)
   shell(r, not faces, function(x, y, z)
     local name = source(x, y, z)
     if name then
-      out[#out + 1] = {name = name, pos = M.pos(x, y, z)}
+      out[#out + 1] = {name = name, pos = pos(x, y, z)}
     end
   end)
   return located(r, out)
@@ -1242,7 +1203,7 @@ function M.Region:center(pattern)
   for x = ranges[1][1], ranges[1][2] do
     for y = ranges[2][1], ranges[2][2] do
       for z = ranges[3][1], ranges[3][2] do
-        list[#list + 1] = M.pos(x, y, z)
+        list[#list + 1] = pos(x, y, z)
       end
     end
   end
@@ -1317,7 +1278,7 @@ function M.Region:shift(dx, dy, dz)
   local v = offset_of(dx, dy, dz)
   local r = KINDS[self.kind].shift(self, v)
   local o = self.origin
-  return o and changed(r, {origin = M.pos(o.x + v.x, o.y + v.y, o.z + v.z)}) or r
+  return o and changed(r, {origin = pos(o.x + v.x, o.y + v.y, o.z + v.z)}) or r
 end
 
 -- the changes outset and inset make: the six directions, fewer with horizontal or vertical
@@ -1438,7 +1399,7 @@ local function turned(self, m, t, without_air)
       local dx, dy, dz = p.x - ox, p.y - oy, p.z - oz
       local at = setmetatable({x = ox + floor(dx * m11 + dy * m12 + dz * m13 + t),
                                y = oy + floor(dx * m21 + dy * m22 + dz * m23 + t),
-                               z = oz + floor(dx * m31 + dy * m32 + dz * m33 + t)}, M.Pos)
+                               z = oz + floor(dx * m31 + dy * m32 + dz * m33 + t)}, numen.geometry.Pos)
       local name = c.pos and c.name
       out[#out + 1] = name and {name = blocks[slot[name]], pos = at} or at
     end
@@ -1535,7 +1496,7 @@ function M.Cells:move(count, dir, leave)
   end
   -- the cells they leave would change the smallest corner, so the moved origin is given outright
   local o = origin_of(self)
-  return cells_of(out, o and M.pos(o.x + v.x, o.y + v.y, o.z + v.z))
+  return cells_of(out, o and pos(o.x + v.x, o.y + v.y, o.z + v.z))
 end
 
 ---Moved so that the origin lands on at (WorldEdit's //paste); the origin is at afterwards.
@@ -1548,7 +1509,7 @@ function M.Cells:paste(at)
     return self
   end
   local out = self:shift(to.x - o.x, to.y - o.y, to.z - o.z)
-  return cells_of(out, M.pos(to.x, to.y, to.z))
+  return cells_of(out, pos(to.x, to.y, to.z))
 end
 
 ---These cells and count - 1 copies turned evenly round a full turn about the vertical axis through the origin:
@@ -1624,7 +1585,7 @@ function M.cyl(at, pattern, radii, height)
   local min_y = height < 0 and c.y + height or c.y
   local max_y = height < 0 and c.y - 1 or c.y + height - 1
   return finish(region({kind = "cyl", cx = c.x, cz = c.z, rx = r[1], rz = r[2], min_y = min_y, max_y = max_y,
-                        origin = M.pos(c.x, c.y, c.z)}), pattern)
+                        origin = pos(c.x, c.y, c.z)}), pattern)
 end
 
 ---Only the wall of a cylinder (see minecraft.shape.cyl): the cells with an open cell beside them, no top and no bottom.
@@ -1650,7 +1611,7 @@ function M.sphere(at, pattern, radii, raised)
   local r = radii_of(radii, 3, 0, "minecraft.shape.sphere(pos, \"stone\", {4, 6, 4})")
   local up = raised and floor(r[2]) or 0
   return finish(region({kind = "ellipsoid", cx = c.x, cy = c.y + up, cz = c.z, rx = r[1], ry = r[2], rz = r[3],
-                        origin = M.pos(c.x, c.y, c.z)}), pattern)
+                        origin = pos(c.x, c.y, c.z)}), pattern)
 end
 
 ---Only the shell of a sphere (see minecraft.shape.sphere): the cells with an open cell beside them, the thinnest closed
@@ -1710,7 +1671,7 @@ function M.cone(at, pattern, radii, height)
   local list = {}
   cone_cells(c, radii_of(radii, 2, 1, "minecraft.shape.cone(pos, \"stone\", {4, 6}, 5)"), floor(height or 1), false, 1,
       put_cell(list))
-  return finish(region_of_cells(list, M.pos(c.x, c.y, c.z)), pattern)
+  return finish(region_of_cells(list, pos(c.x, c.y, c.z)), pattern)
 end
 
 ---Only the wall of a cone (see minecraft.shape.cone), thickness cells thick (default 1).
@@ -1725,7 +1686,7 @@ function M.hcone(at, pattern, radii, height, thickness)
   local list = {}
   cone_cells(c, radii_of(radii, 2, 1, "minecraft.shape.hcone(pos, \"stone\", {4, 6}, 5)"), floor(height or 1), true,
       thickness or 1, put_cell(list))
-  return finish(region_of_cells(list, M.pos(c.x, c.y, c.z)), pattern)
+  return finish(region_of_cells(list, pos(c.x, c.y, c.z)), pattern)
 end
 
 -- the cells of a pyramid of size layers standing on c; hollow keeps only each layer's ring and no floor
@@ -1752,7 +1713,7 @@ function M.pyramid(at, pattern, size)
   local c = cell_at(at)
   local list = {}
   pyramid_cells(c, floor(size), false, put_cell(list))
-  return finish(region_of_cells(list, M.pos(c.x, c.y, c.z)), pattern)
+  return finish(region_of_cells(list, pos(c.x, c.y, c.z)), pattern)
 end
 
 ---Only the outside of a pyramid (see minecraft.shape.pyramid): each layer's ring, open at the bottom.
@@ -1764,7 +1725,7 @@ function M.hpyramid(at, pattern, size)
   local c = cell_at(at)
   local list = {}
   pyramid_cells(c, floor(size), true, put_cell(list))
-  return finish(region_of_cells(list, M.pos(c.x, c.y, c.z)), pattern)
+  return finish(region_of_cells(list, pos(c.x, c.y, c.z)), pattern)
 end
 
 -- cells (a set keyed by position) → every cell whose six neighbours are not all in the set
@@ -1874,7 +1835,7 @@ function M.line(points, pattern, thickness)
   thickness = thickness or 0
   check_path(points, thickness)
   local first = cell_at(points[1])
-  return thick(centre_line(points), thickness, false, M.pos(first.x, first.y, first.z), pattern)
+  return thick(centre_line(points), thickness, false, pos(first.x, first.y, first.z), pattern)
 end
 
 ---Only the outside of a thick line (see minecraft.shape.line): the cells with an open neighbour.
@@ -1886,7 +1847,7 @@ function M.hline(points, pattern, thickness)
   thickness = thickness or 0
   check_path(points, thickness)
   local first = cell_at(points[1])
-  return thick(centre_line(points), thickness, true, M.pos(first.x, first.y, first.z), pattern)
+  return thick(centre_line(points), thickness, true, pos(first.x, first.y, first.z), pattern)
 end
 
 -- the length of the Catmull-Rom spline through nodes, summed over its segments; eight steps each
@@ -1976,7 +1937,7 @@ function M.curve(points, pattern, thickness)
   thickness = thickness or 0
   check_path(points, thickness)
   local first = cell_at(points[1])
-  return thick(curve_line(points), thickness, false, M.pos(first.x, first.y, first.z), pattern)
+  return thick(curve_line(points), thickness, false, pos(first.x, first.y, first.z), pattern)
 end
 
 ---Only the outside of a thick curve (see minecraft.shape.curve).
@@ -1988,7 +1949,7 @@ function M.hcurve(points, pattern, thickness)
   thickness = thickness or 0
   check_path(points, thickness)
   local first = cell_at(points[1])
-  return thick(curve_line(points), thickness, true, M.pos(first.x, first.y, first.z), pattern)
+  return thick(curve_line(points), thickness, true, pos(first.x, first.y, first.z), pattern)
 end
 
 -- the space a function sees a selection in, as WorldEdit's //generate and //deform give it: the cell it is for is
@@ -2220,7 +2181,7 @@ function M.Region:deform(fn, mode)
   local out = {}
   for i, b in ipairs(blocks) do
     local t = targets[i]
-    out[i] = {name = b.name, pos = M.pos(t.x, t.y, t.z)}
+    out[i] = {name = b.name, pos = pos(t.x, t.y, t.z)}
   end
   return cells_of(out, self.origin)
 end
@@ -2256,7 +2217,7 @@ local function filled(at, pattern, radius, depth, everywhere)
     bad("fill needs the pattern to fill with", "minecraft.shape.fill(pos, \"water\", 5)")
   end
   local c = cell_at(at)
-  return painted(minecraft.shape.holes(c, radius, depth, {everywhere = everywhere}), pattern, M.pos(c.x, c.y, c.z))
+  return painted(minecraft.shape.holes(c, radius, depth, {everywhere = everywhere}), pattern, pos(c.x, c.y, c.z))
 end
 
 ---Fill a hole with a pattern (WorldEdit's //fill): the air in a ball of radius round at, at at's height or lower, no
@@ -2362,11 +2323,11 @@ function M.splatter(at, pattern, radius, decay)
     if math.random() > d2 / size2 * (decay / 10) * 2 then
       local name = source(x, y, z)
       if name then
-        out[#out + 1] = {name = name, pos = M.pos(x, y, z)}
+        out[#out + 1] = {name = name, pos = pos(x, y, z)}
       end
     end
   end)
-  return cells_of(out, M.pos(c.x, c.y, c.z))
+  return cells_of(out, pos(c.x, c.y, c.z))
 end
 
 ---Snow layers laid over the ground of this selection's box, smoothed (WorldEdit's //snowsmooth): the same height blur as
@@ -2409,8 +2370,8 @@ function M.Region:size()
     blocks = blocks + to - from + 1
   end)
   local dx, dy, dz = hi.x - lo.x, hi.y - lo.y, hi.z - lo.z
-  return {kind = self.kind, min = M.pos(lo.x, lo.y, lo.z), max = M.pos(hi.x, hi.y, hi.z),
-          size = M.pos(dx + 1, dy + 1, dz + 1), distance = math.sqrt(dx * dx + dy * dy + dz * dz), blocks = blocks}
+  return {kind = self.kind, min = pos(lo.x, lo.y, lo.z), max = pos(hi.x, hi.y, hi.z),
+          size = pos(dx + 1, dy + 1, dz + 1), distance = math.sqrt(dx * dx + dy * dy + dz * dz), blocks = blocks}
 end
 
 ---A forest over this selection (WorldEdit's //forest): each column, in the share density says (percent, default 5), gets

@@ -77,13 +77,15 @@ public final class LuaCodecs {
 
     // ---- 共用的类 ----
 
-    /** 一个位置:只是数据(x、y、z),引擎和各插件共用;方法与运算不归任何插件给它加。 */
+    /** 一个位置(x、y、z),引擎和各插件共用;加减比较与挪动是引擎自带的模块 {@code numen.geometry},每个位置都一样。 */
     public static final ScriptType.Class POS = new ScriptType.Class("Pos",
             "A position. A cell's x, y, z are whole numbers; a body's or an entity's are decimals. Wherever a Pos is "
                     + "taken, anything with a pos field (a Block, an Entity, an Item) goes too, and decimals mean the "
-                    + "cell they fall in (rounded down, as Minecraft does).",
+                    + "cell they fall in (rounded down, as Minecraft does). p + q and p - q add and subtract, p == q "
+                    + "compares, p:offset(dx, dy, dz) moves it and p:dist(q) measures the distance; numen.geometry.pos(x, y, z) "
+                    + "makes one.",
             null, List.of(ScriptType.field("x", ScriptType.NUMBER, null), ScriptType.field("y", ScriptType.NUMBER, null),
-                    ScriptType.field("z", ScriptType.NUMBER, null)));
+                    ScriptType.field("z", ScriptType.NUMBER, null))).methodsIn("numen.geometry");
 
     /** 失败的调用抛出的错误值。 */
     public static final ScriptType.Class ERROR = new ScriptType.Class("Error",

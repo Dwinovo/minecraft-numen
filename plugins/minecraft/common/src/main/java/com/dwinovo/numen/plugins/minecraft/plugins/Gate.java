@@ -39,7 +39,7 @@ public final class Gate {
     /**
      * @param modLoaded 问加载器:这个 mod id 装了没
      * @param inJar     问加载器:本模组 jar 里的这条路径对应哪个 {@link Path},没有这条路径给 null。
-     *                  各加载器模块的 {@code ModJar.find}——Numen 自己的 numen/ 目录也从那里取
+     *                  引擎的平台服务 {@code modResource}(本插件的模组 id)——本插件自己的 numen/ 目录也从那里取
      */
     public Gate(Predicate<String> modLoaded, Function<String, Path> inJar) {
         this.modLoaded = modLoaded;

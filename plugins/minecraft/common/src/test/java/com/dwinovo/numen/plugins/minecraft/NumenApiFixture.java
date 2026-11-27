@@ -39,6 +39,7 @@ public final class NumenApiFixture {
         // 入口登记一次
         com.dwinovo.numen.api.CommonClass.registerTools();
         com.dwinovo.numen.api.CommonClass.registerApi();
+        com.dwinovo.numen.api.CommonClass.registerBundledContent(engineBundled());
         installed = true;
     }
 
@@ -48,5 +49,33 @@ public final class NumenApiFixture {
         } catch (java.net.URISyntaxException e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    /** 引擎自带的 numen/ 目录(类路径上有 numen/modules/numen 的那一个):单测里没有加载器,从类路径取。 */
+    private static java.nio.file.Path engineBundled() {
+        try {
+            var urls = NumenApiFixture.class.getClassLoader().getResources("numen");
+            while (urls.hasMoreElements()) {
+                java.net.URI uri = urls.nextElement().toURI();
+                java.nio.file.Path dir;
+                if ("jar".equals(uri.getScheme())) {
+                    java.nio.file.FileSystem fs;
+                    try {
+                        fs = java.nio.file.FileSystems.newFileSystem(uri, java.util.Map.of());
+                    } catch (java.nio.file.FileSystemAlreadyExistsException e) {
+                        fs = java.nio.file.FileSystems.getFileSystem(uri);
+                    }
+                    dir = fs.getPath("/numen");
+                } else {
+                    dir = java.nio.file.Path.of(uri);
+                }
+                if (java.nio.file.Files.isDirectory(dir.resolve("modules").resolve("numen"))) {
+                    return dir;
+                }
+            }
+        } catch (java.io.IOException | java.net.URISyntaxException e) {
+            throw new IllegalStateException(e);
+        }
+        throw new IllegalStateException("no numen/modules/numen on the class path");
     }
 }
