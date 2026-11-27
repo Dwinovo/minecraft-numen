@@ -18,7 +18,7 @@
 
 </div>
 
-言出法随是一个**运行在 Minecraft 内部的具身智能体**，*作为模组直接存在于游戏之中*，它能够不断探索 Minecraft 世界，**自主决策并采取行动完成任务**。
+言出法随是**你在 Minecraft 里的个人智能体**，*作为模组存在于游戏之中*，它能够不断探索 Minecraft 世界，**自主决策并采取行动完成任务**。
 
 > [!TIP]
 > 欢迎加入 QQ 交流群 **1121662678** 或 [Discord](https://discord.gg/FpDCV327vX)交流。更多详情请见[官网](https://numen.dwinovo.cn)。

@@ -18,7 +18,7 @@
 
 </div>
 
-Numen is an **embodied agent that runs inside Minecraft**. *It lives in the game as a mod*, continually explores the Minecraft world, **makes its own decisions, and takes action to get tasks done**.
+Numen is **your personal agent in Minecraft**. *It lives in the game as a mod*, continually explores the Minecraft world, **makes its own decisions, and takes action to get tasks done**.
 
 > [!TIP]
 > Join us on [Discord](https://discord.gg/FpDCV327vX) or in QQ group **1121662678**. Learn more on the [website](https://numen.dwinovo.cn).

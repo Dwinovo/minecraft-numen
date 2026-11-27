@@ -6,7 +6,7 @@
 
 ![Numen](https://raw.githubusercontent.com/Dwinovo/minecraft-numen/1.21.1/assets/branding/numen-hero-2560.webp)
 
-Numen is an **embodied agent that runs inside Minecraft**. *It lives in the game as a mod*, continually explores the Minecraft world, **makes its own decisions, and takes action to get tasks done**.
+Numen is **your personal agent in Minecraft**. *It lives in the game as a mod*, continually explores the Minecraft world, **makes its own decisions, and takes action to get tasks done**.
 
 > ⭐ **Enjoying Numen?** Please give it a [star on GitHub](https://github.com/Dwinovo/minecraft-numen) — it means a lot to me and really helps the project grow!
 
