@@ -42,7 +42,7 @@ class SerialCallsTest {
 
         @Override
         public boolean isProgram(LlmToolCall call) {
-            return "lua".equals(call.name());
+            return "Lua".equals(call.name());
         }
 
         @Override
@@ -80,11 +80,11 @@ class SerialCallsTest {
     };
 
     private static LlmToolCall tool(String id) {
-        return new LlmToolCall(id, "skill", "{}");
+        return new LlmToolCall(id, "Skill", "{}");
     }
 
     private static LlmToolCall program(String id) {
-        return new LlmToolCall(id, "lua", "{\"code\":\"x\"}");
+        return new LlmToolCall(id, "Lua", "{\"code\":\"x\"}");
     }
 
     private void answer(String id, String result) {

@@ -52,7 +52,7 @@ public final class LuaEngine implements ScriptEngine {
 
     @Override
     public String toolName() {
-        return "lua";
+        return "Lua";
     }
 
     @Override

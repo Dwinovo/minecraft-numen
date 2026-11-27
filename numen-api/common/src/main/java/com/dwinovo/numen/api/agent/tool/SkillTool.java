@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
 public final class SkillTool implements NumenTool {
 
     /** 工具名;技能表的抬头({@link SkillRegistry#formatXml})照它写。 */
-    public static final String NAME = "skill";
+    public static final String NAME = "Skill";
 
 
     @Override

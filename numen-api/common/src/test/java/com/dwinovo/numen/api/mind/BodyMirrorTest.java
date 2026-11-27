@@ -15,13 +15,13 @@ class BodyMirrorTest {
 
     @Test
     void aRunningCallReadsAsItsSummaryWhenItHasOne() {
-        assertEquals(new LoopStatus.Doing("numen.tool.lua", List.of("lua", "Mine the iron vein")),
-                new BodyMirror().doing("lua", "Mine the iron vein"));
+        assertEquals(new LoopStatus.Doing("numen.tool.Lua", List.of("Lua", "Mine the iron vein")),
+                new BodyMirror().doing("Lua", "Mine the iron vein"));
     }
 
     @Test
     void aRunningCallWithNothingToSayReadsAsItsToolName() {
-        assertEquals(new LoopStatus.Doing("numen.tool.lua", List.of("lua")), new BodyMirror().doing("lua", ""));
+        assertEquals(new LoopStatus.Doing("numen.tool.Lua", List.of("Lua")), new BodyMirror().doing("Lua", ""));
     }
 
     @Test
@@ -33,6 +33,6 @@ class BodyMirrorTest {
     void aBodyJobComesFirst() {
         BodyMirror mirror = new BodyMirror();
         mirror.take(new SeatState("", new BodyTask("t1", "numen.work.dig", false, "numen.activity.dig", List.of("oak_log")), 0, 0));
-        assertEquals(new LoopStatus.Doing("numen.activity.dig", List.of("oak_log")), mirror.doing("lua", "Mine the iron vein"));
+        assertEquals(new LoopStatus.Doing("numen.activity.dig", List.of("oak_log")), mirror.doing("Lua", "Mine the iron vein"));
     }
 }

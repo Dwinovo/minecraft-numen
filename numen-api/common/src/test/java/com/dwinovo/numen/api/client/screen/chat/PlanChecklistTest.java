@@ -42,7 +42,7 @@ class PlanChecklistTest {
 
     @Test
     void otherToolsAndRefusedOrUnansweredCallsAreNotChecklists() {
-        assertNull(PlanChecklist.of(call("lua", PLAN), TAKEN));
+        assertNull(PlanChecklist.of(call("Lua", PLAN), TAKEN));
         assertNull(PlanChecklist.of(call(TodoTool.NAME, PLAN), null));
         assertNull(PlanChecklist.of(call(TodoTool.NAME, PLAN),
                 "{\"success\":false,\"message\":\"while work remains exactly one step is [>]\"}"));

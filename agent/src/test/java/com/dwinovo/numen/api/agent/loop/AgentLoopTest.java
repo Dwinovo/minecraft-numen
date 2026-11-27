@@ -47,9 +47,9 @@ class AgentLoopTest extends LoopHarness {
         @Test
         void asideIsOnlyFreeWhenNeitherARunNorAnotherAsideIsInFlight() {
             assertTrue(loop.asideFree());
-            assertTrue(loop.runAside(new LlmToolCall("ext-a", "lua", "{}"), result -> { }));
+            assertTrue(loop.runAside(new LlmToolCall("ext-a", "Lua", "{}"), result -> { }));
             assertFalse(loop.asideFree());
-            assertFalse(loop.runAside(new LlmToolCall("ext-b", "lua", "{}"), result -> { }));
+            assertFalse(loop.runAside(new LlmToolCall("ext-b", "Lua", "{}"), result -> { }));
         }
     }
 
@@ -1031,7 +1031,7 @@ class AgentLoopTest extends LoopHarness {
             ownerSays("挖矿");
             model.last().fail(OVERFLOW);
             model.last().say("摘要");
-            model.last().callTools(new LlmToolCall("c1", "lua", "{}"));
+            model.last().callTools(new LlmToolCall("c1", "Lua", "{}"));
             tools.finish("c1");
 
             model.last().fail(OVERFLOW);

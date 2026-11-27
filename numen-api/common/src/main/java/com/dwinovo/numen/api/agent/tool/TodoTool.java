@@ -18,7 +18,7 @@ import java.util.Map;
 public final class TodoTool implements NumenTool {
 
     /** 工具名。 */
-    public static final String NAME = "todo";
+    public static final String NAME = "TodoWrite";
 
     /** 一项到了哪一步,写在这一项开头的记号。 */
     public enum Status {

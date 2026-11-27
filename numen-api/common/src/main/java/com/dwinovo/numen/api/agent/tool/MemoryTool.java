@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
 public final class MemoryTool implements NumenTool {
 
     /** 工具名。 */
-    public static final String NAME = "memory";
+    public static final String NAME = "Memory";
 
     static final String REMEMBER = "remember";
     static final String RECALL = "recall";

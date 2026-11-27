@@ -311,7 +311,7 @@ class CompactorTest {
         extras.addProperty("reasoning_content", "秘密思考");
         for (int i = 0; i < 5; i++) {
             convo.addUser("主人说第" + i + "句");
-            convo.addAssistant(new AssistantTurn("好的", List.of(new LlmToolCall("c" + i, "lua", "{\"code\":\"goto()\"}")),
+            convo.addAssistant(new AssistantTurn("好的", List.of(new LlmToolCall("c" + i, "Lua", "{\"code\":\"goto()\"}")),
                     extras, "秘密思考", PLAIN.origin()));
             convo.addToolResult("c" + i, "路".repeat(3_000));
         }
@@ -324,7 +324,7 @@ class CompactorTest {
         assertEquals(Compactor.SUMMARIZATION_SYSTEM_PROMPT, request.systemPrompt());
         String prompt = ((ConvoState.Msg.User) request.messages().get(0)).content();
         assertTrue(prompt.startsWith("<conversation>\n[User]: 主人说第0句"), prompt.substring(0, 40));
-        assertTrue(prompt.contains("[Assistant]: 好的\n\n[Assistant tool calls]: lua(code=\"goto()\")"));
+        assertTrue(prompt.contains("[Assistant]: 好的\n\n[Assistant tool calls]: Lua(code=\"goto()\")"));
         assertTrue(prompt.contains("more characters truncated]"), "工具结果截断");
         assertFalse(prompt.contains("秘密思考"), "思考不进摘要请求");
         assertTrue(prompt.indexOf("</conversation>") < prompt.indexOf(Compactor.SUMMARIZATION_PROMPT),
@@ -344,7 +344,7 @@ class CompactorTest {
         // 最后一轮自己就超出近段预算:切点劈在这一轮中间
         convo.addUser("长".repeat(400));
         for (int i = 0; i < 6; i++) {
-            convo.addAssistant(new AssistantTurn("", List.of(new LlmToolCall("t" + i, "lua", "{}")), null));
+            convo.addAssistant(new AssistantTurn("", List.of(new LlmToolCall("t" + i, "Lua", "{}")), null));
             convo.addToolResult("t" + i, "到了");
         }
         Compactor c = compactor(convo, log, endpoint("", "", WINDOW, 16_384, 150));
@@ -372,7 +372,7 @@ class CompactorTest {
         ConvoState convo = new ConvoState(m -> log.append(m, null));
         convo.addUser("长".repeat(400));
         for (int i = 0; i < 6; i++) {
-            convo.addAssistant(new AssistantTurn("", List.of(new LlmToolCall("t" + i, "lua", "{}")), null));
+            convo.addAssistant(new AssistantTurn("", List.of(new LlmToolCall("t" + i, "Lua", "{}")), null));
             convo.addToolResult("t" + i, "到了");
         }
         Compactor c = compactor(convo, log, endpoint("", "", WINDOW, 16_384, 150));

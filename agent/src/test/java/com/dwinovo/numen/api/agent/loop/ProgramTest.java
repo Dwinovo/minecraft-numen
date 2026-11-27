@@ -230,7 +230,7 @@ class ProgramTest {
 
         assertEquals(List.of("work.dig ores"), lines, "collect was not sent");
         assertFalse(receipt().get("success").getAsBoolean());
-        assertTrue(message().startsWith("The script stopped at line 2 after 1 call: lua:2: could not dig: work.dig: "
+        assertTrue(message().startsWith("The script stopped at line 2 after 1 call: Lua:2: could not dig: work.dig: "
                 + "failed — error: out of reach\nusage: work.dig(place)\nhint: walk"), message());
         assertEquals(new ScriptCall.Ending(ScriptCall.Status.ERROR, "runtime"), outcome.ending());
         assertEquals("runtime", outcome.failure().get("kind"));

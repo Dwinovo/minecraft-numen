@@ -22,6 +22,6 @@ class ToolLineTest {
 
     @Test
     void theLabelKeyIsTheToolNameUnderTheConventionPrefix() {
-        assertEquals("numen.tool.lua", ToolLine.key("lua"));
+        assertEquals("numen.tool.Lua", ToolLine.key("Lua"));
     }
 }

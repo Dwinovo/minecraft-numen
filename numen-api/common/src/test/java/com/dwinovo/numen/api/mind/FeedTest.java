@@ -59,7 +59,7 @@ class FeedTest {
     @Test
     void everyEventSurvivesTheWireInOrder() {
         ConvoLog.Line line = new ConvoLog.Line("c0ffee01", 1234, "G", new ConvoState.Msg.Assistant(
-                new AssistantTurn("好", List.of(new LlmToolCall("t1", "lua", "{\"code\":\"x\"}")), null, "想一想")));
+                new AssistantTurn("好", List.of(new LlmToolCall("t1", "Lua", "{\"code\":\"x\"}")), null, "想一想")));
         ConvoLog.Line cut = new ConvoLog.Line("c0ffee02", 1300, null, new ConvoState.Msg.Halt("主人按了停止", null, List.of()));
         List<Feed> events = List.of(new Feed.TurnStart(true), new Feed.Delta("你", "想"), new Feed.Replied("你好", true),
                 new Feed.TurnCut(), new Feed.Halted(), new Feed.Failed(Cause.of(Cause.NETWORK)),

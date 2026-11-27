@@ -5,7 +5,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -120,7 +119,11 @@ public final class ToolRegistry {
             return null;
         }
         NumenTool exact = mine.get(name);
-        return exact != null ? exact : mine.get(name.toLowerCase(Locale.ROOT));
+        if (exact != null) return exact;
+        for (Map.Entry<String, NumenTool> owned : mine.entrySet()) {
+            if (owned.getKey().equalsIgnoreCase(name)) return owned.getValue();
+        }
+        return null;
     }
 
     /** 这位玩家的同伴看得到的全部工具:全局的,接着是他自己的。 */
@@ -141,7 +144,7 @@ public final class ToolRegistry {
      *
      * <p>Most LLM typo failure modes come from case drift
      * ({@code Move_to} vs {@code move_to}, {@code AssignTask} vs
-     * {@code assign_task}); a single lowercase compare catches them all.
+     * {@code assign_task}); one case-insensitive compare catches them all.
      * For names that still don't resolve, callers should surface a
      * structured "unknown tool" error so the LLM can self-correct on
      * the next turn.
@@ -150,9 +153,11 @@ public final class ToolRegistry {
         if (name == null) return null;
         NumenTool exact = TOOLS.get(name);
         if (exact != null) return exact;
-        String lower = name.toLowerCase(Locale.ROOT);   // 工具名是 ASCII 标识符,不能随系统区域变(土耳其语 I)
-        if (lower.equals(name)) return null;  // already lowercase, no further fallback
-        return TOOLS.get(lower);
+        // 工具名是 ASCII 标识符,不能随系统区域变(土耳其语 I)
+        for (Map.Entry<String, NumenTool> tool : TOOLS.entrySet()) {
+            if (tool.getKey().equalsIgnoreCase(name)) return tool.getValue();
+        }
+        return null;
     }
 
     /**

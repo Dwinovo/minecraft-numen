@@ -128,7 +128,7 @@ class TraceRecorderTest {
         trace.on(new LoopEvent.TurnStarted(1, false));
         trace.on(new LoopEvent.ModelUsed(new Usage(100, 40, 0, 0), LoopEvent.Purpose.TURN));
         trace.on(new LoopEvent.AssistantMessage(1, new AssistantTurn("",
-                List.of(new LlmToolCall("a", "lua", "{}"), new LlmToolCall("b", "dig", "{}")), null)));
+                List.of(new LlmToolCall("a", "Lua", "{}"), new LlmToolCall("b", "dig", "{}")), null)));
 
         trace.turn(1, 2, new JsonObject());
 

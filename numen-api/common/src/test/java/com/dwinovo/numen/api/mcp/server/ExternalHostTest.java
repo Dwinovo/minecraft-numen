@@ -54,7 +54,7 @@ class ExternalHostTest {
         @Override
         public CompletableFuture<List<NumenTool>> tools() {
             return CompletableFuture.completedFuture(List.of(new Probe("zeta", ToolHints.UNKNOWN),
-                    new Probe("lua", new ToolHints("Run Lua program", false, true, false, true))));
+                    new Probe("Lua", new ToolHints("Run Lua program", false, true, false, true))));
         }
 
         @Override
@@ -162,7 +162,7 @@ class ExternalHostTest {
     void aBrainSeesTheControlToolsThenHerToolBookSortedByName() throws Exception {
         List<McpHost.ToolInfo> tools = host.tools(BRAIN);
 
-        assertEquals(List.of("list_companions", "create_companion", "delete_companion", "get_events", "guide", "say", "lua",
+        assertEquals(List.of("list_companions", "create_companion", "delete_companion", "get_events", "guide", "say", "Lua",
                         "zeta"),
                 names(tools));
         McpHost.ToolInfo getEvents = tools.get(3);
@@ -219,9 +219,9 @@ class ExternalHostTest {
         lua.addProperty("code", "return 1");
         lua.addProperty("description", "Return one");
 
-        McpHost.Result result = host.call(BRAIN, "lua", lua.toString(), 5, McpHost.Progress.NONE);
+        McpHost.Result result = host.call(BRAIN, "Lua", lua.toString(), 5, McpHost.Progress.NONE);
 
-        assertEquals(List.of("ran lua {\"code\":\"return 1\",\"description\":\"Return one\"}", "<events>x</events>",
+        assertEquals(List.of("ran Lua {\"code\":\"return 1\",\"description\":\"Return one\"}", "<events>x</events>",
                 "<runtime_state>of " + ALICE + "</runtime_state>"), result.texts());
         assertFalse(result.error());
         assertEquals(ALICE, result.subject());

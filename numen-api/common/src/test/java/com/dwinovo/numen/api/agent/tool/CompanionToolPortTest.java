@@ -31,7 +31,7 @@ class CompanionToolPortTest {
 
     @BeforeAll
     static void tools() {
-        if (ToolRegistry.resolve("lua") == null) {
+        if (ToolRegistry.resolve("Lua") == null) {
             ToolRegistry.register(new ScriptTool());
         }
         if (ToolRegistry.resolve(AskUserQuestionTool.NAME) == null) {
@@ -141,7 +141,7 @@ class CompanionToolPortTest {
     };
 
     private static LlmToolCall program(String id) {
-        return new LlmToolCall(id, "lua", ScriptTool.args("numen.work.dig({x = 1, y = 2, z = 3})", "Dig one block").toString());
+        return new LlmToolCall(id, "Lua", ScriptTool.args("numen.work.dig({x = 1, y = 2, z = 3})", "Dig one block").toString());
     }
 
     private static Program.Outcome ended(String receipt) {
