@@ -115,7 +115,7 @@
   一次调用跑完,回一张回执。一次调用就是一行程序:`status.self()`。每个工具自己说一次调用在主人面板上读作什么(`NumenTool.summary`;
   `Lua` 读作那句 `description`),聊天里的工具条与"她在干什么"都问它。外接 MCP 服务器的工具照旧挂着(`RemoteMcpTool`),不在这一套里。
 - 计划清单是另一个工具 `TodoWrite`(见 §七),不是函数;聊天里的计划清单从这次调用的参数画。
-- 系统提示的 `<api>` 索引、工具说明、`api.help` 都从登记处生成;提示词与技能里的例子全是 Lua,防漂移测试经脚本的前端读一遍。
+- 系统提示里的 Lua API 名字空间一行、`ApiSearch` 的答复、工具说明都从登记处生成;提示词与技能里的例子全是 Lua,防漂移测试经脚本的前端读一遍。
 - 管理员的 `/numen drive <同伴> <程序>` 跑一段 Lua,和她的程序同一个入口(§十三);没有第二个前端。
 
 ### 命令函数:由登记处生成
@@ -284,7 +284,7 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
   `fight.clear`。
 - **回执**:结局一行,再是 stderr、返回值与 stdout 三栏(§四"回执");出错带行号与那次调用的 `error:`/`usage:`/`hint:`。
 - **技能是另一个工具,不是 API**(10-04):照 Claude Code 的 Skill 工具,`Skill` 工具收技能名(附属文件 `file`、页码 `page`
-  可选),技能正文就是这次调用的结果;系统提示的 `<available_skills>` 是索引。`numen.skill.load` 删了:程序回执里每次调用只露
+  可选),技能正文就是这次调用的结果;系统提示里的技能表(一句引导语加 `- 名字: 说明`)是索引。`numen.skill.load` 删了:程序回执里每次调用只露
   结果的第一行,正文没 `return` 出来她就读不到,真机上她连着三轮在程序里装同一份技能。外接大脑调的是同一个工具。
 - **计划也是另一个工具,不是 API**(10-04):判据是工具只放管大脑自己的事、不碰世界的(技能、计划),作用于世界的一律是
   Lua API。照 Claude Code 的 TodoWrite,`TodoWrite` 工具收整份计划(`items`,一项一个带记号的字符串),每次替换上一份,大脑
@@ -309,8 +309,8 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
 |---|---|---|
 | 位置是一种带名字字段的值,方块带着它的 `position`,`bot.dig(block)` 收方块本身 | mineflayer 的 `Vec3`、`Block.position`、`bot.dig` | `Pos {x, y, z}`(`LuaCodecs.POS`),Block/Entity/Item 都带 `pos`;收位置的参数收任何带 `pos` 的表(`Positions.cell`、`Place` 的读法) |
 | 查到的东西直接交给下一步,在代码里筛,不让模型抄数 | Anthropic《Code execution with MCP》、Cloudflare Code Mode | `scan.blocks(...).groups[1].nearest` → `work.dig`;`scan.entities()[1]` → `fight.attack`、`move.walk`;`route.plan(...)` 的计划 → `move.go` |
-| 函数签名写成类型,模型照签名写代码;只给一个写代码的工具 | Cloudflare Code Mode(TS 接口)、smolagents `CodeAgent`(带类型的函数签名) | `api.help` 给 LuaLS 注释:`---@class 组` 加每个函数一行 `---@field f fun(…): 返回`(`LuaEngine.groupText`、`functionText`) |
-| 先看索引,要用哪组再展开 | Anthropic 的渐进披露(`search_tools`) | 系统提示只放 `<api>` 索引(组名、一句话、函数名与共用的类);`api.help("组")` 展开一组,`api.help("组.函数")` 展开一个 |
+| 函数签名写成类型,模型照签名写代码;只给一个写代码的工具 | Cloudflare Code Mode(TS 接口)、smolagents `CodeAgent`(带类型的函数签名) | `ApiSearch` 给 LuaLS 注释:`---@class 组` 加每个函数一行 `---@field f fun(…): 返回`(`LuaEngine.groupText`、`functionText`) |
+| 先看索引,要用哪组再展开 | Anthropic 的渐进披露(`search_tools`) | 系统提示只放一行插件名字空间;`ApiSearch` 的 `select:插件` 展开一个插件的说明与它的组,`select:组` 展开一组,`select:组.函数` 展开一个(control 0029) |
 | 失败是一个值,带能拿来改正的信息,程序自己接住再改 | CodeAct(报错回给代码自纠)、Voyager 技能库抛 `Error` 再由技能接住 | 错误值 `{kind, message, hint, fn, data}`,`pcall` 接住按 `err.kind` 分支;库函数 `raise(kind, …)` |
 | 类型注解的写法 | LuaLS(`---@class`、`---@field`、`---@param`、`---@return`) | 登记处的 `ScriptType` 与库函数自己的注释,同一种写法 |
 
@@ -354,10 +354,10 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
 
 ### 帮助
 
-- `<api>` 索引:一句怎么用帮助,共用的类,然后一组一行(说明与函数名)。`api.help("组")`:`---@class 组`、每个函数一行
+- `ApiSearch` 的 `select:插件`:这个插件登记的说明(`NumenApi#guide`),再是它的组一行一个(说明与函数名)。`select:组`:`---@class 组`、每个函数一行
   `---@field 名字 fun(参数: 类型, opts?: {…}): 返回 说明`、`组 = {}`,再接这一组用到的类。`api.help("组.函数")`:完整的
-  `---@param`/`---@return`、选项表与结果写成 `组.函数.opts`、`组.函数.result` 两个类、例子与说明。都由登记处与库的注释生成,
-  没有手写的第二份。
+  `---@param`/`---@return`、选项表与结果写成 `组.函数.opts`、`组.函数.result` 两个类、例子与说明;用到的类(含各组共用的值类型)附在后面。关键字查询按名字与说明排序,`+词` 要求名字里有。
+  都由登记处与库的注释生成,没有手写的第二份。
 
 ## 九、模块统一成库,存在服务器上主人名下(10-04)
 
@@ -592,7 +592,7 @@ public final class LocateApi {                         // 一组:一个公开类
 | `ApiRegistry` | 登记表:组、函数、名字空间;给脚本的目录(`ScriptCatalog`);登记交回撤回它的句柄 |
 | `LuaCodecs` / `Codec` | 值转换,连同签名里写成什么;record、枚举、列表、表现造,别的登记 |
 | `Dispatcher` | 一次调用:脚本里的调用读成参数(读不成当场 `bad_argument`)、服务端或客户端执行、按种类交回(`ApiReply`)、受理活并记下重启后再跑的那一行 |
-| `ApiDocs` | `<api>` 索引、`numen.api.help`、用法、LuaLS 存根、元数据,全从登记表生成 |
+| `ApiDocs` / `ApiSearch` | 一组、一个函数的文字、用法、LuaLS 存根、元数据,全从登记表生成;`ApiSearch` 按名字或关键字取 |
 | `ApiTester` | 进程里跑一段程序看回执(`run`)、lint 报告 |
 | `program.ServerPrograms` | 服务端跑程序的唯一入口(§十四):她的大脑、`/numen drive`、重启后再跑、GameTest、评测与单测都经它 |
 
@@ -688,7 +688,7 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 
 程序里的每次 API 调用有了结局(成了、哪种失败,参数读不成的也算一次)都随回执从服务端送回(`Program.Outcome.calls`,每次调用只带写成的
 文字——长过 `ScriptLimits.CALL_TEXT_CHARS` 的留头部加摘要——第一个文字对象与失败的种类),经 `ScriptCall.Called` → `ToolPort.Sink.called` →
-`LoopEvent.ApiCalled` 报给循环;评测的 `Meter` 按函数记:调了几次、失败的各是哪一种(尤其 `bad_argument`)、第一次调它之前 `numen.api.help`
+`LoopEvent.ApiCalled` 报给循环;评测的 `Meter` 按函数记:调了几次、失败的各是哪一种(尤其 `bad_argument`)、第一次调它之前 `ApiSearch` 按名字查它
 查过几次它(或它的组、名字空间)、和之前一字不差又失败了几次。每次运行写进 `runs.jsonl` 的 `functions`;`summary.md` 有"每个函数"
 一张表,`Compare` 把前后两份按函数并排(调用、失败率、参数错率、查帮助/调用)。插件作者给自己的函数打分:用 `Bench.suite` 登记自己的
 场景,看这张表。

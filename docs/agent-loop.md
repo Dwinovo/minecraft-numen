@@ -570,7 +570,7 @@ sealed interface LoopEvent {
 | 组件 | 职责 | 来源 |
 |---|---|---|
 | `LoopHost` | 构造内核并接端口;人设/模型绑定;外接大脑取件与说话;她的家(日志、收件箱、台账、目标、绑定,在主人客户端上) | 最早的循环类 |
-| `SystemPromptComposer` | 人设 + 操作核心 + 技能表 + 本能名册 | `composeSystemPrompt` |
+| `SystemPromptComposer` | 固定部分 + 记忆与场面的规矩 + 人设(绑了才有) + 技能表 + Lua API 名字空间一行 + 本能 | `composeSystemPrompt` |
 | `RuntimeState` | `<runtime_state>`:当前任务、背包、效果、骑乘、插件片段、附近(`Nearby`) | `runtimeStateXml` 等 |
 | `Compactor` | 压缩提示、切分、摘要提取、熔断 | 压缩相关方法 |
 | `GoalSteward` | 目标设定、评估、续跑、收工 | 目标相关方法 |

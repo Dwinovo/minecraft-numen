@@ -61,7 +61,7 @@ GameTest 服务器(runs/bench)
 ```
 
 - **大脑**:就是产品里主人客户端上的大脑 `LoopHost`(经 `ClientBrains` 建,和 GameTest 夹具 `GameBrain` 同一套接法,座位用进程内的管道),只注入三样:模型(`Mind`,真实的或基线)、
-  人设(内置默认人设)、主动性(默认档位)。请求由产品的 `AgentRequestContext.turn` 组装——系统提示(`SystemPromptComposer`)、
+  人设(评测自己绑的那一份)、主动性(默认档位)。请求由产品的 `AgentRequestContext.turn` 组装——系统提示(`SystemPromptComposer`)、
   运行期状态(`RuntimeState`)、工具表只有那一份;札记索引是 `MemoryPreamble`,整理记忆是 `Compactor`,派工具的顺序是 `SerialCalls`,
   程序整段经座位交给服务端的 `LocalPrograms` 跑。评测不另接一遍端口。
 - **模拟主人**:一个在线的 `ServerPlayer`,连接是 Numen API 测试夹具里的 `OwnerLine`(GameTest 的模拟主人也是它)。发给主人的

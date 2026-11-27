@@ -1,6 +1,6 @@
 # 0029 系统提示照 Claude Code 的写法、引擎不点名插件;查 API 换成工具 ApiSearch;工具名统一大驼峰;先删掉她自己存的模块
 
-- 状态:已接受,未落地
+- 状态:已接受,已落地(实现说明见文末)
 - 日期:2026-11-27
 - 另见:[0008](0008-lua-only-tool.md)(她的工具)、[0014](0014-plugin-registrations-scoped.md)(插件登记有作用域)、
   [0028](0028-ask-user-question-tool.md)(照 Claude Code 对齐工具)、[runtime 0008](../runtime/0008-brain-on-owners-client.md)(大脑在主人客户端)
@@ -152,3 +152,18 @@ Query forms:
 - 插件多一份要写的说明;不写也能用,只是她只能从函数说明里拼。
 - 内容插件仍叫 `numen`,Lua 里仍是 `numen.*`;改名 `minecraft` 另写一份 ADR。
 - 人设、清单仍在系统提示末尾,改人设、装卸技能、插件变化时缓存照旧失效,等记录书那份 ADR 解决。
+
+## 实现说明
+
+- 系统提示:固定部分与记忆、场面两节在 `NumenPrompts`(`FIXED`、`MEMORY`、`CONVERSATION`),`SystemPromptComposer#compose` 按顺序拼人设、技能表、Lua API 一行、本能;
+  技能表由 `SkillRegistry#formatList` 写,本能一节由 `ReflexRegistry#overview` 写,各只有一个生产者。没有人设时 `# Persona` 整段不出现;`DEFAULT_PERSONA`、`ONE_BODY`、
+  全局配置的系统提示(`INumenConfig#getSystemPrompt`、两个加载器的配置项)都删了,"身体同时只做一件后台活"那句话只在 `ScriptTool` 的说明里。
+- `ApiSearch`:`ApiSearchTool`(引擎的工具)经座位的 `api/search` 向服务端要文字,`ApiSearch#search` 按活的登记表现算,一组、一个函数怎么写仍是 `ApiDocs`;
+  目录(`catalog/get`)不再带函数的元数据,只带名字空间一行(`namespaces`)。名字空间 = 有可见的组的插件,加上登记了说明的插件(`curios`、`jei` 没有自己的函数,
+  只有说明)。关键字排序:名字里有一段正好是词 > 名字里含有 > 一句说明里有 > 参数与注意里有,同分时大的(插件、组、函数)在前;`+词` 要求名字里含有。
+- 插件说明:`NumenApi#guide(markdown)`,和别的登记一样归在门的作用域里(`ApiRegistry#registerGuide`);KubeJS 脚本经 `plugin.guide(...)` 登记。每个自带插件一份:
+  `numen`、`ysm`、`tlm`、`kaleidoscope`、`curios`、`ftbquests`、`litematica`、`jei`。
+- `numen.api.help` 删了,`numen.api` 组里剩 `sources`;错误里的 `hint` 写成 `ApiSearch with query "select:<名字>"`(`ScriptEngine#lookUp`)。
+- 工具名:`Lua`、`Skill`、`TodoWrite`、`Memory`、`ApiSearch`;`ToolRegistry#resolve` 的宽松匹配改成不分大小写比较。
+- 她的模块:`numen.module`、`my.*`、`HerModules`、座位的 `modules/get` 与 `modules/builtin`、`Modules` 里她的一层都删了;`Modules` 现在只是随模组与插件发布的内置模块
+  按主人客户端提供的名字空间筛过的视图。每个模块的"战绩"(`Program.Used`、`ScriptCall.Tally`)没有读它的人了,留着没动。
