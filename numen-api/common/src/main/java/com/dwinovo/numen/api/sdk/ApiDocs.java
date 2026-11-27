@@ -19,139 +19,50 @@ import java.util.UUID;
 
 /**
  * API 的说明,全由登记({@link ApiFunction})与模块里函数上面的注释生成,没有手写的第二份。以类型签名呈现(Lua 是 LuaLS 的注解,由脚本
- * 引擎写),按需展开:
+ * 引擎写)。各部件的用处:
  *
  * <ul>
- *   <li>索引({@link #index}):系统提示里的 {@code <api>}——共用的几种值的类声明,每组一行说明与它的函数名,再是模块一个一行;</li>
- *   <li>帮助({@link #help}):{@code numen.api.help("numen.move")} 是一组或一个模块(每个函数一行签名),
- *       {@code numen.api.help("numen.move.walk")} 是一个函数的全部(逐个参数、返回值的字段、例子、注意、相关);</li>
+ *   <li>一组、一个函数、一个模块函数的文字({@link #group}、{@link #function}、{@link #library}):{@link ApiSearch} 按名字或关键字把它们交给模型;</li>
  *   <li>写错时附上的用法({@link #usage});</li>
  *   <li>整份 LuaLS 存根({@link #stubs})与机器可读的元数据({@link #metadata}):编辑器、评测与工具读。</li>
  * </ul>
  */
 public final class ApiDocs {
 
-    /**
-     * 索引里模块那一段的开头,有没有模块都写:模块按名字直接用,不需要也不能 require。
-     */
-    static final String NO_REQUIRE = "Modules: functions written in " + ScriptEngine.IN_USE.language() + " that a "
-            + "program uses by name, like a group: `numen.work.collect()`. You neither need nor can require them; "
-            + "there is no require.";
-
     private ApiDocs() {}
-
-    // ---- 索引 ----
-
-    /**
-     * 系统提示里的 API 索引,由服务端的目录({@link #catalog})拼成:怎么往下要帮助,共用的类,每个组一行说明与函数名
-     * (和组同名的模块的函数也列在那一组下),再是模块,一个一行。按名字排好,字节稳定,不打碎 prompt 缓存。
-     * 一个组都没有时是空串。主人的客户端上的大脑拼的和服务端读的是同一份。
-     */
-    public static String index(Modules modules) {
-        return index(catalog(modules.companion()));
-    }
-
-    /**
-     * 同上,目录是座位上取来的那一份({@code api})。
-     *
-     * @param api {@link #catalog} 的答复
-     */
-    public static String index(JsonObject api) {
-        JsonArray groups = api.getAsJsonArray("groups");
-        if (groups.isEmpty()) {
-            return "";
-        }
-        ScriptEngine engine = ScriptEngine.IN_USE;
-        List<String> lines = new ArrayList<>();
-        lines.add("Call these from the " + engine.toolName() + " tool, always written in full: "
-                + "namespace.group.function. `" + Call.of("numen.api.help", "numen.move") + "` lists a group's or a "
-                + "module's functions with their types; `" + Call.of("numen.api.help", "numen.move.walk")
-                + "` explains one in full (every argument, what it returns, examples).");
-        lines.add("Values the groups share:");
-        JsonObject classes = api.getAsJsonObject("classes");
-        api.getAsJsonArray("shared").forEach(shared -> lines.add(classes.get(shared.getAsString()).getAsString()));
-        lines.add("Groups:");
-        Set<String> groupNames = new LinkedHashSet<>();
-        for (var element : groups) {
-            JsonObject group = element.getAsJsonObject();
-            String name = group.get("name").getAsString();
-            groupNames.add(name);
-            Set<String> functions = new LinkedHashSet<>();
-            group.getAsJsonArray("functions").forEach(f -> functions.add(f.getAsString()));
-            lines.add(name + " — " + group.get("summary").getAsString() + " " + String.join(", ", functions));
-        }
-        Map<String, JsonObject> modules = new java.util.TreeMap<>();
-        api.getAsJsonArray("modules").forEach(m -> modules.put(m.getAsJsonObject().get("name").getAsString(),
-                m.getAsJsonObject()));
-        lines.add(NO_REQUIRE);
-        if (!modules.isEmpty()) {
-            lines.add("Built in: use these for common jobs before writing your own.");
-        }
-        modules.forEach((name, m) -> {
-            List<String> functions = new ArrayList<>();
-            m.getAsJsonArray("functions").forEach(f -> functions.add(f.getAsString()));
-            lines.add("- " + name + ": " + m.get("summary").getAsString() + " (" + String.join(", ", functions) + ")"
-                    + (groupNames.contains(name) ? " — adds to the " + name + " group" : ""));
-        });
-        return "<api>\n" + String.join("\n", lines) + "\n</api>";
-    }
 
     /**
      * 这位主人的客户端提供的组:目标模组只在客户端的联动({@code ClientMods}),主人的客户端没报它就不列、不给帮助;别的组都在。
      * 判据在 {@code ClientMods#offered},这里只是按它筛;隐藏的组({@link ApiRegistry.Group#hidden})不列。
      */
-    private static List<ApiRegistry.Group> offered(Modules modules) {
+    static List<ApiRegistry.Group> offered(Modules modules) {
         return offered(modules.companion());
     }
 
-    private static List<ApiRegistry.Group> offered(UUID companion) {
+    static List<ApiRegistry.Group> offered(UUID companion) {
         return ApiRegistry.groups().stream()
                 .filter(g -> !g.hidden() && com.dwinovo.numen.api.plugin.ClientMods.offered(companion, g.namespace()))
                 .toList();
     }
 
-    /** 索引里一组的那一行:{@code numen.work — 说明 dig, fish, collect, mine}(和组同名的模块的函数接在后面)。 */
-    private static String groupLine(ApiRegistry.Group group, Map<String, Library> library) {
+    /** 一个不和组同名的模块的那一行:{@code numen.shape — 说明 cyl, sphere}。 */
+    static String moduleLine(Modules.Module module, Map<String, Library> library) {
+        return module.name() + " — " + (module.summary() == null ? "" : module.summary()) + " "
+                + String.join(", ", functionsOf(module.name(), library));
+    }
+
+    /** 一个插件的一览里一组的那一行:{@code numen.work — 说明 dig, fish, collect, mine}(和组同名的模块的函数接在后面)。 */
+    static String groupLine(ApiRegistry.Group group, Map<String, Library> library) {
         List<String> names = new ArrayList<>();
         group.functions().forEach(f -> names.add(f.name()));
         names.addAll(functionsOf(group.fullName(), library));
         return group.fullName() + " — " + group.summary() + " " + String.join(", ", names);
     }
 
-    // ---- 帮助 ----
+    // ---- 一组、一个函数、一个模块函数 ----
 
-    /**
-     * 一个名字({@code numen}、{@code numen.move}、{@code numen.move.follow}、{@code numen.move.walk}、指的名字空间、组、模块或函数的帮助;不认得是 null。和组同名的模块的函数在那一组的帮助里。
-     */
-    public static String help(String name, Modules modules) {
-        Map<String, Library> library = library(modules);
-        List<ApiRegistry.Group> offered = offered(modules);
-        List<ApiRegistry.Group> inNamespace = offered.stream().filter(g -> g.namespace().equals(name)).toList();
-        if (!inNamespace.isEmpty()) {
-            List<String> lines = new ArrayList<>();
-            lines.add(name + ": " + inNamespace.size() + " group" + (inNamespace.size() == 1 ? "" : "s") + ". `"
-                    + Call.of("numen.api.help", inNamespace.getFirst().fullName()) + "` lists one with its types.");
-            inNamespace.forEach(g -> lines.add(groupLine(g, library)));
-            return String.join("\n", lines);
-        }
-        ApiRegistry.Group group = ApiRegistry.group(name);
-        if (group != null && offered.contains(group)) {
-            return group(group, library, modules);
-        }
-        ApiFunction fn = ApiRegistry.function(name);
-        if (fn != null && offered.stream().anyMatch(g -> g.namespace().equals(fn.namespace()))) {
-            return function(fn, modules);
-        }
-        Modules.Module module = modules.get(name);
-        if (module != null) {
-            return module(module, library);
-        }
-        Library defined = library.get(name);
-        return defined == null ? null : library(defined);
-    }
-
-    /** 一组:说明,每个函数一行签名(模块里定义在这一组表里的接在后面),再是这些签名引用到的类(共用的几种在索引里,不重复)。 */
-    private static String group(ApiRegistry.Group group, Map<String, Library> library, Modules modules) {
+    /** 一组:说明,每个函数一行签名(模块里定义在这一组表里的接在后面),再是这些签名引用到的类({@code sharedClasses} 为假时共用的几种不写)。 */
+    static String group(ApiRegistry.Group group, Map<String, Library> library, Modules modules, boolean sharedClasses) {
         ScriptEngine engine = ScriptEngine.IN_USE;
         List<String> lines = new ArrayList<>();
         Set<String> named = new LinkedHashSet<>();
@@ -165,11 +76,11 @@ public final class ApiDocs {
                 lines.add(engine.libraryLine(fn.defined()));
             }
         });
-        return engine.groupText(group.fullName(), group.summary(), lines) + classes(named, modules);
+        return engine.groupText(group.fullName(), group.summary(), lines) + classes(named, modules, sharedClasses);
     }
 
     /** 一个不和组同名的模块:说明,每个函数一行签名,和组同一种样子。 */
-    private static String module(Modules.Module module, Map<String, Library> library) {
+    static String module(Modules.Module module, Map<String, Library> library) {
         ScriptEngine engine = ScriptEngine.IN_USE;
         List<String> lines = new ArrayList<>();
         library.forEach((name, fn) -> {
@@ -183,11 +94,11 @@ public final class ApiDocs {
     /** 一个函数,给全:签名(逐个参数带说明、返回什么)、选项与结果的字段、例子、注意、相关,再是它引用到的类。 */
     static String function(ApiFunction fn, Modules modules) {
         FunctionDoc doc = doc(fn);
-        return ScriptEngine.IN_USE.functionText(doc) + classes(named(doc), modules);
+        return ScriptEngine.IN_USE.functionText(doc) + classes(named(doc), modules, true);
     }
 
     /** 模块函数的帮助:它上面的注释(带类型注解)与定义行,它在哪个模块里。 */
-    private static String library(Library fn) {
+    static String library(Library fn) {
         ScriptEngine engine = ScriptEngine.IN_USE;
         return engine.libraryText(fn.defined()) + "\n" + engine.comment("Written in " + engine.language()
                 + " in the module " + fn.module() + ".");
@@ -239,12 +150,12 @@ public final class ApiDocs {
 
     // ---- 类 ----
 
-    /** 引用到的类的声明,接在后面;共用的几种在索引里,不重复。没有是空串。 */
-    private static String classes(Set<String> named, Modules modules) {
+    /** 引用到的类的声明,接在后面;{@code sharedClasses} 为假时共用的几种不写(存根里它们在最前,不重复)。没有是空串。 */
+    private static String classes(Set<String> named, Modules modules, boolean sharedClasses) {
         StringBuilder sb = new StringBuilder();
         for (String name : named) {
             ScriptType.Class c = LuaCodecs.classNamed(name);
-            if (c != null && !LuaCodecs.SHARED.contains(name)) {
+            if (c != null && (sharedClasses || !LuaCodecs.SHARED.contains(name))) {
                 sb.append("\n\n").append(classText(c, modules));
             }
         }
@@ -335,7 +246,7 @@ public final class ApiDocs {
             sb.append("\n\n").append(classText(LuaCodecs.classNamed(shared), modules));
         }
         for (ApiRegistry.Group group : offered(modules)) {
-            sb.append("\n\n").append(group(group, library, modules));
+            sb.append("\n\n").append(group(group, library, modules, false));
             for (ApiFunction fn : group.functions()) {
                 sb.append("\n\n").append(engine.functionText(doc(fn)));
             }
@@ -359,48 +270,16 @@ public final class ApiDocs {
     }
 
     /**
-     * 这位主人的同伴能用的 API,机器可读(JSON),不含任何一位玩家的东西:登记表里的组({@code groups},每组的名字、一句说明、函数名)、
-     * 这些组的每个函数的元数据({@code functions},同 {@link #metadata})、声明了的类({@code classes}、共用的几种 {@code shared})、
-     * 随模组发布的内置模块({@code modules},名字、一句说明、函数名)。系统提示里的 {@link #index} 就是由这些拼出来的;
-     * 目标模组只在客户端的联动,主人的客户端没报它就不列(同 {@link #offered}),隐藏的组不列。
+     * 这位主人的同伴此刻能用的名字空间,按名字排:有登记了的、不隐藏的组,或登记了说明(没有函数、只给别的插件多一类名词的插件也算),
+     * 并且主人的客户端提供它(目标模组只在客户端的联动,主人的客户端没报它就不列,判据同 {@link #offered})。系统提示里的那一行就是它们。
      *
      * @param companion 她;不是谁的视图(只读随模组发布的文字)是 null,都列
      */
-    public static JsonObject catalog(UUID companion) {
-        Map<String, Library> library = library(Modules.factory());
-        JsonArray groups = new JsonArray();
-        JsonArray functions = new JsonArray();
-        for (ApiRegistry.Group group : offered(companion)) {
-            JsonObject g = new JsonObject();
-            g.addProperty("name", group.fullName());
-            g.addProperty("namespace", group.namespace());
-            g.addProperty("summary", group.summary());
-            JsonArray names = new JsonArray();
-            group.functions().forEach(f -> names.add(f.name()));
-            functionsOf(group.fullName(), library).forEach(names::add);
-            g.add("functions", names);
-            groups.add(g);
-            group.functions().forEach(f -> functions.add(functionJson(f)));
-        }
-        JsonArray modules = new JsonArray();
-        Modules.factory().all().forEach((name, module) -> {
-            if (com.dwinovo.numen.api.plugin.ClientMods.offered(companion, name.substring(0, name.indexOf('.')))) {
-                JsonObject m = new JsonObject();
-                m.addProperty("name", name);
-                m.addProperty("summary", module.summary() == null ? "" : module.summary());
-                JsonArray names = new JsonArray();
-                functionsOf(name, library).forEach(names::add);
-                m.add("functions", names);
-                modules.add(m);
-            }
-        });
-        JsonObject out = new JsonObject();
-        out.add("groups", groups);
-        out.add("functions", functions);
-        out.add("classes", classesJson());
-        out.add("shared", new Gson().toJsonTree(LuaCodecs.SHARED));
-        out.add("modules", modules);
-        return out;
+    public static List<String> namespaces(UUID companion) {
+        return java.util.stream.Stream.concat(offered(companion).stream().map(ApiRegistry.Group::namespace),
+                        ApiRegistry.guideNamespaces().stream()
+                                .filter(n -> com.dwinovo.numen.api.plugin.ClientMods.offered(companion, n)))
+                .distinct().sorted().toList();
     }
 
     private static JsonObject functionJson(ApiFunction fn) {

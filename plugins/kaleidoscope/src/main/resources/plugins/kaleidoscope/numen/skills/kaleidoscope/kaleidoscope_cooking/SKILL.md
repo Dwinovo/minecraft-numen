@@ -7,7 +7,7 @@ description: How cooking works in Kaleidoscope Cookery — the stir-fry pot and 
 
 This world has Kaleidoscope Cookery installed. The cooking functions are in the `kaleidoscope.pot` group: `recipes` looks up the menu, `inspect` looks at a pot, `cook` makes one dish from start to finish,
 and the pot's single steps are `oil` to pour oil, `base` to add a soup base, `fill` to add ingredients, `lid` to put the lid on or take it off, `stir` to stir-fry, `plate` to serve. Look up how to call them with
-`numen.api.help("kaleidoscope.pot.cook")` and the like.
+ApiSearch (select:kaleidoscope.pot.cook) and the like.
 
 ## Recipes
 

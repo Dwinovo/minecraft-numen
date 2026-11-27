@@ -134,6 +134,14 @@ public final class SeatClient {
         return call(SeatMethods.PROGRAM_RUN, companion, extra).thenApply(ProgramResult::fromJson);
     }
 
+    /** 查 API 的说明:{@code query} 与 {@code maxResults}(不是正数按默认)见 {@code ApiSearch};答复是写好的文字。 */
+    public CompletableFuture<String> apiSearch(UUID companion, String query, int maxResults) {
+        JsonObject extra = new JsonObject();
+        extra.addProperty("query", query);
+        extra.addProperty("max_results", maxResults);
+        return call(SeatMethods.API_SEARCH, companion, extra).thenApply(o -> o.get("text").getAsString());
+    }
+
     /** 一份随发布的技能:说明、正文与附属文件清单。 */
     public CompletableFuture<SkillText> skill(UUID companion, String name) {
         JsonObject extra = new JsonObject();

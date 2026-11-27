@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.agent.skill;
 
 import com.dwinovo.numen.api.Constants;
+import com.dwinovo.numen.api.agent.prompt.NumenPrompts;
 import com.dwinovo.numen.api.library.EntryId;
 import com.dwinovo.numen.api.library.Library;
 import com.dwinovo.numen.api.library.LibraryKind;
@@ -37,14 +38,7 @@ import java.util.concurrent.CompletableFuture;
  * </pre>
  *
  * <h2>送进系统提示的清单</h2>
- * {@link #formatXml()} 每轮生成一块:
- * <pre>
- * Skills are reference knowledge: how the game and the mods in this world work, their numbers and ids.
- * Use the skill tool to read a skill when what you are about to do touches its topic.
- * &lt;available_skills&gt;
- *   &lt;skill&gt;&lt;name&gt;…&lt;/name&gt;&lt;description&gt;…&lt;/description&gt;&lt;/skill&gt;
- * &lt;/available_skills&gt;
- * </pre>
+ * {@link #formatList()} 每轮生成一块 Markdown:一句引导语,接着一个技能一行 {@code - 名字: 说明}。
  *
  * <p>线程:读任何线程。她自己的技能从库的内存表里解析出来,库变了(复制、重扫)下一次读自动重新解析;手改磁盘上的文件要重扫。
  */
@@ -182,7 +176,7 @@ public final class SkillRegistry {
 
     /**
      * 她能用的技能:有描述的(模型对一份什么都不知道的技能挑不出来,同 opencode),玩家没关掉的。系统提示的
-     * {@code <available_skills>} 索引与点错名字时列出的"有哪些"都是这一份。
+     * 系统提示里的技能表与点错名字时列出的"有哪些"都是这一份。
      */
     public List<SkillInfo> available() {
         return skills().values().stream()
@@ -203,25 +197,19 @@ public final class SkillRegistry {
     }
 
     /**
-     * 每轮追加进系统提示的那块 XML。没有带描述的技能时返回空串,调用方可以无条件追加。
-     * 照 opencode {@code Skill.fmt(verbose:true)} 原样,去掉 {@code <location>}(那是 opencode 给 IDE 显示用的,模型不需要)。
+     * 追加进系统提示的技能表:一句引导语,空一行,一个技能一行 {@code - 名字: 说明}(说明里的换行压成空格)。没有带描述的技能时返回空串,
+     * 调用方可以无条件追加。
      */
-    public String formatXml() {
+    public String formatList() {
         List<SkillInfo> described = available();
         if (described.isEmpty()) return "";
         StringBuilder sb = new StringBuilder(256);
-        sb.append("Skills are reference knowledge: how the game and the mods in this world work, their numbers and ids.\n");
-        sb.append("Use the ").append(com.dwinovo.numen.api.agent.tool.SkillTool.NAME)
-                .append(" tool to read a skill when what you are about to do touches its topic.\n");
-        sb.append("<available_skills>\n");
+        sb.append(NumenPrompts.SKILLS_INTRO).append("\n\n");
         for (SkillInfo s : described) {
-            sb.append("  <skill>\n");
-            sb.append("    <name>").append(escapeXml(s.name())).append("</name>\n");
-            sb.append("    <description>").append(escapeXml(s.description())).append("</description>\n");
-            sb.append("  </skill>\n");
+            sb.append("- ").append(s.name()).append(": ").append(s.description().replaceAll("\\s+", " ").strip())
+                    .append('\n');
         }
-        sb.append("</available_skills>");
-        return sb.toString();
+        return sb.toString().stripTrailing();
     }
 
     /**
@@ -270,22 +258,5 @@ public final class SkillRegistry {
         String description = parsed.frontmatter().get("description");
         if (description != null && description.isBlank()) description = null;
         return new SkillInfo(name.trim(), description, parsed.content(), location);
-    }
-
-    private static String escapeXml(String s) {
-        if (s == null) return "";
-        StringBuilder out = new StringBuilder(s.length());
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            switch (c) {
-                case '<' -> out.append("&lt;");
-                case '>' -> out.append("&gt;");
-                case '&' -> out.append("&amp;");
-                case '"' -> out.append("&quot;");
-                case '\'' -> out.append("&apos;");
-                default -> out.append(c);
-            }
-        }
-        return out.toString();
     }
 }

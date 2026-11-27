@@ -27,14 +27,14 @@ public final class AgentRequestContext {
      * @param runtimeXml  这一刻的运行期状态({@link RuntimeState#xml})
      * @param personaText 人设正文;没有为 {@code null}(见 {@link SystemPromptComposer#compose})
      * @param catalog     服务端的目录(见 {@link SystemPromptComposer#compose})
-     * @param skillsXml   她能用的技能的表
+     * @param skillList   她能用的技能的表
      * @param tools       她这一轮看得到的工具({@code ToolBook#all})
      */
     public static ModelRequest turn(List<ConvoState.Msg> history, String runtimeXml, String personaText,
                                     com.dwinovo.numen.api.seat.Catalog catalog,
-                                    String skillsXml, List<NumenTool> tools) {
+                                    String skillList, List<NumenTool> tools) {
         return new ModelRequest(attach(history, runtimeXml), tools,
-                SystemPromptComposer.compose(personaText, catalog, skillsXml));
+                SystemPromptComposer.compose(personaText, catalog, skillList));
     }
 
     /**

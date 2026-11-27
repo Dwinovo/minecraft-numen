@@ -38,27 +38,41 @@ public final class ScriptTool implements NumenTool {
 
     @Override
     public String description() {
-        // 照 Claude Code 的工具描述写:动词起头,只说它做什么、环境是什么样
+        // 照 Claude Code 的工具描述写:动词起头,只说它做什么、环境是什么样;对所有插件一样,不点名任何一个的函数
         ScriptEngine engine = ScriptEngine.IN_USE;
         return "Runs a " + engine.language() + " program that acts through your API, and returns one receipt when it "
-                + "ends. This is how you do anything in the world: every function is listed in <api>.\n"
+                + "ends. This is how you do anything in the world.\n"
                 + "- " + engine.howToCall() + "\n"
-                + "- One call is a one-line program: `numen.status.self()`. When each next step follows from what a "
-                + "call returned — going through what a scan found, repeating until nothing is left, stopping on the "
-                + "first failure — write the steps as one program.\n"
+                + "- You know a plugin only by its name, which the system prompt lists. Before you use one, read it "
+                + "with " + ScriptEngine.DOCS_TOOL + ": its guide, then the signature of the function you are about to "
+                + "call. Don't guess a name or an argument.\n"
+                + "- One call is a one-line program. When each next step follows from what a call returned — going "
+                + "through what a scan found, repeating until nothing is left, stopping on the first failure — write "
+                + "the steps as one program.\n"
                 + "- The receipt reads like a process's output. First line: how the program ended (`ok · 3 calls · 2 s`; "
                 + "on an error: the line and the call's error, usage and hint). Then stderr: what your body did and what "
                 + "went wrong, an entry for each call that had something to say, with its line and function (`line 5 "
-                + "numen.fight.attack: killed minecraft:cow …`; a body job's entry is its whole account of what it "
-                + "changed; a call that failed is there even when you caught it with pcall; a call that only returns "
-                + "data writes nothing). Then what the program returned, and stdout: what it printed. A long list or "
-                + "deep table is shortened to its first and last items with its size, never silently.\n"
+                + "plugin.group.verb: killed a cow …`; a body job's entry is its whole account of what it changed; a "
+                + "call that failed is there even when you caught it with pcall; a call that only returns data writes "
+                + "nothing). Then what the program returned, and stdout: what it printed. A long list or deep table is "
+                + "shortened to its first and last items with its size, never silently.\n"
+                + "- A function that starts work for your body (walking, digging, fighting, building…) first checks "
+                + "the world and plans; one that can't start (no path, nothing to dig, no tool) fails right there with "
+                + "the reason, and whatever the body was doing goes on. The program waits for each job it starts to "
+                + "end before its next line runs; a job that failed or timed out names the kind first (a timeout "
+                + "reports progress, and the same call again resumes). A job with no end of its own (following, "
+                + "guarding) is passed over: the program goes on past it.\n"
+                + "- " + BODY_JOBS + "\n"
                 + "- A run stops at " + ScriptLimits.COMMANDS + " API calls or " + ScriptLimits.WALL_MILLIS / 60_000
                 + " minutes, and when it runs " + ScriptLimits.INSTRUCTIONS_PER_SLICE + " instructions without "
-                + "calling one. Your owner speaking, an urgent event or the stop button stops it between calls; a body "
-                + "job it was waiting for then keeps running (the stop button stops it too), and its end arrives as "
-                + "a task_finished event.";
+                + "calling one. Your owner speaking, an urgent event or the stop button stops it between calls and the "
+                + "receipt says where; a body job it was waiting for then keeps running (the stop button stops it "
+                + "too), and its end arrives later as an <event kind=\"task_finished\">.";
     }
+
+    /** 身体同时只做一件后台活:任务槽({@code TaskDispatch})做的事,这条规则给模型读的说法只在这里。 */
+    private static final String BODY_JOBS = "One body, one background job: starting another while one runs replaces it, "
+            + "and the new receipt names the job it stopped. Quick actions step in on top of it and hand the body back.";
 
     /** 一段程序能做 API 里的任何事(拆、杀、放、丢),什么都可能发生:按最保守的写。 */
     @Override
@@ -72,7 +86,7 @@ public final class ScriptTool implements NumenTool {
                 .string(CODE, "The program.")
                 .string(DESCRIPTION, "A clear, concise line, in active voice, saying what this program does, a few "
                         + "words: \"Mine the iron vein to the east\". Your owner reads it on the panel; write it in "
-                        + "the language you speak with them (see <speaking>).")
+                        + "the language you speak with them (see # Speaking in the system prompt).")
                 .build();
     }
 

@@ -38,11 +38,11 @@ class ReflexRegistryTest {
 
         String overview = ReflexRegistry.overview();
 
-        assertTrue(overview.startsWith("Your body has these instincts"));
+        assertTrue(overview.startsWith("# Instincts\n"));
         int mlg = overview.indexOf("会用水桶自救高坠");
         int armor = overview.indexOf("会自动穿上更好的盔甲");
         assertTrue(mlg >= 0 && armor > mlg, "顺序该是报到顺序:" + overview);
-        assertTrue(overview.contains("What you explicitly do always comes first"));
+        assertTrue(overview.contains("\n- 会用水桶自救高坠\n- 会自动穿上更好的盔甲"), "每条本能一行:" + overview);
     }
 
     @Test

@@ -105,6 +105,11 @@ class CompanionToolPortTest {
         }
 
         @Override
+        public java.util.concurrent.CompletableFuture<String> searchApi(String query, int maxResults) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public QuestionDesk questions() {
             return desk;
         }

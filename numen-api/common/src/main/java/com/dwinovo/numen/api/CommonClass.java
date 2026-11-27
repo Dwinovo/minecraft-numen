@@ -71,18 +71,18 @@ public class CommonClass {
         ToolRegistry.register(new com.dwinovo.numen.api.agent.tool.SkillTool());
         ToolRegistry.register(new com.dwinovo.numen.api.agent.tool.TodoTool());
         ToolRegistry.register(new com.dwinovo.numen.api.agent.tool.MemoryTool());
+        ToolRegistry.register(new com.dwinovo.numen.api.agent.tool.ApiSearchTool());
         ToolRegistry.register(new com.dwinovo.numen.api.agent.tool.AskUserQuestionTool());
         Constants.LOG.info("[numen] registered {} tool(s)", ToolRegistry.size());
     }
 
     /**
-     * Numen API 自己的几组 API 函数,走宿主自己的登记({@code NumenPlugins.registerHost}),和 Numen 与插件登记进同一张表:{@code api}(帮助)、{@code mc}(原版与模组的
-     * 指令)、{@code task}(手上的活与表)。它们属于 Numen API:谁登记了函数,谁都指望帮助与这几样在。
+     * Numen API 自己的几组 API 函数,走宿主自己的登记({@code NumenPlugins.registerHost}),和 Numen 与插件登记进同一张表:{@code api}(查询的来源)、{@code mc}(原版与模组的
+     * 指令)、{@code task}(手上的活与表)。它们属于 Numen API:谁登记了函数,谁都指望这几样在。
      */
     public static void registerApi() {
         com.dwinovo.numen.api.NumenPlugins.registerHost(numen -> {
-            numen.api("api", "The API itself: the typed signatures of a group's or a module's functions, or one "
-                    + "function in full.", com.dwinovo.numen.api.sdk.HelpApi.class);
+            numen.api("api", "The API itself: what stands behind its lookups.", com.dwinovo.numen.api.sdk.HelpApi.class);
             numen.api("mc", "Minecraft and mod commands, as a player types them in chat, with your owner's permission "
                     + "level.", com.dwinovo.numen.api.mc.McApi.class);
             numen.api("permission", "What your owner lets you do to the world: read it, tighten it yourself, ask "

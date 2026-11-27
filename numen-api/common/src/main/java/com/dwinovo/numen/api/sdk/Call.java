@@ -46,8 +46,8 @@ public final class Call {
         return ScriptEngine.IN_USE.call(fn.fullName(), objects, options);
     }
 
-    /** 一个函数的全部帮助怎么要,一行能照抄的程序:{@code print(numen.api.help("numen.work.dig"))}。 */
+    /** 一个名字(名字空间、组、函数)的说明怎么要:{@code ApiSearch with query "select:numen.work.dig"}。 */
     public static String help(String name) {
-        return "print(" + of("numen.api.help", name) + ")";
+        return ScriptEngine.lookUp(name);
     }
 }

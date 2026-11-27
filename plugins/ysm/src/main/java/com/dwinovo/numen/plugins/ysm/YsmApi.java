@@ -44,6 +44,7 @@ public final class YsmApi {
         YsmApi.emotes = emotes;
         numen.api("model", "Yes Steve Model looks: what you wear and can switch to, switching, emotes.",
                 YsmApi.class);
+        numen.guide(YsmGuide.TEXT);
     }
 
     /** 穿着的与能换的。 */

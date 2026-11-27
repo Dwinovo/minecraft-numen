@@ -1,12 +1,18 @@
 package com.dwinovo.numen.api.agent.request;
 
 import com.dwinovo.numen.api.agent.prompt.NumenPrompts;
-import com.dwinovo.numen.api.platform.Services;
+import com.dwinovo.numen.api.seat.Catalog;
+import com.dwinovo.numen.api.task.reflex.ReflexRegistry;
+import com.dwinovo.numen.script.ScriptEngine;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * 系统提示:只放会话内稳定的那几层——人设、操作核心、技能表、API 索引(含模块)、本能名册、札记的规矩、场面的规矩、说话规则——
- * 好让它成为字节级稳定的缓存前缀。会变的东西不在这里:背包、效果、当前任务挂在每一轮的
- * {@link RuntimeState} 里,她一写就变的札记索引随注入的 user 消息进历史。
+ * 系统提示:只放会话内稳定的那几层,好让它成为字节级稳定的缓存前缀。固定的部分在前(所有同伴一字不差),按情况拼的在后,按这个顺序:
+ * 记忆的规矩、场面的规矩、人设(绑了才有)、技能表(有才有)、Lua API 的名字空间一行(有才有)、本能(有才有)。引擎只说通用的事,
+ * 不点名任何插件的函数:有哪些插件只列名字,要用时她经 {@code ApiSearch} 读。会变的东西不在这里:背包、效果、当前任务挂在每一轮的
+ * {@link RuntimeState} 里,她一写就变的记忆索引随注入的 user 消息进历史。
  *
  * <p>不碰客户端类:主人客户端上的大脑与评测组装的是同一份。
  */
@@ -15,51 +21,29 @@ public final class SystemPromptComposer {
     private SystemPromptComposer() {}
 
     /**
-     * @param personaText 这只同伴绑定的人设正文;没绑或条目没了为 {@code null}(退到全局配置,再退到内置默认人设)
-     * @param catalog     服务端的目录:API、本能名册
-     * @param skillsXml   她能用的技能的表({@code SkillRegistry#formatXml})
+     * @param personaText 这只同伴绑定的人设正文;没绑或条目没了为 {@code null},这一节整段不出现
+     * @param catalog     服务端的目录:Lua API 的名字空间、本能名册
+     * @param skillList   她能用的技能的表({@code SkillRegistry#formatList});没有是空串
      */
-    public static String compose(String personaText, com.dwinovo.numen.api.seat.Catalog catalog, String skillsXml) {
-        // 人设层:同伴绑的人设 → 全局配置的人设 → 内置默认人设。空着的槽会让她退回通用助手的腔调,
-        // 所以最后一档是一个具体的性格,不是"自由发挥"。
-        String base = (personaText != null && !personaText.isBlank())
-                ? personaText : Services.config().getSystemPrompt();
-        if (base == null || base.isBlank()) base = NumenPrompts.DEFAULT_PERSONA;
-        return "<persona>\n" + base.strip() + "\n</persona>" + core(catalog, skillsXml);
-    }
-
-    /**
-     * 不论谁来想都读同一份的那几层:操作核心、技能表(有才有)、API 索引(含模块)、本能名册、札记的规矩、场面的规矩、说话规则。
-     * 内置大脑的系统提示在人设后接上它;外接大脑的说明(MCP 端点)也引用它,所以身体怎么干活、规矩是什么只在这里与
-     * {@link NumenPrompts} 一处。会变的东西不在这里:背包、效果、当前任务挂在每一轮的 {@link RuntimeState} 里,她一写就变的札记索引随
-     * 注入的 user 消息进历史。
-     *
-     * @param skillsXml 技能表({@link SkillRegistry#formatXml});没有技能表是空串
-     */
-    public static String core(com.dwinovo.numen.api.seat.Catalog catalog, String skillsXml) {
-        StringBuilder sb = new StringBuilder(NumenPrompts.ENTITY_PROMPT);
-        if (!skillsXml.isEmpty()) {
-            sb.append("\n\n").append(skillsXml);
+    public static String compose(String personaText, Catalog catalog, String skillList) {
+        List<String> sections = new ArrayList<>();
+        sections.add(NumenPrompts.FIXED);
+        sections.add(NumenPrompts.MEMORY);
+        sections.add(NumenPrompts.CONVERSATION);
+        if (personaText != null && !personaText.isBlank()) {
+            sections.add(NumenPrompts.PERSONA_HEADING + "\n" + personaText.strip());
         }
-        // API 索引:装了哪些组,一组一句,再是模块(内置的在前,她的在后),她不必先 help 就知道去哪找。只随组与模块的增减变、
-        // 按名字排好,是稳定前缀的一部分(她存一个模块,前缀变一次);各组的动作与语法只在帮助里。
-        String commands = com.dwinovo.numen.api.sdk.ApiDocs.index(catalog.api());
-        if (!commands.isEmpty()) {
-            sb.append("\n\n").append(commands);
+        if (!skillList.isEmpty()) {
+            sections.add(skillList);
         }
-        // 本能名册:她得知道身体会自己做哪些事,不然既可能重复去做,也可能对"我怎么突然挪了二十格"
-        // 毫无头绪。名册是服务端注册表的内容,随座位上取来的目录到这里。
-        // 模型只从这里读到它——工具描述里不再另带一份。
-        String reflexes = com.dwinovo.numen.api.task.reflex.ReflexRegistry.overview(catalog.instincts());
-        if (!reflexes.isEmpty()) {
-            sb.append("\n\n<instincts>\n").append(reflexes).append("\n</instincts>");
+        if (!catalog.namespaces().isEmpty()) {
+            sections.add("Lua API: " + String.join(", ", catalog.namespaces()) + ". Read one with " + ScriptEngine.DOCS_TOOL
+                    + " before you use it.");
         }
-        // 札记的规矩:她有记忆这件事、什么值得记。规矩不变所以在前缀里,内容会变所以在注入块里。
-        sb.append(NumenPrompts.MEMORY);
-        // 场面的规矩:<audience> 是什么、旁听到的话是什么、她的话叫不醒别人。谁在场随每句话注入。
-        sb.append(NumenPrompts.CONVERSATION);
-        // 怎么说话压在最末尾:长度与语气离生成位置越近,越不容易在长对话里被冲淡(见 NumenPrompts)
-        sb.append(NumenPrompts.SPEAKING);
-        return sb.toString();
+        String instincts = ReflexRegistry.overview(catalog.instincts());
+        if (!instincts.isEmpty()) {
+            sections.add(instincts);
+        }
+        return String.join("\n\n", sections);
     }
 }

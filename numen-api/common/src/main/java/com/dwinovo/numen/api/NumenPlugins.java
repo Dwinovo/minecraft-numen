@@ -309,6 +309,11 @@ public final class NumenPlugins {
         }
 
         @Override
+        public void guide(String markdown) {
+            open().add(com.dwinovo.numen.api.sdk.ApiRegistry.registerGuide(namespace, markdown));
+        }
+
+        @Override
         public <R extends com.dwinovo.numen.api.task.TaskRecord<?>> void taskRunner(Class<R> record,
                 com.dwinovo.numen.api.task.TaskFactory.Runner<R> runner) {
             open().add(com.dwinovo.numen.api.task.TaskFactory.register(record, runner));

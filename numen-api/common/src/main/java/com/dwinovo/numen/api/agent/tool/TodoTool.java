@@ -67,11 +67,12 @@ public final class TodoTool implements NumenTool {
     @Override
     public String description() {
         // 照 Claude Code 的 TodoWrite 写:动词起头,说清什么时候用、什么时候不用、怎么标
-        return "Writes down your plan for work of several physical phases; your owner sees it as a checklist. Each "
+        return "Writes down your plan for work that goes through several phases; your owner sees it as a checklist. Each "
                 + "call gives the whole plan and replaces the one before.\n"
+                + "- Use it for work that goes through several phases; skip it for work that is done in one step, and "
+                + "for chat.\n"
                 + "- Write it before the first physical step, and again right after each verified result to mark the "
                 + "finished step [x] and move exactly one step to [>]. While work remains exactly one step is [>].\n"
-                + "- Skip it for single actions and chat.\n"
                 + "- Never mark a step [x] on intent or dispatch, only on a result. When blocked, keep the step [>] "
                 + "and add a concrete recovery step.";
     }

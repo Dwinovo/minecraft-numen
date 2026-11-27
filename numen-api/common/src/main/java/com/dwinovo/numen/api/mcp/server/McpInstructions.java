@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api.mcp.server;
 
+import com.dwinovo.numen.api.agent.tool.ApiSearchTool;
 import com.dwinovo.numen.api.agent.tool.MemoryTool;
 import com.dwinovo.numen.api.agent.tool.SkillTool;
 import com.dwinovo.numen.api.agent.tool.TodoTool;
@@ -26,9 +27,9 @@ final class McpInstructions {
                 aside, and even the owner's in-game chat reaches you (via get_events) instead of it.
 
                 Start here: call guide(companion) once and keep what it returns. It is the very text the companion's own \
-                brain starts every request with: its persona, how its body gets things done, the API index, its skills, \
-                its instincts and the rules for notes and for speaking. Where it says "you", it means the companion, and \
-                so it means you.
+                brain starts every request with: how it acts, speaks and keeps memories, its persona, its skills, the \
+                plugins of its Lua API and its instincts. Where it says "you", it means the companion, and so it means \
+                you.
 
                 How this server carries that guide:
                 - Tools: list_companions says who you can drive (create_companion summons one by name, delete_companion \
@@ -36,7 +37,8 @@ final class McpInstructions {
                 one body; you can drive several in parallel, and there is no take-control step.
                 - Acting: the one tool for acting is %s, a program that calls the companion's API; its receipt is what the \
                 guide calls the program's receipt. The %s tool loads one of the companion's skills, the %s tool writes \
-                down your plan, and the %s tool keeps the companion's own notes (recall with no name lists them).
+                down your plan, the %s tool keeps the companion's own memories (recall with no name lists them), and \
+                the %s tool reads the documentation of the Lua API.
                 - What the built-in brain gets at the end of every request you get at the end of every program receipt \
                 and every get_events result: the companion's <runtime_state> (what it is doing, what it carries, its \
                 effects, what is around it), as it is at that moment.
@@ -51,6 +53,6 @@ final class McpInstructions {
                 the owner's approval the owner is asked (not you), and the answer arrives as the program's outcome.
                 - Keep your own conversation history; the game stores none for you, and events queue up until you take \
                 them.""".formatted(ScriptEngine.IN_USE.toolName(), SkillTool.NAME, TodoTool.NAME, MemoryTool.NAME,
-                ExternalBrain.MAX_WAIT_SECONDS);
+                ApiSearchTool.NAME, ExternalBrain.MAX_WAIT_SECONDS);
     }
 }

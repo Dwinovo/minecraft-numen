@@ -33,6 +33,7 @@ public final class LitematicaApi {
     static void install(NumenApi numen) {
         numen.api("placement", "Litematica: the schematic projections your owner has loaded, their cells layer by layer, "
                 + "and showing your own design to them as a projection.", LitematicaApi.class);
+        numen.guide(LitematicaGuide.TEXT);
     }
 
     /** 尺寸:各方向多少格。 */

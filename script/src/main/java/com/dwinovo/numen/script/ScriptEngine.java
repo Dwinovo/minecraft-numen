@@ -14,10 +14,18 @@ public interface ScriptEngine {
     /** 眼下用的那一种。 */
     ScriptEngine IN_USE = new LuaEngine();
 
+    /** 查 API 说明的那个工具的名字:引擎的工具,不随脚本语言。 */
+    String DOCS_TOOL = "ApiSearch";
+
+    /** 怎么读一个名字(名字空间、组、函数)的说明:错误的 {@code hint} 里写的那一句。 */
+    static String lookUp(String name) {
+        return DOCS_TOOL + " with query \"select:" + name + "\"";
+    }
+
     /** 语言的名字,给模型看:{@code Lua 5.2}。 */
     String language();
 
-    /** 收这种程序的工具叫什么:{@code lua}。 */
+    /** 收这种程序的工具叫什么:{@code Lua}。 */
     String toolName();
 
     /** 存成文件时的扩展名:{@code .lua}。 */

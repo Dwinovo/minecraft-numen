@@ -4,6 +4,7 @@ import com.dwinovo.numen.api.talk.Spoken;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.skill.BundledSkills;
 import com.dwinovo.numen.api.agent.skill.SkillInfo;
+import com.dwinovo.numen.api.sdk.ApiSearch;
 import com.dwinovo.numen.mcp.rpc.RpcError;
 import com.dwinovo.numen.api.program.ClientTransport;
 import com.dwinovo.numen.mcp.rpc.RpcException;
@@ -62,6 +63,7 @@ final class SeatConnection {
         peer.onRequest(SeatMethods.STATE_GET, this::state);
         peer.onRequest(SeatMethods.SAY, this::say);
         peer.onRequest(SeatMethods.SKILL_READ, this::readSkill);
+        peer.onRequest(SeatMethods.API_SEARCH, this::searchApi);
         peer.onNotification(SeatMethods.RUN_STARTED, this::runStarted);
         peer.onNotification(SeatMethods.RUN_ENDED, this::runEnded);
         peer.onRequest(SeatMethods.EVENTS_ACK, in -> {
@@ -158,6 +160,19 @@ final class SeatConnection {
         ProgramResult result = seat.run(this, Params.string(in.params(), "program"),
                 Params.requiredInteger(in.params(), "generation"), Params.string(in.params(), "code"), keeper);
         return result.toJson();
+    }
+
+    private JsonElement searchApi(RpcPeer.Incoming in) throws Exception {
+        Seat seat = seat(in);
+        String query = Params.string(in.params(), "query");
+        int max = (int) Params.integer(in.params(), "max_results", 0);
+        JsonObject o = new JsonObject();
+        try {
+            o.addProperty("text", ApiSearch.search(query, max, seat.companion));
+        } catch (IllegalArgumentException refused) {
+            throw new RpcException(RpcError.INVALID_PARAMS, refused.getMessage());
+        }
+        return o;
     }
 
     private JsonElement readSkill(RpcPeer.Incoming in) throws Exception {

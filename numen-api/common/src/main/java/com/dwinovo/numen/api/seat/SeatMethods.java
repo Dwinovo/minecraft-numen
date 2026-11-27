@@ -27,6 +27,8 @@ public final class SeatMethods {
     public static final String STATE_GET = "state/get";
     /** 读一份随模组与插件发布的技能:{@code companion}、{@code name}、可选 {@code file}(附属文件的相对路径);答复见 {@code SkillText}。 */
     public static final String SKILL_READ = "skill/read";
+    /** 查 API 的说明(工具 {@code ApiSearch}):{@code companion}、{@code query}、{@code max_results};答复 {@code {text}}。 */
+    public static final String API_SEARCH = "api/search";
     /** 她要说的话,由服务端在 {@code spoken} 说的地方说出来:{@code companion}、{@code text}、{@code spoken}(见 {@code Spoken#toJson})。 */
     public static final String SAY = "say";
     /** 通知:一次 run 开始了:{@code companion}、{@code run}(这一次的编号,同一只同伴内递增)。 */

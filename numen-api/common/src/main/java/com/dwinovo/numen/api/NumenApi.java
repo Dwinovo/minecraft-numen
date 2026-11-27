@@ -85,6 +85,15 @@ public interface NumenApi {
     void api(String group, String summary, java.util.List<com.dwinovo.numen.api.sdk.ApiFunction> functions);
 
     /**
+     * 登记你的名字空间的说明(Markdown):你的插件是干什么的、几组函数怎么配合、一两个例子。她的上下文里只有一行名字空间,要用时
+     * 经 {@code ApiSearch} 读它;函数各自的签名与说明由 {@link #api} 的登记生成,这里写的是它们之外的:什么时候用这个插件、用法的顺序、
+     * 不看函数说明就看不出来的关系。不强制写,不写她只能从函数说明里拼。在门里登记,插件撤回时一起撤。
+     *
+     * @throws IllegalArgumentException 说明是空的,或这个名字空间已经有一份
+     */
+    void guide(String markdown);
+
+    /**
      * 登记一种活的执行器:你的函数返回 {@code Job.of(记录)} 派下的活({@link com.dwinovo.numen.api.task.TaskRecord} 的某个具体类),
      * 由 {@code runner} 在她的身体上按刻执行。在门里登记,所以插件撤回时它一起撤掉(门外直接调
      * {@link com.dwinovo.numen.api.task.TaskFactory#register} 撤不回,那样的插件得声明卸下要重启)。

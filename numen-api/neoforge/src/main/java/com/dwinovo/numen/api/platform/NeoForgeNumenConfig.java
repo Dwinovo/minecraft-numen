@@ -23,7 +23,6 @@ import net.neoforged.neoforge.common.ModConfigSpec;
 public final class NeoForgeNumenConfig implements INumenConfig {
 
     public static final ModConfigSpec.ConfigValue<String> PROXY;
-    public static final ModConfigSpec.ConfigValue<String> SYSTEM_PROMPT;
     public static final ModConfigSpec.ConfigValue<String> STT_PROVIDER;
     public static final ModConfigSpec.ConfigValue<String> STT_BASE_URL;
     public static final ModConfigSpec.ConfigValue<String> STT_MODEL;
@@ -36,10 +35,6 @@ public final class NeoForgeNumenConfig implements INumenConfig {
         b.comment("Network settings for LLM calls.").push("openai");
         PROXY = b.comment("Optional HTTP proxy for LLM calls as host:port (empty = direct).")
                 .define("proxy", "");
-        b.pop();
-        b.comment("Behaviour tuning.").push("agent");
-        SYSTEM_PROMPT = b.comment("System prompt prepended to every conversation.")
-                .define("system_prompt", DEFAULT_SYSTEM_PROMPT);
         b.pop();
 
         b.comment("Voice input (STT) — global, one microphone / one transcription service.").push("stt");
@@ -61,11 +56,6 @@ public final class NeoForgeNumenConfig implements INumenConfig {
     public NeoForgeNumenConfig() {}
 
     @Override
-    public String getSystemPrompt() {
-        return safe(SYSTEM_PROMPT);
-    }
-
-    @Override
     public String getProxy() {
         return safe(PROXY);
     }
@@ -75,11 +65,6 @@ public final class NeoForgeNumenConfig implements INumenConfig {
     @Override
     public void setProxy(String value) {
         PROXY.set(value == null ? "" : value);
-    }
-
-    @Override
-    public void setSystemPrompt(String value) {
-        SYSTEM_PROMPT.set(value == null ? "" : value);
     }
 
     /**

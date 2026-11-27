@@ -1,5 +1,7 @@
 package com.dwinovo.numen.api.task.reflex;
 
+import com.dwinovo.numen.api.agent.prompt.NumenPrompts;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -11,9 +13,8 @@ import java.util.Map;
  *
  * <ul>
  *   <li><b>self-description into the prompt</b> — {@link #overview()} joins the
- *       registered reflexes' one-liners into the "你的身体有这些本能:…你的显式动作
- *       永远优先" paragraph, which the client puts in the system prompt's
- *       {@code <instincts>} block — the one place the model reads it;</li>
+ *       registered reflexes' one-liners into the "# Instincts" section, which the
+ *       client puts in the system prompt — the one place the model reads it;</li>
  *   <li>—— 就这一件。<b>名册即全部</b>:登记了就是开着的,没有"每条本能的开关"。
  *       要做开关,先做主人能按的面板入口,再让这里长出开关——只有开关没有入口的话,
  *       每次启动读一个文件、写一个文件,里面的值永远全是 true。看着有、实际没有,
@@ -46,9 +47,8 @@ public final class ReflexRegistry {
     }
 
     /**
-     * The reflex overview for the model: every registered reflex's self-description
-     * joined into one paragraph, ending on the constitutional guarantee that
-     * explicit actions always win. Empty when nothing is registered.
+     * The reflex overview for the model: the "# Instincts" section of the system prompt,
+     * every registered reflex's self-description one per line. Empty when nothing is registered.
      */
     public static synchronized String overview() {
         return overview(descriptions());
@@ -57,9 +57,9 @@ public final class ReflexRegistry {
     /** 同上,自述由调用方给:主人的客户端上的大脑读的是服务端目录里的那一份。 */
     public static String overview(List<String> lines) {
         if (lines.isEmpty()) return "";
-        return "Your body has these instincts; they happen on their own and need no tool: "
-                + String.join("; ", lines)
-                + ". What you explicitly do always comes first.";
+        StringBuilder sb = new StringBuilder(NumenPrompts.INSTINCTS_INTRO);
+        lines.forEach(line -> sb.append("\n- ").append(line));
+        return sb.toString();
     }
 
     /** Test hook: wipe the roster. */

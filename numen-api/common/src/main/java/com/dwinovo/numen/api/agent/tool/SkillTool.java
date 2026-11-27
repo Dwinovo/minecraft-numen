@@ -13,7 +13,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * 装技能的工具,照 Claude Code 的 Skill 工具:她在系统提示的 {@code <available_skills>} 里看到一份技能合用,调它,技能正文就是这次
+ * 装技能的工具,照 Claude Code 的 Skill 工具:她在系统提示里看到一份技能表合用,调它,技能正文就是这次
  * 调用的结果。技能表是这位主人看到的那一份({@link SkillRegistry#of}),工具当场答;外接大脑(MCP)调的是同一个工具。
  *
  * <p>正文成型交给 {@link SkillInjection},和主人打斜杠命令进上下文的是同一个样子。技能与附属文件是文件,按输出预算一页一页给
@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
  */
 public final class SkillTool implements NumenTool {
 
-    /** 工具名;技能表的抬头({@link SkillRegistry#formatXml})照它写。 */
+    /** 工具名;技能表的引导语({@link SkillRegistry#formatList})写着它。 */
     public static final String NAME = "Skill";
 
 
@@ -35,8 +35,8 @@ public final class SkillTool implements NumenTool {
         // 照 Claude Code 的 Skill 工具写:动词起头,说清什么时候用、结果是什么
         return "Reads a skill — reference knowledge on one topic: how the game or a mod works, its numbers and ids — "
                 + "and returns its text as this call's result.\n"
-                + "- <available_skills> in the system prompt lists each skill and what it covers. When something you "
-                + "are about to do touches one of those topics, read it first.\n"
+                + "- The system prompt lists each skill and what it covers. When a skill fits what you are about to "
+                + "do, read it before you start.\n"
                 + "- A read skill is a <skill_content name=\"…\"> block in the conversation, whether this tool or "
                 + "your owner's slash command put it there; while it is in the conversation, it is there to look up.\n"
                 + "- A skill's text may name a supporting file by relative path; load that with file when the text "
@@ -52,7 +52,7 @@ public final class SkillTool implements NumenTool {
     @Override
     public Map<String, Object> parameterSchema() {
         return Schema.object()
-                .string("skill", "The skill's name, as <available_skills> lists it.")
+                .string("skill", "The skill's name, as the system prompt lists it.")
                 .optionalString("file", "Relative path of a supporting file the skill's text names, e.g. "
                         + "references/baroque.md. Omit to load the skill's own text.")
                 .optionalInteger("page", "Which page of a long text. Omit for the first.", 1, 99)

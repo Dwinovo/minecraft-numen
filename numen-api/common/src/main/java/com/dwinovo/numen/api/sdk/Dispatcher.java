@@ -50,7 +50,7 @@ public final class Dispatcher {
         ApiFunction fn = ApiRegistry.function(call.group() + "." + call.name());
         if (fn == null) {
             throw new ApiError(ErrorKind.NO_FUNCTION, "there is no API function " + call.function(),
-                    "the <api> index lists every group; " + Call.help(call.group()) + " lists one.");
+                    "read what " + call.group() + " has: " + Call.help(call.group()));
         }
         FnArgs args = read(fn, call);
         return new Invocation(fn.groupName(), fn.name(), fn.fullName(),

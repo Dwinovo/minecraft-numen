@@ -128,18 +128,12 @@ public final class FabricNumenConfig implements INumenConfig {
     }
 
     @Override
-    public String getSystemPrompt() { return data().systemPrompt == null ? "" : data().systemPrompt; }
-
-    @Override
     public String getProxy() { return data().proxy == null ? "" : data().proxy; }
 
     // ---- mutations ----
 
     @Override
     public void setProxy(String value) { data().proxy = value == null ? "" : value; }
-
-    @Override
-    public void setSystemPrompt(String value) { data().systemPrompt = value == null ? "" : value; }
 
     @Override
     public void save() {
@@ -173,7 +167,6 @@ public final class FabricNumenConfig implements INumenConfig {
         public String sttBaseUrl = "";
         public String sttModel = "FunAudioLLM/SenseVoiceSmall";
         public String sttMicrophone = "";
-        public String systemPrompt = DEFAULT_SYSTEM_PROMPT;
 
         static ConfigData defaults() {
             return new ConfigData();
@@ -183,7 +176,6 @@ public final class FabricNumenConfig implements INumenConfig {
         ConfigData applyDefaults() {
             ConfigData d = defaults();
             if (proxy == null) proxy = d.proxy;
-            if (systemPrompt == null) systemPrompt = d.systemPrompt;
             if (sttProvider == null || sttProvider.isBlank()) sttProvider = d.sttProvider;
             if (sttBaseUrl == null) sttBaseUrl = d.sttBaseUrl;
             if (sttModel == null) sttModel = d.sttModel;

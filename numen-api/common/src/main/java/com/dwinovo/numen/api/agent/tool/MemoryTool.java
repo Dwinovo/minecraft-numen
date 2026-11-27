@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
  * 她自己的札记,照 Anthropic 的 memory 工具:一个工具,{@code command} 说这一次做哪件事——记一条、读一条的正文、忘掉一条。札记本
  * ({@link NoteBook})落在主人客户端,管的是大脑自己的事、不碰世界,所以是工具而不是 Lua API;工具当场在主人客户端答,外接大脑(MCP)
  * 经 {@code ToolRegistry} 拿到的是同一个工具。札记的索引照旧每轮作为 {@code <memory>} 注入;记什么、不记什么写在系统提示的
- * {@code <memory_rules>} 里,这里只讲参数怎么填——同一份说明不写两处。
+ * {@code # Memory} 一节里,这里只讲参数怎么填——同一份说明不写两处。
  *
  * <p>为什么是一个工具带 {@code command},不是三个工具:三件事作用于同一本札记,说明与参数大半共用;Anthropic 的 memory 工具与
  * 文本编辑工具都是这样一个工具几种命令,工具表也只多一项。
@@ -36,7 +36,8 @@ public final class MemoryTool implements NumenTool {
     @Override
     public String description() {
         // 照 Anthropic memory 工具的描述写:动词起头,说清三种命令各做什么
-        return "Keeps your own notes, which outlive this session; <memory> is the index of them, one line per note.\n"
+        return "Keeps your own memories, which outlive this session; the # Memory section of the system prompt says "
+                + "what is worth keeping, and <memory> is the index of them, one line per memory.\n"
                 + "- command \"remember\" writes one note: description is the line you will see in <memory>, the fact "
                 + "itself (\"main base -340,68,120\"), not a label; name is its handle (writing a name again replaces "
                 + "that note); content is a longer body, only when there is more worth reading later.\n"

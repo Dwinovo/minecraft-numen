@@ -67,7 +67,7 @@ public final class LuaEngine implements ScriptEngine {
 
     private static Object require(List<Object> in) {
         throw new LuaSandbox.ScriptError(ScriptRun.failure(ErrorKind.NO_FUNCTION.wire(), "there is no require in "
-                + "these programs", "modules are used by name: `numen.work.collect()`, `my.lumber.chop(...)`", REQUIRE,
+                + "these programs", "modules are used by name, like a group: plugin.group.verb()", REQUIRE,
                 null));
     }
 
@@ -125,7 +125,7 @@ public final class LuaEngine implements ScriptEngine {
         return new LuaSandbox.ScriptError(ScriptRun.failure(ErrorKind.BAD_ARGUMENT.wire(),
                 "takes " + (taken == 0 ? "no arguments" : taken + " argument(s)") + ", got " + given + "\nusage: " + name
                         + "(" + String.join(", ", fn.params()) + ")",
-                "print(numen.api.help(\"" + (fn.type() == null ? name : module) + "\"))", name, null));
+                ScriptEngine.lookUp(fn.type() == null ? name : module), name, null));
     }
 
     /**
@@ -168,24 +168,18 @@ public final class LuaEngine implements ScriptEngine {
 
     @Override
     public String howToCall() {
-        return "Every API function is written in full, `namespace.group.verb(objects..., {option = value})`: Numen's "
-                + "own are under numen (`numen.scan.blocks(\"iron_ore\", {radius = 12})`, `numen.work.dig({x = 120, y = 12, z = -35})`), a "
-                + "mod's under its id. A position is a table with named "
-                + "fields, `{x = 120, y = 64, z = -35}` (a Pos); anything a call returns that has a `pos` (a Block, an "
-                + "Entity, an Item) goes where a position goes, as it is: `local e = numen.scan.entities(\"hostile\")[1]; "
-                + "numen.fight.attack(e)`, and the same with numen.move.walk(e.pos). A switch is `{sneak = true}`; a "
+        return "Every API function is written in full, the plugin's namespace first: plugin.group.verb(objects..., "
+                + "{option = value}). A position is a table with named fields, `{x = 120, y = 64, z = -35}` (a Pos); "
+                + "anything a call returns that has a `pos` (a Block, an Entity, an Item) goes where a position goes, "
+                + "as it is. A switch is `{sneak = true}`; a "
                 + "name Lua already uses gets a trailing underscore (`until_`). A call returns when it is done "
-                + "(work that occupies your body: when it has finished) and returns data, never sentences: "
-                + "`numen.status.self()` is a table whose pos is a Pos, numen.work.dig(b) a table with what it dug. A "
-                + "call that fails raises an error value: `local ok, err = pcall(numen.work.dig, {x = 120, y = 12, "
-                + "z = -35})` catches it, "
+                + "(work that occupies your body: when it has finished) and returns data, never sentences. A "
+                + "call that fails raises an error value: pcall(fn, args...) catches it, "
                 + "`err.kind` says what kind "
                 + "(bad_argument, not_found, out_of_reach, no_path, denied, ...), `err.hint` is a line to run next; "
                 + "`raise(kind, message, hint)` raises your own. To read a value, `print(x)` (a table prints as a Lua "
                 + "table) or `return x`; the receipt shows what you printed (stdout) or returned, a long table shortened with its size; what your body did and any call that failed are in its stderr. A module "
-                + "is used by its name like a group, with no require: `numen.work.collect()`, `my.lumber.chop(t)`. "
-                + "`numen.api.help(\"numen.work\")` lists a group's or a module's typed signatures, "
-                + "`numen.api.help(\"numen.work.dig\")` explains one.";
+                + "is used by its name like a group, with no require.";
     }
 
     @Override
@@ -629,8 +623,7 @@ public final class LuaEngine implements ScriptEngine {
                 "there is no " + (namespace ? "group or module " : "API function ") + table + "." + key
                         + (close ? "; did you mean " + table + "." + nearest + "?" : "")
                         + (namespace ? "; " + table + " has: " + String.join(", ", present) : ""),
-                namespace ? "the <api> index lists every group." : "numen.api.help(\"" + table
-                        + "\") lists the group's functions.", null, null));
+                ScriptEngine.lookUp(table), null, null));
     }
 
     /**

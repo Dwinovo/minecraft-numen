@@ -115,10 +115,12 @@ class NumenPluginScopeTest {
             numen.codec(Marker.class, MARKER);
             numen.registerGear(gear);
             numen.answer(PROBE, "gt_scope", "gt_scope says");
+            numen.guide("Guide of the scope fixture.");
             numen.bundleContent(dir);
         });
 
         assertNotNull(ApiRegistry.function("gt_scope.scoped.act"));
+        assertEquals("Guide of the scope fixture.", ApiRegistry.guide("gt_scope"));
         assertTrue(EventTypes.isRegistered("gt_scope_event"));
         assertTrue(codecKnown());
         assertNotNull(BuiltinModules.get("gt_scope.probe"));
@@ -132,6 +134,7 @@ class NumenPluginScopeTest {
 
         assertNull(ApiRegistry.function("gt_scope.scoped.act"));
         assertNull(ApiRegistry.group("gt_scope.scoped"));
+        assertNull(ApiRegistry.guide("gt_scope"));
         assertFalse(EventTypes.isRegistered("gt_scope_event"));
         assertFalse(codecKnown());
         assertNull(BuiltinModules.get("gt_scope.probe"));
@@ -146,6 +149,7 @@ class NumenPluginScopeTest {
 
         assertEquals(2, setups.get(), "re-registering runs the setup again");
         assertNotNull(ApiRegistry.function("gt_scope.scoped.act"));
+        assertEquals("Guide of the scope fixture.", ApiRegistry.guide("gt_scope"));
         assertTrue(EventTypes.isRegistered("gt_scope_event"));
         assertTrue(codecKnown());
         assertNotNull(BuiltinModules.get("gt_scope.probe"));

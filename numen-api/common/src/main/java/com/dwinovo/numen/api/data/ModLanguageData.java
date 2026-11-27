@@ -768,6 +768,7 @@ public final class ModLanguageData {
         adder.add("numen.tool.TodoWrite", "To-do");
         adder.add("numen.tool.Memory", "Memory");
         adder.add("numen.tool.AskUserQuestion", "Ask");
+        adder.add("numen.tool.ApiSearch", "API");
         adder.add(Keys.ACTIVITY_AWAITING_ANSWER, "waiting for an answer");
         adder.add(Keys.QUESTION_OTHER, "Other answer…");
         adder.add(Keys.QUESTION_CHAT, "Chat about this");
@@ -1543,6 +1544,7 @@ public final class ModLanguageData {
         adder.add("numen.tool.TodoWrite", "待办");
         adder.add("numen.tool.Memory", "记忆");
         adder.add("numen.tool.AskUserQuestion", "提问");
+        adder.add("numen.tool.ApiSearch", "查接口");
         adder.add(Keys.ACTIVITY_AWAITING_ANSWER, "等待回答");
         adder.add(Keys.QUESTION_OTHER, "其他回答…");
         adder.add(Keys.QUESTION_CHAT, "聊聊这个");

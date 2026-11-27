@@ -60,6 +60,11 @@ final class CountingApi implements NumenApi {
     }
 
     @Override
+    public void guide(String markdown) {
+        door.guide(markdown);
+    }
+
+    @Override
     public <R extends com.dwinovo.numen.api.task.TaskRecord<?>> void taskRunner(Class<R> record,
             com.dwinovo.numen.api.task.TaskFactory.Runner<R> runner) {
         door.taskRunner(record, runner);

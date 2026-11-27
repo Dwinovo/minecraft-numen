@@ -80,7 +80,7 @@ GameTest 服务器(runs/bench)
 
 一组场景是一条 GameTest 用例,场景一次一次地跑、不并行:
 
-1. 每个场景先跑**标准解**(把场景写好的一段 Lua 程序当作一次 `lua` 调用交出去,必须过)和**空操作**(她只答一句,必须挂)。两种基线
+1. 每个场景先跑**标准解**(把场景写好的一段 Lua 程序当作一次 `Lua` 调用交出去,必须过)和**空操作**(她只答一句,必须挂)。两种基线
    不花 API,证明场景可解、断言不被什么都不做骗过。对不上的场景不跑真实模型,记为自检失败。
 2. 基线可信的场景跑真实模型 `bench.repeats` 次。
 3. 用例本身的成败只说评测靠不靠得住:自检全对、没有评测出错、没被余额不足打断就通过。模型成不成功只进报告。
@@ -126,7 +126,7 @@ public final class TlmBench implements GameTestSuite {
 | `opening()` | 主人开场说的话 |
 | `checks()` | `Check.success`(成功断言)、`Check.guard`(负面断言)、`Check.subgoal`(子目标);写法同 GameTest,不成立就 `scene.assertTrue(false, "看到了什么")`。"她没死"每个场景都有 |
 | `metrics(Scene)` | 可选:收场时记一组数(名字到数值)进结果的 `metrics`,只是指标、不决定成败 |
-| `solution(Scene)` | 标准解:一段 Lua 程序,和她调 `lua` 工具写的一样 |
+| `solution(Scene)` | 标准解:一段 Lua 程序,和她调 `Lua` 工具写的一样 |
 | `arena()`、`budget()`、`start()`、`ownerAt()`、`owner()` | 可选:场地大小、预算(默认 30 轮、10 分钟;长链条的场景自己给,如 `iron_pickaxe_chain` 是 60 轮、20 分钟)、她和主人站哪、模拟主人的剧本(默认允许一次、不回话) |
 
 每次运行造一个新实例(`suite.add` 收构造器),这一次生成的东西(一只女仆)放在场景自己的字段里。坐标相对场地:

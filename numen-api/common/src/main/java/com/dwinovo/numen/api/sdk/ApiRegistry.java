@@ -42,6 +42,9 @@ public final class ApiRegistry {
     /** 组的全名 → 组,按名字排序:帮助与系统提示索引的顺序不随插件的加载先后变,字节稳定。 */
     private static final Map<String, Group> GROUPS = new TreeMap<>();
 
+    /** 名字空间 → 它的说明(Markdown),按名字排序,和组一样字节稳定。 */
+    private static final Map<String, String> GUIDES = new TreeMap<>();
+
     /** 引擎自己占的全局名:名字空间不能占。 */
     private static final List<String> ENGINE_GLOBALS = List.of("raise", "require");
 
@@ -124,6 +127,42 @@ public final class ApiRegistry {
                 }
             }
         });
+    }
+
+    /**
+     * 登记一个名字空间的说明:这个插件是干什么的、几组函数怎么配合、例子(Markdown)。{@code ApiSearch} 查到这个名字空间时把它交给模型。
+     * 不强制写;一个名字空间只有一份。
+     *
+     * @return 撤回它的句柄
+     * @throws IllegalArgumentException 名字空间写不出来、这个名字空间已经有一份、说明是空的
+     */
+    public static synchronized Handle registerGuide(String namespace, String guide) {
+        checkNamespace(namespace);
+        if (guide == null || guide.isBlank()) {
+            throw new IllegalArgumentException("the guide of " + namespace + " is empty");
+        }
+        if (GUIDES.containsKey(namespace)) {
+            throw new IllegalArgumentException("the namespace " + namespace + " already has a guide");
+        }
+        String made = guide.strip();
+        GUIDES.put(namespace, made);
+        return Handle.once(() -> {
+            synchronized (ApiRegistry.class) {
+                if (GUIDES.get(namespace) == made) {
+                    GUIDES.remove(namespace);
+                }
+            }
+        });
+    }
+
+    /** 这个名字空间的说明;没有登记是 null。 */
+    public static synchronized String guide(String namespace) {
+        return GUIDES.get(namespace);
+    }
+
+    /** 登记了说明的名字空间,按名字排序。 */
+    public static synchronized List<String> guideNamespaces() {
+        return List.copyOf(GUIDES.keySet());
     }
 
     /** 登记了的各组,按全名排序。 */

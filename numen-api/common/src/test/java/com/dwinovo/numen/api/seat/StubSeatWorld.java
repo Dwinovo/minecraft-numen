@@ -134,12 +134,7 @@ final class StubSeatWorld implements SeatWorld {
     public JsonObject catalog(UUID companion) {
         JsonObject catalog = new JsonObject();
         catalog.addProperty("version", catalogVersion.get());
-        JsonObject api = new JsonObject();
-        for (String key : java.util.List.of("groups", "functions", "shared", "modules")) {
-            api.add(key, new com.google.gson.JsonArray());
-        }
-        api.add("classes", new JsonObject());
-        catalog.add("api", api);
+        catalog.add("namespaces", new com.google.gson.JsonArray());
         catalog.add("skills", new com.google.gson.JsonArray());
         catalog.add("instincts", new com.google.gson.JsonArray());
         return catalog;

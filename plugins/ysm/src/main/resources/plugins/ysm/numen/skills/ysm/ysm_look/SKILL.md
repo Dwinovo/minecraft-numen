@@ -6,7 +6,7 @@ description: How changing models and playing emotes works in YSM (Yes Steve Mode
 # YSM models and emotes
 
 With YSM installed, the functions in the `ysm` group change your look (`ysm.model.switch`) and play emotes (`ysm.model.emote`); look up how to call them with
-`numen.api.help("ysm.model.switch")`.
+ApiSearch (select:ysm.model.switch).
 
 ## Models
 

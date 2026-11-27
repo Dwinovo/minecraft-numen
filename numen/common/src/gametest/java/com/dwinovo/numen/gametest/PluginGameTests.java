@@ -176,7 +176,7 @@ public class PluginGameTests {
     }
 
     private static boolean listsDyn() {
-        return com.dwinovo.numen.api.sdk.ApiDocs.index(com.dwinovo.numen.api.script.Modules.factory()).contains("gt_dyn.dyn");
+        return !com.dwinovo.numen.api.sdk.ApiSearch.search("select:gt_dyn.dyn", 0, null).startsWith("No match");
     }
 
     /**

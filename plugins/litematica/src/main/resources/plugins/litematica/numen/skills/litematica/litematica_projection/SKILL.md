@@ -5,7 +5,7 @@ description: What Litematica's placements and layer display are, what the litema
 
 # Litematica placements
 
-Your owner has Litematica installed. It is a schematic mod that runs only on the player's client: your owner loads a schematic file (`.litematic`), puts it somewhere in the world, and a translucent ghost appears there to build by. The ghost is only shown on your owner's client; it is not blocks in the world. The functions are in the `litematica.placement` group; look up how to call them with `numen.api.help("litematica.placement.cells")` and the like. They all run on your owner's client and read your owner's Litematica as it is at that moment.
+Your owner has Litematica installed. It is a schematic mod that runs only on the player's client: your owner loads a schematic file (`.litematic`), puts it somewhere in the world, and a translucent ghost appears there to build by. The ghost is only shown on your owner's client; it is not blocks in the world. The functions are in the `litematica.placement` group; look up how to call them with ApiSearch (select:litematica.placement.cells) and the like. They all run on your owner's client and read your owner's Litematica as it is at that moment.
 
 ## Placements
 

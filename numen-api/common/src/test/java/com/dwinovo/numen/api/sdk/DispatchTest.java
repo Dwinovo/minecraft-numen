@@ -249,7 +249,7 @@ class DispatchTest {
         assertEquals("bad_argument", error.get("kind").getAsString());
         assertTrue(error.get("message").getAsString().startsWith("cake is not a thing to doubt\nusage: "),
                 error.toString());
-        assertEquals("print(numen.api.help(\"gt.gt_echo.doubt\"))", error.get("hint").getAsString());
+        assertEquals("ApiSearch with query \"select:gt.gt_echo.doubt\"", error.get("hint").getAsString());
     }
 
     @Test

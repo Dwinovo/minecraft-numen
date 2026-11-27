@@ -11,7 +11,7 @@ import java.util.TreeMap;
  * @param function         函数全名,{@code numen.work.dig}
  * @param calls            调了几次(参数读不成、当场失败的也算)
  * @param failures         失败的次数,按种类({@code bad_argument}、{@code out_of_reach}……)
- * @param helpLookups      第一次调它之前,{@code numen.api.help} 查它(或它的组、名字空间)的次数
+ * @param helpLookups      第一次调它之前,{@code ApiSearch} 按名字查它(或它的组、名字空间)的次数
  * @param repeatedFailures 和之前某次失败的调用写法一字不差、又失败了的次数
  */
 public record FunctionUse(String function, int calls, Map<String, Integer> failures, int helpLookups,

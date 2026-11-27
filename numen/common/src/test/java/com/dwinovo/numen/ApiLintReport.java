@@ -28,10 +28,10 @@ public class ApiLintReport {
         NumenApiFixture.install();
         List<ApiTester.Lint> lint = new ArrayList<>(ApiTester.lint());
         List<ApiTester.Text> texts = new ArrayList<>(documents("numen/skills"));
-        texts.add(new ApiTester.Text("NumenPrompts.ENTITY_PROMPT", NumenPrompts.ENTITY_PROMPT));
+        texts.add(new ApiTester.Text("NumenPrompts.FIXED", NumenPrompts.FIXED));
         texts.add(new ApiTester.Text("NumenPrompts.MEMORY", NumenPrompts.MEMORY));
         texts.add(new ApiTester.Text("NumenPrompts.CONVERSATION", NumenPrompts.CONVERSATION));
-        texts.add(new ApiTester.Text("NumenPrompts.SPEAKING", NumenPrompts.SPEAKING));
+        texts.add(new ApiTester.Text("guide numen", NumenGuide.TEXT));
         texts.add(new ApiTester.Text("instincts", ReflexRegistry.overview()));
         ToolRegistry.all().forEach(tool -> texts.add(new ApiTester.Text("tool " + tool.name(), tool.description())));
         lint.addAll(ApiTester.lint(texts));

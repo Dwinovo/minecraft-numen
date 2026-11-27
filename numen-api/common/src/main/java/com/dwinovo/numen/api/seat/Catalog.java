@@ -1,7 +1,6 @@
 package com.dwinovo.numen.api.seat;
 
 import com.dwinovo.numen.api.agent.skill.SkillInfo;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
@@ -13,14 +12,14 @@ import java.util.List;
  * 这里只读。
  *
  * @param version 内容的指纹;变了就是插件或 {@code /reload} 改了目录,要再取一次
- * @param api     API 登记表({@code ApiDocs#catalog})
+ * @param namespaces Lua API 此刻的名字空间,按名字排({@code ApiDocs#namespaces})
  * @param skills  随模组与插件发布的技能:名字与说明
  * @param instincts 本能名册里每一条的自述
  */
-public record Catalog(String version, JsonObject api, List<SkillInfo> skills, List<String> instincts) {
+public record Catalog(String version, List<String> namespaces, List<SkillInfo> skills, List<String> instincts) {
 
     /** 一份都没有的目录:座位还没问过服务端。 */
-    public static final Catalog EMPTY = new Catalog("", emptyApi(), List.of(), List.of());
+    public static final Catalog EMPTY = new Catalog("", List.of(), List.of(), List.of());
 
     public static Catalog fromJson(JsonObject o) {
         List<SkillInfo> skills = new ArrayList<>();
@@ -30,16 +29,10 @@ public record Catalog(String version, JsonObject api, List<SkillInfo> skills, Li
         }
         List<String> instincts = new ArrayList<>();
         o.getAsJsonArray("instincts").forEach(i -> instincts.add(i.getAsString()));
-        return new Catalog(o.get("version").getAsString(), o.getAsJsonObject("api"), List.copyOf(skills),
+        List<String> namespaces = new ArrayList<>();
+        o.getAsJsonArray("namespaces").forEach(n -> namespaces.add(n.getAsString()));
+        return new Catalog(o.get("version").getAsString(), List.copyOf(namespaces), List.copyOf(skills),
                 List.copyOf(instincts));
     }
 
-    private static JsonObject emptyApi() {
-        JsonObject api = new JsonObject();
-        for (String key : List.of("groups", "functions", "shared", "modules")) {
-            api.add(key, new JsonArray());
-        }
-        api.add("classes", new JsonObject());
-        return api;
-    }
 }

@@ -10,6 +10,7 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 
 import com.dwinovo.numen.script.ScriptCall;
+import com.dwinovo.numen.script.ScriptEngine;
 import com.dwinovo.numen.bench.report.FunctionUse;
 
 import java.util.ArrayList;
@@ -54,7 +55,7 @@ final class Meter implements Consumer<LoopEvent> {
 
     /** 按函数记的账,按第一次调用的先后。 */
     private final Map<String, Use> uses = new LinkedHashMap<>();
-    /** {@code numen.api.help} 查过的名字,按先后。 */
+    /** {@code ApiSearch} 按名字({@code select:})查过的,按先后。 */
     private final List<String> helped = new ArrayList<>();
     /** 失败过的 API 调用的写法。 */
     private final Set<String> failedApiCalls = new HashSet<>();
@@ -86,6 +87,9 @@ final class Meter implements Consumer<LoopEvent> {
             case LoopEvent.ToolStarted started -> {
                 toolCalls++;
                 transcript.write("tool_call", "tool", started.call().name(), "args", started.call().arguments());
+                if (started.call().name().equals(ScriptEngine.DOCS_TOOL)) {
+                    looked(started.call().arguments());
+                }
             }
             case LoopEvent.ProgramEnded ended -> ending = ended;
             case LoopEvent.ToolFinished finished -> finished(finished.call(), finished.resultJson());
@@ -105,7 +109,7 @@ final class Meter implements Consumer<LoopEvent> {
         }
     }
 
-    /** 程序里的一次 API 调用有了结局:记进它那个函数的账。第一次调它时,数一数之前查过几次它(或它的组、名字空间)的帮助。 */
+    /** 程序里的一次 API 调用有了结局:记进它那个函数的账。第一次调它时,数一数之前查过几次它(或它的组、名字空间)的说明。 */
     private void called(ScriptCall.Called called) {
         String fn = called.function();
         Use use = uses.get(fn);
@@ -121,13 +125,21 @@ final class Meter implements Consumer<LoopEvent> {
                 use.repeated++;
             }
         }
-        if (fn.equals(HELP) && called.first() != null) {
-            helped.add(called.first());
-        }
     }
 
-    /** 查帮助的那个函数。 */
-    private static final String HELP = "numen.api.help";
+    /** 一次 {@code ApiSearch} 调用:按名字查的({@code select:a,b}),把名字记下;按关键字查的不指哪一个函数,不记。 */
+    private void looked(String arguments) {
+        try {
+            String query = JsonParser.parseString(arguments).getAsJsonObject().get("query").getAsString().strip();
+            if (query.regionMatches(true, 0, "select:", 0, "select:".length())) {
+                for (String name : query.substring("select:".length()).split(",")) {
+                    helped.add(name.strip());
+                }
+            }
+        } catch (RuntimeException unreadable) {
+            // 参数读不成:这次查询没有指哪个名字
+        }
+    }
 
     /** 按函数的账,按函数名。 */
     List<FunctionUse> functions() {

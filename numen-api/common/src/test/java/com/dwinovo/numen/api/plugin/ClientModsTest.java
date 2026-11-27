@@ -3,9 +3,9 @@ package com.dwinovo.numen.api.plugin;
 import com.dwinovo.numen.api.agent.skill.SkillRegistry;
 import com.dwinovo.numen.api.owner.Presence;
 import com.dwinovo.numen.api.library.LibraryHub;
-import com.dwinovo.numen.api.script.Modules;
 import com.dwinovo.numen.api.sdk.ApiDocs;
 import com.dwinovo.numen.api.sdk.ApiRegistry;
+import com.dwinovo.numen.api.sdk.ApiSearch;
 import com.dwinovo.numen.api.sdk.ClientCall;
 import com.dwinovo.numen.api.sdk.Example;
 import com.dwinovo.numen.api.sdk.Fn;
@@ -84,14 +84,14 @@ class ClientModsTest {
     }
 
     private static boolean listed() {
-        return ApiDocs.index(Modules.of(HER)).contains("gtcm.pad");
+        return ApiDocs.namespaces(HER).contains(NAMESPACE);
     }
 
     @Test
     void anOwnerWhoHasNotReportedSeesNeitherTheGroupNorItsHelpNorItsSkill() {
         assertFalse(listed());
-        assertTrue(ApiDocs.help("gtcm.pad", Modules.of(HER)) == null && ApiDocs.help("gtcm.pad.read", Modules.of(HER)) == null
-                && ApiDocs.help(NAMESPACE, Modules.of(HER)) == null);
+        assertTrue(ApiSearch.search("select:gtcm.pad,gtcm.pad.read," + NAMESPACE, 0, HER).startsWith("No match"),
+                "the group, its function and the namespace are not found for an owner who has not reported");
         assertFalse(skillListed(), "the bundled skill of the client-only mod is not offered");
     }
 
@@ -107,7 +107,7 @@ class ClientModsTest {
         Presence.reported(OWNER, Presence.PROTOCOL);
         assertTrue(Presence.ready(OWNER, Set.of(NAMESPACE)));
         assertTrue(Presence.hasClient(OWNER) && listed());
-        assertTrue(ApiDocs.help("gtcm.pad.read", Modules.of(HER)) != null);
+        assertTrue(ApiSearch.search("select:gtcm.pad.read", 0, HER).contains("function gtcm.pad.read("));
         assertTrue(skillListed());
     }
 

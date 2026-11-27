@@ -213,6 +213,11 @@ public final class LoopHost implements ClientContext {
             }
 
             @Override
+            public java.util.concurrent.CompletableFuture<String> searchApi(String query, int maxResults) {
+                return parts.seat().apiSearch(companion, query, maxResults);
+            }
+
+            @Override
             public QuestionDesk questions() {
                 return questions;
             }
@@ -453,7 +458,7 @@ public final class LoopHost implements ClientContext {
 
     /** 这一轮请求的系统提示:人设、操作核心、技能表、API 索引……内置大脑读的就是它,外接大脑经 MCP 的 guide 工具取同一份。 */
     public String systemPrompt() {
-        return SystemPromptComposer.compose(personaText(), catalog, skills.formatXml());
+        return SystemPromptComposer.compose(personaText(), catalog, skills.formatList());
     }
 
     /** 下一次请求里 {@code <runtime_state>} 此刻的样子:最近一次服务端说的。 */
@@ -943,7 +948,7 @@ public final class LoopHost implements ClientContext {
             // xml 只算一次:记下来的必须就是发出去的那一份
             String xml = body.xml();
             ModelRequest request = AgentRequestContext.turn(convo.snapshot(), xml, personaText(), catalog,
-                    skills.formatXml(), parts.tools().all());
+                    skills.formatList(), parts.tools().all());
             if (trace != null) {
                 trace.turn(runId, n, turnBody(endpoint, xml));
             }

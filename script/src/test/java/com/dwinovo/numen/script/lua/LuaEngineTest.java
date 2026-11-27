@@ -394,7 +394,7 @@ class LuaEngineTest {
         assertEquals("bad_argument", extra.failure().get("kind"));
         assertEquals("my.args.one", extra.failure().get("fn"));
         assertEquals("takes 1 argument(s), got 2\nusage: my.args.one(a)", extra.failure().get("message"));
-        assertEquals("print(numen.api.help(\"my.args.one\"))", extra.failure().get("hint"));
+        assertEquals("ApiSearch with query \"select:my.args.one\"", extra.failure().get("hint"));
         assertEquals("takes no arguments, got 1\nusage: my.args.none()",
                 go.apply("my.args.none(1)").failure().get("message"));
         assertFalse(go.apply("my.args.two(1, 2, nil)").ok(), "显式给的 nil 也算一个");
@@ -510,7 +510,7 @@ class LuaEngineTest {
         assertEquals(List.of("hi"), printed);
         ScriptRun.Done required = assertInstanceOf(ScriptRun.Done.class, run("local g = require('greet')").start());
         assertEquals("no_function", required.failure().get("kind"));
-        assertEquals("modules are used by name: `numen.work.collect()`, `my.lumber.chop(...)`",
+        assertEquals("modules are used by name, like a group: plugin.group.verb()",
                 required.failure().get("hint"));
         ScriptRun.Done typo = assertInstanceOf(ScriptRun.Done.class, run("my.grete.hi()").start());
         assertEquals("no_function", typo.failure().get("kind"));

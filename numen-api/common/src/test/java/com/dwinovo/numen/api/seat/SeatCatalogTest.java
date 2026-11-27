@@ -94,41 +94,39 @@ class SeatCatalogTest {
         return out;
     }
 
+    private static List<String> strings(JsonElement array) {
+        List<String> out = new ArrayList<>();
+        ((JsonArray) array).forEach(e -> out.add(e.getAsString()));
+        return out;
+    }
+
     @Test
-    void theCatalogHoldsTheApiRegistryTheBundledSkillsAndTheInstincts() {
+    void theCatalogHoldsTheNamespacesTheBundledSkillsAndTheInstincts() {
         JsonObject catalog = SeatCatalog.of(HER);
-        JsonObject api = catalog.getAsJsonObject("api");
-        assertTrue(names(api.get("groups"), "name").contains("gt.gt_catalog"));
-        JsonObject up = api.getAsJsonArray("functions").asList().stream().map(JsonElement::getAsJsonObject)
-                .filter(f -> f.get("name").getAsString().equals("gt.gt_catalog.up")).findFirst().orElseThrow();
-        assertEquals("server", up.get("side").getAsString());
-        assertEquals("Add one, on the server.", up.get("summary").getAsString());
-        assertTrue(api.getAsJsonObject("classes").size() > 0 && api.getAsJsonArray("shared").size() > 0);
+        assertTrue(strings(catalog.get("namespaces")).contains("gt"), catalog.get("namespaces").toString());
+        assertEquals(strings(catalog.get("namespaces")).stream().sorted().toList(), strings(catalog.get("namespaces")),
+                "the namespaces are sorted, so the line in the prompt is byte-stable");
+        assertFalse(catalog.has("api"), "the signatures are not shipped: ApiSearch reads them on the server");
         assertEquals(List.of("masonry"), names(catalog.get("skills"), "name"),
                 "bundled skills with a description, whatever the player's switch says");
         assertEquals(ReflexRegistry.descriptions().size(), catalog.getAsJsonArray("instincts").size());
     }
 
     @Test
-    void aGroupThatIsHiddenIsNotListedAndAFunctionOnTheClientSaysSo() {
-        JsonObject api = SeatCatalog.of(HER).getAsJsonObject("api");
-        JsonObject twice = api.getAsJsonArray("functions").asList().stream().map(JsonElement::getAsJsonObject)
-                .filter(f -> f.get("name").getAsString().equals("gt.gt_catalog.twice")).findFirst().orElseThrow();
-        assertEquals("client", twice.get("side").getAsString());
-        var handle = ApiRegistry.registerHidden("gt", "gt_catalog_hidden", "Not for the model.", Fns.class);
+    void aNamespaceWithOnlyHiddenGroupsIsNotListed() {
+        var handle = ApiRegistry.registerHidden("gth", "gt_catalog_hidden", "Not for the model.", Fns.class);
         try {
-            assertFalse(names(SeatCatalog.of(HER).getAsJsonObject("api").get("groups"), "name")
-                    .contains("gt.gt_catalog_hidden"));
+            assertFalse(strings(SeatCatalog.of(HER).get("namespaces")).contains("gth"));
         } finally {
             handle.close();
         }
     }
 
     @Test
-    void theVersionIsTheSameWhileNothingChangesAndMovesWhenARegistryDoes() {
+    void theVersionIsTheSameWhileNothingChangesAndMovesWhenANamespaceComes() {
         String before = SeatCatalog.of(HER).get("version").getAsString();
         assertEquals(before, SeatCatalog.of(HER).get("version").getAsString());
-        var handle = ApiRegistry.register("gt", "gt_catalog_extra", "Added later.", Fns.class);
+        var handle = ApiRegistry.register("gtv", "gt_catalog_extra", "Added later.", Fns.class);
         try {
             assertNotEquals(before, SeatCatalog.of(HER).get("version").getAsString());
         } finally {

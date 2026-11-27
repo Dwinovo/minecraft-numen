@@ -5,7 +5,7 @@ description: How FTB Quests and FTB Teams work — how quest progress is credite
 
 # FTB Quests and Teams
 
-This world has FTB Quests installed. FTB treats you as a real player: the mobs you kill, what you carry and where you walk all count toward the quest progress of **the team you are in**, by FTB's own rules. The functions are in the `ftbquests` group; look up how to call them with `numen.api.help("ftbquests.quest.submit")` and the like.
+This world has FTB Quests installed. FTB treats you as a real player: the mobs you kill, what you carry and where you walk all count toward the quest progress of **the team you are in**, by FTB's own rules. The functions are in the `ftbquests` group; look up how to call them with ApiSearch (select:ftbquests.quest.submit) and the like.
 
 ## Who gets the progress
 

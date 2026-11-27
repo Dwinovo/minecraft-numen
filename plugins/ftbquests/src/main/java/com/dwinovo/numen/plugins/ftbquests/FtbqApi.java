@@ -29,6 +29,7 @@ public final class FtbqApi {
     static void install(NumenApi numen) {
         numen.api("quest", "FTB Quests: your owner's quest book, handing in quests, accepting a party invitation.",
                 FtbqApi.class);
+        numen.guide(FtbQuestsGuide.TEXT);
     }
 
     /** 任务的一个条件。 */

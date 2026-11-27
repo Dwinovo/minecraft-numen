@@ -1,6 +1,6 @@
 # 命令行与脚本:原子命令 + Lua 脚本
 
-状态:10-01 设计,10-03 改成只有 `lua` 一个工具(§七),10-04 模块统一成库、存在主人客户端(§九),同日 API 第二版:全名、
+状态:10-01 设计,10-03 改成只有 `Lua` 一个工具(§七),10-04 模块统一成库、存在主人客户端(§九),同日 API 第二版:全名、
 值带方法、无名词增删改查(§十);路线是一张描述、越界才问(§十一),两版合在一起(§十二);10-05 程序整段在服务端跑、客户端想服务端做(§十四)。总纲与五层见
 `docs/architecture-mind-model.md` §零。
 
@@ -111,10 +111,10 @@
 
 ### 工具面
 
-- 模型在世界里做事的工具只有一个 `ScriptTool`(名字随语言,眼下是 `lua`):一段程序(参数 `code`,与必填的 `description`:一句话说这段程序做什么,用她和主人说话的语言写),
+- 模型在世界里做事的工具只有一个 `ScriptTool`(名字随语言,眼下是 `Lua`):一段程序(参数 `code`,与必填的 `description`:一句话说这段程序做什么,用她和主人说话的语言写),
   一次调用跑完,回一张回执。一次调用就是一行程序:`status.self()`。每个工具自己说一次调用在主人面板上读作什么(`NumenTool.summary`;
-  `lua` 读作那句 `description`),聊天里的工具条与"她在干什么"都问它。外接 MCP 服务器的工具照旧挂着(`RemoteMcpTool`),不在这一套里。
-- 计划清单是另一个工具 `todo`(见 §七),不是函数;聊天里的计划清单从这次调用的参数画。
+  `Lua` 读作那句 `description`),聊天里的工具条与"她在干什么"都问它。外接 MCP 服务器的工具照旧挂着(`RemoteMcpTool`),不在这一套里。
+- 计划清单是另一个工具 `TodoWrite`(见 §七),不是函数;聊天里的计划清单从这次调用的参数画。
 - 系统提示的 `<api>` 索引、工具说明、`api.help` 都从登记处生成;提示词与技能里的例子全是 Lua,防漂移测试经脚本的前端读一遍。
 - 管理员的 `/numen drive <同伴> <程序>` 跑一段 Lua,和她的程序同一个入口(§十三);没有第二个前端。
 
@@ -137,7 +137,7 @@
   `raise(kind, message, hint)` 以一个错误值失败,`error("why", 0)` 是程序自己的运行错(`runtime`)。
 - **名字的改写只有一条**:组名或动作名撞上 Lua 的保留字(`goto`、`end`……)或沙箱自带的全局名(`string`、`table`、
   `print`……)的,后面加 `_`:`until_`。命令名本身不变,只是脚本里的写法;帮助里这样的动作多一行
-  `In a script: 组.名字_(...).`,`lua` 工具的说明里也写了这一条。规则只在 `ScriptEngine.functionName` 一处,登记处的
+  `In a script: 组.名字_(...).`,`Lua` 工具的说明里也写了这一条。规则只在 `ScriptEngine.functionName` 一处,登记处的
   目录、回执里的函数名、帮助都从它来;沙箱不收撞名的宿主函数,登记时就抛出。
 
 ### 放在哪:`script` 模块,程序在服务端跑
@@ -271,27 +271,27 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
   `LuaEngineTest`(交出与接着跑、直接返回与抛错、声明的返回项、撞名)、`SerialCallsTest`(顺序、等收尾、分支、开口与急件、
   切断时的回执、按名字跑与嵌套、两种上限)、`ScriptLineTest`、`ScriptStoreTest`、`GateTest`;GameTest:`ScriptGameTests`
   (顺序、按失败分支、主人停止与开口、`for` 走 `area.parts`、`script run mine` 挖空埋在石头里的矿、存读跑删)。
-- 外接大脑(MCP)当时直接调工具、没有派发器;10-03 起它的 `lua` 调用经她自己的派发器跑(§七)。
+- 外接大脑(MCP)当时直接调工具、没有派发器;10-03 起它的 `Lua` 调用经她自己的派发器跑(§七)。
 
 ## 七、只有 lua 一个工具,API 原子化(10-03)
 
-- **一个入口**:模型在世界里做事的工具只剩 `lua`;`command` 与各组的快捷工具删了。Lua 的对象与选项
-  直接按参数类型读成值交给处理函数,不经命令行字符串。外接大脑(MCP)的 `lua` 调用交给她自己的派发器跑
+- **一个入口**:模型在世界里做事的工具只剩 `Lua`;`command` 与各组的快捷工具删了。Lua 的对象与选项
+  直接按参数类型读成值交给处理函数,不经命令行字符串。外接大脑(MCP)的 `Lua` 调用交给她自己的派发器跑
   (`AgentLoop.runAside`):同一套等收尾、上限、回执;程序跑着的时候到达的事件转给它,不另起一轮对话。
 - **原子化**:`build.at` 只放站在原地够得着的格,一格都够不着就当场拒并说怎么走过去;施工绕外圈、清场(`ClearSiteTask`)、
   垫块记账(`DropTracker`)都删了。走与挖由 `build.raise` 这段库函数组合。新增 `build.left`(查询)与到达方式 `reach`。
   `work.collect` 变成库函数(扫掉落物、走上去),新增掉落物的 `pickup_delay`;`fight.attack` 只收一只,"打一片"是
   `fight.clear`。
 - **回执**:结局一行,再是 stderr、返回值与 stdout 三栏(§四"回执");出错带行号与那次调用的 `error:`/`usage:`/`hint:`。
-- **技能是另一个工具,不是 API**(10-04):照 Claude Code 的 Skill 工具,`skill` 工具收技能名(附属文件 `file`、页码 `page`
+- **技能是另一个工具,不是 API**(10-04):照 Claude Code 的 Skill 工具,`Skill` 工具收技能名(附属文件 `file`、页码 `page`
   可选),技能正文就是这次调用的结果;系统提示的 `<available_skills>` 是索引。`numen.skill.load` 删了:程序回执里每次调用只露
   结果的第一行,正文没 `return` 出来她就读不到,真机上她连着三轮在程序里装同一份技能。外接大脑调的是同一个工具。
 - **计划也是另一个工具,不是 API**(10-04):判据是工具只放管大脑自己的事、不碰世界的(技能、计划),作用于世界的一律是
-  Lua API。照 Claude Code 的 TodoWrite,`todo` 工具收整份计划(`items`,一项一个带记号的字符串),每次替换上一份,大脑
+  Lua API。照 Claude Code 的 TodoWrite,`TodoWrite` 工具收整份计划(`items`,一项一个带记号的字符串),每次替换上一份,大脑
   当场答;聊天里的清单从成功的这次调用的参数读(`PlanChecklist`,一项的写法只在 `TodoTool.Item.parse`)。`numen.todo.write`
   与只为它存在的回执回显(`data.echoed`)删了。外接大脑经 `ToolRegistry` 拿到同一套(问主人的 `AskUserQuestion` 除外,见下)。
 - **札记也是另一个工具,不是 API**(10-04):同一判据,札记本落在她的家里(服务器)、管她自己的事。照 Anthropic 的 memory 工具,一个
-  `memory` 工具带 `command`(`remember`、`recall`、`forget`),三件事作用于同一本札记、参数大半共用,不拆成三个工具。札记索引照旧
+  `Memory` 工具带 `command`(`remember`、`recall`、`forget`),三件事作用于同一本札记、参数大半共用,不拆成三个工具。札记索引照旧
   每轮作为 `<memory>` 注入。`numen.memory.*` 删了。
 - **问主人也是一个工具**(11-26,ADR control 0028):照 Claude Code 的 `AskUserQuestion`,工具名、参数、说明一字对齐(只把 "the user"
   换成 "your owner",删去计划模式与预览)。调用挂起,主人在输入框那里长出的提问面板上作答,答案就是这次调用的结果:答了、拒绝(Esc)、
@@ -368,7 +368,7 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
 | ⓪ 身体控制 | 寻路执行、瞄准、换工具、追着转头、等冷却、憋气;模型看不见 | Java,任务与身体 |
 | ① 原子 API | 对一个名词做一种意图;每刻控制在里面;过权限层;做的事报告给模型 | Java,登记处生成 Lua 函数 |
 | ② 内置模块 | 常见的组合(`numen.move.explore`、`numen.work.mine`、`numen.inv.make`、`numen.shape` …) | Lua,随模组或插件发布(jar 里 `numen/modules/<名字空间>/<组>.lua`),服务器起来时同步进服务器目录 `server/modules/` |
-| ③ 这一轮的程序 | `lua` 工具的 `code` | Lua |
+| ③ 这一轮的程序 | `Lua` 工具的 `code` | Lua |
 
 权限层只守在 ①;反射独立于各层,能打断程序。判据:**秒级的决策进 Lua;每刻的控制、重计算(寻路搜索、大范围扫描)、权限、
 反射、名词的存取与校验留 Java。**

@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 装技能的工具,从模型的入口调:技能正文原样是这次调用的结果;点了一个没有的技能,结果说没有这一份并列出能用的那些——主人在设置里
- * 关掉的不列,和 {@code <available_skills>} 索引一样。
+ * 关掉的不列,和系统提示里的技能表一样。
  */
 class SkillToolTest {
 
@@ -81,6 +81,11 @@ class SkillToolTest {
                     }
 
                     @Override
+                    public java.util.concurrent.CompletableFuture<String> searchApi(String query, int maxResults) {
+                        throw new UnsupportedOperationException();
+                    }
+
+                    @Override
                     public QuestionDesk questions() {
                         throw new UnsupportedOperationException();
                     }
@@ -108,7 +113,7 @@ class SkillToolTest {
         String result = call("{\"skill\": \"no_such_skill\"}");
         assertTrue(result.contains("\"success\":false"), result);
         assertTrue(result.contains("unknown skill: no_such_skill; the skills are: lumber\""), result);
-        assertTrue(skills.formatXml().contains("<name>lumber</name>") && !skills.formatXml().contains("masonry"),
-                skills.formatXml());
+        assertTrue(skills.formatList().contains("- lumber: ") && !skills.formatList().contains("masonry"),
+                skills.formatList());
     }
 }

@@ -440,8 +440,8 @@ public class ScriptGameTests {
                     helper.assertTrue(seat.seated(), "her seat is not open");
                 })
                 .thenExecute(() -> {
-                    helper.assertFalse(com.dwinovo.numen.api.sdk.ApiDocs.index(Modules.of(her.getUUID())).contains("gtcm.pad"),
-                            "the index lists a client-only mod the owner's client did not report");
+                    helper.assertFalse(com.dwinovo.numen.api.sdk.ApiDocs.namespaces(her.getUUID()).contains("gtcm"),
+                            "the plugin list has a client-only mod the owner's client did not report");
                     ServerPrograms.run(her, her.getUUID(), owner.getUUID(), new ServerPrograms.Request(
                             "padless-" + UUID.randomUUID(), "return pcall(gtcm.pad.read)", Modules.of(her.getUUID()), true),
                             ServerSeats.transport(), CallObserver.NONE, refused::set);
@@ -457,8 +457,8 @@ public class ScriptGameTests {
                     com.dwinovo.numen.api.owner.Replies.hello(owner, com.dwinovo.numen.api.owner.Presence.PROTOCOL,
                             java.util.Set.of("gtcm"));
                     seat.pump();
-                    helper.assertTrue(com.dwinovo.numen.api.sdk.ApiDocs.index(Modules.of(her.getUUID())).contains("gtcm.pad"),
-                            "the index does not list a client-only mod the owner's client reported");
+                    helper.assertTrue(com.dwinovo.numen.api.sdk.ApiDocs.namespaces(her.getUUID()).contains("gtcm"),
+                            "the plugin list does not have a client-only mod the owner's client reported");
                     ServerPrograms.run(her, her.getUUID(), owner.getUUID(), new ServerPrograms.Request(
                             "padded-" + UUID.randomUUID(), "return gtcm.pad.read()", Modules.of(her.getUUID()), true),
                             ServerSeats.transport(), CallObserver.NONE, answered::set);

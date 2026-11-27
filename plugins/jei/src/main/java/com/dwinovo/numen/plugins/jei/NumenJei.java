@@ -37,6 +37,7 @@ public final class NumenJei {
     public static void install(JeiHost loader) {
         host = loader;
         NumenPlugins.registerForClientMod(NAMESPACE, TARGET_MOD, numen -> {
+            numen.guide(JeiGuide.TEXT);
             numen.knowledgeSource(KnowledgeKind.RECIPES, "which machine does it, the category's name in your owner's "
                     + "language, fluids with their amounts", NOT_PROVIDED, JeiRecipes.class);
             numen.knowledgeSource(KnowledgeKind.USES, "which machine does it, the category's name in your owner's "

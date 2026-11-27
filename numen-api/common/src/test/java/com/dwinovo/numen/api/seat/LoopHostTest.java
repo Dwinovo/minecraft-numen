@@ -166,7 +166,7 @@ class LoopHostTest {
         List<com.dwinovo.numen.api.agent.llm.ConvoState.Msg> messages = model.asked.getFirst().messages();
         assertTrue(messages.getLast().toString().contains("she stands by the lake"),
                 "the request ends with the state the seat gave at the start of the run: " + messages.getLast());
-        assertTrue(model.asked.getFirst().systemPrompt().contains("<persona>"), "the prompt is composed on the client");
+        assertTrue(model.asked.getFirst().systemPrompt().contains("# Persona"), "the prompt is composed on the client");
     }
 
     @Test

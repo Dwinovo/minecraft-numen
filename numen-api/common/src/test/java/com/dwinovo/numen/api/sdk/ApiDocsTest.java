@@ -1,6 +1,5 @@
 package com.dwinovo.numen.api.sdk;
 
-import com.dwinovo.numen.api.script.Modules;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -11,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 帮助是模型读的界面,全从签名写出,写成脚本里的样子(LuaLS 的存根):一组一行一个函数,一个函数给全(参数逐个带说明、选项表与结果的类、例子、
+ * 说明是模型读的界面,全从签名写出,写成脚本里的样子(LuaLS 的存根):一组一行一个函数,一个函数给全(参数逐个带说明、选项表与结果的类、例子、
  * 注意、相关)。这里查的是结构:登记了的每个函数都出现、带着自己的签名与登记时写下的说明,帮助里指的函数都是登记了的;措辞不钉。
  */
 class ApiDocsTest {
@@ -63,7 +62,7 @@ class ApiDocsTest {
 
     @Test
     void aGroupIsOneTypedLinePerFunction() {
-        String help = ApiDocs.help("gt.gt_pantry", Modules.factory());
+        String help = ApiSearch.search("select:gt.gt_pantry", 0, null);
         assertTrue(help.contains("\n---@class gt.gt_pantry\n"), "the group is its own class: " + help);
         for (ApiFunction fn : pantry().functions()) {
             String line = help.lines().filter(l -> l.startsWith("---@field " + fn.name() + " ")).findFirst()
@@ -86,7 +85,7 @@ class ApiDocsTest {
     @Test
     void aFunctionGivesEverything() {
         ApiFunction take = ApiRegistry.function("gt.gt_pantry.take");
-        String help = ApiDocs.help(take.fullName(), Modules.factory());
+        String help = ApiSearch.search("select:" + take.fullName(), 0, null);
         assertTrue(help.contains("function gt.gt_pantry.take(item, count, opts) end"), help);
         assertTrue(help.contains(take.summary()), help);
         for (ApiFunction.Param p : take.params()) {
@@ -105,8 +104,8 @@ class ApiDocsTest {
     }
 
     @Test
-    void theIndexListsTheGroupAndAWrongCallsUsageShowsTheExamples() {
-        assertTrue(ApiDocs.index(Modules.factory()).contains("gt.gt_pantry"), ApiDocs.index(Modules.factory()));
+    void theNamespacesListThePluginAndAWrongCallsUsageShowsTheExamples() {
+        assertTrue(ApiDocs.namespaces(null).contains("gt"), ApiDocs.namespaces(null).toString());
         ApiFunction take = ApiRegistry.function("gt.gt_pantry.take");
         String usage = ApiDocs.usage(take);
         assertTrue(usage.startsWith("gt.gt_pantry.take("), usage);

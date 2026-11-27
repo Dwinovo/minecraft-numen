@@ -17,7 +17,7 @@ import java.util.function.Function;
  * 脚本里声明的一个插件:往门里登记什么,只是一串记录。登记({@link #setup})把它们按序交给{@code NumenPlugins.register}拿到的那扇门——
  * 和 Java 插件的 setup 一样;撤回之后重登(管理员关了再开)再交一遍,所以声明时就读好的东西(函数的描述)不依赖那扇门。
  *
- * <p>脚本能做的就是门能做的:函数组、同伴事件、事件类型与发事件、身体状态片段、穿戴来源、知识来源(物品说明与配方)。动世界的事只能经函数里的
+ * <p>脚本能做的就是门能做的:函数组、插件的说明、同伴事件、事件类型与发事件、身体状态片段、穿戴来源、知识来源(物品说明与配方)。动世界的事只能经函数里的
  * {@link ScriptCall} 受权的几个动作,身体做了什么照常报告给模型。
  */
 public final class ScriptPlugin {
@@ -52,6 +52,14 @@ public final class ScriptPlugin {
         declare.accept(group);
         var functions = group.functions();
         registrations.add(numen -> numen.api(name, summary, functions));
+    }
+
+    /**
+     * 这个插件的说明(Markdown):它是干什么的、几组函数怎么配合、一两个例子。她的上下文里只有名字空间,要用时经 {@code ApiSearch} 读到它。
+     * 不强制写。
+     */
+    public void guide(String markdown) {
+        registrations.add(numen -> numen.guide(markdown));
     }
 
     /**

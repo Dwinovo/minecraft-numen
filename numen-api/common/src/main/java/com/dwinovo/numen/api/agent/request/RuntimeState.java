@@ -148,7 +148,7 @@ public final class RuntimeState {
         // 有没有"干完"这回事,决定她该等还是该换:有终点的活等它的 task_finished;
         // 常驻的活(跟随 / 一直钓鱼)永远不会有那条事件,只能被换掉。分不清这一点,
         // 她要么干等一个永不到来的事件,要么把还没干完的活当成已经结束。
-        // 怎么换是系统提示里那条身体规则(NumenPrompts.ONE_BODY),这里只说这一件活的事实。
+        // 怎么换是 Lua 工具说明里那条身体规则,这里只说这一件活的事实。
         String tail = task.standing()
                 ? "This is a STANDING job — it has no finish line and will NEVER send a "
                   + "task_finished event. It keeps running until something replaces it."

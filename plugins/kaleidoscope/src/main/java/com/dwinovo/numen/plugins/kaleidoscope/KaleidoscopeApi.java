@@ -38,6 +38,7 @@ public final class KaleidoscopeApi {
     static void install(NumenApi numen) {
         numen.api("pot", "Kaleidoscope Cookery pots and stockpots: recipes, reading one, cooking a dish.",
                 KaleidoscopeApi.class);
+        numen.guide(KaleidoscopeGuide.TEXT);
     }
 
     /** 一道菜的做法。 */

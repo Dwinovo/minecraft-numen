@@ -14,6 +14,7 @@
 NumenEvents.register(event => {
   // 'mypack' 是这个插件的名字空间:她在程序里调 mypack.<组>.<函数>
   event.plugin('mypack', plugin => {
+    plugin.guide('# mypack\n\nSay hello to people: `mypack.talk.greet` greets one by name.')
     plugin.group('talk', 'Things she can say.', group => {
       group.fn('greet', fn => fn
         .summary('Say hello to someone by name.')
@@ -30,7 +31,7 @@ NumenEvents.register(event => {
 })
 ```
 
-保存后在游戏里 `/reload`:她的函数清单里就有了 `mypack.talk.greet`,模型能照着说明调它。再改脚本、再 `/reload`,旧的函数被撤掉,
+保存后在游戏里 `/reload`:她的名字空间那一行里就有了 `mypack`,模型用 `ApiSearch` 读到它的说明与 `mypack.talk.greet` 的签名,再调它。再改脚本、再 `/reload`,旧的函数被撤掉,
 她调到的是新写的。一个插件声明到一半抛了错,它在插件页里记为失败(原因写在 KubeJS 控制台),别的插件不受影响。
 
 ## 能写什么
@@ -40,6 +41,7 @@ NumenEvents.register(event => {
 | 方法 | 做什么 |
 |---|---|
 | `plugin.group(组名, 一句话, group => { group.fn(…) })` | 登记一组函数 |
+| `plugin.guide(markdown)` | 这个插件的说明:干什么、几组函数怎么配合、例子;她经 `ApiSearch` 读 `select:<名字空间>` 时先看到它(可不写) |
 | `plugin.on(事件, body => …)` | 听同伴身上与大脑的事:`spawn`、`remove`、`death`、`abort`、`hurt`、`run_started`、`run_ended`、`task_finished`(只读;外接大脑驾驶时没有 `run_*`) |
 | `plugin.eventType(类型, 恒为急件)` / `plugin.emit(同伴, 类型, 属性, 文字, 急件)` | 登记一种事件,往她的收件箱发一条 |
 | `plugin.bodyState(body => 文字)` | 每轮从她身上读一段状态,拼进她看到的身体状态 |

@@ -10,7 +10,7 @@ import java.nio.file.Path;
  *                    as the lookup key in the registry and as the argument
  *                    the LLM passes to the {@code skill} tool.
  * @param description short blurb from the {@code description:} frontmatter
- *                    key, surfaced in the {@code <available_skills>} XML
+ *                    key, surfaced in the system prompt's skill list
  *                    list. May be {@code null} — descriptionless skills are
  *                    deliberately hidden from the listing (matching opencode
  *                    behaviour), so the model never picks them blindly.
