@@ -37,6 +37,7 @@ public class KubeJsGameTests {
             NumenEvents.register(event => {
               event.plugin('gt_script', plugin => {
                 plugin.eventType('gt_script_ping', false)
+                plugin.guide('Test fixture guide: it greets people.')
                 plugin.group('say', 'Test fixture: things she can say.', group => {
                   group.fn('hello', fn => fn
                     .summary('Greet someone by name.')
@@ -130,6 +131,8 @@ public class KubeJsGameTests {
                             "the plugin that threw is not marked failed with its reason: " + broken);
                     helper.assertTrue(com.dwinovo.numen.api.agent.inbox.EventTypes.isRegistered("gt_script_ping"),
                             "the script's event type was not registered");
+                    helper.assertTrue("Test fixture guide: it greets people.".equals(ApiRegistry.guide("gt_script")),
+                            "the script's guide was not registered");
                     script(SECOND);
                     reload(server);
                 })
@@ -146,6 +149,7 @@ public class KubeJsGameTests {
                     helper.assertTrue(ApiRegistry.function("gt_script.say.hello") == null, "the old function stayed registered");
                     helper.assertTrue(!com.dwinovo.numen.api.agent.inbox.EventTypes.isRegistered("gt_script_ping"),
                             "the old script's event type stayed registered");
+                    helper.assertTrue(ApiRegistry.guide("gt_script") == null, "the old script's guide stayed registered");
                     helper.assertTrue(row("gt_script_broken") == null, "the plugin of the old script stayed on the roster");
                     unscript();
                     reload(server);

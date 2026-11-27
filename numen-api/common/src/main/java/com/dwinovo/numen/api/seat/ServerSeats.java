@@ -93,11 +93,6 @@ public final class ServerSeats {
         return SEATS.seated(companion) != null;
     }
 
-    /** 她最近一段程序用的那一套模块:服务端自己起的程序({@code ServerPrograms#launch})借用它。 */
-    public static com.dwinovo.numen.api.script.Modules modules(UUID companion) {
-        return SEATS.modules(companion);
-    }
-
     /** 她此刻的样子:座位上 {@code state/get} 给的那一份。 */
     public static SeatState state(UUID companion) {
         return WORLD.state(companion);

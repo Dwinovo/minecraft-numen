@@ -28,7 +28,7 @@ import java.util.function.Consumer;
  *   <li>{@link Program}(agent):一段程序从头到回执,在它自己的执行体上;</li>
  *   <li>{@link ProgramCalls}:一次调用在哪一端执行——{@link ServerCalls} 排进主线程的车道({@link MainQueue}),
  *       {@link ClientCalls} 向主人客户端发反向请求({@link ClientTransport}),{@link RoutedCalls} 按函数的端分流;</li>
- *   <li>{@link Modules}:这段程序能用的模块(内置的加她自己的),程序用到一个才去读那个模块;</li>
+ *   <li>{@link Modules}:这段程序能用的模块(随模组与插件发布的内置模块),程序用到一个才去读那个模块;</li>
  *   <li>这里:登记在跑的程序、准入(每只同伴一段,每位主人、全服各有上限)、把服务端发出的事件交给程序、停、清理。</li>
  * </ul>
  *
@@ -56,25 +56,22 @@ public final class ServerPrograms {
         final MainQueue.Lane lane;
         /** 这段程序等着的反向请求:每刻查期限、程序结束时撤掉。 */
         final ClientCalls client;
-        final Modules modules;
         Program program;
         volatile String claimed;
 
-        Running(UUID companion, UUID owner, String programId, MainQueue.Lane lane, ClientCalls client,
-                Modules modules) {
+        Running(UUID companion, UUID owner, String programId, MainQueue.Lane lane, ClientCalls client) {
             this.companion = companion;
             this.owner = owner;
             this.programId = programId;
             this.lane = lane;
             this.client = client;
-            this.modules = modules;
         }
     }
 
     /**
      * 一次跑程序的请求。
      *
-     * @param modules        她的模块;程序结束时用到的每个模块在这里记一次战绩
+     * @param modules        这段程序能用的模块
      * @param keeper         这段程序替哪一位 keeper 做事;没有({@code null})是创建者
      * @param reportsToModel 回执是给模型看的(她的大脑、GameTest 与单测里扮大脑的):程序等着的那件活的收尾就写进回执,
      *                       不再作为事件另送。管理员的 drive、重启后再跑的那一行没有模型读回执,它们派的活的收尾照常作为事件送到她手里
@@ -118,7 +115,7 @@ public final class ServerPrograms {
                            CallObserver observer, Consumer<Program.Outcome> done) {
         MainQueue.Lane lane = QUEUE.lane();
         ClientCalls client = new ClientCalls(companion, lane, transport, () -> ticks);
-        Running running = new Running(companion, owner, request.programId(), lane, client, request.modules());
+        Running running = new Running(companion, owner, request.programId(), lane, client);
         String refused;
         synchronized (RUNNING) {
             refused = admit(her, companion, owner);
@@ -159,14 +156,8 @@ public final class ServerPrograms {
         running.program.start();
     }
 
-    /** 她此刻在跑的那段程序能用的模块(帮助读它);没有在跑的是内置的那一套。 */
-    public static Modules modulesOf(UUID companion) {
-        Running running = RUNNING.get(companion);
-        return running == null ? Modules.factory() : running.modules;
-    }
-
     /**
-     * 服务端自己起的一段程序(管理员的 {@code /numen drive}、重启后再跑的那一行):用她的模块(座位上最近一段程序用的那一套,没有就是内置的);
+     * 服务端自己起的一段程序(管理员的 {@code /numen drive}、重启后再跑的那一行):用她能用的模块;
      * 它调的客户端函数照样向她的主人的客户端发反向请求(主人不在线就是一条失败)。整张回执经 {@code receipt} 交回一次。
      *
      * @param tag       程序编号的前缀,日志里认它
@@ -175,7 +166,7 @@ public final class ServerPrograms {
     public static void launch(NumenPlayer her, String tag, String code, ClientTransport transport,
                               CallObserver observer, Consumer<String> receipt) {
         UUID owner = her.getOwnerUuid() != null ? her.getOwnerUuid() : her.getUUID();
-        run(her, her.getUUID(), owner, new Request(tag + "-" + UUID.randomUUID(), code, com.dwinovo.numen.api.seat.ServerSeats.modules(her.getUUID()),
+        run(her, her.getUUID(), owner, new Request(tag + "-" + UUID.randomUUID(), code, Modules.of(her.getUUID()),
                 false), transport, observer, outcome -> receipt.accept(outcome.receipt()));
     }
 

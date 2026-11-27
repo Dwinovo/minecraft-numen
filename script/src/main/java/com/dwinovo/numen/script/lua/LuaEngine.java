@@ -74,8 +74,8 @@ public final class LuaEngine implements ScriptEngine {
     /** 读了一个既不是全局、也不是模块的名字:多半是名字空间写错了,说有哪些模块。 */
     static LuaSandbox.ScriptError unknown(String name, List<String> modules) {
         return new LuaSandbox.ScriptError(ScriptRun.failure(ErrorKind.NO_FUNCTION.wire(), "there is no global, "
-                + "namespace or module named " + name + "; the API is under numen (and each mod's id), the modules "
-                + "are: " + String.join(", ", modules), "numen.module.list() lists the modules with what each does",
+                + "namespace or module named " + name + "; the API is under each plugin's namespace, the modules "
+                + "are: " + String.join(", ", modules), ScriptEngine.DOCS_TOOL + " lists the plugins and what each has",
                 null, null));
     }
 

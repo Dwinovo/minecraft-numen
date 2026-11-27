@@ -138,12 +138,6 @@ public final class Seats {
         }
     }
 
-    /** 她最近一段程序用的那一套模块(服务端自己起的程序借用);座位没有或还没跑过程序是内置的那一套。 */
-    public com.dwinovo.numen.api.script.Modules modules(UUID companion) {
-        Seat seat = seats.get(companion);
-        return seat == null ? com.dwinovo.numen.api.script.Modules.factory() : seat.modules();
-    }
-
     /** 注册表变了(插件、{@code /reload}):各座位按需通知客户端再取目录。 */
     public void catalogChanged() {
         handlers.execute(() -> seats.values().forEach(Seat::catalogMayHaveChanged));

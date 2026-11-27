@@ -52,8 +52,6 @@ final class Seat {
     /** 她的创建者:只有他的连接坐得上。 */
     final UUID owner;
     private final Outbox outbox;
-    /** 最近一段程序用的那一套模块:服务端自己起的程序({@code ServerPrograms#launch})借用它。 */
-    private volatile Modules lastModules;
     private final Map<String, Run> running = new HashMap<>();
     private SeatConnection attached;
     /** 最后一次告诉客户端的目录版本。 */
@@ -199,8 +197,7 @@ final class Seat {
                         + " is already running on this seat");
             }
         }
-        Modules modules = Modules.of(companion);
-        seats.world().main().execute(() -> start(run, believed, code, modules, keeper));
+        seats.world().main().execute(() -> start(run, believed, code, keeper));
         try {
             return run.answer.get();
         } catch (ExecutionException failed) {
@@ -211,7 +208,7 @@ final class Seat {
         }
     }
 
-    private void start(Run run, long believed, String code, Modules modules, UUID keeper) {
+    private void start(Run run, long believed, String code, UUID keeper) {
         long actual = seats.generation(companion);
         synchronized (this) {
             if (run.detached) {
@@ -224,8 +221,8 @@ final class Seat {
                 return;
             }
         }
-        lastModules = modules;
-        seats.world().programs().run(companion, run.program, code, modules, keeper, outcome -> finished(run, outcome));
+        seats.world().programs().run(companion, run.program, code, Modules.of(companion), keeper,
+                outcome -> finished(run, outcome));
     }
 
     private void finished(Run run, Program.Outcome outcome) {
@@ -242,12 +239,6 @@ final class Seat {
                     System.currentTimeMillis());
             add(SeatEvent.ofOutcome(companion, generation, entry, outcome, state.gameTime(), state.dayTime()));
         }
-    }
-
-    /** 最近一段程序用的模块;还没有跑过程序是内置的那一套。 */
-    Modules modules() {
-        Modules last = lastModules;
-        return last == null ? Modules.factory() : last;
     }
 
     /** 叫程序停在调用之间。 */
