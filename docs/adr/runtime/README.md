@@ -14,4 +14,4 @@
 | [0007](0007-paper-removed.md) | 11-25 | 移除 Paper:只做模组加载器上的服务端,设计默认玩家装了客户端 | 已接受,已落地;修订 0001 |
 | [0008](0008-brain-on-owners-client.md) | 11-25 | 大脑在主人的客户端,身体在服务端:两端之间只有一个座位,说 JSON-RPC | 已接受,已落地;修订 0001、control 0011;上下文的存放被 0010 修订 |
 | [0009](0009-skins-signed-by-the-chooser.md) | 11-25 | 皮肤由挑的人的客户端签好交给服务端,服务端只验签和穿上 | 已接受,在落地;修订 0005 |
-| [0010](0010-conversations-stored-on-server.md) | 11-28 | 对话存在服务端,格式照 Claude Code 的会话记录;目标是对话里的一行 | 已接受 |
+| [0010](0010-conversations-stored-on-server.md) | 11-28 | 对话存在服务端,格式照 Claude Code 的会话记录;目标是对话里的一行 | 已接受,已落地 |
