@@ -16,15 +16,15 @@ def kubejs = ["dev.latvian.mods:kubejs-neoforge:${kubejs_version}",
               "dev.latvian.mods:rhino:${rhino_version}"]
 
 dependencies {
-    // 瘦 api jar 取 NeoForge 那份:本联动本来就只跑在 NeoForge 上
-    compileOnly files(rootProject.project(':numen-api:neoforge').tasks.named('apiJar'))
+    // 瘦 api jar 取 common 那份:加载器的成品 jar 把内置的 Minecraft 插件(连同平铺在里面的本联动)内嵌进去,从它裁出来的瘦 jar 会让构建绕成环
+    compileOnly files(rootProject.project(':numen-api:common').tasks.named('apiJar'))
     kubejs.each { compileOnly it }
 }
 
 /*
  * KubeJS 在场时的 GameTest:用例在 src/gametest,单开一次跑批 `./gradlew :plugins:kubejs:runGameTestServer`。
  *
- * 不挂进 Numen 那一次(:numen:neoforge:runGameTestServer):KubeJS 带着 mixin 与脚本引擎,挂上去全部用例的环境都跟着变。
+ * 不挂进 Numen 那一次(:plugins:minecraft:neoforge:runGameTestServer):KubeJS 带着 mixin 与脚本引擎,挂上去全部用例的环境都跟着变。
  * 这一次照成品拼:本体、这个联动(成品 jar 里它本来就平铺在本体里,并带着 kubejs.plugins.txt,KubeJS 据此发现它)、联动的用例同在 numen
  * 这一个模组里,KubeJS 由运行时类路径带进来,和玩家装它一样被当成模组加载。
  *
@@ -35,23 +35,24 @@ sourceSets {
     gametest {}
 }
 
-def numenNeoForge = project(':numen:neoforge')
-def gameTestStructures = project(':numen:common').layout.buildDirectory.dir('gameteststructures')
+evaluationDependsOn(':plugins:minecraft:neoforge')
+def numenNeoForge = project(':plugins:minecraft:neoforge')
+def gameTestStructures = project(':plugins:minecraft:common').layout.buildDirectory.dir('gameteststructures')
 def kubejsSuite = rootProject.ext.numenSuites[project.path].gametest
 
 neoForge {
     addModdingDependenciesTo(sourceSets.gametest)
     mods {
-        numen {
+        numen_minecraft {
             sourceSet numenNeoForge.sourceSets.main
-            sourceSet project(':numen:common').sourceSets.testFixtures
+            sourceSet project(':plugins:minecraft:common').sourceSets.testFixtures
             // 寻路模块的类在成品里平铺在本体的 jar 里;这里不走 jar,同样声明
-            sourceSet project(':numen:pathing').sourceSets.main
+            sourceSet project(':plugins:minecraft:pathing').sourceSets.main
             sourceSet sourceSets.main
             sourceSet sourceSets.gametest
         }
         // Numen API 的 GameTest 支持:套件机制与登记入口、模拟主人连接的加载器实现
-        numen_api_gametest {
+        numen_gametest {
             sourceSet project(':numen-api:neoforge').sourceSets.gametest
             sourceSet project(':numen-api:common').sourceSets.testFixtures
         }
@@ -71,24 +72,24 @@ neoForge {
 
 dependencies {
     gametestCompileOnly files({ numenNeoForge.sourceSets.main.output })
-    gametestCompileOnly rootProject.project(':numen:common').sourceSets.testFixtures.output
+    gametestCompileOnly rootProject.project(':plugins:minecraft:common').sourceSets.testFixtures.output
     // 套件接口:本联动的用例经它报到(numen_kubejs)
     gametestCompileOnly rootProject.project(':numen-api:common').sourceSets.testFixtures.output
     // 用例直接读联动里包内的类,不绕脚本
     gametestCompileOnly sourceSets.main.output
-    // 整个 Numen API(不是瘦 api jar):用例拉起同伴、调工具,和 Numen 的用例一样;运行时它就是 numen_api 那个模组
+    // 整个 Numen API(不是瘦 api jar):用例拉起同伴、调工具,和 Numen 的用例一样;运行时它就是 numen 那个模组
     gametestImplementation project(':numen-api:neoforge')
     // KubeJS 本体与 Rhino 在运行时类路径上当模组加载;KubeJS 运行期的几个库(小型 web 服务、动图)已经嵌套在它的 jar 里
     kubejs.each { gametestImplementation(it) { transitive = false } }
 }
 
 tasks.named('compileGametestJava') {
-    dependsOn ':numen:neoforge:classes', ':numen:common:testFixturesClasses'
+    dependsOn ':plugins:minecraft:neoforge:classes', ':plugins:minecraft:common:testFixturesClasses'
 }
 
 tasks.matching { it.name == 'runGameTestServer' }.configureEach {
-    dependsOn ':numen:neoforge:classes', ':numen-api:neoforge:gametestClasses', ':numen:common:syncGameTestStructures',
-            ':numen:common:testFixturesClasses', ':numen-api:common:testFixturesClasses'
+    dependsOn ':plugins:minecraft:neoforge:classes', ':numen-api:neoforge:gametestClasses', ':plugins:minecraft:common:syncGameTestStructures',
+            ':plugins:minecraft:common:testFixturesClasses', ':numen-api:common:testFixturesClasses'
     // 脚本存在运行目录的 kubejs/ 里、不跟着世界走:上一次跑批留下的脚本会让这一次从中间开始,用例要从自己放的那份开始
     doFirst {
         delete fileTree(dir: project.file('runs/gametestserver/kubejs/server_scripts'))

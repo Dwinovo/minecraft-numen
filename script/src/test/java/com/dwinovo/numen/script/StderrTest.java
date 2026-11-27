@@ -13,36 +13,36 @@ class StderrTest {
 
     @Test
     void anEntryCarriesItsLineAndFunctionAndNothingToSayWritesNothing() {
-        stderr.write(5, "numen.fight.attack", "killed minecraft:cow");
-        stderr.write(6, "numen.inv.count", "");
-        stderr.write(7, "numen.inv.count", "   ");
-        stderr.write(8, "numen.inv.count", null);
-        assertEquals("line 5 numen.fight.attack: killed minecraft:cow", stderr.text());
+        stderr.write(5, "minecraft.fight.attack", "killed minecraft:cow");
+        stderr.write(6, "minecraft.inv.count", "");
+        stderr.write(7, "minecraft.inv.count", "   ");
+        stderr.write(8, "minecraft.inv.count", null);
+        assertEquals("line 5 minecraft.fight.attack: killed minecraft:cow", stderr.text());
     }
 
     @Test
     void aWholeAccountIsOneEntryWhoseLaterLinesAreIndented() {
-        stderr.write(2, "numen.move.go", "walked there\nbroke 2 stone on the way");
-        assertEquals("line 2 numen.move.go: walked there\n  broke 2 stone on the way", stderr.text());
+        stderr.write(2, "minecraft.move.go", "walked there\nbroke 2 stone on the way");
+        assertEquals("line 2 minecraft.move.go: walked there\n  broke 2 stone on the way", stderr.text());
     }
 
     @Test
     void entriesThatAreTheSameOneAfterAnotherBecomeOneWithACount() {
         for (int i = 0; i < 40; i++) {
-            stderr.write(3, "numen.work.dig", "not_found — no block there");
+            stderr.write(3, "minecraft.work.dig", "not_found — no block there");
         }
-        stderr.write(4, "numen.work.dig", "dug 1 stone");
-        stderr.write(3, "numen.work.dig", "not_found — no block there");
-        assertEquals("line 3 numen.work.dig: not_found — no block there (×40)\n"
-                + "line 4 numen.work.dig: dug 1 stone\n"
-                + "line 3 numen.work.dig: not_found — no block there", stderr.text());
+        stderr.write(4, "minecraft.work.dig", "dug 1 stone");
+        stderr.write(3, "minecraft.work.dig", "not_found — no block there");
+        assertEquals("line 3 minecraft.work.dig: not_found — no block there (×40)\n"
+                + "line 4 minecraft.work.dig: dug 1 stone\n"
+                + "line 3 minecraft.work.dig: not_found — no block there", stderr.text());
     }
 
     @Test
     void sameWordsOnAnotherLineAreAnotherEntry() {
-        stderr.write(1, "numen.work.dig", "dug 1 stone");
-        stderr.write(2, "numen.work.dig", "dug 1 stone");
-        assertEquals("line 1 numen.work.dig: dug 1 stone\nline 2 numen.work.dig: dug 1 stone", stderr.text());
+        stderr.write(1, "minecraft.work.dig", "dug 1 stone");
+        stderr.write(2, "minecraft.work.dig", "dug 1 stone");
+        assertEquals("line 1 minecraft.work.dig: dug 1 stone\nline 2 minecraft.work.dig: dug 1 stone", stderr.text());
     }
 
     @Test
@@ -64,11 +64,11 @@ class StderrTest {
     @Test
     void theWholeChannelIsBoundedAndSaysHowManyEntriesWereLeftOut() {
         for (int i = 0; i < 100; i++) {
-            stderr.write(i + 1, "numen.build.place", "placed " + i + " blocks, " + "z".repeat(480));
+            stderr.write(i + 1, "minecraft.build.place", "placed " + i + " blocks, " + "z".repeat(480));
         }
         String text = stderr.text();
         assertTrue(text.length() < ScriptLimits.STDERR_CHARS + 200, text.length() + "");
-        assertTrue(text.startsWith("line 1 numen.build.place: placed 0 blocks"), "the head is kept");
+        assertTrue(text.startsWith("line 1 minecraft.build.place: placed 0 blocks"), "the head is kept");
         assertTrue(text.matches("(?s).*\\n\\[\\d+ more stderr entries \\(\\d+ characters\\) left out: stderr keeps the "
                 + "first " + ScriptLimits.STDERR_CHARS + " characters]$"), text.substring(text.length() - 120));
         assertFalse(text.contains("placed 99 blocks"));

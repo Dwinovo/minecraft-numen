@@ -13,8 +13,8 @@ repositories {
 }
 
 dependencies {
-    // 瘦 api jar 取 NeoForge 那份:本联动本来就只跑在 NeoForge 上
-    compileOnly files(rootProject.project(':numen-api:neoforge').tasks.named('apiJar'))
+    // 瘦 api jar 取 common 那份:加载器的成品 jar 把内置的 Minecraft 插件(连同平铺在里面的本联动)内嵌进去,从它裁出来的瘦 jar 会让构建绕成环
+    compileOnly files(rootProject.project(':numen-api:common').tasks.named('apiJar'))
     // 运行时由玩家自己装的那份提供;本模块不携带它一个字节,也不带任何模型/贴图/音频。
     compileOnly "maven.modrinth:touhou-little-maid:${tlm_version}"
 }
@@ -22,12 +22,12 @@ dependencies {
 /*
  * 车万女仆在场时的 GameTest:用例在 src/gametest,单开一次跑批 `./gradlew :plugins:tlm:runGameTestServer`。
  *
- * 不挂进 Numen 那一次(:numen:neoforge:runGameTestServer):车万女仆带着一堆 mixin,挂上去全部用例的环境都跟着变,那一次测的
+ * 不挂进 Numen 那一次(:plugins:minecraft:neoforge:runGameTestServer):车万女仆带着一堆 mixin,挂上去全部用例的环境都跟着变,那一次测的
  * 就不再是"只有本体"的样子。这一次照成品拼:本体、这个联动(成品 jar 里它本来就平铺在本体里)、联动的用例同在 numen 这一个
  * 模组里,车万女仆由运行时类路径带进来,和玩家装它一样被当成模组加载。
  *
  * 用例和 Numen 的 GameTest 共用件(GameTestKit、Steps)同包,在同一个模组里才看得见包内的那些,所以用例编译对着 Numen 的
- * 测试夹具(numen/common 的 src/testFixtures)的输出;Numen 自己的用例与寻路的用例不加载。
+ * 测试夹具(plugins/minecraft/common 的 src/testFixtures)的输出;Numen 自己的用例与寻路的用例不加载。
  * 它们是套件 numen_tlm(见 TlmGameTestSuite);Numen 与寻路的用例不在这一次的类路径上,所以只跑这一个套件。
  * 结构模板用 Numen 同步好的那一份目录。
  */
@@ -36,23 +36,24 @@ sourceSets {
 }
 
 // 在 runs 块外取:块里的 project(…) 是运行配置自己的"依赖某个项目",不是那个项目
-def numenNeoForge = project(':numen:neoforge')
-def gameTestStructures = project(':numen:common').layout.buildDirectory.dir('gameteststructures')
+evaluationDependsOn(':plugins:minecraft:neoforge')
+def numenNeoForge = project(':plugins:minecraft:neoforge')
+def gameTestStructures = project(':plugins:minecraft:common').layout.buildDirectory.dir('gameteststructures')
 def tlmSuite = rootProject.ext.numenSuites[project.path].gametest
 
 neoForge {
     addModdingDependenciesTo(sourceSets.gametest)
     mods {
-        numen {
+        numen_minecraft {
             sourceSet numenNeoForge.sourceSets.main
-            sourceSet project(':numen:common').sourceSets.testFixtures
+            sourceSet project(':plugins:minecraft:common').sourceSets.testFixtures
             // 寻路模块的类在成品里平铺在本体的 jar 里;这里不走 jar,同样声明
-            sourceSet project(':numen:pathing').sourceSets.main
+            sourceSet project(':plugins:minecraft:pathing').sourceSets.main
             sourceSet sourceSets.main
             sourceSet sourceSets.gametest
         }
         // Numen API 的 GameTest 支持:套件机制与登记入口、模拟主人连接的加载器实现
-        numen_api_gametest {
+        numen_gametest {
             sourceSet project(':numen-api:neoforge').sourceSets.gametest
             sourceSet project(':numen-api:common').sourceSets.testFixtures
         }
@@ -75,23 +76,23 @@ neoForge {
 
 dependencies {
     gametestCompileOnly files({ numenNeoForge.sourceSets.main.output })
-    gametestCompileOnly rootProject.project(':numen:common').sourceSets.testFixtures.output
+    gametestCompileOnly rootProject.project(':plugins:minecraft:common').sourceSets.testFixtures.output
     // 套件接口:本联动的用例经它报到(numen_tlm)
     gametestCompileOnly rootProject.project(':numen-api:common').sourceSets.testFixtures.output
     // 用例直接读她身上的外观附件(Outfit),不绕客户端
     gametestCompileOnly sourceSets.main.output
-    // 整个 Numen API(不是瘦 api jar):用例拉起同伴、按模型的样子调工具,和 Numen 的用例一样;运行时它就是 numen_api 那个模组
+    // 整个 Numen API(不是瘦 api jar):用例拉起同伴、按模型的样子调工具,和 Numen 的用例一样;运行时它就是 numen 那个模组
     gametestImplementation project(':numen-api:neoforge')
     gametestImplementation "maven.modrinth:touhou-little-maid:${tlm_version}"
 }
 
 tasks.named('compileGametestJava') {
-    dependsOn ':numen:neoforge:classes', ':numen:common:testFixturesClasses'
+    dependsOn ':plugins:minecraft:neoforge:classes', ':plugins:minecraft:common:testFixturesClasses'
 }
 
 tasks.matching { it.name == 'runGameTestServer' }.configureEach {
-    dependsOn ':numen:neoforge:classes', ':numen-api:neoforge:gametestClasses', ':numen:common:syncGameTestStructures',
-            ':numen:common:testFixturesClasses', ':numen-api:common:testFixturesClasses'
+    dependsOn ':plugins:minecraft:neoforge:classes', ':numen-api:neoforge:gametestClasses', ':plugins:minecraft:common:syncGameTestStructures',
+            ':plugins:minecraft:common:testFixturesClasses', ':numen-api:common:testFixturesClasses'
     // 测试服的配置目录每次开服从空的开始(世界目录由 TerrainWorld 清):上一次跑批(包括失败的一次)改过的开关、签过的皮肤缓存、
     // 发过的令牌、存下的档案不带进这一次。
     doFirst {

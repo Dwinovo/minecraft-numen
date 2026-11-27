@@ -6,7 +6,7 @@ description: How raising maids works in Touhou Little Maid — taming, what a ma
 # Raising Touhou Little Maid maids
 
 You can raise maids the way your owner does. The functions are in the `tlm` group: `tlm.maid.list`, `tlm.maid.info`, `tlm.maid.give`, `tlm.maid.take`, `tlm.maid.task`, `tlm.maid.config` and so on;
-look up how to call them with ApiSearch (select:tlm.maid.task) and the like. A maid's entity id comes from `numen.scan.entities` or `tlm.maid.list`, and changes after a server restart.
+look up how to call them with ApiSearch (select:tlm.maid.task) and the like. A maid's entity id comes from `minecraft.scan.entities` or `tlm.maid.list`, and changes after a server restart.
 
 ## What you can see
 

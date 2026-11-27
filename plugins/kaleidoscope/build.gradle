@@ -14,8 +14,8 @@ repositories {
 }
 
 dependencies {
-    // 瘦 api jar 取 NeoForge 那份:本联动本来就只跑在 NeoForge 上
-    compileOnly files(rootProject.project(':numen-api:neoforge').tasks.named('apiJar'))
+    // 瘦 api jar 取 common 那份:加载器的成品 jar 把内置的 Minecraft 插件(连同平铺在里面的本联动)内嵌进去,从它裁出来的瘦 jar 会让构建绕成环
+    compileOnly files(rootProject.project(':numen-api:common').tasks.named('apiJar'))
     // 运行时由玩家自己装的那份提供;本模块不携带它一个字节,也不带任何模型/贴图/音频。
     compileOnly "curse.maven:kaleidoscope-cookery-1309203:${kaleidoscope_version}"
 }

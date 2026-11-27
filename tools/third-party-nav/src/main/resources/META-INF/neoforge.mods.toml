@@ -23,7 +23,7 @@ ordering = "NONE"
 side = "BOTH"
 
 [[dependencies.mynav]]
-modId = "numen_api"
+modId = "numen"
 type = "required"
 versionRange = "[0,)"
 ordering = "AFTER"

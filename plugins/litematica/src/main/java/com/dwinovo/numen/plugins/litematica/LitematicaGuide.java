@@ -15,7 +15,7 @@ final class LitematicaGuide {
 
             ## How it fits together
             - `litematica.placement.list()` shows the projections your owner has loaded, which one is selected and the layer display they set.
-            - `litematica.placement.cells(layers)` returns the cells of one projection on the layers you name, in world coordinates, as cells you can pass straight to `numen.build.place` or compare with `numen.build.diff`. A call returns a limited number of cells, so for a large build ask a few layers at a time.
+            - `litematica.placement.cells(layers)` returns the cells of one projection on the layers you name, in world coordinates, as cells you can pass straight to `minecraft.build.place` or compare with `minecraft.build.diff`. A call returns a limited number of cells, so for a large build ask a few layers at a time.
             - `litematica.placement.preview(cells, name)` shows a design of yours to your owner as a projection, at the cells' own coordinates, without touching the world.
             - Everything here runs on your owner's client and reads their Litematica as it is at that moment, so it exists only for an owner whose client has the mod.
             - Read the `litematica_projection` skill for placements, subregions, rotation and mirror.
@@ -23,7 +23,7 @@ final class LitematicaGuide {
             ## Example
             ```lua
             local cells = litematica.placement.cells(64, 66)
-            numen.build.place(cells)
+            minecraft.build.place(cells)
             ```
             """;
 }

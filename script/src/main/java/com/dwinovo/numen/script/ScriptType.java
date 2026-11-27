@@ -49,7 +49,7 @@ public sealed interface ScriptType {
      * 一个有名字的类:名字、一句说明、继承的类(没有是 null)、字段。
      *
      * @param items 一串值的类({@code Cells}):每一项是什么;一张带字段的表是 null
-     * @param home  它的方法写在哪个模块里({@code numen.shape}):那个模块里与类同名的表是它的值的元表(方法、运算);只是数据的是 null
+     * @param home  它的方法写在哪个模块里({@code minecraft.shape}):那个模块里与类同名的表是它的值的元表(方法、运算);只是数据的是 null
      */
     record Class(String name, String doc, String parent, List<Field> fields, ScriptType items, String home) {
 

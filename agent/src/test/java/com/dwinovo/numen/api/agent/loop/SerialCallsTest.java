@@ -132,10 +132,10 @@ class SerialCallsTest {
         assertTrue(results.isEmpty(), "程序是服务端在停,这里等它交回结局");
 
         pending.remove("p").accept(new SerialCalls.Settled("{\"success\":false}", null, List.of(
-                new ScriptCall.Called("numen.move.go", "numen.move.go()", null, null)),
+                new ScriptCall.Called("minecraft.move.go", "minecraft.move.go()", null, null)),
                 "an urgent owner_hurt event arrived; t3 keeps running"));
 
-        assertEquals(List.of("p numen.move.go"), reported, "每次调用的结局随回执送到");
+        assertEquals(List.of("p minecraft.move.go"), reported, "每次调用的结局随回执送到");
         for (String skipped : List.of("after", "later")) {
             assertTrue(ToolOutcome.failed(results.get(skipped)), results.get(skipped));
             assertTrue(results.get(skipped).contains("Not run") && results.get(skipped)

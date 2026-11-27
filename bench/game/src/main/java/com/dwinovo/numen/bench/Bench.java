@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * 真模型评测的入口:登记一组场景,得到跑这组场景的 GameTest 用例。考题跟着被测的模块走(Numen 的在 numen/common 的评测源码集,
+ * 真模型评测的入口:登记一组场景,得到跑这组场景的 GameTest 用例。考题跟着被测的模块走(Numen 的在 plugins/minecraft/common 的评测源码集,
  * 每个联动在自己的评测源码集),每组是一个 GameTest 套件({@code GameTestSuite},按名字报到、由运行配置选,和别的 GameTest 同一个
  * 机制),套件类里一个生成器,{@link #suite} 登记一组:
  *

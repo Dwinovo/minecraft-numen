@@ -1,0 +1,224 @@
+package com.dwinovo.numen.plugins.minecraft.task.interact;
+import com.dwinovo.numen.api.permission.GatedAct.Permit;
+import com.dwinovo.numen.api.permission.GatedAct.PermitState;
+import com.dwinovo.numen.plugins.minecraft.task.MouseButton;
+
+import com.dwinovo.numen.api.task.TaskState;
+
+import com.dwinovo.numen.api.entity.NumenPlayer;
+import com.dwinovo.numen.plugins.minecraft.FailureType;
+import com.dwinovo.numen.plugins.minecraft.act.Interaction;
+import com.dwinovo.numen.plugins.minecraft.task.base.InReachTask;
+import com.dwinovo.numen.plugins.minecraft.task.base.Precondition;
+import com.dwinovo.numen.plugins.minecraft.task.move.Arrival;
+import com.dwinovo.numen.plugins.minecraft.task.move.Where;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.HitResult;
+
+import java.util.List;
+
+/**
+ * {@code minecraft.use.entity} on the player body: the entity-aimed native interaction. The entity must be within reach and in
+ * sight of where she stands; out of reach she first walks up beside it ({@link #approach}). Then she aims at it and presses
+ * the requested mouse button only when the native raytrace reaches that entity. LEFT+hold repeats the native attack until
+ * the hold ends, the target dies, or the task times out.
+ */
+public final class InteractEntityCompanionTask extends InReachTask<InteractEntityTaskRecord, com.dwinovo.numen.plugins.minecraft.tools.Clicks.Clicked> {
+
+    private Entity entity;
+    private Interaction interaction;
+    private long holdUntil = -1;
+    private boolean acted = false;     // landed at least one press (death then = success, not failure)
+    private String successMsg = "done";
+
+    public InteractEntityCompanionTask(NumenPlayer player, InteractEntityTaskRecord record) {
+        super(player, record);
+    }
+
+    @Override
+    protected List<Precondition> preconditions() {
+        return List.of(
+                // Resolve + cache the target; fail fast if it despawned / moved out of range.
+                () -> {
+                    entity = r.entity.in((ServerLevel) player.level());
+                    r.engage(entity);
+                    return (entity == null || !entity.isAlive())
+                            ? new Precondition.Failure(r.entity
+                                    + " is not nearby (it may have despawned or moved out of range)",
+                                    FailureType.TARGET_LOST)
+                            : null;
+                },
+                () -> r.which == null || player.hotbar().count(r.which) > 0 ? null
+                        : new Precondition.Failure("don't have "
+                                + BuiltInRegistries.ITEM.getKey(r.which.item()).getPath() + " to use on it",
+                                FailureType.NO_MATERIAL));
+    }
+
+    /** 够不着时走到它旁边。 */
+    @Override
+    protected Arrival approach() {
+        return Arrival.to(new Where.Mob(r.entity), Arrival.BESIDE);
+    }
+
+    /** Act this tick when the target is gone (report the outcome), a fixed hold has elapsed, or we're
+     *  in reach of it; otherwise walk up to it first. */
+    @Override
+    protected boolean reached() {
+        return entity == null || !entity.isAlive()
+                || (interaction != null && holdUntil >= 0 && player.level().getGameTime() >= holdUntil)
+                || withinReach();
+    }
+
+    @Override
+    protected TaskState act() {
+        // Target gone: death is success for a left-click that already landed; otherwise
+        // the target slipped away before we could touch it.
+        if (entity == null || !entity.isAlive()) {
+            if (acted) {
+                successMsg = (r.button == MouseButton.LEFT
+                        ? "defeated " + targetName() : "done with " + targetName());
+                return TaskState.SUCCESS;
+            }
+            fail("the target entity is gone before I could reach it", FailureType.TARGET_LOST);
+            return TaskState.FAILED;
+        }
+
+        // 目标是她自己坐着的载具:右键的意图(上船)早已是事实,立即了结;左键
+        // 原版玩家也打不到自己的座驾。不拦的话,下面的准星确认要求"看见目标",
+        // 而从座位上看自己的船永远确认不了——任务空转到超时,实测就是这么挂的。
+        if (entity == player.getVehicle()) {
+            if (r.button == MouseButton.LEFT) {
+                fail("you are riding the " + targetName()
+                        + " — can't hit your own vehicle; minecraft.use.dismount() steps off first",
+                        FailureType.UNKNOWN);
+                return TaskState.FAILED;
+            }
+            successMsg = "already riding the " + targetName();
+            return TaskState.SUCCESS;
+        }
+
+        // A fixed-duration hold completes on time even if the line of sight lapsed near the end.
+        if (interaction != null && holdUntil >= 0 && player.level().getGameTime() >= holdUntil) {
+            interaction.stop();
+            successMsg = describeDone() + settle();
+            return TaskState.SUCCESS;
+        }
+
+        // 够得着就点这一只,不要求准星落在它身上(原版服务端对玩家也只查距离,见 Mouse#reaches);转过去看着它是给人看的。
+        player.look().atNearest(entity.getBoundingBox());
+        HitResult hit = new EntityHitResult(entity);
+
+        if (interaction == null) {
+            // 按下去之前交给权限层:左键是打它(宠物、有名字的、村民),右键是右键它(有主人的)。
+            // 要问就站着等主人,不许就带着理由收场
+            boolean left = r.button == MouseButton.LEFT;
+            Permit permit = gate().permit(player.mouse().intents(hit, left).get(0));
+            if (permit.state() == PermitState.WAITING) {
+                player.controls().stop();
+                return TaskState.RUNNING;
+            }
+            if (permit.state() == PermitState.REFUSED) {
+                fail("cannot " + (left ? "attack " : "use ") + targetName() + ": " + permit.refusal(),
+                        FailureType.REFUSED);
+                return TaskState.FAILED;
+            }
+        }
+        if (interaction == null) {
+            if (r.which != null) {
+                player.hotbar().grip(r.which);
+            }
+            // 兜底开关与 use block 同一条身体约束(政策的唯一出处在那份记录上):
+            // 实体没吃掉点击才轮到物品自用,手里是食物/珍珠时宁可不兜。
+            boolean fallthroughOk =
+                    InteractAtTaskRecord.bodyBoundReason(player.getMainHandItem().getItem()) == null
+                    && InteractAtTaskRecord.bodyBoundReason(player.getOffhandItem().getItem()) == null;
+            interaction = Interaction.forHit(player, hit, button(), r.holdTicks, fallthroughOk, r.sneak).pointing(r.at);
+            if (r.holdTicks > 0) {
+                holdUntil = player.level().getGameTime() + r.holdTicks;
+            }
+        }
+        acted = true;
+
+        return switch (interaction.tick()) {
+            case DONE -> {
+                successMsg = describeDone() + settle();
+                yield TaskState.SUCCESS;
+            }
+            case FAILED -> {
+                fail(interaction.failReason(), interaction.failType());
+                yield TaskState.FAILED;
+            }
+            case RUNNING -> TaskState.RUNNING;
+        };
+    }
+
+    private Interaction.Button button() {
+        return r.button == MouseButton.LEFT
+                ? Interaction.Button.ATTACK : Interaction.Button.USE;
+    }
+
+    private boolean withinReach() {
+        return bodySettled() && entity != null
+                && player.canInteractWithEntity(entity, 0.0);
+    }
+
+    private String targetName() {
+        return entity != null ? entity.getName().getString() : r.entity.label();
+    }
+
+    private String describeDone() {
+        String verb = r.button == MouseButton.LEFT ? "attacked" : "interacted with";
+        return verb + " " + targetName() + (r.sneak ? " while sneaking" : "");
+    }
+
+    /** 收尾那半句,与点一格同款:这一下游戏接没接。之后它什么样她自己看。 */
+    private String settle() {
+        return com.dwinovo.numen.plugins.minecraft.tools.Clicks.said(interaction);
+    }
+
+    /**
+     * 这一下打开了界面(村民的交易、箱子矿车)就当场合上,回执与交回的值都不提它,与点一格同款。派这件活的要接着用那个界面时
+     * ({@link InteractEntityTaskRecord#keepsWindow})留着。
+     */
+    @Override
+    protected void closeBooks() {
+        if (!r.keepsWindow && interaction != null && interaction.opened()
+                && player.containerMenu != player.inventoryMenu) {
+            player.closeContainer();
+        }
+    }
+
+    /** Release the interaction, then the nav + overlay (base default). */
+    @Override
+    protected void cleanup() {
+        if (interaction != null) interaction.stop();
+        super.cleanup();
+    }
+
+    /** 按了哪个键、点了哪只实体、游戏接没接,和点一格同一种结果。 */
+    @Override
+    protected com.dwinovo.numen.plugins.minecraft.tools.Clicks.Clicked value() {
+        return com.dwinovo.numen.plugins.minecraft.tools.Clicks.result(
+                r.button == MouseButton.LEFT ? com.dwinovo.numen.plugins.minecraft.tools.Clicks.Button.LEFT
+                        : com.dwinovo.numen.plugins.minecraft.tools.Clicks.Button.RIGHT,
+                null, r.entity.label(), java.util.Optional.empty(), interaction != null && interaction.accepted());
+    }
+
+    @Override
+    protected String successMessage() {
+        return successMsg;
+    }
+
+    @Override
+    protected String timeoutMessage() {
+        return "timed out before interacting with " + targetName();
+    }
+
+    @Override
+    protected String cancelledMessage() {
+        return r.getToolName() + " interrupted";
+    }
+}

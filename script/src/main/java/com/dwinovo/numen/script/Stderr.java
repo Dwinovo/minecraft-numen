@@ -6,7 +6,7 @@ import java.util.List;
 /**
  * 回执的 stderr 一栏:API 与运行时主动报告的事,像命令行工具往 stderr 写——身体做了什么、没看全哪里、征询的结果,以及每一次 API 调用的
  * 失败(她用 {@code pcall} 接住了也写,同 Unix:失败的程序照样往 stderr 写,处不处理是调用方的事)。只返回值、没什么可报告的调用不写。
- * 每条带它在程序里的行号与函数名:{@code line 5 numen.fight.attack: killed minecraft:cow …}。
+ * 每条带它在程序里的行号与函数名:{@code line 5 minecraft.fight.attack: killed minecraft:cow …}。
  *
  * <p>按构造有界({@link ScriptLimits}):一条至多 {@link ScriptLimits#STDERR_RECORD_CHARS} 字,超出的写明还有多少字没显示;连续相同的
  * 条合并成一条加 {@code (×N)};整栏至多 {@link ScriptLimits#STDERR_CHARS} 字,超出的条数与字数写明。纯 JVM。

@@ -1,8 +1,8 @@
 package com.dwinovo.numen.plugins.ftbquests;
 
 import com.dwinovo.numen.api.NumenPlugins;
-import com.dwinovo.numen.ApiLintReport;
-import com.dwinovo.numen.NumenApiFixture;
+import com.dwinovo.numen.plugins.minecraft.ApiLintReport;
+import com.dwinovo.numen.plugins.minecraft.NumenApiFixture;
 import com.dwinovo.numen.api.sdk.ApiTester;
 
 import java.io.IOException;

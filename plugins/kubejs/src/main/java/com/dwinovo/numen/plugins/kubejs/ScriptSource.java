@@ -1,7 +1,6 @@
 package com.dwinovo.numen.plugins.kubejs;
 
 import com.dwinovo.numen.api.knowledge.InfoPage;
-import com.dwinovo.numen.api.knowledge.KnowledgeKind;
 import com.dwinovo.numen.api.knowledge.Recipe;
 import com.dwinovo.numen.api.knowledge.RecipePage;
 import com.dwinovo.numen.api.sdk.ApiFunction;
@@ -17,8 +16,8 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * 脚本里声明的一个知识来源(control 0016):整合包作者用它登记<b>物品说明</b>({@code numen.inv.info})或<b>配方</b>
- * ({@code numen.inv.recipes}、{@code numen.inv.uses})——模型读到的动词把它的答复和原版、JEI 的合在一起,每条注明出自这个插件。
+ * 脚本里声明的一个物品查询:整合包作者用它登记<b>物品说明</b>({@code <名字空间>.lookup.info})或<b>配方</b>
+ * ({@code <名字空间>.lookup.recipes}、{@code <名字空间>.lookup.uses})——是这个插件自己的函数,不并进别的插件的答复。
  * 写法同函数({@link ScriptFn}):说明必填、方法连着写,最后 {@code run}。
  *
  * <p>{@code run(item => …)} 收物品 id({@code minecraft:iron_ingot}),返回:
@@ -27,22 +26,25 @@ import java.util.Optional;
  *   <li>{@code recipes}、{@code uses}:一串配方 {@code {id, category, item, makes, ingredients, catalysts, categoryName, alsoMakes, ticks}},
  *       必填的是 {@code category}(配方类型或机器的 id)与 {@code item}(产出),其余不写就是没有。</li>
  * </ul>
- * 来源读不到的字段({@code notProvided})如实声明,不写不猜。
+ * 读不到的字段({@code notProvided})如实声明,写进函数的说明里,不写不猜。
  */
 public final class ScriptSource {
 
     private final String namespace;
-    private final KnowledgeKind kind;
+    /** 查询的种类:recipes、uses、info。 */
+    static final java.util.Set<String> KINDS = java.util.Set.of("recipes", "uses", "info");
+
+    private final String kind;
     private String provides = "";
     private List<String> notProvided = List.of();
     private ScriptLookup lookup;
 
-    ScriptSource(String namespace, KnowledgeKind kind) {
+    ScriptSource(String namespace, String kind) {
         this.namespace = namespace;
         this.kind = kind;
     }
 
-    /** 这个来源多给的是哪一类信息(一句话):它缺席时,模型据此知道缺了什么。 */
+    /** 这个查询多给的是哪一类信息(一句话):写进函数的说明,模型据此知道它答什么。 */
     public ScriptSource provides(String text) {
         this.provides = text == null ? "" : text.strip();
         return this;
@@ -66,46 +68,31 @@ public final class ScriptSource {
         Object find(String item);
     }
 
-    @HideFromJS
-    KnowledgeKind kind() {
-        return kind;
-    }
-
-    @HideFromJS
-    String provides() {
-        return provides;
-    }
-
-    @HideFromJS
-    List<String> notProvided() {
-        return notProvided;
-    }
-
     /**
      * @throws IllegalArgumentException 没写说明或执行体
      */
     @HideFromJS
     @SuppressWarnings("unchecked")
     ApiFunction build() {
-        String where = namespace + " " + kind.verb() + " source";
+        String where = namespace + " " + kind + " lookup";
         if (provides.isBlank()) {
-            throw new IllegalArgumentException(where + " needs source.provides(\"…\"): the model reads it to know what is "
-                    + "missing when this source does not answer");
+            throw new IllegalArgumentException(where + " needs source.provides(\"…\"): the model reads it to know what "
+                    + "this lookup answers");
         }
         if (lookup == null) {
             throw new IllegalArgumentException(where + " needs a body (source.run(item => …))");
         }
         Codec<Object> item = (Codec<Object>) LuaCodecs.of(Item.class, namespace);
-        Codec<Object> page = (Codec<Object>) LuaCodecs.of(kind.returns(), namespace);
-        return ApiFunction.builder("read")
-                .summary("The " + kind.verb() + " source of the plugin " + namespace + ".")
+        Codec<Object> page = (Codec<Object>) LuaCodecs.of(kind.equals("info") ? InfoPage.class : RecipePage.class, namespace);
+        return ApiFunction.builder(kind)
+                .summary(provides + (notProvided.isEmpty() ? "" : " It cannot say: " + String.join(", ", notProvided) + "."))
                 .required("item", item, "The item.")
                 .returns(page)
                 .server((call, args) -> {
                     String id = BuiltInRegistries.ITEM.getKey((Item) args.get("item")).toString();
                     try {
                         Object found = lookup.find(id);
-                        return kind == KnowledgeKind.INFO ? info(found) : recipes(found);
+                        return kind.equals("info") ? info(found) : recipes(found);
                     } catch (RuntimeException error) {
                         throw ScriptErrors.asFailure(where, error);
                     }
@@ -130,7 +117,7 @@ public final class ScriptSource {
             out.add(new Recipe(text(fields, "id"), required(fields, "category"), text(fields, "categoryName"),
                     required(fields, "item"), number(fields, "makes").orElse(1), strings(fields, "alsoMakes"),
                     strings(fields, "ingredients"), strings(fields, "catalysts"), Optional.empty(), Optional.empty(),
-                    number(fields, "ticks"), List.of()));
+                    number(fields, "ticks")));
         }
         return RecipePage.of(out);
     }

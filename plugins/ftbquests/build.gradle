@@ -24,8 +24,8 @@ def ftb = ["dev.ftb.mods:ftb-quests-neoforge:${ftb_quests_version}",
            "dev.architectury:architectury-neoforge:${architectury_version}"]
 
 dependencies {
-    // 瘦 api jar 取 NeoForge 那份:本联动本来就只跑在 NeoForge 上
-    compileOnly files(rootProject.project(':numen-api:neoforge').tasks.named('apiJar'))
+    // 瘦 api jar 取 common 那份:加载器的成品 jar 把内置的 Minecraft 插件(连同平铺在里面的本联动)内嵌进去,从它裁出来的瘦 jar 会让构建绕成环
+    compileOnly files(rootProject.project(':numen-api:common').tasks.named('apiJar'))
     ftb.each { compileOnly it }
     // 防漂移测试登记 ftbquests 组时,动作的处理函数(读任务书的 ClientBook 等)要连上 FTB 的类:只加载、不运行,
     // 同样不进任何产物
@@ -35,7 +35,7 @@ dependencies {
 /*
  * FTB Quests 在场时的 GameTest:用例在 src/gametest,单开一次跑批 `./gradlew :plugins:ftbquests:runGameTestServer`。
  *
- * 不挂进 Numen 那一次(:numen:neoforge:runGameTestServer):FTB 带着 mixin 与自己的队伍系统,挂上去全部用例的环境都跟着变。
+ * 不挂进 Numen 那一次(:plugins:minecraft:neoforge:runGameTestServer):FTB 带着 mixin 与自己的队伍系统,挂上去全部用例的环境都跟着变。
  * 这一次照成品拼:本体、这个联动(成品 jar 里它本来就平铺在本体里)、联动的用例同在 numen 这一个模组里,FTB 全家由运行时类路径
  * 带进来,和玩家装它们一样被当成模组加载。跑的是专用服务器,FTB 里只在客户端有的方法在这里不存在。
  *
@@ -46,23 +46,24 @@ sourceSets {
     gametest {}
 }
 
-def numenNeoForge = project(':numen:neoforge')
-def gameTestStructures = project(':numen:common').layout.buildDirectory.dir('gameteststructures')
+evaluationDependsOn(':plugins:minecraft:neoforge')
+def numenNeoForge = project(':plugins:minecraft:neoforge')
+def gameTestStructures = project(':plugins:minecraft:common').layout.buildDirectory.dir('gameteststructures')
 def ftbqSuite = rootProject.ext.numenSuites[project.path].gametest
 
 neoForge {
     addModdingDependenciesTo(sourceSets.gametest)
     mods {
-        numen {
+        numen_minecraft {
             sourceSet numenNeoForge.sourceSets.main
-            sourceSet project(':numen:common').sourceSets.testFixtures
+            sourceSet project(':plugins:minecraft:common').sourceSets.testFixtures
             // 寻路模块的类在成品里平铺在本体的 jar 里;这里不走 jar,同样声明
-            sourceSet project(':numen:pathing').sourceSets.main
+            sourceSet project(':plugins:minecraft:pathing').sourceSets.main
             sourceSet sourceSets.main
             sourceSet sourceSets.gametest
         }
         // Numen API 的 GameTest 支持:套件机制与登记入口、模拟主人连接的加载器实现
-        numen_api_gametest {
+        numen_gametest {
             sourceSet project(':numen-api:neoforge').sourceSets.gametest
             sourceSet project(':numen-api:common').sourceSets.testFixtures
         }
@@ -82,23 +83,23 @@ neoForge {
 
 dependencies {
     gametestCompileOnly files({ numenNeoForge.sourceSets.main.output })
-    gametestCompileOnly rootProject.project(':numen:common').sourceSets.testFixtures.output
+    gametestCompileOnly rootProject.project(':plugins:minecraft:common').sourceSets.testFixtures.output
     // 套件接口:本联动的用例经它报到(numen_ftbquests)
     gametestCompileOnly rootProject.project(':numen-api:common').sourceSets.testFixtures.output
     // 用例直接读联动里包内的类(任务书的样子),不绕客户端
     gametestCompileOnly sourceSets.main.output
-    // 整个 Numen API(不是瘦 api jar):用例拉起同伴、调工具,和 Numen 的用例一样;运行时它就是 numen_api 那个模组
+    // 整个 Numen API(不是瘦 api jar):用例拉起同伴、调工具,和 Numen 的用例一样;运行时它就是 numen 那个模组
     gametestImplementation project(':numen-api:neoforge')
     ftb.each { gametestImplementation(it) { transitive = false } }
 }
 
 tasks.named('compileGametestJava') {
-    dependsOn ':numen:neoforge:classes', ':numen:common:testFixturesClasses'
+    dependsOn ':plugins:minecraft:neoforge:classes', ':plugins:minecraft:common:testFixturesClasses'
 }
 
 tasks.matching { it.name == 'runGameTestServer' }.configureEach {
-    dependsOn ':numen:neoforge:classes', ':numen-api:neoforge:gametestClasses', ':numen:common:syncGameTestStructures',
-            ':numen:common:testFixturesClasses', ':numen-api:common:testFixturesClasses'
+    dependsOn ':plugins:minecraft:neoforge:classes', ':numen-api:neoforge:gametestClasses', ':plugins:minecraft:common:syncGameTestStructures',
+            ':plugins:minecraft:common:testFixturesClasses', ':numen-api:common:testFixturesClasses'
     // 测试服的配置目录每次开服从空的开始(世界目录由 TerrainWorld 清):上一次跑批(包括失败的一次)改过的开关、签过的皮肤缓存、
     // 发过的令牌、存下的档案不带进这一次。
     // 任务书(config/ftbquests)也在里面:上一次跑批存下的章节不留到这一次,用例从空书开始

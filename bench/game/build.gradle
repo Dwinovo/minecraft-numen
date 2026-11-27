@@ -1,5 +1,5 @@
 // 评测在游戏里的那一半:场景接口、运行器、评测大脑、模拟主人。它是一个独立的模组 numen_bench,只在评测的运行配置里
-// 与场景的源码集一起加载(numen/neoforge 与各联动的 runBench),平时的游戏、GameTest、发行 jar 里都没有它。
+// 与场景的源码集一起加载(plugins/minecraft/neoforge 与各联动的 runBench),平时的游戏、GameTest、发行 jar 里都没有它。
 // 模组入口(NumenBench)是 NeoForge 的,所以对着 NeoForge 编译;评测也只在 NeoForge 上跑。考场只依赖 Numen API,不认识任何插件。
 plugins {
     id 'java-library'

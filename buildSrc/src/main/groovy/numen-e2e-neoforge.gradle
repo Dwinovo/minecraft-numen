@@ -1,7 +1,7 @@
 /**
- * 端到端测试的起服层之一:NeoForge 专用服。应用在 numen/neoforge 的构建脚本末尾(它要用到模组 numen)。
+ * 端到端测试的起服层之一:NeoForge 专用服。应用在 plugins/minecraft/neoforge 的构建脚本末尾(它要用到模组 numen_minecraft)。
  *
- * <p>场景(numen/common 的 e2e 源码集里的 JUnit)只认一份规格——numen-e2e 里的 {@code ext.e2e}:服务端要在哪个地址、RCON 口与密码、
+ * <p>场景(plugins/minecraft/common 的 e2e 源码集里的 JUnit)只认一份规格——numen-e2e 里的 {@code ext.e2e}:服务端要在哪个地址、RCON 口与密码、
  * 配置根里要预先放哪些文件(种子)。怎么把满足这份规格的服务端起起来,是这一层的事,
  * 提供 {@code e2eServerStart}/{@code e2eServerStop} 两个任务。
  *
@@ -30,7 +30,7 @@ neoForge {
             server()
             gameDirectory = project.mkdir(gameDir)
             // 玩家服务器上有的就这些:Numen 与它依赖的 Numen API。GameTest 的支持模组不在里面
-            loadedMods = [mods.numen]
+            loadedMods = [mods.numen_minecraft]
             programArguments.add('--nogui')
         }
     }

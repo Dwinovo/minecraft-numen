@@ -22,11 +22,11 @@ plugins {
 
 // This should match the folder name of the project, or else IDEA may complain (see https://youtrack.jetbrains.com/issue/IDEA-317606)
 rootProject.name = 'Numen'
-// 目录与项目路径从模组 id 推出:numen/(模组 numen)、numen-api/(模组 numen_api)、ai/(LLM 连接层,纯 JVM)。
-// 单一构建:numen 直接以 project 依赖消费 numen-api,numen-api 消费 agent,agent 消费 script 与 ai,不经 maven 中转。
-include('numen:common')
-include('numen:fabric')
-include('numen:neoforge')
+// 目录与项目路径:numen-api/(引擎,模组 numen)、plugins/(联动与内置的 Minecraft 插件,plugins/minecraft 是模组 numen_minecraft)、ai/(LLM 连接层,纯 JVM)。
+// 单一构建:Minecraft 插件直接以 project 依赖消费 numen-api,numen-api 消费 agent,agent 消费 script 与 ai,不经 maven 中转。
+include('plugins:minecraft:common')
+include('plugins:minecraft:fabric')
+include('plugins:minecraft:neoforge')
 include('numen-api:common')
 include('numen-api:fabric')
 include('numen-api:neoforge')
@@ -45,8 +45,8 @@ include('permission')
 include('ui')
 // numen-lua:沙箱里的 Lua 5.2,纯 JVM,不依赖 Minecraft 与 Numen(详见 lua/build.gradle 头注与 lua/README.md)。
 include('lua')
-// numen-pathing:寻路,只依赖原版 Minecraft,Numen 经端口接入(详见 numen/pathing/build.gradle 头注)。
-include('numen:pathing')
+// numen-pathing:寻路,只依赖原版 Minecraft,Numen 经端口接入(详见 plugins/minecraft/pathing/build.gradle 头注)。
+include('plugins:minecraft:pathing')
 
 // numen-bench:真模型评测(docs/bench.md)。:bench 是纯 JVM 的记录与统计,:bench:game 是游戏里那一半;都不发布、不进发行 jar。
 include('bench')

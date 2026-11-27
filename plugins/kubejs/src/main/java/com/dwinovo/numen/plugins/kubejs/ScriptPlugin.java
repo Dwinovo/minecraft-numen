@@ -4,7 +4,7 @@ import com.dwinovo.numen.api.CompanionEvent;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.api.entity.NumenPlayer;
 import com.dwinovo.numen.api.gear.GearSource;
-import com.dwinovo.numen.api.knowledge.KnowledgeKind;
+import com.dwinovo.numen.api.sdk.ApiFunction;
 import dev.latvian.mods.rhino.util.HideFromJS;
 
 import java.util.ArrayList;
@@ -34,6 +34,8 @@ public final class ScriptPlugin {
 
     private final String namespace;
     private final List<Consumer<NumenApi>> registrations = new ArrayList<>();
+    /** 脚本里声明的查询函数(recipes、uses、info),装进这个插件的 {@code lookup} 组。 */
+    private final List<ApiFunction> lookups = new ArrayList<>();
     /** 这一次登记拿到的门;发事件用它(撤回之后它过期,发事件就抛)。 */
     private volatile NumenApi door;
     private Throwable failure;
@@ -63,19 +65,21 @@ public final class ScriptPlugin {
     }
 
     /**
-     * 一个知识来源:{@code kind} 是 {@code recipes}、{@code uses}、{@code info}(物品说明);{@code declare} 里写它({@link ScriptSource})。
-     * 模型读到的动词 {@code numen.inv.recipes|uses|info} 把它的答复和原版、JEI 的合在一起,每条注明出自这个插件。
+     * 一个物品查询:{@code kind} 是 {@code recipes}、{@code uses}、{@code info}(物品说明);{@code declare} 里写它({@link ScriptSource})。
+     * 模型读到的函数是这个插件自己的 {@code <名字空间>.lookup.<kind>}。
      *
-     * @throws IllegalArgumentException 没有这种知识、说明或执行体没写
+     * @throws IllegalArgumentException 没有这种查询、同一种写了两次、说明或执行体没写
      */
     public void knowledgeSource(String kind, Consumer<ScriptSource> declare) {
-        KnowledgeKind known = java.util.Arrays.stream(KnowledgeKind.values()).filter(k -> k.verb().equals(kind)).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("no knowledge '" + kind + "'; the kinds are recipes, "
-                        + "uses and info"));
-        ScriptSource source = new ScriptSource(namespace, known);
+        if (!ScriptSource.KINDS.contains(kind)) {
+            throw new IllegalArgumentException("no lookup '" + kind + "'; the kinds are recipes, uses and info");
+        }
+        if (lookups.stream().anyMatch(f -> f.name().equals(kind))) {
+            throw new IllegalArgumentException("the lookup '" + kind + "' of plugin " + namespace + " is declared twice");
+        }
+        ScriptSource source = new ScriptSource(namespace, kind);
         declare.accept(source);
-        var function = source.build();
-        registrations.add(numen -> numen.knowledgeSource(known, source.provides(), source.notProvided(), function));
+        lookups.add(source.build());
     }
 
     /**
@@ -134,6 +138,9 @@ public final class ScriptPlugin {
     void setup(NumenApi numen) {
         door = numen;
         registrations.forEach(registration -> registration.accept(numen));
+        if (!lookups.isEmpty()) {
+            numen.api("lookup", "What the plugin " + namespace + " knows about items.", List.copyOf(lookups));
+        }
     }
 
     @HideFromJS

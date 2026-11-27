@@ -36,7 +36,7 @@ import java.util.Optional;
  *
  * <p>都在服务端:女仆是世界里的实体。读的(清单、详情、攻击名单、模型)当场回、不问主人;做的是人在女仆界面里按的按钮,每一个都是用这只女仆
  * ({@link ServerCall#use}:够不够得着、权限层的 {@code use_entity}、放行后再认一次),放行了才调车万女仆的包({@link Maids})。和
- * {@code numen.use.block} 同一条规矩:不走路,够不着就失败并给出照抄就能走过去的那一次调用。
+ * {@code minecraft.use.block} 同一条规矩:不走路,够不着就失败并给出照抄就能走过去的那一次调用。
  *
  * <p>本类不碰车万女仆的类,只经 {@link Maids}:登记这一组(联动的检查只跑这一段)时那里没有车万女仆。
  */
@@ -72,7 +72,7 @@ public final class MaidApi {
 
     /** 一只加载着的女仆。 */
     @Doc("A maid of Touhou Little Maid, loaded in the world: an Entity with her work and settings. Hand her on as she "
-            + "is: tlm.maid.info(m), numen.use.entity(m), numen.move.walk(m).")
+            + "is: tlm.maid.info(m), minecraft.use.entity(m), minecraft.move.walk(m).")
     public record Maid(@Flatten EntityInfo entity,
                        @Doc("The model she wears.") String model,
                        @Doc("Her work mode, touhou_little_maid:farm.") String task,
@@ -96,10 +96,10 @@ public final class MaidApi {
     @Fn("The maids you keep: the ones here, the ones in unloaded chunks, and tombstones.")
     @Example("tlm.maid.list()")
     @Example("for _, m in ipairs(tlm.maid.list().here) do print(m.id, m.task, m.distance) end")
-    @Note("Read-only. A wild maid is tamed with a cake: `numen.use.entity(\"maid@3f9a1c\", {item = \"minecraft:cake\"})`, with her "
-            + "id from `numen.scan.entities`.")
+    @Note("Read-only. A wild maid is tamed with a cake: `minecraft.use.entity(\"maid@3f9a1c\", {item = \"minecraft:cake\"})`, with her "
+            + "id from `minecraft.scan.entities`.")
     @Note("Your power points and how many maids TLM counts as yours are in your body state every turn.")
-    @SeeAlso({"tlm.maid.info", "numen.scan.entities"})
+    @SeeAlso({"tlm.maid.info", "minecraft.scan.entities"})
     public static Household list(ServerCall call) {
         NumenPlayer her = call.her();
         List<Maid> here = new ArrayList<>();
@@ -154,7 +154,7 @@ public final class MaidApi {
                          @Doc("Every work mode in her task list.") List<WorkMode> tasks) {}
 
     /** 哪一只。 */
-    public record Which(@Doc("The maid: her Maid or Entity, or her id as tlm.maid.list or numen.scan.entities "
+    public record Which(@Doc("The maid: her Maid or Entity, or her id as tlm.maid.list or minecraft.scan.entities "
             + "lists it.") EntityRef maid) {}
 
     @Fn("One maid in full: settings, gear, what she carries, effects, what she is doing, and every work mode with "
@@ -184,7 +184,7 @@ public final class MaidApi {
     @Example("tlm.maid.task(\"touhou_little_maid:farm\", {maid = \"maid@3f9a1c\"})")
     @Example("tlm.maid.task(\"touhou_little_maid:idle\")")
     @Note("It does not travel: stand within about 7 blocks of her, the distance at which her GUI stays open. Farther "
-            + "away it fails with out_of_reach, and its hint is the numen.move.walk call to copy.")
+            + "away it fails with out_of_reach, and its hint is the minecraft.move.walk call to copy.")
     @Note("TLM decides: only the owner may switch, and a mode may wait for something first (see can_switch in "
             + "tlm.maid.info). It reads her task back; when TLM did not take it, it fails and says what TLM's rules show.")
     @Note("It is using your maid, so your owner's rules may ask them first; the call waits for the answer.")
@@ -383,9 +383,9 @@ public final class MaidApi {
     @Example("tlm.maid.name(\"maid@3f9a1c\", \"Reimu\")")
     @Example("tlm.maid.name(\"maid@3f9a1c\", \"Reimu\", {always_show = true})")
     @Note("TLM names a maid only while you hold a name tag in your main hand, and uses the tag up: "
-            + "`numen.gear.hold(\"minecraft:name_tag\")` first. The tag's own text does not matter.")
+            + "`minecraft.gear.hold(\"minecraft:name_tag\")` first. The tag's own text does not matter.")
     @Note("The same reach, owner rule and asking as tlm.maid.task. It reads her name back.")
-    @SeeAlso({"tlm.maid.info", "numen.gear.hold"})
+    @SeeAlso({"tlm.maid.info", "minecraft.gear.hold"})
     public static Pending<Named> name(ServerCall call, Name args) {
         if (args.name().isBlank() || args.name().length() > Maids.NAME_MAX) {
             throw new ApiError(ErrorKind.BAD_ARGUMENT, "a maid's name is 1 to " + Maids.NAME_MAX + " characters", null);
@@ -402,7 +402,7 @@ public final class MaidApi {
                 String said = Maids.label(still) + " was not named.";
                 if (Maids.ownedBy(still, her) && !tagged) {
                     throw new ApiError(ErrorKind.FAILED, said + " TLM names a maid only with a name tag in your main "
-                            + "hand.", Call.of("numen.gear.hold", "minecraft:name_tag"), read);
+                            + "hand.", Call.of("minecraft.gear.hold", "minecraft:name_tag"), read);
                 }
                 throw refused(her, still, null, said, read);
             }
@@ -467,7 +467,7 @@ public final class MaidApi {
             + "armour slot that holds something else takes nothing; take that out first.")
     @Note("Returns how many went over; fewer than asked when she ran out of room. None at all fails and says why.")
     @Note("Naming only the item hands over any stack of it. To hand over one kind of it only (the enchanted bow, not "
-            + "the plain one), pass that kind's entry of numen.inv.items() as item.")
+            + "the plain one), pass that kind's entry of minecraft.inv.items() as item.")
     @SeeAlso({"tlm.maid.take", "tlm.maid.info"})
     public static Pending<Integer> give(ServerCall call, Give args) {
         Stacks.Which which = args.item().in(call.her().getInventory(), call.her().registryAccess());
@@ -623,7 +623,7 @@ public final class MaidApi {
             String owner = Maids.owner(maid);
             if (owner == null) {
                 return new ApiError(ErrorKind.DENIED, said + " She is wild: tame her first with a cake.",
-                        Call.of("numen.use.entity", EntityLabel.of(maid), Map.of("item", "minecraft:cake")), read);
+                        Call.of("minecraft.use.entity", EntityLabel.of(maid), Map.of("item", "minecraft:cake")), read);
             }
             return new ApiError(ErrorKind.DENIED, said + " She is not yours: TLM lets only her owner (" + owner
                     + ") do this.", null, read);

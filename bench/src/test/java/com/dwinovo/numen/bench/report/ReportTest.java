@@ -28,7 +28,7 @@ class ReportTest {
                 subgoals, end.name(), 6, 4, passed ? 0 : 2, passed ? 0 : 1, 0, 12000, 30000, 800,
                 cost, cost == null ? null : "CNY", 42000, 840, !passed && end == EndReason.DONE, tag,
                 "挖好了|给你", "transcripts/" + scenario + "-" + variant.id() + "-" + attempt + ".jsonl", null,
-                Map.of(), variant == Variant.LIVE ? List.of(new FunctionUse("numen.work.dig", 2,
+                Map.of(), variant == Variant.LIVE ? List.of(new FunctionUse("minecraft.work.dig", 2,
                         passed ? Map.of() : Map.of("bad_argument", 1), 1, 0)) : List.of());
     }
 
@@ -48,16 +48,16 @@ class ReportTest {
     @Test
     void summaryAndCompareListEveryFunction() {
         List<Run> runs = sample();
-        assertTrue(Summary.markdown("t", runs).contains("| numen.work.dig | 6 | 17% | 1 | — | 3 | 0 |"),
+        assertTrue(Summary.markdown("t", runs).contains("| minecraft.work.dig | 6 | 17% | 1 | — | 3 | 0 |"),
                 Summary.markdown("t", runs));
         List<Run> after = new ArrayList<>(runs);
         after.replaceAll(r -> r.live() ? new Run(r.suite(), r.scenario(), r.variant(), r.attempt(), r.commit(),
                 r.promptHash(), r.model(), r.passed(), r.checks(), r.subgoals(), r.end(), r.turns(), r.toolCalls(),
                 r.toolErrors(), r.repeatedFailures(), r.consents(), r.tokensMiss(), r.tokensHit(), r.tokensOut(),
                 r.cost(), r.currency(), r.wallMs(), r.gameTicks(), r.claimedDone(), r.tag(), r.finalWords(),
-                r.transcript(), r.error(), r.metrics(), List.of(new FunctionUse("numen.work.dig", 1, Map.of(), 0, 0))) : r);
+                r.transcript(), r.error(), r.metrics(), List.of(new FunctionUse("minecraft.work.dig", 1, Map.of(), 0, 0))) : r);
         String md = Compare.markdown("before", runs, "after", after);
-        assertTrue(md.contains("| numen.work.dig | 6 | 3 | 17% | 0% | 17% | 0% | 50% | 0% |"), md);
+        assertTrue(md.contains("| minecraft.work.dig | 6 | 3 | 17% | 0% | 17% | 0% | 50% | 0% |"), md);
     }
 
     private static List<Run> sample() {
@@ -123,16 +123,16 @@ class ReportTest {
     @Test
     void actingOnAWorldSheNeverLookedAtIsAPerceptionFailure() {
         assertEquals(FailureTag.B,
-                FailureTag.auto(false, EndReason.DONE, true, false, false, List.of(used("numen.work.dig")), null),
+                FailureTag.auto(false, EndReason.DONE, true, false, false, List.of(used("minecraft.work.dig")), null),
                 "挖了却一次都没看过");
         assertNull(FailureTag.auto(false, EndReason.DONE, true, false, false,
-                        List.of(used("numen.scan.block"), used("numen.work.dig")), null),
+                        List.of(used("minecraft.scan.block"), used("minecraft.work.dig")), null),
                 "看过了就判不出是不是感知的问题,留给人工");
-        assertNull(FailureTag.auto(false, EndReason.DONE, true, false, false, List.of(used("numen.move.walk")), null),
+        assertNull(FailureTag.auto(false, EndReason.DONE, true, false, false, List.of(used("minecraft.move.walk")), null),
                 "只走路不算动世界:主人给了坐标本就不必先看一眼");
-        assertEquals(FailureTag.D, FailureTag.auto(false, EndReason.DONE, true, true, false, List.of(used("numen.work.dig")), null),
+        assertEquals(FailureTag.D, FailureTag.auto(false, EndReason.DONE, true, true, false, List.of(used("minecraft.work.dig")), null),
                 "没有别的证据时,命令写错了就是执行参数");
-        assertNull(FailureTag.auto(false, EndReason.DENIED, false, false, false, List.of(used("numen.use.block")), null),
+        assertNull(FailureTag.auto(false, EndReason.DENIED, false, false, false, List.of(used("minecraft.use.block")), null),
                 "基线是写死的脚本,坐标在剧本里,拿它问看没看过是问错了对象");
     }
 
@@ -173,7 +173,7 @@ class ReportTest {
         assertNull(FailureTag.auto(false, EndReason.DONE, true, false, false, List.of(), new PathEnd("Blocked", null)),
                 "执行期受阻判不出是规划还是恢复,留给人工");
         assertEquals(FailureTag.H, FailureTag.auto(false, EndReason.DONE, true, true, false,
-                        List.of(used("numen.work.dig")), new PathEnd("NoRoute", "EXCLUDED")),
+                        List.of(used("minecraft.work.dig")), new PathEnd("NoRoute", "EXCLUDED")),
                 "场景设错了排在最前:别的证据都是它的后果");
     }
 

@@ -87,11 +87,11 @@ public final class LitematicaApi {
                        @Doc("Which projection: its name as litematica.placement.list prints it.")
                        @Omitted("the selected one") Optional<String> placement) {}
 
-    @Fn("The cells of one projection on a layer or a few layers, in world coordinates, as Cells that numen.build.place, "
-            + "numen.build.diff take as they are.")
+    @Fn("The cells of one projection on a layer or a few layers, in world coordinates, as Cells that minecraft.build.place, "
+            + "minecraft.build.diff take as they are.")
     @Example("litematica.placement.cells(64)")
     @Example("litematica.placement.cells(64, 66)")
-    @Example("numen.build.place(litematica.placement.cells(64))")
+    @Example("minecraft.build.place(litematica.placement.cells(64))")
     @Example("litematica.placement.cells(64, {placement = \"tower\"})")
     @Note("Each cell is a Block: name is the block with its full state, written as /setblock takes it "
             + "(minecraft:oak_stairs[facing=east,half=bottom,shape=straight,waterlogged=false]), pos is the world cell. "
@@ -102,7 +102,7 @@ public final class LitematicaApi {
             + "that reads the layers that fit. litematica.placement.list says how many cells each projection has.")
     @Note("Reads your owner's Litematica on their client and changes nothing. A name that matches no projection fails with "
             + "not_found.")
-    @SeeAlso({"litematica.placement.list", "numen.build.place", "numen.build.diff"})
+    @SeeAlso({"litematica.placement.list", "minecraft.build.place", "minecraft.build.diff"})
     public static List<BlockAt> cells(ClientCall call, Read args) {
         return Projections.cells(args.from(), args.to().orElse(args.from()), args.placement().orElse(null));
     }
@@ -122,7 +122,7 @@ public final class LitematicaApi {
             + "as a placement they see in the world. A projection already made with the same name is replaced, so calling it "
             + "again with a changed design updates what they see. Air cells are not shown.")
     @Note("Returns the projection, as litematica.placement.list prints it.")
-    @SeeAlso({"litematica.placement.list", "numen.build.place"})
+    @SeeAlso({"litematica.placement.list", "minecraft.build.place"})
     public static Placement preview(ClientCall call, Show args) {
         return Preview.show(args.cells(), args.name());
     }

@@ -1,7 +1,7 @@
 /**
- * 端到端测试在平台项目这一侧的共用部分(numen/neoforge 应用它,起服层 numen-e2e-neoforge 再应用它):
+ * 端到端测试在平台项目这一侧的共用部分(plugins/minecraft/neoforge 应用它,起服层 numen-e2e-neoforge 再应用它):
  * 一台真服务端 + 一个按原版客户端协议(MCProtocolLib)连进去的无头客户端,把玩家能做的事从头走一遍:
- * 进服、翻译、召唤、私聊、会话指令、补全、征询。场景是 numen/common 的 e2e 源码集(和 GameTest 用例同处),
+ * 进服、翻译、召唤、私聊、会话指令、补全、征询。场景是 plugins/minecraft/common 的 e2e 源码集(和 GameTest 用例同处),
  * 不发布、不进发行 jar。
  *
  * <p>分两层:
@@ -10,9 +10,9 @@
  *   <li>起服:提供 {@code e2eServerStart}/{@code e2eServerStop} 两个任务、满足这份规格(buildSrc 的 numen-e2e-neoforge)。</li>
  * </ul>
  * 这里提供规格、现取端口、种子和 {@code e2eTest}(起服、跑场景、关服,一条命令):
- * {@code ./gradlew :numen:neoforge:e2eTest --no-daemon}。
+ * {@code ./gradlew :plugins:minecraft:neoforge:e2eTest --no-daemon}。
  */
-evaluationDependsOn(':numen:common')
+evaluationDependsOn(':plugins:minecraft:common')
 
 /**
  * 场景对服务端的全部要求。三个端口(服务端、RCON、假模型)每次运行时由 e2ePorts 现取空闲的填进来,并行的 worktree 与 CI 互不相踩;
@@ -46,7 +46,7 @@ tasks.register('e2ePorts') {
     }
 }
 
-def scenes = project(':numen:common').sourceSets.getByName('e2e')
+def scenes = project(':plugins:minecraft:common').sourceSets.getByName('e2e')
 
 tasks.register('e2eTest', Test) {
     group = 'verification'

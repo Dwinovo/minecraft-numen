@@ -1,20 +1,20 @@
 /**
- * 真模型评测的运行配置(设计与用法见 docs/bench.md),原版(numen/neoforge)与各联动共用这一份。
+ * 真模型评测的运行配置(设计与用法见 docs/bench.md),原版(plugins/minecraft/neoforge)与各联动共用这一份。
  *
  * <p>评测的机器({@code :bench}、{@code :bench:game},考场)只依赖 Numen API、不认识任何插件;考题是 GameTest 套件,跟着被测的模块走:
- * 写在那个模块的 {@code src/bench}(Numen 的在 numen/common,联动的在联动自己)。一次评测运行 = 考场 + Numen API + 选中的考题 +
+ * 写在那个模块的 {@code src/bench}(Numen 的在 plugins/minecraft/common,联动的在联动自己)。一次评测运行 = 考场 + Numen API + 选中的考题 +
  * 它们要测的模块与目标模组,考场和考题一起组成模组 {@code numen_bench},只在 {@code runBench} 这一次运行里加载。
  *
  * <p>考哪几套由 {@code -Pbench=套件名,…} 选,默认是本项目带的全部(套件名出自根 build.gradle 的 {@code numenSuites} 表,只此一处);
  * 套件里考哪几个场景由 {@code -Dbench.scenarios} 再收窄。
  *
  * <pre>
- * ./gradlew :numen:neoforge:runBench -Dbench.repeats=3
- * ./gradlew :numen:neoforge:runBenchParallel -Dbench.repeats=3 -Pbench.parallel=4
+ * ./gradlew :plugins:minecraft:neoforge:runBench -Dbench.repeats=3
+ * ./gradlew :plugins:minecraft:neoforge:runBenchParallel -Dbench.repeats=3 -Pbench.parallel=4
  * </pre>
  *
- * <p>在构建脚本的<b>末尾</b>应用({@code apply plugin: 'numen-bench'}):它要用到脚本里定义好的模组 {@code numen}。
- * 考题所在的模块默认是本项目自己;考题在别处的(numen/neoforge,考题在 numen/common)在应用之前设 {@code ext.benchModules}。
+ * <p>在构建脚本的<b>末尾</b>应用({@code apply plugin: 'numen-bench'}):它要用到脚本里定义好的模组 {@code numen_minecraft}。
+ * 考题所在的模块默认是本项目自己;考题在别处的(plugins/minecraft/neoforge,考题在 plugins/minecraft/common)在应用之前设 {@code ext.benchModules}。
  * 本项目的 {@code bench} 源码集是运行的类路径:联动在 {@code benchImplementation} 里补上考题要的目标模组(车万女仆这类)。
  */
 
@@ -27,8 +27,8 @@ def benchCommit = providers.exec { commandLine 'git', 'rev-parse', '--short=9', 
         .zip(providers.exec { commandLine 'git', 'status', '--porcelain', '--untracked-files=no' }.standardOutput.asText,
                 { head, status -> head.trim() + (status.trim().isEmpty() ? '' : '+dirty') })
 
-// 同步好的 GameTest 结构模板目录(见 numen/common 的 syncGameTestStructures):评测的场地由代码现搭,只借其中一块地板作落脚点
-def gameTestStructures = rootProject.project(':numen:common').layout.buildDirectory.dir('gameteststructures')
+// 同步好的 GameTest 结构模板目录(见 plugins/minecraft/common 的 syncGameTestStructures):评测的场地由代码现搭,只借其中一块地板作落脚点
+def gameTestStructures = rootProject.project(':plugins:minecraft:common').layout.buildDirectory.dir('gameteststructures')
 
 // 考题所在的模块,各自的 src/bench 是一个 bench 源码集;本项目自己的 bench 源码集另外是这次运行的类路径
 def benchModules = project.hasProperty('benchModules') ? project.benchModules : [project]
@@ -43,7 +43,7 @@ dependencies {
     benchCompileOnly project(':bench:game')
     // 考题实现 GameTestSuite
     benchCompileOnly rootProject.project(':numen-api:common').sourceSets.testFixtures.output
-    // 整个 Numen API:运行时它就是 numen_api 那个模组,和 GameTest 的运行一样
+    // 整个 Numen API:运行时它就是 numen 那个模组,和 GameTest 的运行一样
     benchImplementation project(':numen-api:neoforge')
 }
 
@@ -63,7 +63,7 @@ neoForge {
         configureEach {
             // e2e 是玩家服务器的样子,不带 GameTest 的支持模组(它自己声明加载哪些,见 numen-e2e-neoforge)
             if (it.name != 'bench' && it.name != 'e2e') {
-                loadedMods = [mods.numen, mods.numen_api_gametest]
+                loadedMods = [mods.numen_minecraft, mods.numen_gametest]
             }
         }
         bench {
@@ -71,7 +71,7 @@ neoForge {
             ideName = "NeoForge Bench (${project.path})"
             sourceSet = sourceSets.bench
             // 考场(numen_bench)与 Numen API 的 GameTest 支持不认识 Numen;被测的模块(numen,联动在里面)与目标模组另外在场
-            loadedMods = [mods.numen, mods.numen_api_gametest, mods.numen_bench]
+            loadedMods = [mods.numen_minecraft, mods.numen_gametest, mods.numen_bench]
             gameDirectory = project.mkdir(project.file('runs/bench'))
             // 车万女仆这类目标模组自带它们的 GameTest,不归我们跑:NeoForge 的命名空间过滤只放行评测的
             systemProperty('neoforge.enabledGameTestNamespaces', 'numen_bench')
@@ -91,7 +91,7 @@ neoForge {
 }
 
 tasks.matching { it.name == 'runBench' }.configureEach {
-    dependsOn ':bench:classes', ':bench:game:classes', ':numen:neoforge:classes', ':numen:common:syncGameTestStructures'
+    dependsOn ':bench:classes', ':bench:game:classes', ':plugins:minecraft:neoforge:classes', ':plugins:minecraft:common:syncGameTestStructures'
     // 登记套件的入口与模拟主人连接的配法,在 Numen API 的 GameTest 源码集与夹具里
     dependsOn ':numen-api:neoforge:gametestClasses', ':numen-api:common:testFixturesClasses'
     benchModules.each { dependsOn "${it.path}:benchClasses" }

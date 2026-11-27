@@ -1,0 +1,45 @@
+package com.dwinovo.numen.plugins.minecraft.pathing.drive;
+
+import com.dwinovo.numen.api.entity.Controls.Key;
+import com.dwinovo.numen.plugins.minecraft.pathing.plan.Maneuver;
+
+import net.minecraft.world.phys.Vec3;
+
+/**
+ * 跑酷:朝落点跑(规划要疾跑就疾跑),在起步那一块的边上起跳——下一刻身子就要离开边沿的那一刻;腾空之后接着朝落点
+ * 冲,要收脚时停在落点上({@link Steering#stop})。
+ */
+final class ParkourControl extends Control {
+
+    ParkourControl(Rig rig, Maneuver m, Gait.Stride stride) {
+        super(rig, m, stride);
+    }
+
+    @Override
+    Beat tick() {
+        keys().release(Key.SNEAK);
+        Vec3 target = center(m.to());
+        keys().set(Key.SPRINT, stride.sprint());
+        double edge = 0.5 + rig.entity.getBbWidth() / 2;
+        if (rig.entity.onGround() && ahead() < edge) {
+            rig.look.faceToward(target.x, target.z);
+            keys().press(Key.FORWARD);
+            keys().release(Key.BACK);
+            // 下一刻身子就离开边沿了:这一刻按下跳,原版在下一刻移动之前起跳
+            keys().set(Key.JUMP, ahead() + Steering.nextStride(rig.entity) >= edge);
+            return Beat.IDLE;
+        }
+        keys().release(Key.JUMP);
+        if (stride.flows()) {
+            Steering.pass(rig, target.x, target.z);
+        } else {
+            Steering.stop(rig, target.x, target.z);
+        }
+        return Beat.IDLE;
+    }
+
+    @Override
+    boolean falls() {
+        return true;
+    }
+}

@@ -147,7 +147,7 @@ final class JeiLookups {
         ResourceLocation id = category.getRegistryName(recipe);
         return new Recipe(Optional.ofNullable(id).map(ResourceLocation::toString), category.getRecipeType().getUid().toString(),
                 Optional.of(categoryName), main == null ? "nothing listed" : main.name(), main == null ? 0 : (int) Math.min(main.amount(), Integer.MAX_VALUE),
-                listed(also), listed(taken), catalysts, Optional.empty(), Optional.empty(), Optional.empty(), List.of());
+                listed(also), listed(taken), catalysts, Optional.empty(), Optional.empty(), Optional.empty());
     }
 
     /** 最多列 {@link #MAX_LISTED} 项,其余记一个数。 */

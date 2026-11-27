@@ -277,7 +277,7 @@ public abstract class LoopHarness {
 
         @Override
         public LoopStatus.Doing activity() {
-            return bodyTask ? new LoopStatus.Doing("numen.activity.dig", List.of("64")) : null;
+            return bodyTask ? new LoopStatus.Doing("numen_minecraft.activity.dig", List.of("64")) : null;
         }
     }
 

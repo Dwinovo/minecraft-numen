@@ -52,7 +52,7 @@ public final class ScriptCall {
     /**
      * 点名的那只实体,此刻在她这一层世界里。
      *
-     * @param ref 实体的身份,{@code numen.scan.entities} 交回的那种({@code zombie@3f9a1c})
+     * @param ref 实体的身份,{@code minecraft.scan.entities} 交回的那种({@code zombie@3f9a1c})
      */
     public Entity entity(String ref) {
         return call.entity(new EntityRef(ref));

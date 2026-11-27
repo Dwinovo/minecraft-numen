@@ -112,21 +112,21 @@ public final class ReviveMaid implements Scenario {
         // 取墓碑里的东西(胶片)要走到它旁边;祭坛的柱子逐根走到手边、拿着一样右键一下,六样放齐就复活
         StringBuilder program = new StringBuilder("""
                 local tombstone
-                for _, e in ipairs(numen.scan.entities("all", {radius = 32})) do
+                for _, e in ipairs(minecraft.scan.entities("all", {radius = 32})) do
                   if e.type == "touhou_little_maid:tombstone" then
                     tombstone = e
                     break
                   end
                 end
-                numen.move.walk(tombstone, 2)
-                numen.use.entity(tombstone)
+                minecraft.move.walk(tombstone, 2)
+                minecraft.use.entity(tombstone)
                 """);
         List<String> items = new ArrayList<>(List.of(FILM.toString()));
         MATERIALS.forEach(item -> items.add(BuiltInRegistries.ITEM.getKey(item).toString()));
         for (int i = 0; i < pillars.size(); i++) {
             String pillar = Positions.literal(pillars.get(i));
-            program.append("numen.gear.hold(\"").append(items.get(i)).append("\")\n");
-            program.append("numen.use.block(").append(pillar).append(")\n");
+            program.append("minecraft.gear.hold(\"").append(items.get(i)).append("\")\n");
+            program.append("minecraft.use.block(").append(pillar).append(")\n");
         }
         return program.toString();
     }

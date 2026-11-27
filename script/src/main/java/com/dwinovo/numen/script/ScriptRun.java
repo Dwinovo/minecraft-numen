@@ -42,7 +42,7 @@ public interface ScriptRun {
     record Call(int line, String group, String name, List<Object> args, Map<String, Object> options)
             implements Step {
 
-        /** 脚本里写的函数名,{@code numen.work.dig}、{@code numen.move.go}(改写规则在 {@link ScriptEngine#functionName})。 */
+        /** 脚本里写的函数名,{@code minecraft.work.dig}、{@code minecraft.move.go}(改写规则在 {@link ScriptEngine#functionName})。 */
         public String function() {
             return ScriptEngine.IN_USE.function(group, name);
         }

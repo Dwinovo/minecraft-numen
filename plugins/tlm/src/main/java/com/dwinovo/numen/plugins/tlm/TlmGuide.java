@@ -19,7 +19,7 @@ final class TlmGuide {
             - `tlm.altar.recipes()` lists what the altar can craft, with its power points.
 
             ## Things to know
-            - A wild maid is tamed with a cake (`numen.use.entity` on her, with the cake), after which a `maid_tamed` event tells you she is yours. A maid's id comes from `numen.scan.entities` or `tlm.maid.list`, and changes after a server restart.
+            - A wild maid is tamed with a cake (`minecraft.use.entity` on her, with the cake), after which a `maid_tamed` event tells you she is yours. A maid's id comes from `minecraft.scan.entities` or `tlm.maid.list`, and changes after a server restart.
             - Your power points and how many maids TLM counts as yours are in your body state every turn.
             - TLM decides what a maid may do: only the owner may switch her work mode, and a mode may wait for something first. Using your maid can ask your owner first.
             - Read the `maid_keeping` and `maid_look` skills for taming, gear and baubles, work modes, schedules and reviving a maid.

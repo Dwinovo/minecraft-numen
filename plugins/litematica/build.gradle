@@ -5,7 +5,7 @@ plugins {
 
 // 只接 Fabric:Litematica 与 MaLiLib 的发布物是 Yarn 名(运行在 intermediary 上),moddev 编译不了它们。
 // 本联动用 Loom 加官方 Mojang 映射,与 Numen 的 Fabric 端同一套:modCompileOnly 的 jar 由 Loom 重映射成 Mojang 名,
-// 编译出来的类与 Numen 本体同命名,随后由 numen:fabric 的 remapJar 一起换成 intermediary。
+// 编译出来的类与 Numen 本体同命名,随后由 plugins:minecraft:fabric 的 remapJar 一起换成 intermediary。
 // 1.21.1 的 NeoForge 只有非官方移植 Forgematica,这个联动不接(调研见任务报告)。
 dependencies {
     minecraft "com.mojang:minecraft:${minecraft_version}"

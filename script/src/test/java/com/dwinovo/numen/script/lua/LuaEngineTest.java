@@ -33,7 +33,7 @@ class LuaEngineTest {
 
             -- Plan a walk to a place, then walk it.
             function M.to(place, opts)
-              return numen.move.go(numen.route.plan({to = place}))
+              return minecraft.move.go(numen.route.plan({to = place}))
             end
 
             local function helper() end
@@ -43,7 +43,7 @@ class LuaEngineTest {
 
     /** 模块来源:一张名字到正文的表,每次问都读它此刻的样子。 */
     private static final Map<String, String> MODULES = new java.util.concurrent.ConcurrentHashMap<>(Map.of(
-            "numen.move", WALK, "my.greet", "-- Greetings.\nlocal M = {}\nfunction M.hi() return 'hi' end\nreturn M"));
+            "minecraft.move", WALK, "my.greet", "-- Greetings.\nlocal M = {}\nfunction M.hi() return 'hi' end\nreturn M"));
 
     /** 一个测试用的函数:按顺序的对象不限,{@code options} 是选项表里能写的名字,返回 {@code returns}。 */
     private static ScriptCatalog.Function fn(com.dwinovo.numen.script.ScriptType returns, String... options) {
@@ -55,10 +55,10 @@ class LuaEngineTest {
             new com.dwinovo.numen.script.ScriptType.Simple("table");
 
     private static final ScriptCatalog CATALOG = new ScriptCatalog(Map.of(
-            "numen.work", Map.of("dig", fn(ANY, "count"), "collect", fn(ANY)),
-            "numen.move", Map.of("go", fn(ANY)),
+            "minecraft.work", Map.of("dig", fn(ANY, "count"), "collect", fn(ANY)),
+            "minecraft.move", Map.of("go", fn(ANY)),
             "numen.route", Map.of("plan", fn(ANY, "arrive", "range")),
-            "numen.scan", Map.of("blocks", fn(ANY), "sight", fn(com.dwinovo.numen.script.ScriptType.BOOLEAN))),
+            "minecraft.scan", Map.of("blocks", fn(ANY), "sight", fn(com.dwinovo.numen.script.ScriptType.BOOLEAN))),
             new ScriptCatalog.ModuleSource() {
                 @Override
                 public String code(String name) {
@@ -103,12 +103,12 @@ class LuaEngineTest {
     @Test
     void aCallIsHandedOverWhereItIsMadeAndTheScriptGoesOnWithItsResult() {
         ScriptRun run = run("""
-                local r = numen.work.dig("ores/g3")
+                local r = minecraft.work.dig("ores/g3")
                 print("dug: " .. r.dug)
                 numen.route.plan({x = 120, y = 64, z = -35}, {arrive = "dig", range = 2})
                 """);
         ScriptRun.Call first = assertInstanceOf(ScriptRun.Call.class, run.start());
-        assertEquals("numen.work.dig", first.function());
+        assertEquals("minecraft.work.dig", first.function());
         assertEquals(1, first.line());
         assertEquals(List.of("ores/g3"), first.args());
         assertTrue(first.options().isEmpty());
@@ -127,14 +127,14 @@ class LuaEngineTest {
     void aModuleFunctionCallsTheApiFromTheScriptsOwnLine() {
         ScriptRun run = run("""
                 local x = 1
-                local r = numen.move.to("home")
+                local r = minecraft.move.to("home")
                 return {walked = r}
                 """);
         ScriptRun.Call plan = assertInstanceOf(ScriptRun.Call.class, run.start());
         assertEquals("numen.route.plan", plan.function());
         assertEquals(2, plan.line(), "模块函数里的调用记在脚本里调它的那一行");
         ScriptRun.Call go = assertInstanceOf(ScriptRun.Call.class, run.resume(ok()));
-        assertEquals("numen.move.go", go.function());
+        assertEquals("minecraft.move.go", go.function());
         assertEquals(2, go.line());
         ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(table("route", new JsonPrimitive("home"))));
         assertTrue(done.ok());
@@ -143,11 +143,11 @@ class LuaEngineTest {
 
     @Test
     void theFunctionsAModuleDefinesComeWithTheCommentsAboveThem() {
-        List<com.dwinovo.numen.script.ScriptEngine.Defined> defined = LUA.functions("numen.move", WALK);
+        List<com.dwinovo.numen.script.ScriptEngine.Defined> defined = LUA.functions("minecraft.move", WALK);
         assertEquals(List.of(
-                new com.dwinovo.numen.script.ScriptEngine.Defined("numen.move.to", List.of("place", "opts"),
+                new com.dwinovo.numen.script.ScriptEngine.Defined("minecraft.move.to", List.of("place", "opts"),
                         List.of("-- Plan a walk to a place, then walk it.")),
-                new com.dwinovo.numen.script.ScriptEngine.Defined("numen.move.sweep", List.of("a", "b"), List.of())),
+                new com.dwinovo.numen.script.ScriptEngine.Defined("minecraft.move.sweep", List.of("a", "b"), List.of())),
                 defined);
         assertEquals("Plan a walk to a place, then walk it.", LUA.summaryOf(defined.get(0)));
     }
@@ -155,35 +155,35 @@ class LuaEngineTest {
     @Test
     void readingWithoutRunningListsTheCallsAndTheirArguments() {
         List<ScriptRun.Call> calls = LUA.calls("example", """
-                numen.work.dig("ores", {count = 2})
-                numen.move.to({x = 1, y = 2, z = 3}, {arrive = "use"})
+                minecraft.work.dig("ores", {count = 2})
+                minecraft.move.to({x = 1, y = 2, z = 3}, {arrive = "use"})
                 """, CATALOG).calls();
         assertEquals(2, calls.size());
-        assertEquals("numen.work.dig", calls.get(0).function());
+        assertEquals("minecraft.work.dig", calls.get(0).function());
         assertEquals(Map.of("count", 2L), calls.get(0).options());
-        assertEquals("numen.move", calls.get(1).group(), "模块函数记成它自己的那一次调用,不进它的正文");
+        assertEquals("minecraft.move", calls.get(1).group(), "模块函数记成它自己的那一次调用,不进它的正文");
         assertEquals("to", calls.get(1).name());
         assertEquals(List.of(Map.of("x", 1L, "y", 2L, "z", 3L)), calls.get(1).args());
-        assertThrows(IllegalArgumentException.class, () -> LUA.calls("example", "numen.work.dig(", CATALOG),
+        assertThrows(IllegalArgumentException.class, () -> LUA.calls("example", "minecraft.work.dig(", CATALOG),
                 "语法错读不通");
         com.dwinovo.numen.script.ScriptEngine.Reading stopped = LUA.calls("example", """
-                numen.work.dig("ores")
-                for _, c in ipairs(numen.scan.blocks("iron_ore")) do numen.work.dig(c.blocks) end
+                minecraft.work.dig("ores")
+                for _, c in ipairs(minecraft.scan.blocks("iron_ore")) do minecraft.work.dig(c.blocks) end
                 """, CATALOG);
         assertEquals(2, stopped.calls().size(), "停下之前调到的照记");
         assertTrue(stopped.error() != null, "拿返回值往下算的写法跑到那儿停下,说出原因");
         assertTrue(LUA.calls("example", "nope.dig()", CATALOG).error() != null);
-        assertNull(LUA.calls("example", "numen.work.collect()", CATALOG).error());
+        assertNull(LUA.calls("example", "minecraft.work.collect()", CATALOG).error());
     }
 
     @Test
     void aSucceedingCallReturnsItsDataAndAFailingOneRaisesAtTheCall() {
         ScriptRun run = run("""
-                local r = numen.work.collect()
+                local r = minecraft.work.collect()
                 print(r.picked, r.kinds[2])
-                local ok, err = pcall(function() numen.work.dig("ores") end)
+                local ok, err = pcall(function() minecraft.work.dig("ores") end)
                 print(ok, err.kind, err.fn, tostring(err))
-                numen.work.dig("ores")
+                minecraft.work.dig("ores")
                 """);
         run.start();
         JsonObject picked = new JsonObject();
@@ -195,10 +195,10 @@ class LuaEngineTest {
         run.resume(value(picked));
         run.resume(failed("out of reach"));
         ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(failed("out of reach")));
-        assertEquals(List.of("3\tcobblestone", "false\tfailed\tnumen.work.dig\tnumen.work.dig: failed — out of reach"), printed);
+        assertEquals(List.of("3\tcobblestone", "false\tfailed\tminecraft.work.dig\tminecraft.work.dig: failed — out of reach"), printed);
         assertFalse(done.ok());
         assertEquals(5, done.line());
-        assertEquals("numen.work.dig: failed — out of reach", done.error());
+        assertEquals("minecraft.work.dig: failed — out of reach", done.error());
         assertEquals("failed", done.failure().get("kind"));
     }
 
@@ -209,7 +209,7 @@ class LuaEngineTest {
     @Test
     void aFoldedFieldIsReadButNotListedOrReturned() {
         ScriptRun run = run("""
-                local r = numen.work.collect()
+                local r = minecraft.work.collect()
                 local n = 0
                 for k in pairs(r) do n = n + 1 end
                 print(#r.path, r.path[1].move, n)
@@ -235,7 +235,7 @@ class LuaEngineTest {
     @Test
     void aFailureCarriesItsKindHintAndData() {
         ScriptRun run = run("""
-                local ok, err = pcall(numen.work.dig, "ores")
+                local ok, err = pcall(minecraft.work.dig, "ores")
                 if err.kind == "out_of_reach" then print(err.hint, err.data.nearest.x) end
                 print(tostring(err))
                 """);
@@ -245,16 +245,16 @@ class LuaEngineTest {
         JsonObject data = new JsonObject();
         data.add("nearest", nearest);
         assertTrue(assertInstanceOf(ScriptRun.Done.class, run.resume(ScriptRun.Result.failed(ScriptRun.failure(
-                "out_of_reach", "too far", "numen.move.to({x = 7, y = 12, z = 3}, {arrive = \"dig\"})", null,
+                "out_of_reach", "too far", "minecraft.move.to({x = 7, y = 12, z = 3}, {arrive = \"dig\"})", null,
                 com.dwinovo.numen.script.JsonValues.toJava(data))))).ok());
-        assertEquals(List.of("numen.move.to({x = 7, y = 12, z = 3}, {arrive = \"dig\"})\t7",
-                "numen.work.dig: out_of_reach — too far\nhint: numen.move.to({x = 7, y = 12, z = 3}, {arrive = \"dig\"})"), printed);
+        assertEquals(List.of("minecraft.move.to({x = 7, y = 12, z = 3}, {arrive = \"dig\"})\t7",
+                "minecraft.work.dig: out_of_reach — too far\nhint: minecraft.move.to({x = 7, y = 12, z = 3}, {arrive = \"dig\"})"), printed);
     }
 
     /** 不返回值的成功是 nil。 */
     @Test
     void aCallWithoutAValueReturnsNil() {
-        ScriptRun run = run("print(numen.work.collect() == nil)");
+        ScriptRun run = run("print(minecraft.work.collect() == nil)");
         run.start();
         assertTrue(assertInstanceOf(ScriptRun.Done.class, run.resume(ok())).ok());
         assertEquals(List.of("true"), printed);
@@ -319,7 +319,7 @@ class LuaEngineTest {
                 function M.pos(x) return setmetatable({x = x}, M.Pos) end
                 return M
                 """;
-        ScriptCatalog catalog = new ScriptCatalog(Map.of("numen.work", Map.of("where", new ScriptCatalog.Function(
+        ScriptCatalog catalog = new ScriptCatalog(Map.of("minecraft.work", Map.of("where", new ScriptCatalog.Function(
                 Integer.MAX_VALUE, java.util.Set.of(), ScriptCatalog.Kind.VALUE,
                 com.dwinovo.numen.script.ScriptType.listOf(pos.type()), List.of(Map.of("x", 0L))))),
                 new ScriptCatalog.ModuleSource() {
@@ -333,7 +333,7 @@ class LuaEngineTest {
                         return List.of("geo.shape");
                     }
                 }, Map.of("Pos", pos));
-        ScriptRun run = LUA.start("t", "local p = numen.work.where()[2]\nprint(p:twice())", catalog, printed::add);
+        ScriptRun run = LUA.start("t", "local p = minecraft.work.where()[2]\nprint(p:twice())", catalog, printed::add);
         run.start();
         JsonArray found = new JsonArray();
         JsonObject one = new JsonObject();
@@ -344,7 +344,7 @@ class LuaEngineTest {
         found.add(two);
         assertTrue(assertInstanceOf(ScriptRun.Done.class, run.resume(value(found))).ok());
         assertEquals(List.of("10"), printed);
-        assertNull(LUA.calls("example", "print(numen.work.where()[1]:twice())", catalog).error(),
+        assertNull(LUA.calls("example", "print(minecraft.work.where()[1]:twice())", catalog).error(),
                 "只读不跑时,样子也带着方法");
         String declared = LUA.classText(pos, LUA.methods("Pos", shape));
         assertTrue(declared.contains("\n---@field twice fun(self: Pos): number Twice its x."), declared);
@@ -407,8 +407,8 @@ class LuaEngineTest {
     @Test
     void aDeclaredValueIsWhatTheCallReturns() {
         ScriptRun run = run("""
-                for _, c in ipairs(numen.scan.blocks("iron_ore")) do print(c) end
-                while numen.scan.sight("ores") do numen.work.dig("ores") end
+                for _, c in ipairs(minecraft.scan.blocks("iron_ore")) do print(c) end
+                while minecraft.scan.sight("ores") do minecraft.work.dig("ores") end
                 print("done")
                 """);
         run.start();
@@ -425,22 +425,22 @@ class LuaEngineTest {
 
     @Test
     void aFailedValueQueryRaises() {
-        ScriptRun run = run("numen.scan.sight('nope')");
+        ScriptRun run = run("minecraft.scan.sight('nope')");
         run.start();
         ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(ScriptRun.Result.failed(
-                ScriptRun.failure("not_found", "there is nothing named nope", "numen.scan.entities()", null, null))));
+                ScriptRun.failure("not_found", "there is nothing named nope", "minecraft.scan.entities()", null, null))));
         assertFalse(done.ok());
-        assertEquals("numen.scan.sight: not_found — there is nothing named nope\nhint: numen.scan.entities()",
+        assertEquals("minecraft.scan.sight: not_found — there is nothing named nope\nhint: minecraft.scan.entities()",
                 done.error());
     }
 
     @Test
     void aRefusedCallFailsAtTheCallWithoutRunning() {
-        ScriptRun run = run("local ok, err = pcall(function() numen.work.dig(1, 2) end)\nprint(err.kind, tostring(err))");
+        ScriptRun run = run("local ok, err = pcall(function() minecraft.work.dig(1, 2) end)\nprint(err.kind, tostring(err))");
         run.start();
         assertTrue(assertInstanceOf(ScriptRun.Done.class, run.refuse(new com.dwinovo.numen.script.ApiError(
                 com.dwinovo.numen.script.ErrorKind.BAD_ARGUMENT, "takes 1 object, got 2", null))).ok());
-        assertEquals(List.of("bad_argument\tnumen.work.dig: bad_argument — takes 1 object, got 2"), printed);
+        assertEquals(List.of("bad_argument\tminecraft.work.dig: bad_argument — takes 1 object, got 2"), printed);
     }
 
     @Test
@@ -448,15 +448,15 @@ class LuaEngineTest {
         assertEquals("goto_", LUA.functionName("goto"));
         assertEquals("string_", LUA.functionName("string"));
         assertEquals("dig", LUA.functionName("dig"));
-        assertEquals("numen.move.goto_", LUA.function("numen.move", "goto"));
-        assertEquals("numen.move.go", LUA.function("numen.move", "go"));
-        assertTrue(LUA.check("t", "numen.move.goto(1)") != null, "goto 是保留字,原名写不出来");
-        assertNull(LUA.check("t", "numen.move.goto_(1)"));
+        assertEquals("minecraft.move.goto_", LUA.function("minecraft.move", "goto"));
+        assertEquals("minecraft.move.go", LUA.function("minecraft.move", "go"));
+        assertTrue(LUA.check("t", "minecraft.move.goto(1)") != null, "goto 是保留字,原名写不出来");
+        assertNull(LUA.check("t", "minecraft.move.goto_(1)"));
     }
 
     @Test
     void optionsGoLast() {
-        ScriptRun run = run("local where = \"ores\"\nnumen.work.dig(where, {count = 4})");
+        ScriptRun run = run("local where = \"ores\"\nminecraft.work.dig(where, {count = 4})");
         ScriptRun.Call call = assertInstanceOf(ScriptRun.Call.class, run.start());
         assertEquals(List.of("ores"), call.args());
         assertEquals(Map.of("count", 4L), call.options());
@@ -465,7 +465,7 @@ class LuaEngineTest {
 
     @Test
     void closingAScriptThatWaitsForAResultLetsItsThreadGo() throws InterruptedException {
-        ScriptRun run = run("numen.work.dig('ores')\nprint('never')");
+        ScriptRun run = run("minecraft.work.dig('ores')\nprint('never')");
         assertInstanceOf(ScriptRun.Call.class, run.start());
         run.close();
         Thread.sleep(100);
@@ -475,7 +475,7 @@ class LuaEngineTest {
     @Test
     void theSummaryIsTheFirstCommentLine() {
         assertEquals("Dig out an area.", LUA.summary("\n-- Dig out an area.\n-- usage: mine <area>\nwork.dig(...)"));
-        assertNull(LUA.summary("numen.work.dig('x')\n-- late comment"));
+        assertNull(LUA.summary("minecraft.work.dig('x')\n-- late comment"));
     }
 
     @Test
@@ -491,15 +491,15 @@ class LuaEngineTest {
     @Test
     void anApiFunctionCannotBeRedefinedButAGroupTakesNewNames() {
         ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run("""
-                function numen.move.mine() return 1 end
-                function numen.move.go() end
+                function minecraft.move.mine() return 1 end
+                function minecraft.move.go() end
                 """).start());
         assertFalse(done.ok());
         assertEquals(2, done.line());
         assertEquals("runtime", done.failure().get("kind"));
-        assertTrue(done.error().startsWith("runtime — numen.move.go is an API function"), done.error());
-        ScriptRun.Done shadowed = assertInstanceOf(ScriptRun.Done.class, run("numen.move = {}").start());
-        assertTrue(shadowed.error().contains("numen.move is built into the API"), shadowed.error());
+        assertTrue(done.error().startsWith("runtime — minecraft.move.go is an API function"), done.error());
+        ScriptRun.Done shadowed = assertInstanceOf(ScriptRun.Done.class, run("minecraft.move = {}").start());
+        assertTrue(shadowed.error().contains("minecraft.move is built into the API"), shadowed.error());
     }
 
     /** 模块按名字直接用,用到才装;没有 require;写错的名字说有哪些模块。 */
@@ -517,7 +517,7 @@ class LuaEngineTest {
                 typo.error());
         ScriptRun.Done space = assertInstanceOf(ScriptRun.Done.class, run("mine.greet.hi()").start());
         assertTrue(space.error().contains("there is no global, namespace or module named mine")
-                && space.error().contains("my.greet, numen.move"), space.error());
+                && space.error().contains("minecraft.move, my.greet"), space.error());
     }
 
     /** 改了正文,下一次运行就是新的。 */
@@ -552,16 +552,16 @@ class LuaEngineTest {
     /** 存之前读一遍:读不通、不返回表、给第 ① 层赋值都说出来;好的是 null。名字的规矩只在一处。 */
     @Test
     void aModuleIsCheckedBeforeItIsKept() {
-        assertNull(LUA.checkModule("numen.move", WALK, CATALOG));
-        assertNull(LUA.checkModule("my.lumber", "local M = {}\nfunction M.chop() numen.work.dig('x') end\nreturn M", CATALOG));
+        assertNull(LUA.checkModule("minecraft.move", WALK, CATALOG));
+        assertNull(LUA.checkModule("my.lumber", "local M = {}\nfunction M.chop() minecraft.work.dig('x') end\nreturn M", CATALOG));
         assertTrue(LUA.checkModule("my.lumber", "local M = {", CATALOG) != null);
         assertTrue(LUA.checkModule("my.lumber", "local x = 1", CATALOG).contains("not a table"));
-        String redefines = LUA.checkModule("numen.move", "local M = {}\nfunction M.go() end\nreturn M", CATALOG);
-        assertTrue(redefines.contains("numen.move.go is an API function"), redefines);
-        String inside = LUA.checkModule("my.lumber", "function numen.work.dig() end\nreturn {}", CATALOG);
-        assertTrue(inside.contains("numen.work.dig is an API function"), inside);
+        String redefines = LUA.checkModule("minecraft.move", "local M = {}\nfunction M.go() end\nreturn M", CATALOG);
+        assertTrue(redefines.contains("minecraft.move.go is an API function"), redefines);
+        String inside = LUA.checkModule("my.lumber", "function minecraft.work.dig() end\nreturn {}", CATALOG);
+        assertTrue(inside.contains("minecraft.work.dig is an API function"), inside);
         assertNull(LUA.moduleName("my.lumber"));
-        assertNull(LUA.moduleName("numen.move"), "和组同名是给这一组加函数");
+        assertNull(LUA.moduleName("minecraft.move"), "和组同名是给这一组加函数");
         assertNull(LUA.moduleName("my.string"), "组那一段只要写得出来");
         assertTrue(LUA.moduleName("my-mod.x") != null);
         assertTrue(LUA.moduleName("my.end") != null);

@@ -110,10 +110,10 @@ public final class MaidFarmhand implements Scenario {
 
     @Override
     public String solution(Scene scene) {
-        // numen.use.entity 不走动:先走到她两格内;驯服之后把种子递给她,再切工作、开家模式(家就是她站的地方)
+        // minecraft.use.entity 不走动:先走到她两格内;驯服之后把种子递给她,再切工作、开家模式(家就是她站的地方)
         String id = "\"" + com.dwinovo.numen.api.sdk.EntityLabel.of(maid) + "\"";
-        return "numen.move.walk(" + Positions.literal(maid.blockPosition()) + ", 2)\n"
-                + "numen.use.entity(" + id + ", {item = \"minecraft:cake\"})\n"
+        return "minecraft.move.walk(" + Positions.literal(maid.blockPosition()) + ", 2)\n"
+                + "minecraft.use.entity(" + id + ", {item = \"minecraft:cake\"})\n"
                 + "tlm.maid.give(" + id + ", \"minecraft:wheat_seeds\")\n"
                 + "tlm.maid.task(\"touhou_little_maid:farm\", {maid = " + id + "})\n"
                 + "tlm.maid.config(" + id + ", {home = true})";

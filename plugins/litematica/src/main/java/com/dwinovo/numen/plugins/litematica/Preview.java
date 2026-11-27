@@ -48,7 +48,7 @@ final class Preview {
             throw new ApiError(ErrorKind.BAD_ARGUMENT, "The name " + name + " is also the file name, so it can hold letters, "
                     + "digits, spaces and _ - . ( ) only, and not start with a dot or a space.", null);
         }
-        // 同一格写两次留后一笔,和 numen.build 收一串格时一样;空气是"这一格挖空",投影里没有它
+        // 同一格写两次留后一笔,和 minecraft.build 收一串格时一样;空气是"这一格挖空",投影里没有它
         Map<BlockPos, BlockState> blocks = new LinkedHashMap<>();
         for (int i = 0; i < cells.size(); i++) {
             BlockPos pos = cells.get(i).pos().immutable();

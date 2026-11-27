@@ -66,10 +66,10 @@ debug、os、io 库的修复(这些库我们不带)、`b121b65151e4` 与 `661309
 
 - **全局**:基本函数(不装上面那几个)、`string`、`table`、`math`,加上宿主登记的函数与 `print`。没有协程:LuaJ 的协程每个都起
   一个平台线程,脚本要并发以后再说。
-- **表的路径**:宿主函数登记在一条表的路径下(`function("numen.work", "dig", f)`),路径上每一段是一张表,外层装着里层,脚本里写全
-  路径 `numen.work.dig(…)`。
-- **宿主的名字定死**:宿主登记的全局函数、路径上的每一张表与表里的每个宿主函数换不掉也遮不住(`numen = {}`、`numen.move = {}`、
-  `function numen.move.go() end`、`rawset(numen.move, "go", f)` 都在那一行报错,话由 `Builder.redefined` 给);往宿主的表里加别的
+- **表的路径**:宿主函数登记在一条表的路径下(`function("minecraft.work", "dig", f)`),路径上每一段是一张表,外层装着里层,脚本里写全
+  路径 `minecraft.work.dig(…)`。
+- **宿主的名字定死**:宿主登记的全局函数、路径上的每一张表与表里的每个宿主函数换不掉也遮不住(`minecraft = {}`、`minecraft.move = {}`、
+  `function minecraft.move.go() end`、`rawset(minecraft.move, "go", f)` 都在那一行报错,话由 `Builder.redefined` 给);往宿主的表里加别的
   名字照常。
 - **字符串只读**:`string` 表与字符串元表是全 JVM 共用的一份只读表,改它报错。要字符串工具就写成局部函数。
 - **预算**(`LuaSandbox.Limits`,每段脚本一份):
@@ -98,14 +98,14 @@ debug、os、io 库的修复(这些库我们不带)、`b121b65151e4` 与 `661309
 
 ```java
 LuaSandbox sandbox = LuaSandbox.builder(new LuaSandbox.Limits(1_000_000, 10_000_000, 64 << 20, Duration.ofMinutes(20)))
-        .function("numen.work", "dig", args -> {     // 脚本里是 numen.work.dig(...)
+        .function("minecraft.work", "dig", args -> {     // 脚本里是 minecraft.work.dig(...)
             if (!dug(args.get(0))) {
                 // 脚本在调用处得到一个错误值:这张表,带沙箱的错误元表
                 throw new LuaSandbox.ScriptError(Map.of("kind", "out_of_reach", "message", "too far"));
             }
             return Map.of("dug", 4L);                // 交回脚本的值:null、布尔、数、字符串、列表、名字到值的表
         })
-        .errors(error -> "numen.work.dig: " + error.get("kind") + " — " + error.get("message"))  // 错误表写成字的样子
+        .errors(error -> "minecraft.work.dig: " + error.get("kind") + " — " + error.get("message"))  // 错误表写成字的样子
         .show(value -> render(value))                // print 一张普通表时写成什么样子
         .print(line -> log.info(line))
         .build();

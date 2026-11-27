@@ -1253,7 +1253,7 @@ class AgentLoopTest extends LoopHarness {
 
         host.bodyTask = true;
         assertTrue(loop.status().busy());
-        assertEquals(new LoopStatus.Doing("numen.activity.dig", List.of("64")), loop.status().activity());
+        assertEquals(new LoopStatus.Doing("numen_minecraft.activity.dig", List.of("64")), loop.status().activity());
     }
 
     /** 一次 run 的第几次模型调用,由内核自己数;换 run 才从 1 重来。 */

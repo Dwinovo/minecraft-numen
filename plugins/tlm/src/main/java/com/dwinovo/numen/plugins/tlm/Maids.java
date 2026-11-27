@@ -175,7 +175,7 @@ final class Maids {
     }
 
     /**
-     * 一只加载着的女仆此刻的样子:一只实体(主人照 {@code numen.scan.entities} 的说法),加上她的模型、工作、设置与好感等级。
+     * 一只加载着的女仆此刻的样子:一只实体(主人照 {@code minecraft.scan.entities} 的说法),加上她的模型、工作、设置与好感等级。
      */
     static MaidApi.Maid row(Entity entity, NumenPlayer her) {
         EntityMaid maid = (EntityMaid) entity;

@@ -27,14 +27,14 @@ public enum FailureTag {
     }
 
     /** 只读、不动世界的那几组:她"看"用的就是它们。 */
-    private static final Set<String> PERCEPTION = Set.of("numen.scan.", "numen.status.", "numen.locate.");
+    private static final Set<String> PERCEPTION = Set.of("minecraft.scan.", "minecraft.status.", "minecraft.locate.");
 
     /**
      * 动了世界或动了身上东西的那几组。走路不在里面:她走到哪儿不改世界,而"主人给了坐标让她走过去"本来
      * 就不需要先看一眼,算进来会把寻路的失败误判成感知的。
      */
-    private static final Set<String> CHANGES_WORLD = Set.of("numen.work.", "numen.build.", "numen.use.",
-            "numen.fight.", "numen.creative.", "numen.gear.", "numen.inv.craft", "numen.inv.eat", "numen.inv.drop");
+    private static final Set<String> CHANGES_WORLD = Set.of("minecraft.work.", "minecraft.build.", "minecraft.use.",
+            "minecraft.fight.", "minecraft.creative.", "minecraft.gear.", "minecraft.inv.craft", "minecraft.inv.eat", "minecraft.inv.drop");
 
     /**
      * 这几种结局是"照这次的规格想不出路来":搜遍了没有、预算用完、憋不住气、没料可垫、要改的格数超了规格。

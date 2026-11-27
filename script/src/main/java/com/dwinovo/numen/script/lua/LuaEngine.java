@@ -26,8 +26,8 @@ import java.util.regex.Pattern;
  * 脚本语言是 Lua 5.2,跑在 {@code numen-lua} 的沙箱里({@link LuaSandbox}):沙箱的类型只在这个类里出现。
  *
  * <h2>API 函数怎么接</h2>
- * 每个动作是一个宿主函数 {@code 名字空间.组.动作}({@code numen.work.dig};名字撞上 Lua 的保留字或沙箱自带的全局时加后缀
- * {@code _},{@link #functionName})。模块按名字直接用,第一次用到才装(和组同名的给那一组加函数,{@code numen.move.walk}),它们的
+ * 每个动作是一个宿主函数 {@code 名字空间.组.动作}({@code minecraft.work.dig};名字撞上 Lua 的保留字或沙箱自带的全局时加后缀
+ * {@code _},{@link #functionName})。模块按名字直接用,第一次用到才装(和组同名的给那一组加函数,{@code minecraft.move.walk}),它们的
  * 函数照常调宿主函数;没有 {@code require}。
  * 脚本跑在它自己的虚拟线程上;调一个
  * API 函数,那个线程把这次调用交给驱动方({@link ScriptRun#start}/{@link ScriptRun#resume} 的返回值),然后停在那儿等结局。驱动方
@@ -129,7 +129,7 @@ public final class LuaEngine implements ScriptEngine {
     }
 
     /**
-     * 一个错误值写成文字:{@code numen.work.dig: out_of_reach — 那句话},下一行 {@code hint: …}。{@code tostring(err)} 与没接住时整段回执里的
+     * 一个错误值写成文字:{@code minecraft.work.dig: out_of_reach — 那句话},下一行 {@code hint: …}。{@code tostring(err)} 与没接住时整段回执里的
      * 那句话都是它。
      */
     static String render(Map<String, Object> error) {
@@ -477,7 +477,7 @@ public final class LuaEngine implements ScriptEngine {
         }
     }
 
-    /** 清单里一张就地写出的表最多几个字段;再多就按名字引用({@code numen.move.go.opts}),全部字段在这个函数自己的帮助里。 */
+    /** 清单里一张就地写出的表最多几个字段;再多就按名字引用({@code minecraft.move.go.opts}),全部字段在这个函数自己的帮助里。 */
     private static final int INLINE_FIELDS = 5;
 
     @Override
@@ -604,7 +604,7 @@ public final class LuaEngine implements ScriptEngine {
     }
 
     /**
-     * 脚本读了一组里没有的函数({@code numen.work.dgi}),或一个名字空间里没有的组({@code numen.wrok}):说没有这个,名字差一两个字的
+     * 脚本读了一组里没有的函数({@code minecraft.work.dgi}),或一个名字空间里没有的组({@code numen.wrok}):说没有这个,名字差一两个字的
      * 给出最近的那个,再说怎么列。停在读它的那一行,不让它成 nil 再在调用处报"调了一个 nil"。
      */
     static LuaSandbox.ScriptError missing(String table, String key, List<String> present) {
@@ -627,8 +627,8 @@ public final class LuaEngine implements ScriptEngine {
     }
 
     /**
-     * 程序或模块给第 ① 层的名字赋值({@code function numen.move.go() end}、{@code move = {}}、{@code raise = f}):登记的 API 函数与它们的表
-     * 谁都换不掉、遮不住,停在那一行。往组里加别的名字照常({@code function numen.move.walk(…)})。
+     * 程序或模块给第 ① 层的名字赋值({@code function minecraft.move.go() end}、{@code move = {}}、{@code raise = f}):登记的 API 函数与它们的表
+     * 谁都换不掉、遮不住,停在那一行。往组里加别的名字照常({@code function minecraft.move.walk(…)})。
      */
     static LuaSandbox.ScriptError redefined(String table, String key) {
         String name = table == null ? key : table + "." + key;

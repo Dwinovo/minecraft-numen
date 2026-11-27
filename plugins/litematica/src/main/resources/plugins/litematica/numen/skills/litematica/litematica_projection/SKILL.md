@@ -1,6 +1,6 @@
 ---
 name: litematica_projection
-description: What Litematica's placements and layer display are, what the litematica.placement functions return (the list of placements, the cells of chosen layers, turning a design into a placement for your owner to look at), and how those cells go straight into numen.build.place and numen.build.diff.
+description: What Litematica's placements and layer display are, what the litematica.placement functions return (the list of placements, the cells of chosen layers, turning a design into a placement for your owner to look at), and how those cells go straight into minecraft.build.place and minecraft.build.diff.
 ---
 
 # Litematica placements
@@ -37,11 +37,11 @@ The cells returned are Cells and go unchanged into any function that takes a lis
 
 ```lua
 local cells = litematica.placement.cells(64)
-print(numen.build.diff(cells))
-numen.build.place(cells)
+print(minecraft.build.diff(cells))
+minecraft.build.place(cells)
 ```
 
-`numen.build.diff` reports what is still missing, which materials the remaining cells need (`materials`) and which of them you do not have (`short_of`) — Litematica's own material list is counted against your owner's inventory, not yours.
+`minecraft.build.diff` reports what is still missing, which materials the remaining cells need (`materials`) and which of them you do not have (`short_of`) — Litematica's own material list is counted against your owner's inventory, not yours.
 
 ## Showing your owner a design
 

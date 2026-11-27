@@ -544,25 +544,25 @@ class LuaSandboxTest {
 
     @Test
     void hostFunctionsLiveOnTablePathsAndAModuleOnTheSamePathAddsToThem() throws InterruptedException {
-        Shelf shelf = new Shelf().with("numen.work", "return {twice = function() return numen.work.dig() * 2 end}")
-                .with("numen.shape", "return {box = function() return 'a box' end}");
+        Shelf shelf = new Shelf().with("minecraft.work", "return {twice = function() return minecraft.work.dig() * 2 end}")
+                .with("minecraft.shape", "return {box = function() return 'a box' end}");
         LuaSandbox sandbox = LuaSandbox.builder(ROOMY)
-                .function("numen.work", "dig", args -> 2L)
-                .function("numen.scan", "blocks", args -> 3L)
+                .function("minecraft.work", "dig", args -> 2L)
+                .function("minecraft.scan", "blocks", args -> 3L)
                 .modules(shelf)
                 .missing((table, key, present) -> new LuaSandbox.ScriptError("no " + table + "." + key + "; there are: "
                         + String.join(", ", present)))
                 .redefined((table, key) -> new LuaSandbox.ScriptError((table == null ? "" : table + ".") + key
                         + " is fixed"))
                 .build();
-        assertEquals(4L, run(sandbox, "return numen.work.twice()").value());
-        assertEquals("a box", run(sandbox, "return numen.shape.box()").value());
-        assertEquals(3L, run(sandbox, "return numen.scan.blocks()").value());
-        assertTrue(run(sandbox, "return numen.wrok").message().contains("no numen.wrok; there are: scan, shape, work"));
-        assertTrue(run(sandbox, "return numen.work.dgi").message().contains("no numen.work.dgi; there are: dig"));
-        assertTrue(run(sandbox, "numen.work = {}").message().contains("numen.work is fixed"));
-        assertTrue(run(sandbox, "numen = {}").message().contains("numen is fixed"));
-        assertTrue(run(sandbox, "function numen.work.dig() end").message().contains("numen.work.dig is fixed"));
+        assertEquals(4L, run(sandbox, "return minecraft.work.twice()").value());
+        assertEquals("a box", run(sandbox, "return minecraft.shape.box()").value());
+        assertEquals(3L, run(sandbox, "return minecraft.scan.blocks()").value());
+        assertTrue(run(sandbox, "return minecraft.wrok").message().contains("no minecraft.wrok; there are: scan, shape, work"));
+        assertTrue(run(sandbox, "return minecraft.work.dgi").message().contains("no minecraft.work.dgi; there are: dig"));
+        assertTrue(run(sandbox, "minecraft.work = {}").message().contains("minecraft.work is fixed"));
+        assertTrue(run(sandbox, "minecraft = {}").message().contains("minecraft is fixed"));
+        assertTrue(run(sandbox, "function minecraft.work.dig() end").message().contains("minecraft.work.dig is fixed"));
     }
 
     @Test

@@ -7,7 +7,7 @@ import java.nio.file.Path;
 /**
  * Litematica 联动:她能按主人加载的投影逐层建,也能把自己的设计做成投影给主人预览。
  *
- * <p>建造本身在 Numen({@code numen.build.place|diff} 收一串格);这个联动只是多一个来源(投影的格)和多一种预览(设计变投影),
+ * <p>建造本身在 Numen({@code minecraft.build.place|diff} 收一串格);这个联动只是多一个来源(投影的格)和多一种预览(设计变投影),
  * 交回的格照 Numen 收的写法,原样能传给它们。Numen 的代码里没有 Litematica。
  *
  * <p>Litematica 是<b>目标模组只在客户端</b>的联动:登记在服务端与客户端无条件做({@code Builtin} 的闸门不问目标模组在不在),经

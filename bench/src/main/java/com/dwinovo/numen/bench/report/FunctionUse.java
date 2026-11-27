@@ -8,7 +8,7 @@ import java.util.TreeMap;
  * 一次运行里一个 API 函数用得怎样:她的程序调了它几次、失败的各是哪一种、第一次调它之前查了几次它的帮助、和之前一字不差又失败了几次。
  * 一个函数好不好用由这几样说——参数错({@code bad_argument})多说明签名或说明没写清,查帮助多说明索引里那一行不够。
  *
- * @param function         函数全名,{@code numen.work.dig}
+ * @param function         函数全名,{@code minecraft.work.dig}
  * @param calls            调了几次(参数读不成、当场失败的也算)
  * @param failures         失败的次数,按种类({@code bad_argument}、{@code out_of_reach}……)
  * @param helpLookups      第一次调它之前,{@code ApiSearch} 按名字查它(或它的组、名字空间)的次数

@@ -46,22 +46,22 @@ import java.util.regex.Pattern;
  * 指令或正在阻塞的宿主函数处停下。
  *
  * <h2>表的路径</h2>
- * 宿主函数登记在一张表的路径下({@code numen.work} 的 {@code dig}):路径上的每一段是一张表,外层一张装着里层一张({@code numen} 装着
- * {@code work}),脚本里写全路径 {@code numen.work.dig(…)}。
+ * 宿主函数登记在一张表的路径下({@code minecraft.work} 的 {@code dig}):路径上的每一段是一张表,外层一张装着里层一张({@code minecraft} 装着
+ * {@code work}),脚本里写全路径 {@code minecraft.work.dig(…)}。
  *
  * <h2>模块</h2>
- * 宿主可以给一个模块来源({@link Builder#modules}):模块是一段返回一张函数表的正文,名字也是一条路径({@code numen.work}、
+ * 宿主可以给一个模块来源({@link Builder#modules}):模块是一段返回一张函数表的正文,名字也是一条路径({@code minecraft.work}、
  * {@code my.lumber}),脚本里就按这条路径用({@code my.lumber.chop(…)})。第一次用到时才向来源要正文、在同一个全局环境里跑一遍,所以
- * 每次运行拿到的都是来源此刻的那一份。路径上已经有一张宿主函数表的模块不另占名字,它的函数加进那张表({@code numen.move.walk} 就是
- * 这样进 {@code numen.move} 的)。没用到的模块不读;一个模块读不通、跑出错、没返回表,出错的是用到它的那一行。读一张表里没有的名字、
+ * 每次运行拿到的都是来源此刻的那一份。路径上已经有一张宿主函数表的模块不另占名字,它的函数加进那张表({@code minecraft.move.walk} 就是
+ * 这样进 {@code minecraft.move} 的)。没用到的模块不读;一个模块读不通、跑出错、没返回表,出错的是用到它的那一行。读一张表里没有的名字、
  * 或一个既不是全局也不是模块的名字就是错({@link Builder#missing}、{@link Builder#unknown} 给那句话,写错的名字当场说有哪些)。
  * 行号只记脚本自己那一段:模块里的函数调宿主函数时,{@link #currentLine} 说的是脚本里调这个模块函数的那一行,结局停在的也是脚本里的
  * 那一行。
  *
  * <h2>宿主登记的名字钉死</h2>
- * 宿主登记的全局函数、路径上的每一张表,以及表里的每个宿主函数,脚本都换不掉、遮不住:{@code numen = {}}、
- * {@code numen.move = {}}、{@code function numen.move.go() end}、{@code rawset(numen.move, "go", f)} 一律在那一行报错(那句话由
- * {@link Builder#redefined} 给)。往宿主的表里加别的名字照常(模块就是这样往 {@code numen.move} 里加 {@code to} 的)。
+ * 宿主登记的全局函数、路径上的每一张表,以及表里的每个宿主函数,脚本都换不掉、遮不住:{@code minecraft = {}}、
+ * {@code minecraft.move = {}}、{@code function minecraft.move.go() end}、{@code rawset(minecraft.move, "go", f)} 一律在那一行报错(那句话由
+ * {@link Builder#redefined} 给)。往宿主的表里加别的名字照常(模块就是这样往 {@code minecraft.move} 里加 {@code to} 的)。
  *
  * <h2>桥接</h2>
  * 宿主函数按 {@code 表的路径.函数名}(或全局名)登记,收按顺序的参数、交回一个值;值在两边按 {@link #toJava}/{@link #toLua} 换:nil 是
@@ -71,7 +71,7 @@ import java.util.regex.Pattern;
  *
  * <h2>带方法的值</h2>
  * 宿主交回的值里可以有 {@link Instance}:一个值,加上它是哪个类、类的方法写在哪个模块里。换成 Lua 值时,那个模块里与类同名的表
- * 是它的元表({@code numen.shape} 里的 {@code Pos}:{@code p:offset(1, 0, 0)}、{@code p + q})。模块此刻不在,它就是一张普通的表。
+ * 是它的元表({@code minecraft.shape} 里的 {@code Pos}:{@code p:offset(1, 0, 0)}、{@code p + q})。模块此刻不在,它就是一张普通的表。
  * 交回宿主时元表不算数据({@link #toJava} 只读表里存的东西)。
  *
  * <h2>错误值</h2>
@@ -133,7 +133,7 @@ public final class LuaSandbox {
      * 宿主交回的一个带方法的值:换成 Lua 值时,模块 {@code home} 里叫 {@code type} 的那张表是它的元表。
      *
      * @param type  类名,也是模块里那张元表的名字({@code Pos})
-     * @param home  方法写在哪个模块里({@code numen.shape})
+     * @param home  方法写在哪个模块里({@code minecraft.shape})
      * @param value 值本身(Java 值,见类注释"桥接";里面还可以有 Instance)
      */
     public record Instance(String type, String home, Object value) {}
@@ -235,7 +235,7 @@ public final class LuaSandbox {
     private final Limits limits;
     private final Consumer<String> print;
     private final Map<String, HostFunction> globals;
-    /** 表的路径({@code numen.work})→ 表里的宿主函数。 */
+    /** 表的路径({@code minecraft.work})→ 表里的宿主函数。 */
     private final Map<String, Map<String, HostFunction>> tables;
     /** 模块从哪来;没给是 null(读不认得的全局名照 Lua 的老样子是 nil)。 */
     private final ModuleSource modules;
@@ -255,7 +255,7 @@ public final class LuaSandbox {
     /** {@code print} 一张没有 {@code __tostring} 的表时怎么写它(换成 Java 值之后)。 */
     private final java.util.function.Function<Object, String> show;
 
-    /** 脚本读路径上一张表里没有的名字({@code numen.work.dgi}、{@code numen.wrok}):报什么错。 */
+    /** 脚本读路径上一张表里没有的名字({@code minecraft.work.dgi}、{@code minecraft.wrok}):报什么错。 */
     @FunctionalInterface
     public interface Missing {
 
@@ -434,7 +434,7 @@ public final class LuaSandbox {
             return this;
         }
 
-        /** 登记 {@code table.name} 这个函数:{@code table} 是表的路径({@code numen.work}),路径上的表没有就新建。 */
+        /** 登记 {@code table.name} 这个函数:{@code table} 是表的路径({@code minecraft.work}),路径上的表没有就新建。 */
         public Builder function(String table, String name, HostFunction fn) {
             for (String segment : table.split("\\.", -1)) {
                 checkName(segment);
@@ -939,7 +939,7 @@ public final class LuaSandbox {
         private final Map<String, LuaValue> classMetas = new java.util.HashMap<>();
 
         /**
-         * 一个类的元表:模块 {@code home} 里叫 {@code type} 的表。跑的时候就是路径上那个模块(和程序里 {@code numen.shape.Pos} 是同一张,
+         * 一个类的元表:模块 {@code home} 里叫 {@code type} 的表。跑的时候就是路径上那个模块(和程序里 {@code minecraft.shape.Pos} 是同一张,
          * 比较、运算对得上);只读不跑时从 {@link Builder#classes} 另装一份。模块不在、或模块里没有这张表,是 null。
          * 向来源要模块、装模块、沿路径找表都只在第一次做:来源每问一次都要过库,一份答复有多少个值就问多少次。实测(她真实的模块库,
          * 一次读 5844 格再读 16384 格,共约 4.4 万个带方法的值)不记下要 10.6 秒,记下 1.1 秒。
@@ -1041,13 +1041,13 @@ public final class LuaSandbox {
 
     // ---- 路径 ----
 
-    /** 路径的第一段:{@code numen.work} 是 {@code numen}。 */
+    /** 路径的第一段:{@code minecraft.work} 是 {@code minecraft}。 */
     private static String head(String path) {
         int dot = path.indexOf('.');
         return dot < 0 ? path : path.substring(0, dot);
     }
 
-    /** 路径的外层:{@code numen.work} 是 {@code numen},只有一段的是空串。 */
+    /** 路径的外层:{@code minecraft.work} 是 {@code minecraft},只有一段的是空串。 */
     private static String parent(String path) {
         int dot = path.lastIndexOf('.');
         return dot < 0 ? "" : path.substring(0, dot);

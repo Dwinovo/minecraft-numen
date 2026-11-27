@@ -42,7 +42,7 @@ public interface ScriptEngine {
      */
     String functionName(String name);
 
-    /** 一条点隔开的名字({@code numen.move}、{@code numen.move.until})逐段经 {@link #functionName} 写:{@code numen.move.until_}。 */
+    /** 一条点隔开的名字({@code minecraft.move}、{@code minecraft.move.until})逐段经 {@link #functionName} 写:{@code minecraft.move.until_}。 */
     default String pathName(String path) {
         return String.join(".", java.util.Arrays.stream(path.split("\\.", -1)).map(this::functionName).toList());
     }
@@ -50,13 +50,13 @@ public interface ScriptEngine {
     /** 一个名字能不能直接写成选项表的键({@code {type = "world"}}):不是语言的关键字就能。 */
     boolean isKey(String name);
 
-    /** 一个动作在这种语言里的函数全名:组的全名加动作名,{@code numen.move.go}。 */
+    /** 一个动作在这种语言里的函数全名:组的全名加动作名,{@code minecraft.move.go}。 */
     default String function(String group, String verb) {
         return pathName(group) + "." + functionName(verb);
     }
 
     /**
-     * 一次调用写成这种语言里的样子:{@code numen.work.dig({x = 1, y = 2, z = 3}, {count = 2})}。对象是字符串、数、布尔或它们的列表,选项按名字。
+     * 一次调用写成这种语言里的样子:{@code minecraft.work.dig({x = 1, y = 2, z = 3}, {count = 2})}。对象是字符串、数、布尔或它们的列表,选项按名字。
      */
     String call(String function, List<Object> objects, java.util.Map<String, Object> options);
 
@@ -125,7 +125,7 @@ public interface ScriptEngine {
     List<Defined> methods(String type, String code);
 
     /**
-     * 一个名字在这种语言里能不能当模块名:两段 {@code 名字空间.组}({@code numen.work}、{@code my.lumber}),每段写得出来、不是关键字,
+     * 一个名字在这种语言里能不能当模块名:两段 {@code 名字空间.组}({@code minecraft.work}、{@code my.lumber}),每段写得出来、不是关键字,
      * 名字空间是一个全局名,还不能撞语言自带的全局与引擎自己的全局({@code raise}、{@code require})。和第 ① 层的组同名可以(那是给这一组
      * 加函数)。能是 null,不能是那句话。模块文件放在哪的规矩在 Numen API 的 {@code Modules}。
      */

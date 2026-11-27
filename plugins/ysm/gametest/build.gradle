@@ -20,29 +20,30 @@ plugins {
 group = 'com.dwinovo.numen'
 java { toolchain.languageVersion = JavaLanguageVersion.of(java_version) }
 
-evaluationDependsOn(':numen:common')
+evaluationDependsOn(':plugins:minecraft:common')
 evaluationDependsOn(':numen-api:neoforge')
 evaluationDependsOn(':plugins:ysm')
 
 neoForge { version = neoforge_version }
 
-def numenNeoForge = project(':numen:neoforge')
-def gameTestStructures = project(':numen:common').layout.buildDirectory.dir('gameteststructures')
+evaluationDependsOn(':plugins:minecraft:neoforge')
+def numenNeoForge = project(':plugins:minecraft:neoforge')
+def gameTestStructures = project(':plugins:minecraft:common').layout.buildDirectory.dir('gameteststructures')
 def ysmSuite = rootProject.ext.numenSuites[project.path].gametest
 
 neoForge {
     addModdingDependenciesTo(sourceSets.main)
     mods {
-        numen {
+        numen_minecraft {
             sourceSet numenNeoForge.sourceSets.main
-            sourceSet project(':numen:common').sourceSets.testFixtures
+            sourceSet project(':plugins:minecraft:common').sourceSets.testFixtures
             // 寻路模块的类在成品里平铺在本体的 jar 里;这里不走 jar,同样声明
-            sourceSet project(':numen:pathing').sourceSets.main
+            sourceSet project(':plugins:minecraft:pathing').sourceSets.main
             sourceSet project(':plugins:ysm').sourceSets.main
             sourceSet sourceSets.main
         }
         // Numen API 的 GameTest 支持:套件机制与登记入口、模拟主人连接的加载器实现
-        numen_api_gametest {
+        numen_gametest {
             sourceSet project(':numen-api:neoforge').sourceSets.gametest
             sourceSet project(':numen-api:common').sourceSets.testFixtures
         }
@@ -62,22 +63,22 @@ neoForge {
 
 dependencies {
     compileOnly files({ numenNeoForge.sourceSets.main.output })
-    compileOnly rootProject.project(':numen:common').sourceSets.testFixtures.output
+    compileOnly rootProject.project(':plugins:minecraft:common').sourceSets.testFixtures.output
     // 套件接口:本联动的用例经它报到(numen_ysm)
     compileOnly rootProject.project(':numen-api:common').sourceSets.testFixtures.output
     // 用例装联动用它的入口(NumenYsm.install)
     compileOnly rootProject.project(':plugins:ysm').sourceSets.main.output
-    // 整个 Numen API(不是瘦 api jar):用例拉起同伴、调工具,和 Numen 的用例一样;运行时它就是 numen_api 那个模组
+    // 整个 Numen API(不是瘦 api jar):用例拉起同伴、调工具,和 Numen 的用例一样;运行时它就是 numen 那个模组
     implementation project(':numen-api:neoforge')
 }
 
 tasks.named('compileJava') {
-    dependsOn ':numen:neoforge:classes', ':numen:common:testFixturesClasses', ':plugins:ysm:classes'
+    dependsOn ':plugins:minecraft:neoforge:classes', ':plugins:minecraft:common:testFixturesClasses', ':plugins:ysm:classes'
 }
 
 tasks.matching { it.name == 'runGameTestServer' }.configureEach {
-    dependsOn ':numen:neoforge:classes', ':numen-api:neoforge:gametestClasses', ':numen:common:syncGameTestStructures',
-            ':numen:common:testFixturesClasses', ':numen-api:common:testFixturesClasses', ':plugins:ysm:classes'
+    dependsOn ':plugins:minecraft:neoforge:classes', ':numen-api:neoforge:gametestClasses', ':plugins:minecraft:common:syncGameTestStructures',
+            ':plugins:minecraft:common:testFixturesClasses', ':numen-api:common:testFixturesClasses', ':plugins:ysm:classes'
     // 测试服的配置目录每次开服从空的开始(世界目录由 TerrainWorld 清):上一次跑批(包括失败的一次)改过的开关、签过的皮肤缓存、
     // 发过的令牌、存下的档案不带进这一次。
     doFirst {
