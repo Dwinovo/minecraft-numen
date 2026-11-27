@@ -29,6 +29,20 @@ final class StubSeatWorld implements SeatWorld {
     /** 创建者之外、在她主人表上的人。 */
     final Map<UUID, java.util.Set<UUID>> sharedWith = new ConcurrentHashMap<>();
     final Programs programs = new Programs();
+    /** 她们各自此刻的会话;第一次问到时起一个。 */
+    final Map<UUID, UUID> conversations = new ConcurrentHashMap<>();
+    /** 群的会话印对应的成员。 */
+    final Map<String, List<UUID>> groups = new ConcurrentHashMap<>();
+    private final TranscriptStore transcripts;
+
+    StubSeatWorld() {
+        try {
+            transcripts = new TranscriptStore(new com.dwinovo.numen.api.home.Home(java.nio.file.Files.createTempDirectory("numen-conversations"),
+                    com.dwinovo.numen.api.store.Io.direct(e -> { throw e; })));
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
 
     /** 经座位起的程序:停在这里,测试决定什么时候给结局。 */
     static final class Programs implements ProgramRunner {
@@ -138,5 +152,25 @@ final class StubSeatWorld implements SeatWorld {
         catalog.add("skills", new com.google.gson.JsonArray());
         catalog.add("instincts", new com.google.gson.JsonArray());
         return catalog;
+    }
+
+    @Override
+    public TranscriptStore transcripts() {
+        return transcripts;
+    }
+
+    @Override
+    public UUID conversation(UUID companion) {
+        return conversations.computeIfAbsent(companion, id -> UUID.randomUUID());
+    }
+
+    @Override
+    public void startConversation(UUID companion, UUID conversation) {
+        conversations.put(companion, conversation);
+    }
+
+    @Override
+    public List<UUID> membersOf(UUID viewer, String tag) {
+        return groups.getOrDefault(tag, List.of()).stream().filter(member -> keeps(member, viewer)).toList();
     }
 }

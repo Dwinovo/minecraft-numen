@@ -3,7 +3,6 @@ package com.dwinovo.numen.api.client.agent;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.agent.conversation.Transcript;
-import com.dwinovo.numen.api.mind.Feed;
 import com.dwinovo.numen.api.mind.FeedEncoder;
 import com.dwinovo.numen.api.owner.OwnerInput;
 import com.dwinovo.numen.api.owner.Presence;
@@ -12,7 +11,7 @@ import com.dwinovo.numen.api.library.Library;
 import com.dwinovo.numen.api.library.LibraryKind;
 import com.dwinovo.numen.api.client.ClientMachines;
 import com.dwinovo.numen.api.mind.ClientServices;
-import com.dwinovo.numen.api.mind.History;
+import com.dwinovo.numen.api.seat.History;
 import com.dwinovo.numen.api.mind.LibraryDesk;
 import com.dwinovo.numen.api.mind.LoopHost;
 import com.dwinovo.numen.api.network.ClientPayloadSink;
@@ -25,6 +24,7 @@ import com.dwinovo.numen.api.network.payload.LibraryPayload;
 import com.dwinovo.numen.api.network.payload.LibraryRequestPayload;
 import com.dwinovo.numen.api.network.payload.OwnerInputPayload;
 import com.dwinovo.numen.api.network.payload.ServerHelloPayload;
+import com.dwinovo.numen.api.seat.SeatClient;
 import com.dwinovo.numen.api.plugin.ClientMods;
 
 import java.util.HashMap;
@@ -36,7 +36,7 @@ import java.util.UUID;
 
 /**
  * 主人客户端上她们的大脑在界面这头的样子:每只同伴一个视图({@link CompanionView}),和它们共用的东西:往服务端发那几样服务端管的事(分享、
- * 会话的成员表)、配置库的表({@link LibraryTables})、会话记录({@link Transcripts})的翻页、服务器报到的结果。大脑本身在
+ * 会话的成员表)、配置库的表({@link LibraryTables})、会话记录({@link Transcripts})的翻页与订阅(都向服务端要)、服务器报到的结果。大脑本身在
  * {@link ClientServices} 的 {@code ClientBrains} 里,一个连接一份;这里只是界面的把手,断线就丢。
  *
  * <p>线程:客户端主线程(包的处理在主线程上)。
@@ -52,6 +52,8 @@ public final class ClientCompanions {
 
     private static final Map<UUID, Entry> COMPANIONS = new HashMap<>();
     private static final Transcripts TRANSCRIPTS = new Transcripts();
+    /** 这条连接上已经订阅了对话记录的同伴。 */
+    private static final Set<UUID> WATCHED = new java.util.HashSet<>();
     /** 服务端收下了我们的报到(版本对得上):它推的东西我们读得懂。 */
     private static boolean served;
     /** 服务端发来的落过盘的会话(成员表与名字),整份。 */
@@ -81,12 +83,7 @@ public final class ClientCompanions {
         TurnPresenter presenter = new TurnPresenter(companion, () -> self[0].status(), () -> self[0].personaName(),
                 playing -> NumenNetwork.sendToServer(
                         new com.dwinovo.numen.api.network.payload.SpeakingStatePayload(companion, playing)));
-        self[0] = new CompanionView(companion, brain, feed -> {
-            if (feed instanceof Feed.Wiped) {
-                TRANSCRIPTS.clear();   // 她的日志没了;群里别的会话里她说过的也在其中,都重新取
-            }
-            presenter.on(feed);
-        }, line -> TRANSCRIPTS.live(line.conv() == null ? companion.toString() : line.conv(), companion, line));
+        self[0] = new CompanionView(companion, brain, presenter::on);
         if (brain != null) {
             brain.questions().onAsked(presenter::asked);
         }
@@ -191,18 +188,36 @@ public final class ClientCompanions {
         }
     }
 
-    /** 这个会话的成员里大脑在这台电脑上的,从各自的日志读一页。 */
+    /** 这个会话的成员各自此刻的记录,向服务端要一页(订阅也在这时开,之后落盘的行实时推来)。 */
     private static void requestPage(String conversation) {
-        TRANSCRIPTS.asked(conversation);
         Conversations.Members members = Conversations.membersOf(conversation);
-        History.page(members.brains(), members.tag(), TRANSCRIPTS.cursor(conversation), History.PAGE)
-                .whenComplete((page, failed) -> net.minecraft.client.Minecraft.getInstance().execute(() -> {
+        SeatClient seat = ClientSeats.client();
+        if (seat == null || members.members().isEmpty()) {
+            return;
+        }
+        TRANSCRIPTS.asked(conversation);
+        members.members().forEach(member -> {
+            if (WATCHED.add(member)) {
+                seat.watch(member).whenComplete((done, failed) -> {
+                    if (failed != null) {
+                        Constants.LOG.warn("[numen-mind] could not watch the record of {}: {}", member, failed.toString());
+                    }
+                });
+            }
+        });
+        seat.page(members.tag() == null ? members.members().get(0) : null, members.tag(), TRANSCRIPTS.cursor(conversation),
+                History.PAGE).whenComplete((page, failed) -> net.minecraft.client.Minecraft.getInstance().execute(() -> {
                     if (failed != null) {
                         Constants.LOG.warn("[numen-mind] could not read a page of {}: {}", conversation, failed.toString());
                     } else {
-                        TRANSCRIPTS.page(conversation, page.entries(), page.cursor(), page.more());
+                        TRANSCRIPTS.page(conversation, page.entries(), page.cursor(), page.more(), page.conversations());
                     }
                 }));
+    }
+
+    /** 订阅了的对话记录里落盘了新行(客户端主线程):并进正在看的会话。 */
+    public static void rows(UUID companion, UUID conversation, List<com.google.gson.JsonObject> rows) {
+        TRANSCRIPTS.live(companion, conversation, com.dwinovo.numen.api.agent.llm.Rows.lines(rows));
     }
 
     // ---- 服务端推来的 ----
@@ -238,6 +253,7 @@ public final class ClientCompanions {
         ClientSeats.close();
         COMPANIONS.clear();
         TRANSCRIPTS.clear();
+        WATCHED.clear();
         saved = List.of();
         LIBRARY.clear();
         McpAuthPrompt.clear();

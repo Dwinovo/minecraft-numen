@@ -3,7 +3,7 @@ package com.dwinovo.numen.api.client.agent;
 import com.dwinovo.numen.api.agent.conversation.Audience;
 import com.dwinovo.numen.api.agent.conversation.Transcript;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
-import com.dwinovo.numen.api.agent.llm.ConvoLog;
+import com.dwinovo.numen.api.agent.llm.Rows;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
 import org.junit.jupiter.api.Test;
 
@@ -25,12 +25,16 @@ class TranscriptsTest {
     private final Transcripts transcripts = new Transcripts();
 
     private static Transcript.Entry entry(UUID who, String id, long ts, ConvoState.Msg msg) {
-        return new Transcript.Entry(ts, who, msg, Map.of(who, id));
+        return new Transcript.Entry(ts, who, msg, Map.of(who, id), List.of());
     }
 
-    private static ConvoLog.Line line(String id, long ts, String conv, ConvoState.Msg msg) {
-        return new ConvoLog.Line(id, ts, conv, msg);
+    private static Rows.Line line(String id, long ts, String conv, ConvoState.Msg msg) {
+        return new Rows.Line(id, ts, conv, msg, List.of());
     }
+
+    /** 她们此刻都在各自的第一份会话里。 */
+    private static final Map<UUID, UUID> NOW = Map.of(A, UUID.fromString("00000000-0000-0000-0000-0000000000a1"),
+            B, UUID.fromString("00000000-0000-0000-0000-0000000000b1"));
 
     private static ConvoState.Msg ownerSays(String said, int turn) {
         return new ConvoState.Msg.User(EventQueue.query(said, 0L) + "\n" + Audience.line(turn, "阿岚"));
@@ -42,12 +46,12 @@ class TranscriptsTest {
         transcripts.asked(G);
         assertFalse(transcripts.wantsFirstPage(G), "已经在要了");
 
-        transcripts.page(G, List.of(entry(A, "a2", 2000, new ConvoState.Msg.User("<query>二</query>"))), "c1", true);
+        transcripts.page(G, List.of(entry(A, "a2", 2000, new ConvoState.Msg.User("<query>二</query>"))), "c1", true, NOW);
         assertTrue(transcripts.wantsOlder(G));
         transcripts.asked(G);
         assertFalse(transcripts.wantsOlder(G), "更早的一页也不重复要");
 
-        transcripts.page(G, List.of(entry(A, "a1", 1000, new ConvoState.Msg.User("<query>一</query>"))), "c0", false);
+        transcripts.page(G, List.of(entry(A, "a1", 1000, new ConvoState.Msg.User("<query>一</query>"))), "c0", false, NOW);
         assertFalse(transcripts.wantsOlder(G), "没有更早的了");
         assertEquals(List.of("a1", "a2"), transcripts.entries(G).stream().map(e -> e.ids().get(A)).toList(),
                 "老的接在前面");
@@ -55,24 +59,24 @@ class TranscriptsTest {
 
     @Test
     void aLineThatArrivesLiveIsAppendedOnlyOnceTheConversationIsLoaded() {
-        transcripts.live(G, A, line("a3", 3000, G, new ConvoState.Msg.User("<query>三</query>")));
+        transcripts.live(A, NOW.get(A), List.of(line("a3", 3000, G, new ConvoState.Msg.User("<query>三</query>"))));
         assertTrue(transcripts.entries(G).isEmpty(), "还没取过最新一页:那一页回来会带上它");
 
-        transcripts.page(G, List.of(entry(A, "a2", 2000, new ConvoState.Msg.User("<query>二</query>"))), "c", false);
-        transcripts.live(G, A, line("a3", 3000, G, new ConvoState.Msg.User("<query>三</query>")));
-        transcripts.live(G, A, line("a3", 3000, G, new ConvoState.Msg.User("<query>三</query>")));
+        transcripts.page(G, List.of(entry(A, "a2", 2000, new ConvoState.Msg.User("<query>二</query>"))), "c", false, NOW);
+        transcripts.live(A, NOW.get(A), List.of(line("a3", 3000, G, new ConvoState.Msg.User("<query>三</query>"))));
+        transcripts.live(A, NOW.get(A), List.of(line("a3", 3000, G, new ConvoState.Msg.User("<query>三</query>"))));
 
         assertEquals(2, transcripts.entries(G).size(), "同一行编号只收一次");
     }
 
     @Test
     void theOwnersWordsCopiedIntoEveryMemberAreDrawnOnce() {
-        transcripts.page(G, List.of(), "", false);
+        transcripts.page(G, List.of(), "", false, NOW);
 
-        transcripts.live(G, A, line("a1", 1000, G, ownerSays("都在吗", 4)));
-        transcripts.live(G, B, line("b1", 1006, G, ownerSays("都在吗", 4)));
-        transcripts.live(G, B, line("b2", 1100, G, new ConvoState.Msg.Assistant(
-                new com.dwinovo.numen.api.agent.provider.AssistantTurn("在", List.of(), null))));
+        transcripts.live(A, NOW.get(A), List.of(line("a1", 1000, G, ownerSays("都在吗", 4))));
+        transcripts.live(B, NOW.get(B), List.of(line("b1", 1006, G, ownerSays("都在吗", 4))));
+        transcripts.live(B, NOW.get(B), List.of(line("b2", 1100, G, new ConvoState.Msg.Assistant(
+                new com.dwinovo.numen.api.agent.provider.AssistantTurn("在", List.of(), null)))));
 
         assertEquals(2, transcripts.entries(G).size(), "副本并进了第一份");
         assertEquals(B, transcripts.entries(G).get(1).companion(), "回复各标各的说话人");
@@ -80,11 +84,11 @@ class TranscriptsTest {
 
     @Test
     void aPageDoesNotRepeatWhatAlreadyCameLive() {
-        transcripts.page(G, List.of(entry(A, "a2", 2000, new ConvoState.Msg.User("<query>二</query>"))), "c", true);
-        transcripts.live(G, A, line("a3", 3000, G, new ConvoState.Msg.User("<query>三</query>")));
+        transcripts.page(G, List.of(entry(A, "a2", 2000, new ConvoState.Msg.User("<query>二</query>"))), "c", true, NOW);
+        transcripts.live(A, NOW.get(A), List.of(line("a3", 3000, G, new ConvoState.Msg.User("<query>三</query>"))));
 
         transcripts.page(G, List.of(entry(A, "a1", 1000, new ConvoState.Msg.User("<query>一</query>")),
-                entry(A, "a2", 2000, new ConvoState.Msg.User("<query>二</query>"))), "c0", false);
+                entry(A, "a2", 2000, new ConvoState.Msg.User("<query>二</query>"))), "c0", false, NOW);
 
         assertEquals(List.of("a1", "a2", "a3"), transcripts.entries(G).stream().map(e -> e.ids().get(A)).toList());
     }

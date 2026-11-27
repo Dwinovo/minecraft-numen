@@ -144,7 +144,7 @@ public final class NumenRoster {
      * (她只有一位主人,或不是谁亲口说的)是 {@code null}。聊天流的气泡、左栏的最后一句、未读都按这一处认。
      */
     public Keeper otherSpeaker(UUID companion, String content, UUID viewer) {
-        String marked = com.dwinovo.numen.api.agent.llm.ConvoLog.speaker(content);
+        String marked = com.dwinovo.numen.api.agent.llm.QueryMarkup.speaker(content);
         Keeper said = marked == null ? null : speaker(companion, marked);
         return said == null || said.uuid().equals(viewer) ? null : said;
     }

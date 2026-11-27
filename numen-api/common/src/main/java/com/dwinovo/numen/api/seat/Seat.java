@@ -2,6 +2,7 @@ package com.dwinovo.numen.api.seat;
 
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
+import com.dwinovo.numen.api.agent.llm.Rows;
 import com.dwinovo.numen.api.agent.loop.Program;
 import com.dwinovo.numen.api.script.Modules;
 import com.dwinovo.numen.api.event.NumenEvents;
@@ -56,6 +57,8 @@ final class Seat {
     private SeatConnection attached;
     /** 最后一次告诉客户端的目录版本。 */
     private String told = "";
+    /** 她此刻在写的会话:开了对话记录之后追加的行只认它;还没开是 null。 */
+    private UUID conversation;
 
     Seat(Seats seats, UUID companion, UUID owner) {
         this.seats = seats;
@@ -148,6 +151,59 @@ final class Seat {
                     + outbox.last());
         }
         outbox.ack(seq);
+    }
+
+    // ---- 对话记录 ----
+
+    /**
+     * 开她当前的对话记录:读出最后一个整理边界起的行,此后这条连接追加的行属于这一份会话。
+     * 读排在她这份记录前面交的追加之后。
+     */
+    CompletableFuture<ConversationOpened> openConversation() throws Exception {
+        UUID current = seats.onMain(() -> seats.world().conversation(companion));
+        synchronized (this) {
+            conversation = current;
+        }
+        return seats.world().transcripts().read(current, rows -> new ConversationOpened(current, Rows.open(rows)));
+    }
+
+    /**
+     * 这条连接追加了几行:写进会话,推给订阅的人。只有坐着座位的连接能写,而且只写她此刻在写的那一份;别的丢弃并记一行,
+     * 免得写到一份别人在写的记录里。
+     */
+    void append(SeatConnection by, UUID target, List<JsonObject> rows) {
+        synchronized (this) {
+            if (attached != by || !target.equals(conversation)) {
+                Constants.LOG.warn("[numen-seat] dropped {} row(s) from {} for the conversation {} of {}: it does not hold her seat "
+                        + "or is not writing that conversation", rows.size(), by.player, target, companion);
+                return;
+            }
+        }
+        seats.world().transcripts().append(target, rows);
+        seats.rowsAppended(companion, target, rows);
+    }
+
+    /** 这条连接说对话接着在一个新的会话里写(清空上下文):服务端记下她当前的会话,订阅的人据此换到新的一份。 */
+    void startConversation(SeatConnection by, UUID next) {
+        synchronized (this) {
+            if (attached != by) {
+                Constants.LOG.warn("[numen-seat] {} started a new conversation for {} without holding her seat", by.player, companion);
+                return;
+            }
+            conversation = next;
+        }
+        seats.world().main().execute(() -> seats.world().startConversation(companion, next));
+        seats.rowsAppended(companion, next, List.of());
+    }
+
+    /** 当前对话记录的原文,一行一条 JSON。 */
+    CompletableFuture<String> readConversation() throws Exception {
+        UUID current = seats.onMain(() -> seats.world().conversation(companion));
+        return seats.world().transcripts().read(current, rows -> {
+            StringBuilder text = new StringBuilder();
+            rows.forEach(row -> text.append(row).append('\n'));
+            return text.toString();
+        });
     }
 
     // ---- 目录 ----

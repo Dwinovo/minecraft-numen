@@ -1,7 +1,7 @@
 package com.dwinovo.numen.api.client.agent;
 
 import com.dwinovo.numen.api.agent.conversation.Transcript;
-import com.dwinovo.numen.api.agent.llm.ConvoLog;
+import com.dwinovo.numen.api.agent.llm.Rows;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -13,10 +13,11 @@ import java.util.UUID;
 
 /**
  * 面板正在看的会话记录,从服务端来的:翻页取回的老行加上之后实时推来的新行,按会话各一条时间线。内存里的视图,不落盘、
- * 不是任何东西的副本——真源是服务端那几本日志,关了面板就丢,再开重新取最新一页。
+ * 不是任何东西的副本——真源是服务端的对话记录,关了面板就丢,再开重新取最新一页。主人自己的面板也走这一条,不从本机的大脑另取一份。
  *
  * <p>一个会话的记录在服务端已经归并过(群里主人的一句话在每个成员那儿各有一份副本,归成一行)。实时推来的行是各成员的
- * 日志各推各的,所以新来的主人的话要按同一个键({@link Transcript#copyKey})并进已有的那一行,而不是画两遍。
+ * 记录各推各的,所以新来的主人的话要按同一个键({@link Transcript#copyKey})并进已有的那一行,而不是画两遍。
+ * 成员换了新的会话(清空上下文)之后,所有时间线作废,面板再取。
  *
  * <p>线程:客户端主线程。
  */
@@ -34,6 +35,8 @@ public final class Transcripts {
     }
 
     private final Map<String, Line> lines = new HashMap<>();
+    /** 各成员此刻在写哪一份会话:服务端说的最后一次。 */
+    private final Map<UUID, UUID> conversations = new HashMap<>();
 
     private Line of(String conversation) {
         return lines.computeIfAbsent(conversation, id -> new Line());
@@ -68,7 +71,9 @@ public final class Transcripts {
     }
 
     /** 一页回来了:老行接在时间线前面(已有的行编号不重复),游标与"还有没有"换成这页带回来的。 */
-    public void page(String conversation, List<Transcript.Entry> older, String cursor, boolean more) {
+    public void page(String conversation, List<Transcript.Entry> older, String cursor, boolean more,
+                     Map<UUID, UUID> inConversation) {
+        conversations.putAll(inConversation);
         Line line = of(conversation);
         List<Transcript.Entry> fresh = new ArrayList<>();
         for (Transcript.Entry entry : older) {
@@ -85,26 +90,34 @@ public final class Transcripts {
     }
 
     /**
-     * 实时推来的一行。还没取过最新一页的会话不收:那一页回来时会带上它。主人的话的副本并进已有的那一行。
+     * 实时推来的几行。没打开过的会话不收;打开了还在取最新一页的收下(那一页回来时按行编号去重)。主人的话的副本并进已有的那一行。
+     * 她换了新的会话(推来的会话 id 与记着的不同)就把所有时间线作废,面板重新取。
      *
-     * @param conversation 这一行属于哪个会话
+     * @param conversation 她此刻在写的会话
      */
-    public void live(String conversation, UUID companion, ConvoLog.Line row) {
-        Line line = lines.get(conversation);
-        if (line == null || !line.loaded || row.id() != null && line.ids.contains(row.id())) {
+    public void live(UUID companion, UUID conversation, List<Rows.Line> rows) {
+        UUID known = conversations.put(companion, conversation);
+        if (known != null && !known.equals(conversation)) {
+            lines.clear();
             return;
         }
-        String copy = Transcript.copyKey(row.msg());
-        if (copy != null && line.copies.contains(copy)) {
+        for (Rows.Line row : rows) {
+            Line line = lines.get(row.conv() == null ? companion.toString() : row.conv());
+            if (line == null || row.id() != null && line.ids.contains(row.id())) {
+                continue;
+            }
+            String copy = Transcript.copyKey(row.msg());
+            if (copy != null && line.copies.contains(copy)) {
+                line.ids.add(row.id());
+                continue;
+            }
+            Map<UUID, String> ids = new HashMap<>();
+            ids.put(companion, row.id());
+            Transcript.Entry entry = new Transcript.Entry(row.ts(), companion, row.msg(), ids, row.rows());
             line.ids.add(row.id());
-            return;
+            remember(line, entry);
+            line.entries.add(entry);
         }
-        Map<UUID, String> ids = new HashMap<>();
-        ids.put(companion, row.id());
-        Transcript.Entry entry = new Transcript.Entry(row.ts(), companion, row.msg(), ids);
-        line.ids.add(row.id());
-        remember(line, entry);
-        line.entries.add(entry);
     }
 
     private static void remember(Line line, Transcript.Entry entry) {
@@ -122,5 +135,6 @@ public final class Transcripts {
     /** 全部不要了(断线)。 */
     public void clear() {
         lines.clear();
+        conversations.clear();
     }
 }

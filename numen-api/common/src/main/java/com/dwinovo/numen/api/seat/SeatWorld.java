@@ -48,4 +48,18 @@ public interface SeatWorld {
 
     /** 她能做什么:注册表里服务端拥有的那些,含 {@code version}。任何线程。 */
     JsonObject catalog(UUID companion);
+
+    /** 对话记录的存放。任何线程。 */
+    TranscriptStore transcripts();
+
+    /** 她此刻的对话记录是哪一份会话;还没有过就起一个并记下。只在 {@link #main} 上调。 */
+    UUID conversation(UUID companion);
+
+    /** 她接着在一份新的会话里写(清空上下文);旧的一份留在原处。只在 {@link #main} 上调。 */
+    void startConversation(UUID companion, UUID conversation);
+
+    /**
+     * 会话印为 {@code tag} 的群里,{@code viewer} 用得了的成员(按成员表的顺序);没有这个群是空表。只在 {@link #main} 上调。
+     */
+    java.util.List<UUID> membersOf(UUID viewer, String tag);
 }

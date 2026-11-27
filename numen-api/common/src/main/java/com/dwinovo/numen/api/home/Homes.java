@@ -14,7 +14,8 @@ import java.util.UUID;
  * 按归属组装的落盘位置——这个问题的<b>唯一</b>答案(docs/input-pipeline.md §六"存储的三层"第三层)。每样东西只有一个归属,
  * 归属决定它在哪个根目录。四处:
  * <ul>
- *   <li>{@link #companion}:她的东西(对话日志、收件箱、札记、目标、绑定、台账),在<b>世界存档</b>里
+ *   <li>{@link #conversations}:对话记录({@code <存档>/numen/conversations/<会话 uuid>.jsonl}),在服务端;</li>
+ *   <li>{@link #companion}:她的东西(收件箱、札记、绑定、台账),在<b>世界存档</b>里
  *       {@code <存档>/numen/companions/<uuid>/}——备份世界就连她一起备份,删世界她也跟着走;</li>
  *   <li>{@link #worldOwner}:主人在这个世界里的东西(会话成员表),{@code <存档>/numen/players/<uuid>/};</li>
  *   <li>{@link #server}:服主管的东西(内置的各库、服主的钥匙串、服务器配置、型号目录缓存),{@code config/numen/server/};</li>
@@ -32,6 +33,7 @@ public final class Homes {
     /** 世界存档里 Numen 的目录名。 */
     private static final String WORLD_DIR = "numen";
     private static final String COMPANIONS = "companions";
+    private static final String CONVERSATIONS = "conversations";
     private static final String PLAYERS = "players";
     private static final String SERVER = "server";
     private static final String CLIENT = "client";
@@ -61,6 +63,11 @@ public final class Homes {
     /** 她的家。 */
     public Home companion(UUID companion) {
         return home(world.resolve(COMPANIONS).resolve(companion.toString()), "companion/" + companion);
+    }
+
+    /** 对话记录:一段对话一个文件,文件名是会话 uuid;所有同伴共用一条写车道。 */
+    public Home conversations() {
+        return home(world.resolve(CONVERSATIONS), "conversations");
     }
 
     /** 主人在这个世界里的东西。 */

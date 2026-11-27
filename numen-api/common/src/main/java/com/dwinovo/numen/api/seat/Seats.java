@@ -32,6 +32,8 @@ public final class Seats {
     private final Map<UUID, Seat> seats = new ConcurrentHashMap<>();
     private final Map<UUID, SeatConnection> connections = new ConcurrentHashMap<>();
     private final Map<UUID, AtomicLong> generations = new ConcurrentHashMap<>();
+    /** 订阅了她的对话记录的连接。 */
+    private final Map<UUID, java.util.Set<SeatConnection>> watchers = new ConcurrentHashMap<>();
     private final SeatTransport transport = new SeatTransport(this);
 
     public Seats(SeatWorld world, Executor handlers) {
@@ -58,10 +60,11 @@ public final class Seats {
         return connections.computeIfAbsent(player, id -> new SeatConnection(this, id, wire));
     }
 
-    /** 这位玩家断线了:他的座位上没人,经座位起的程序切断,在等他答复的反向请求失败。 */
+    /** 这位玩家断线了:他的座位上没人,经座位起的程序切断,在等他答复的反向请求失败,订阅也都作废。 */
     public void left(UUID player) {
         SeatConnection connection = connections.remove(player);
         if (connection != null) {
+            watchers.values().forEach(watching -> watching.remove(connection));
             connection.close();
         }
     }
@@ -72,6 +75,7 @@ public final class Seats {
         connections.clear();
         seats.clear();
         generations.clear();
+        watchers.clear();
     }
 
     // ---- 座位 ----
@@ -107,6 +111,22 @@ public final class Seats {
             seat.detach(seat.connection());
         }
         generations.remove(companion);
+        watchers.remove(companion);
+    }
+
+    // ---- 对话记录的订阅 ----
+
+    /** 这条连接订阅她的对话记录:之后落盘的行(含换了新会话)推给它。 */
+    void watch(UUID companion, SeatConnection connection) {
+        watchers.computeIfAbsent(companion, id -> ConcurrentHashMap.newKeySet()).add(connection);
+    }
+
+    /** 她的对话记录里新落盘的行({@code rows} 空是换了新会话):推给订阅的人。 */
+    void rowsAppended(UUID companion, UUID conversation, java.util.List<com.google.gson.JsonObject> rows) {
+        java.util.Set<SeatConnection> watching = watchers.get(companion);
+        if (watching != null) {
+            watching.forEach(connection -> connection.rows(companion, conversation, rows));
+        }
     }
 
     // ---- 代数、事件、目录 ----

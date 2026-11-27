@@ -127,7 +127,7 @@ final class HeadlessOwner implements AutoCloseable {
             LoopHost made = new LoopHost(new LoopHost.Parts(companion, me, new Home(home.resolve(companion.toString()), io),
                     main, seat, new LlmMind(() -> providers, models), SCRIPT_ONLY, () -> false,
                     () -> EventQueue.DEFAULT_LEVEL, bound -> "You are a test companion.",
-                    bundled -> SkillRegistry.of(hub.library(SkillRegistry.KIND), bundled), who -> ""));
+                    bundled -> SkillRegistry.of(hub.library(SkillRegistry.KIND), bundled), who -> "", "e2e"));
             made.bind(Slot.PROVIDER, new Bound(me, profileId));
             made.bind(Slot.PERSONA, new Bound(me, new EntryId("my", "e2e")));
             return made;
@@ -302,11 +302,11 @@ final class HeadlessOwner implements AutoCloseable {
         main.execute(() -> brains.get(companion).submitPrompt(words));
     }
 
-    /** 她的日志里此刻有这句话吗(任何一方说的)。 */
+    /** 她的对话记录里此刻有这句话吗(任何一方说的):向服务端翻一页,和面板读的同一份。 */
     boolean loggedWords(UUID companion, String words) {
         try {
-            return CompletableFuture.supplyAsync(() -> brains.get(companion).log().loadLines(200).stream()
-                    .anyMatch(line -> line.msg().toString().contains(words)), main).get(5, TimeUnit.SECONDS);
+            return seat.page(companion, null, "", com.dwinovo.numen.api.seat.History.PAGE).get(5, TimeUnit.SECONDS).entries().stream()
+                    .anyMatch(entry -> entry.msg().toString().contains(words));
         } catch (InterruptedException | ExecutionException | java.util.concurrent.TimeoutException e) {
             throw new AssertionError(e);
         }

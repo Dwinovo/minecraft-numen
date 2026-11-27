@@ -43,6 +43,7 @@ public final class SeatClient {
     private final Map<UUID, Long> marks = new ConcurrentHashMap<>();
     private final List<Consumer<SeatEvent>> onEvent = new CopyOnWriteArrayList<>();
     private final List<BiConsumer<UUID, String>> onCatalogChanged = new CopyOnWriteArrayList<>();
+    private final List<RowsListener> onRows = new CopyOnWriteArrayList<>();
     /** 她的大脑里客户端函数能碰到的东西,每只同伴一份。 */
     private final Map<UUID, ClientContext> contexts = new ConcurrentHashMap<>();
 
@@ -58,6 +59,7 @@ public final class SeatClient {
         peer.onRequest(SeatMethods.CLIENT_CALL, this::clientCall);
         peer.onNotification(SeatMethods.EVENTS_NEW, this::eventArrived);
         peer.onNotification(SeatMethods.CATALOG_CHANGED, this::catalogChanged);
+        peer.onNotification(SeatMethods.CONVERSATION_ROWS, this::rowsArrived);
     }
 
     /** 服务端发来一条消息。 */
@@ -80,6 +82,16 @@ public final class SeatClient {
     /** 她的大脑里客户端函数能碰到的东西,{@code client/call} 来了就交给函数。 */
     public void serveContext(UUID companion, ClientContext context) {
         contexts.put(companion, context);
+    }
+
+    /** 订阅了的对话记录里新落盘的行:哪只同伴、此刻的会话 id、行({@code rows} 空是换了新会话)。 */
+    public interface RowsListener {
+        void rows(UUID companion, UUID conversation, List<JsonObject> rows);
+    }
+
+    /** 听订阅了的对话记录({@link #watch})里落盘的行。 */
+    public void onRows(RowsListener listener) {
+        onRows.add(listener);
     }
 
     /** 听目录变了:同伴、新的目录版本。 */
@@ -196,6 +208,57 @@ public final class SeatClient {
         return call(SeatMethods.SAY, companion, extra).thenApply(o -> null);
     }
 
+    // ---- 对话记录 ----
+
+    /** 开她当前的对话记录:会话 id 与最后一个整理边界起的行。坐上座位之后、动笔之前要做。 */
+    public CompletableFuture<ConversationOpened> openConversation(UUID companion) {
+        return call(SeatMethods.CONVERSATION_OPEN, companion, new JsonObject()).thenApply(ConversationOpened::fromJson);
+    }
+
+    /** 往她当前的会话后面追加行。通知,按发出的顺序落盘;不等答复。 */
+    public void appendRows(UUID companion, UUID conversation, List<JsonObject> rows) {
+        JsonObject params = new JsonObject();
+        params.addProperty("companion", companion.toString());
+        params.addProperty("conversation", conversation.toString());
+        params.add("rows", ConversationOpened.array(rows));
+        notifyServer(SeatMethods.CONVERSATION_APPEND, params);
+    }
+
+    /** 对话接着在新的会话 {@code conversation} 里写(清空上下文),旧的一份留在原处。通知,与追加同一个顺序。 */
+    public void newConversation(UUID companion, UUID conversation) {
+        JsonObject params = new JsonObject();
+        params.addProperty("companion", companion.toString());
+        params.addProperty("conversation", conversation.toString());
+        notifyServer(SeatMethods.CONVERSATION_NEW, params);
+    }
+
+    /** 整份当前对话记录的原文,一行一条 JSON。 */
+    public CompletableFuture<String> readConversation(UUID companion) {
+        return call(SeatMethods.CONVERSATION_READ, companion, new JsonObject()).thenApply(o -> o.get("text").getAsString());
+    }
+
+    /**
+     * 翻一页她的对话记录(她的主人表上的人都能翻)。
+     *
+     * @param companion 单聊翻的是谁;翻群({@code tag} 非空)时不看它,可以是 {@code null}
+     * @param tag    群的会话印;{@code null} 是单聊
+     * @param cursor 上一页带回来的游标;最新一页是空串
+     */
+    public CompletableFuture<History.Page> page(UUID companion, String tag, String cursor, int limit) {
+        JsonObject extra = new JsonObject();
+        if (tag != null) {
+            extra.addProperty("tag", tag);
+        }
+        extra.addProperty("cursor", cursor);
+        extra.addProperty("limit", limit);
+        return call(SeatMethods.CONVERSATION_PAGE, companion, extra).thenApply(History.Page::fromJson);
+    }
+
+    /** 订阅她的对话记录:之后落盘的行经 {@link #onRows} 推来(她的主人表上的人都能订阅)。 */
+    public CompletableFuture<Void> watch(UUID companion) {
+        return call(SeatMethods.CONVERSATION_WATCH, companion, new JsonObject()).thenApply(o -> null);
+    }
+
     /** 发出去、还没有答复的请求有几条,不算一段程序的 {@code program/run}(它要等游戏往前走才有结局):GameTest 每刻据此等座位上的往返落定。 */
     public int pending() {
         return quick.get();
@@ -241,7 +304,9 @@ public final class SeatClient {
     public record Sitting(long generation, SeatState state) {}
 
     private CompletableFuture<JsonObject> call(String method, UUID companion, JsonObject params) {
-        params.addProperty("companion", companion.toString());
+        if (companion != null) {
+            params.addProperty("companion", companion.toString());
+        }
         CompletableFuture<JsonObject> answer = peer.request(method, params, out).result().thenApply(JsonElement::getAsJsonObject);
         if (!SeatMethods.PROGRAM_RUN.equals(method)) {
             quick.incrementAndGet();
@@ -262,6 +327,17 @@ public final class SeatClient {
         }
         marks.merge(event.companion(), event.seq(), Math::max);
         onEvent.forEach(listener -> listener.accept(event));
+    }
+
+    private void rowsArrived(JsonObject params) {
+        try {
+            UUID companion = Params.uuid(params, "companion");
+            UUID conversation = Params.uuid(params, "conversation");
+            List<JsonObject> rows = ConversationOpened.objects(params.getAsJsonArray("rows"));
+            onRows.forEach(listener -> listener.rows(companion, conversation, rows));
+        } catch (RpcException | RuntimeException unreadable) {
+            Constants.LOG.warn("[numen-seat] dropped unreadable conversation rows: {}", unreadable.toString());
+        }
     }
 
     private void catalogChanged(JsonObject params) {

@@ -14,6 +14,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -64,6 +65,12 @@ final class SeatConnection {
         peer.onRequest(SeatMethods.SAY, this::say);
         peer.onRequest(SeatMethods.SKILL_READ, this::readSkill);
         peer.onRequest(SeatMethods.API_SEARCH, this::searchApi);
+        peer.onRequest(SeatMethods.CONVERSATION_OPEN, in -> seat(in).openConversation().get().toJson());
+        peer.onNotification(SeatMethods.CONVERSATION_APPEND, this::append);
+        peer.onNotification(SeatMethods.CONVERSATION_NEW, this::startConversation);
+        peer.onRequest(SeatMethods.CONVERSATION_READ, this::readConversation);
+        peer.onRequest(SeatMethods.CONVERSATION_PAGE, this::page);
+        peer.onRequest(SeatMethods.CONVERSATION_WATCH, this::watch);
         peer.onNotification(SeatMethods.RUN_STARTED, this::runStarted);
         peer.onNotification(SeatMethods.RUN_ENDED, this::runEnded);
         peer.onRequest(SeatMethods.EVENTS_ACK, in -> {
@@ -94,6 +101,15 @@ final class SeatConnection {
 
     void send(SeatEvent event) {
         notify(SeatMethods.EVENTS_NEW, event.toJson());
+    }
+
+    /** 订阅了的对话记录里新落盘的行。 */
+    void rows(UUID companion, UUID conversation, List<JsonObject> rows) {
+        JsonObject params = new JsonObject();
+        params.addProperty("companion", companion.toString());
+        params.addProperty("conversation", conversation.toString());
+        params.add("rows", ConversationOpened.array(rows));
+        notify(SeatMethods.CONVERSATION_ROWS, params);
     }
 
     void catalogChanged(UUID companion, String version) {
@@ -148,6 +164,72 @@ final class SeatConnection {
             throw new IOException("its owner's client disconnected");
         }
         return answer.toJson();
+    }
+
+    /** 客户端追加了几行:通知在收到它的线程上按顺序处理,行按这个顺序落盘。 */
+    private void append(JsonObject params) {
+        UUID companion = seatedCompanion(params, "wrote rows of");
+        if (companion == null) {
+            return;
+        }
+        try {
+            opened.get(companion).append(this, Params.uuid(params, "conversation"),
+                    ConversationOpened.objects(params.getAsJsonArray("rows")));
+        } catch (RpcException | RuntimeException unreadable) {
+            Constants.LOG.warn("[numen-seat] dropped an unreadable append from {}: {}", player, unreadable.toString());
+        }
+    }
+
+    private void startConversation(JsonObject params) {
+        UUID companion = seatedCompanion(params, "started a conversation of");
+        if (companion == null) {
+            return;
+        }
+        try {
+            opened.get(companion).startConversation(this, Params.uuid(params, "conversation"));
+        } catch (RpcException | RuntimeException unreadable) {
+            Constants.LOG.warn("[numen-seat] dropped an unreadable conversation start from {}: {}", player, unreadable.toString());
+        }
+    }
+
+    private JsonElement readConversation(RpcPeer.Incoming in) throws Exception {
+        JsonObject o = new JsonObject();
+        o.addProperty("text", seat(in).readConversation().get());
+        return o;
+    }
+
+    /** 她的主人表上的人订阅她的对话记录,不要求坐着座位。 */
+    private JsonElement watch(RpcPeer.Incoming in) throws Exception {
+        UUID companion = Params.uuid(in.params(), "companion");
+        requireKeeper(companion);
+        seats.watch(companion, this);
+        return new JsonObject();
+    }
+
+    /**
+     * 翻一页对话记录,不要求坐着座位:单聊({@code companion})她的主人表上的人能翻;群({@code tag})翻他用得了的成员的、盖着这个印的行。
+     */
+    private JsonElement page(RpcPeer.Incoming in) throws Exception {
+        String tag = Params.optionalString(in.params(), "tag");
+        UUID companion = tag == null ? Params.uuid(in.params(), "companion") : null;
+        String cursor = Params.optionalString(in.params(), "cursor");
+        int limit = (int) Math.max(1, Math.min(History.PAGE, Params.integer(in.params(), "limit", History.PAGE)));
+        if (companion != null) {
+            requireKeeper(companion);
+        }
+        Map<UUID, UUID> members = seats.onMain(() -> {
+            List<UUID> who = tag == null ? List.of(companion) : seats.world().membersOf(player, tag);
+            Map<UUID, UUID> out = new java.util.LinkedHashMap<>();
+            who.forEach(member -> out.put(member, seats.world().conversation(member)));
+            return out;
+        });
+        return History.page(seats.world().transcripts(), members, tag, cursor, limit).get().toJson();
+    }
+
+    private void requireKeeper(UUID companion) throws Exception {
+        if (!seats.onMain(() -> seats.world().keeps(companion, player))) {
+            throw new RpcException(RpcError.INVALID_PARAMS, "you are not one of the keepers of " + companion);
+        }
     }
 
     private JsonElement run(RpcPeer.Incoming in) throws Exception {
@@ -240,12 +322,16 @@ final class SeatConnection {
 
     /** 通知里的那只同伴,如果这条连接坐着她的座位;不是就记一行、不理。 */
     private UUID seatedCompanion(JsonObject params) {
+        return seatedCompanion(params, "reported a run of");
+    }
+
+    private UUID seatedCompanion(JsonObject params, String what) {
         try {
             UUID companion = UUID.fromString(params.get("companion").getAsString());
             if (opened.containsKey(companion)) {
                 return companion;
             }
-            Constants.LOG.debug("[numen-seat] {} reported a run of {}, whose seat it does not sit at", player, companion);
+            Constants.LOG.debug("[numen-seat] {} {} {}, whose seat it does not sit at", player, what, companion);
         } catch (RuntimeException unreadable) {
             Constants.LOG.warn("[numen-seat] dropped an unreadable run report from {}: {}", player, unreadable.toString());
         }

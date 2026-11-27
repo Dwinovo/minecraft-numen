@@ -1,7 +1,6 @@
 package com.dwinovo.numen.api.client.agent;
 
 import com.dwinovo.numen.api.agent.goal.GoalState;
-import com.dwinovo.numen.api.agent.llm.ConvoLog;
 import com.dwinovo.numen.api.agent.loop.LoopStatus;
 import com.dwinovo.numen.api.agent.provider.Usage;
 import com.dwinovo.numen.api.mind.CompanionState;
@@ -15,7 +14,6 @@ import com.dwinovo.numen.api.network.NumenNetwork;
 import com.dwinovo.numen.api.network.payload.OwnerInputPayload;
 import com.dwinovo.numen.api.mind.Slot;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -34,24 +32,19 @@ public final class CompanionView {
     private final UUID uuid;
     private final LoopHost host;
     private final Consumer<Feed> effects;
-    private final Consumer<ConvoLog.Line> lineSink;
 
     private CompanionState state = CompanionState.idle();
     private final StringBuilder partial = new StringBuilder();
     private final StringBuilder reasoning = new StringBuilder();
-    /** 她自己那本日志里来的行(实时的),从老到新;翻页取回的老行在 {@link Transcripts}。 */
-    private final List<ConvoLog.Line> lines = new ArrayList<>();
 
     /**
      * @param host     她的大脑
      * @param effects  画的和听的:每个事件在模型更新之后交给它
-     * @param lineSink 推来的日志行再交给会话记录({@link Transcripts})
      */
-    public CompanionView(UUID uuid, LoopHost host, Consumer<Feed> effects, Consumer<ConvoLog.Line> lineSink) {
+    public CompanionView(UUID uuid, LoopHost host, Consumer<Feed> effects) {
         this.uuid = uuid;
         this.host = host;
         this.effects = effects;
-        this.lineSink = lineSink;
     }
 
     /** 服务端推来一包:照序放进模型,再交给画的和听的。 */
@@ -65,14 +58,6 @@ public final class CompanionView {
                 }
                 case Feed.Replied replied -> clearPartial();
                 case Feed.TurnCut cut -> clearPartial();
-                case Feed.Wiped wiped -> {
-                    lines.clear();
-                    clearPartial();
-                }
-                case Feed.Line line -> {
-                    lines.add(line.line());
-                    lineSink.accept(line.line());
-                }
                 case Feed.Status status -> state = status.state();
                 case Feed.Halted halted -> { }
                 case Feed.Failed failed -> { }
@@ -205,11 +190,6 @@ public final class CompanionView {
         return state.messages();
     }
 
-    /** 她自己那本日志里已经实时推来的面板行,从老到新。 */
-    public List<ConvoLog.Line> display() {
-        return java.util.Collections.unmodifiableList(lines);
-    }
-
     // ---- 做 ----
 
     /** 话交给她的大脑;大脑那头压没压着,从状态里看,这里只报"没压着"。 */
@@ -236,12 +216,12 @@ public final class CompanionView {
         return host.requestClearContext();
     }
 
-    /** 导出她的记忆:对话日志与札记打成的 zip(选好存哪儿之后才调,存成文件见 {@code MemoryFiles})。 */
+    /** 导出她的记忆:对话记录(向服务端要)与札记打成的 zip(选好存哪儿之后才调,存成文件见 {@code MemoryFiles})。 */
     public java.util.concurrent.CompletableFuture<byte[]> requestExport() {
         return host.exportMemory();
     }
 
-    /** 清空她的记忆(界面在主人确认之后才调);办完大脑发 {@link Feed.Wiped}。拒绝的理由(语言键),办成是 {@code null}。 */
+    /** 清空她的记忆(界面在主人确认之后才调);办完她的对话从一个新的会话重新开始。拒绝的理由(语言键),办成是 {@code null}。 */
     public String requestWipe() {
         return host.wipeMemory();
     }

@@ -37,6 +37,21 @@ public final class SeatMethods {
     public static final String RUN_ENDED = "run/ended";
     /** 收到第几号了:{@code companion}、{@code seq};之前的事件服务端不再留。 */
     public static final String EVENTS_ACK = "events/ack";
+    /**
+     * 开她当前的对话记录({@code companion}):答复是会话 id、最后一个整理边界起的行(按重放的顺序)、最后一行、当前目标的行,见 {@code Rows.Opening}。
+     * 对话记录是服务端的,脑子在这里读它、往后写它。
+     */
+    public static final String CONVERSATION_OPEN = "conversation/open";
+    /** 通知:往她的对话记录后面追加行({@code companion}、{@code conversation}、{@code rows}),按到达的顺序落盘。只有坐着她座位的连接能写。 */
+    public static final String CONVERSATION_APPEND = "conversation/append";
+    /** 通知:对话接着在一个新的会话里写(清空上下文):{@code companion}、{@code conversation}(客户端起的新 id);旧的一份留在原处。 */
+    public static final String CONVERSATION_NEW = "conversation/new";
+    /** 翻一页对话记录:{@code companion} 或会话印 {@code tag}、{@code cursor}、{@code limit};答复是 {@code History.Page}。她的主人表上的人能读。 */
+    public static final String CONVERSATION_PAGE = "conversation/page";
+    /** 订阅她的对话记录里新落盘的行:{@code companion};之后服务端推 {@link #CONVERSATION_ROWS}。她的主人表上的人能订阅。 */
+    public static final String CONVERSATION_WATCH = "conversation/watch";
+    /** 整份当前对话记录的原文(一行一条 JSON):{@code companion};答复 {@code {text}}。导出记忆用,坐着她座位的连接能读。 */
+    public static final String CONVERSATION_READ = "conversation/read";
 
     // ---- 服务端 → 客户端 ----
 
@@ -44,6 +59,8 @@ public final class SeatMethods {
     public static final String EVENTS_NEW = "events/new";
     /** 通知:目录变了(插件、{@code /reload}),再取一次:{@code companion}、{@code catalog}(新的目录版本)。 */
     public static final String CATALOG_CHANGED = "catalog/changed";
+    /** 通知:订阅了的对话记录里新落盘的行:{@code companion}、{@code conversation}(此刻的会话 id)、{@code rows}。 */
+    public static final String CONVERSATION_ROWS = "conversation/rows";
     /** 请求:程序里只有主人客户端答得了的函数:{@code companion}、{@code function}、{@code args};答复是那次调用的 {@code ApiReply}。 */
     public static final String CLIENT_CALL = "client/call";
 }

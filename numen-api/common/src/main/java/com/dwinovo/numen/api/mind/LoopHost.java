@@ -9,9 +9,11 @@ import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.agent.inbox.ExternalWait;
 import com.dwinovo.numen.api.agent.inbox.JsonlJournal;
-import com.dwinovo.numen.api.agent.llm.ConvoLog;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
 import com.dwinovo.numen.api.agent.llm.LlmEndpoint;
+import com.dwinovo.numen.api.agent.llm.QueryMarkup;
+import com.dwinovo.numen.api.agent.llm.RowJournal;
+import com.dwinovo.numen.api.agent.llm.Rows;
 import com.dwinovo.numen.api.agent.loop.AgentLoop;
 import com.dwinovo.numen.api.agent.loop.Cause;
 import com.dwinovo.numen.api.agent.loop.HaltReason;
@@ -55,11 +57,13 @@ import com.dwinovo.numen.api.event.NumenEvents;
 import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.library.EntryId;
 import com.dwinovo.numen.api.seat.Catalog;
+import com.dwinovo.numen.api.seat.ConversationOpened;
 import com.dwinovo.numen.api.seat.Opened;
 import com.dwinovo.numen.api.seat.SeatClient;
 import com.dwinovo.numen.api.seat.SeatEvent;
 import com.dwinovo.numen.api.seat.SeatState;
 import com.dwinovo.numen.api.sdk.ClientContext;
+import com.dwinovo.numen.api.sdk.EntityLabel;
 import com.dwinovo.numen.api.store.JsonDoc;
 import com.google.gson.JsonObject;
 
@@ -86,7 +90,7 @@ import java.util.function.Supplier;
  *   <li>程序、叫停、切断交给座位({@link SeatPrograms});一轮开头 {@code state/get} 取她此刻的样子,这一轮里每份程序结局带着新的
  *       ({@link BodyMirror});</li>
  *   <li>模型用她绑的档案({@link Mind}),系统提示用座位上取来的目录({@link Catalog})、人设与她自己的模块、技能拼;</li>
- *   <li>她的上下文(日志、收件箱、台账、目标、定时、绑定、札记)落在主人电脑上她的家里({@link Home})。</li>
+ *   <li>她的对话记录在服务端(经座位读、往后写,见 {@link #attach}),收件箱、台账、定时、绑定、札记落在主人电脑上她的家里({@link Home})。</li>
  * </ul>
  *
  * <p>她的脑子和记忆只在这里:服务端没有副本。座位还没坐上、或坐已经断了的时候内脑待命({@link Hold#AWAY}),输入照收进收件箱。
@@ -99,7 +103,7 @@ public final class LoopHost implements ClientContext {
      * 宿主给的东西。取值的都是现问现答,循环不存副本。
      *
      * @param creator    她的创建者(就是这台电脑上的玩家):绑定文件里只有 id 的值算他绑的
-     * @param home       她的家:日志、收件箱、台账、目标、绑定、札记落在这里
+     * @param home       她的家:收件箱、台账、绑定、札记落在这里
      * @param main       大脑的线程的执行器:座位与模型的回调经它回来
      * @param seat       这条到服务器的座位连接
      * @param mind       怎么跟模型说话
@@ -109,22 +113,22 @@ public final class LoopHost implements ClientContext {
      * @param persona    她绑的人设的正文;没有这个人设返回 {@code null}
      * @param skills     她自己的技能(随发布的在座位那一头,见 {@link SeatSources})
      * @param playerName 一位玩家给人看的名字;不知道是空串
+     * @param version    写进对话记录每一行的 Numen 的版本
      */
     public record Parts(UUID companion, UUID creator, Home home, Executor main, SeatClient seat, Mind mind,
                         ToolBook tools, BooleanSupplier driving, IntSupplier initiative,
                         Function<Bound, String> persona,
-                        Function<SkillRegistry.Bundled, SkillRegistry> skills, Function<UUID, String> playerName) {}
+                        Function<SkillRegistry.Bundled, SkillRegistry> skills, Function<UUID, String> playerName,
+                        String version) {}
 
-    private static final String CHAT = "chat.jsonl";
     private static final String INBOX = "inbox.jsonl";
     private static final String STATS = "stats.json";
-    private static final String GOAL = "goal.json";
     private static final String SCHEDULES = "schedules.json";
     private static final String MEMORY = "memory";
 
     private final Parts parts;
     private final UUID companion;
-    private final ConvoLog log;
+    private final Rows.Writer writer;
     private final ConvoState convo;
     private final EventQueue queue;
     private final MemoryPreamble memory;
@@ -144,7 +148,6 @@ public final class LoopHost implements ClientContext {
     private final Compactor compactor;
     private final GoalSteward goals;
     private final AgentLoop loop;
-    private final JsonDoc goalDoc;
     private final JsonDoc bindingDoc;
     private final OwnerSchedules schedules;
     private final Clock clock = new Clock();
@@ -155,6 +158,8 @@ public final class LoopHost implements ClientContext {
     private volatile Catalog catalog = Catalog.EMPTY;
     private volatile long generation;
     private volatile boolean seated;
+    /** 她此刻在写的会话(对话记录的那一份);座位上开了对话记录之后才有。 */
+    private UUID conversation;
     /** 她此刻在答的那句话是谁、在哪儿说的:回话回到那里,程序替他做事,日志盖那个会话的印。会话态,不落盘。 */
     private volatile Spoken spoken;
     /** 上一刻驾驶席在不在外接大脑手里,只用来找翻转的那一下。 */
@@ -183,12 +188,22 @@ public final class LoopHost implements ClientContext {
         this.parts = parts;
         this.companion = parts.companion();
         Home home = parts.home();
-        this.log = ConvoLog.atFile(home.file(CHAT), home.io());
-        this.convo = new ConvoState(msg -> log.append(msg, spoken.conversation()));
+        this.writer = new Rows.Writer(parts.version());
+        this.convo = new ConvoState(new RowJournal(writer, this::stamp, new RowJournal.Sink() {
+            @Override
+            public void rows(List<JsonObject> rows) {
+                parts.seat().appendRows(companion, conversation, rows);
+            }
+
+            @Override
+            public void newConversation() {
+                conversation = UUID.randomUUID();
+                parts.seat().newConversation(companion, conversation);
+            }
+        }));
         this.notes = new NoteBook(new Home(home.file(MEMORY), home.io()), () -> (int) (clock.dayTime / 24000L));
         this.memory = new MemoryPreamble(notes);
         this.queue = new EventQueue(JsonlJournal.atFile(home.file(INBOX), home.io()));
-        this.goalDoc = new JsonDoc(home.file(GOAL), JsonDoc.Format.of(1), home.io());
         this.bindingDoc = new JsonDoc(home.file(Bindings.FILE), JsonDoc.Format.of(1), home.io());
         JsonDoc scheduleDoc = new JsonDoc(home.file(SCHEDULES), JsonDoc.Format.of(1), home.io());
         this.schedules = new OwnerSchedules(scheduleDoc, readDoc(scheduleDoc));
@@ -229,11 +244,9 @@ public final class LoopHost implements ClientContext {
         };
         this.tools = new CompanionToolPort(companion, () -> anchor, programs, parts.tools(), this::receiptAfterCut);
         this.tokens = new TokenLedger(companion, new JsonDoc(home.file(STATS), JsonDoc.Format.of(1), home.io()));
-        this.compactor = new Compactor(companion.toString(), convo, log,
-                () -> parts.mind().endpoint(bound(Slot.PROVIDER)));
+        this.compactor = new Compactor(companion.toString(), convo, () -> parts.mind().endpoint(bound(Slot.PROVIDER)));
         this.loop = new AgentLoop(companion.toString(), new Model(), tools, convo, queue, compactor, new Host());
-        this.goals = new GoalSteward(companion.toString(), loop, convo, queue, body::xml, body::bodyOnFiniteTask,
-                this::persistGoal, readGoal());
+        this.goals = new GoalSteward(companion.toString(), loop, convo, queue, body::xml, body::bodyOnFiniteTask);
         this.spoken = Spoken.panel(parts.creator());
         loop.subscribe(tokens::on);
         loop.subscribe(this::voice);
@@ -255,32 +268,32 @@ public final class LoopHost implements ClientContext {
         parts.seat().serveContext(companion, this);
     }
 
-    /** 把落盘的东西读回内存:绑定、台账、对话尾巴。一次死在半途的回合留下没结果的调用或没回复的 user 消息,原样留着。 */
+    /** 把落盘的东西读回内存:绑定、台账。对话记录在服务端,坐上座位之后才读({@link #attach})。 */
     private void restore() {
         JsonObject binding = readDoc(bindingDoc);
         if (binding != null) {
             bindings = Bindings.read(binding, parts.creator());
         }
         tokens.load();
-        log.migrateIfNeeded();
-        List<ConvoState.Msg> history = log.load(ConvoLog.DEFAULT_LOAD_LIMIT);
-        if (!history.isEmpty()) {
-            convo.preload(history);
-            Constants.LOG.info("[numen-mind#{}] restored {} msg(s) from disk", companion, history.size());
-        }
     }
 
-    private GoalState readGoal() {
-        JsonObject o = readDoc(goalDoc);
-        return o == null ? null : GoalState.fromJson(o);
-    }
-
-    private void persistGoal(GoalState goal) {
-        if (goal == null) {
-            goalDoc.delete();
-        } else {
-            goalDoc.write(goal.toJson());
+    /**
+     * 对话记录里这一行的 {@code conv} 与说话的人:{@code conv} 是她此刻在答的那句话所在的群;主人的话({@code <query>})盖上说话的人,
+     * 多位主人时 {@code <query>} 上自己带着,只有一位时就是创建者。别的行不盖。
+     */
+    private Rows.Stamp stamp(ConvoState.Msg msg) {
+        Spoken to = spoken;
+        String from = null;
+        if (msg instanceof ConvoState.Msg.User user && !user.meta()) {
+            String marked = QueryMarkup.speaker(user.content());
+            EntityLabel.ShownPlayer shown = marked == null ? null : EntityLabel.readShown(marked);
+            if (shown != null) {
+                from = shown.id();
+            } else if (!QueryMarkup.queries(user.content()).isEmpty()) {
+                from = "player@" + EntityLabel.code(to.who());
+            }
         }
+        return new Rows.Stamp(to.conversation(), from);
     }
 
     private static JsonObject readDoc(JsonDoc doc) {
@@ -303,12 +316,23 @@ public final class LoopHost implements ClientContext {
     // ---- 座位 ----
 
     /**
-     * 座位坐上了:她的身体此刻的代数与服务端的目录到手,内脑从待命回到工作。
+     * 座位坐上了:她的身体此刻的代数、服务端的目录与她的对话记录到手,内脑从待命回到工作。对话记录从最后一个整理边界起重放成上下文,
+     * 此后写的行接在它后面;还在的目标一并读回来。
      */
-    public void attach(Opened opened, Catalog fetched) {
+    public void attach(Opened opened, Catalog fetched, ConversationOpened record) {
         generation = opened.generation();
         catalog = fetched;
         sources.refresh();
+        conversation = record.conversation();
+        Rows.Replay replay = Rows.replay(record.opening().rows(), record.opening().last());
+        writer.adopt(replay);
+        convo.replaceAll(replay.context());
+        Rows.Goal goal = Rows.goal(record.opening().goal());
+        goals.restore(goal == null ? null : GoalState.restored(goal));
+        if (!replay.context().isEmpty()) {
+            Constants.LOG.info("[numen-mind#{}] restored {} msg(s) of the conversation {}", companion, replay.context().size(),
+                    conversation);
+        }
         seated = true;
         Constants.LOG.info("[numen-mind#{}] seated at generation {}", companion, generation);
     }
@@ -429,11 +453,6 @@ public final class LoopHost implements ClientContext {
         bindings.slots().forEach((slot, bound) ->
                 shown.put(slot, new CompanionState.Binding(bound, parts.playerName().apply(bound.by()))));
         return shown;
-    }
-
-    /** 她的对话日志:面板按 id 往前翻它。 */
-    public ConvoLog log() {
-        return log;
     }
 
     /** 她的收件箱(只读用:条目与编号)。 */
@@ -688,7 +707,10 @@ public final class LoopHost implements ClientContext {
     /** 定一个目标。整份目标只在这里交给她一次;走 {@link #submitCommand} 是为了聊天里有主人打的那行字。 */
     public void setGoal(GoalState next, String echo) {
         if (goals.set(next)) {
-            submitCommand(echo, GoalPrompts.initialDirective(next));
+            this.spoken = Spoken.panel(parts.creator());
+            long now = System.currentTimeMillis();
+            loop.push(List.of(new EventQueue.Entry(EventTypes.QUERY, EventQueue.query(echo, clock.dayTime, null), now, false),
+                    new EventQueue.Entry(EventTypes.GOAL_DIRECTIVE, GoalPrompts.directive(next.objective()), now, false)));
         }
     }
 
@@ -748,20 +770,20 @@ public final class LoopHost implements ClientContext {
 
     // ---- 她的记忆:导出与清空 ----
 
-    /** 她的对话日志与札记打成的 zip。在她的写车道上读,所以排在前面已交的写之后——刚说的话也在里面。 */
+    /** 她的对话记录(向服务端要,一行一条 JSON)与札记打成的 zip。札记在她的写车道上读,所以排在前面已交的写之后。 */
     public CompletableFuture<byte[]> exportMemory() {
-        return read(() -> {
+        return parts.seat().readConversation(companion).thenCompose(conversationText -> read(() -> {
             try {
-                return MemoryExport.zip(parts.home().dir());
+                return MemoryExport.zip(parts.home().dir(), conversationText);
             } catch (java.io.IOException e) {
                 throw new java.io.UncheckedIOException(e);
             }
-        });
+        }));
     }
 
     /**
-     * 主人清空她的记忆:对话日志、札记、长期目标都删掉,然后如实告诉她——这条进她的上下文,她下一次开口之前就读到。她正在想事情的时候不清
-     * (在飞的回合会把刚清掉的又写回日志),等她停下来。
+     * 主人清空她的记忆:札记、长期目标都删掉,对话从一个新的会话重新开始(旧的一份留在服务器上),然后如实告诉她——这条进她的上下文,
+     * 她下一次开口之前就读到。她正在想事情的时候不清,等她停下来。
      *
      * @return 拒绝的理由(语言键);{@code null} = 清了
      */
@@ -778,8 +800,7 @@ public final class LoopHost implements ClientContext {
         for (NoteBook.Note note : notes.index()) {
             notes.forget(note.name());
         }
-        log.wipe();
-        requestClearContext();   // 内存里的上下文走清空的控制条目;日志已经是空的
+        requestClearContext();   // 上下文走清空的控制条目:清空就是换一个新的会话
         tell(WIPED_NOTICE);
         Constants.LOG.info("[numen-mind#{}] memory wiped by the owner", companion);
         return null;
@@ -829,8 +850,8 @@ public final class LoopHost implements ClientContext {
         switch (slot) {
             case PROVIDER -> loop.bindingChanged();   // 再绑同一份也要再试:可能是补上了 key
             case PERSONA -> {
-                if (changed) {
-                    log.appendPersonaDivider();
+                if (changed && seated) {
+                    convo.attach(Rows.PERSONA_CHANGED, new JsonObject());
                 }
             }
             case VOICE -> { }
@@ -943,8 +964,6 @@ public final class LoopHost implements ClientContext {
         @Override
         public ModelRequest turnRequest(long runId, int n) {
             LlmEndpoint endpoint = parts.mind().endpoint(bound(Slot.PROVIDER));
-            // 这一轮用的端点和日志里最后记下的不同,就在日志里记一条换了模型 / 换了档位
-            log.noteEndpoint(endpoint);
             // xml 只算一次:记下来的必须就是发出去的那一份
             String xml = body.xml();
             ModelRequest request = AgentRequestContext.turn(convo.snapshot(), xml, personaText(), catalog,

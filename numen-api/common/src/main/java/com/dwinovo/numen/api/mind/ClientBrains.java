@@ -53,7 +53,7 @@ public final class ClientBrains {
     }
 
     /**
-     * 名册变了:{@code mine} 是创建者是这位玩家的那些同伴。还没坐的坐上(建大脑、开座位、取目录),已经不在名册上的放掉。
+     * 名册变了:{@code mine} 是创建者是这位玩家的那些同伴。还没坐的坐上(建大脑、开座位、取目录、开对话记录),已经不在名册上的放掉。
      */
     public void sit(Set<UUID> mine) {
         for (UUID gone : Set.copyOf(sitting)) {
@@ -73,7 +73,8 @@ public final class ClientBrains {
         hosts.put(companion, host);
         seat.open(companion, resume.getOrDefault(companion, 0L))
                 .thenCompose(opened -> seat.catalog(companion).thenApply(Catalog::fromJson)
-                        .thenAccept(catalog -> main.execute(() -> host.attach(opened, catalog))))
+                        .thenCompose(catalog -> seat.openConversation(companion)
+                                .thenAccept(record -> main.execute(() -> host.attach(opened, catalog, record)))))
                 .whenComplete((done, failed) -> {
                     if (failed != null) {
                         main.execute(() -> {

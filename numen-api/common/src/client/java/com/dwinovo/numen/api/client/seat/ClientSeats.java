@@ -60,6 +60,8 @@ public final class ClientSeats {
         client = new SeatClient(Minecraft.getInstance(), Executors.newVirtualThreadPerTaskExecutor(),
                 message -> NumenNetwork.sendToServer(SeatPayload.frame(Wire.TO_SERVER, message)));
         Minecraft game = Minecraft.getInstance();
+        client.onRows((companion, conversation, rows) -> game.execute(() ->
+                com.dwinovo.numen.api.client.agent.ClientCompanions.rows(companion, conversation, rows)));
         services = new ClientServices(me, ClientMachines.get(), client, game, new ClientServices.Game(game::isSameThread,
                 ClientSeats::liveCompanions, new LoopHands.Actions() {
                     @Override
@@ -93,6 +95,11 @@ public final class ClientSeats {
             }
         }
         return out;
+    }
+
+    /** 这条连接到服务器的座位;还没报到好是 {@code null}。翻页与订阅对话记录(她的主人表上的人都行)走它。 */
+    public static SeatClient client() {
+        return client;
     }
 
     /** 这条连接上她们的大脑要用的一切;还没报到好是编程错误。 */

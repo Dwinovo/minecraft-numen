@@ -1,7 +1,6 @@
 package com.dwinovo.numen.api.mind;
 
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
-import com.dwinovo.numen.api.agent.llm.ConvoLog;
 import com.dwinovo.numen.api.agent.loop.Cause;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -11,11 +10,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 服务端推给主人客户端的东西:循环里发生的事里界面要画、要听的那些。服务端按刻攒成一包({@link FeedEncoder}),
- * 客户端照序往它的视图里放,不判断、不推断。
+ * 大脑推给主人界面的东西:循环里发生的事里界面要画、要听的那些。大脑按刻攒成一包({@link FeedEncoder}),
+ * 界面照序往它的视图里放,不判断、不推断。
  *
- * <p>只有展示要的:内核的 {@code LoopEvent} 带着整份回复和工具参数,面板要的行从日志来({@link Line}),
- * 所以不原样搬。一条回复的正文只在两处出现:正在长的时候是 {@link Delta},落库之后是 {@link Line}。
+ * <p>只有展示要的:内核的 {@code LoopEvent} 带着整份回复和工具参数,面板要的行从对话记录来(服务端落了盘的才是记录),
+ * 所以不原样搬。一条回复的正文在这里只是正在长的那一段({@link Delta}),成形之后以服务端推来的行为准。
  */
 public sealed interface Feed {
 
@@ -39,12 +38,6 @@ public sealed interface Feed {
 
     /** 她发不了请求(没绑档案、没填 key):配置问题不能静默。 */
     record Blocked(Cause cause) implements Feed {}
-
-    /** 日志里写下的一行面板记录。 */
-    record Line(ConvoLog.Line line) implements Feed {}
-
-    /** 主人清空了她的记忆:面板上她的对话记录作废(之后翻页取到的是空的新日志)。 */
-    record Wiped() implements Feed {}
 
     /** 排着的输入(整份,变了才发)。 */
     record Pending(List<EventQueue.Preview> items) implements Feed {
@@ -90,12 +83,6 @@ public sealed interface Feed {
                 o.add("cause", CompanionState.cause(b.cause()));
                 yield o;
             }
-            case Line l -> {
-                JsonObject o = tagged("line");
-                o.add("line", ConvoLog.toJson(l.line()));
-                yield o;
-            }
-            case Wiped w -> tagged("wiped");
             case Pending p -> {
                 JsonObject o = tagged("pending");
                 JsonArray items = new JsonArray();
@@ -142,11 +129,6 @@ public sealed interface Feed {
             case "halted" -> new Halted();
             case "failed" -> new Failed(CompanionState.cause(o.getAsJsonObject("cause")));
             case "blocked" -> new Blocked(CompanionState.cause(o.getAsJsonObject("cause")));
-            case "line" -> {
-                ConvoLog.Line line = ConvoLog.lineFromJson(o.getAsJsonObject("line"));
-                yield line == null ? null : new Line(line);
-            }
-            case "wiped" -> new Wiped();
             case "pending" -> {
                 List<EventQueue.Preview> items = new ArrayList<>();
                 for (JsonElement p : o.getAsJsonArray("items")) {

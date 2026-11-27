@@ -25,10 +25,12 @@ final class ServerSeatWorld implements SeatWorld {
     private volatile MinecraftServer server;
     private volatile LocalPrograms programs;
     private volatile BodyReports reports;
+    private volatile TranscriptStore transcripts;
 
     void start(MinecraftServer server, ClientTransport transport) {
         this.programs = new LocalPrograms(server, transport);
         this.reports = new BodyReports(server);
+        this.transcripts = new TranscriptStore(com.dwinovo.numen.api.home.Homes.of(server).conversations());
         this.server = server;
     }
 
@@ -36,6 +38,7 @@ final class ServerSeatWorld implements SeatWorld {
         this.server = null;
         this.programs = null;
         this.reports = null;
+        this.transcripts = null;
     }
 
     private MinecraftServer running() {
@@ -135,5 +138,33 @@ final class ServerSeatWorld implements SeatWorld {
     @Override
     public JsonObject catalog(UUID companion) {
         return SeatCatalog.of(companion);
+    }
+
+    @Override
+    public TranscriptStore transcripts() {
+        return transcripts;
+    }
+
+    @Override
+    public UUID conversation(UUID companion) {
+        return CompanionRegistry.get(running()).conversation(companion);
+    }
+
+    @Override
+    public void startConversation(UUID companion, UUID conversation) {
+        CompanionRegistry.get(running()).startConversation(companion, conversation);
+    }
+
+    @Override
+    public java.util.List<UUID> membersOf(UUID viewer, String tag) {
+        Conversation conv = Conversations.of(running(), viewer).get(tag);
+        if (conv == null) {
+            return java.util.List.of();
+        }
+        CompanionRegistry registry = CompanionRegistry.get(running());
+        return conv.members().stream().filter(member -> {
+            CompanionRegistry.Entry entry = registry.find(member);
+            return entry != null && entry.usableBy(viewer);
+        }).toList();
     }
 }

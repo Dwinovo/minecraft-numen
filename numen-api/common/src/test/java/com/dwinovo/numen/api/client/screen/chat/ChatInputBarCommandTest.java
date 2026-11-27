@@ -91,7 +91,7 @@ class ChatInputBarCommandTest {
 
     @Test
     void facingOneCompanionTheCommandLayerAnswersAsBefore() {
-        Host host = new Host(new CompanionView(HER, null, feed -> { }, line -> { }));
+        Host host = new Host(new CompanionView(HER, null, feed -> { }));
         type(bar(host), "/nosuchthing");
         assertTrue(host.sent.isEmpty(), host.sent.toString());
         assertEquals(1, host.replies.size());

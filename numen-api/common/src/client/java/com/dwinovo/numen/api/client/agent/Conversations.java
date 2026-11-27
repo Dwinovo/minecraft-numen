@@ -393,7 +393,7 @@ public final class Conversations {
 
     /**
      * 记录上盖的会话印:落过盘的会话是它的 id;没落盘的(单成员、没人动过)是 null = "就他俩"。
-     * 面板归并成员日志时读印。
+     * 服务端归并成员的记录时读印。
      */
     public String tagOf(Conversation conv) {
         return get(conv.id()) != null ? conv.id() : null;
@@ -421,29 +421,31 @@ public final class Conversations {
         return new Said(conv, true);
     }
 
-    /** 一个会话的成员里大脑在这台电脑上的,和会话给日志盖的印({@code null} = 就他俩)。 */
-    public record Members(List<LoopHost> brains, String tag) {}
+    /** 一个会话此刻的成员,和会话给记录盖的印({@code null} = 就他俩)。 */
+    public record Members(List<UUID> members, String tag) {}
 
-    /** 这个会话此刻的成员:大脑在这台电脑上的几只。 */
+    /**
+     * 这个会话此刻的成员:落过盘的会话是成员表里还在的那些;没落盘的是单聊,id 就是她的 UUID,成员只有她。别的(解散了的、
+     * 不是 UUID 的)没有成员。
+     */
     public static Members membersOf(String conversation) {
         Conversations rooms = instance();
         Conversation conv = rooms.get(conversation);
-        List<LoopHost> brains = new java.util.ArrayList<>();
         if (conv != null) {
-            for (UUID member : rooms.membersAlive(conv)) {
-                LoopHost brain = ClientSeats.brain(member);
-                if (brain != null) {
-                    brains.add(brain);
-                }
-            }
+            return new Members(rooms.membersAlive(conv), rooms.tagOf(conv));
         }
-        return new Members(brains, conv == null ? null : rooms.tagOf(conv));
+        try {
+            return new Members(List.of(UUID.fromString(conversation)), null);
+        } catch (IllegalArgumentException notSolo) {
+            return new Members(List.of(), null);
+        }
     }
 
     /** 这个会话里此刻在向主人提问的那一位的提问(多人会话取先问的);没有是 null。 */
     public static com.dwinovo.numen.api.agent.tool.Asking asking(Conversation conv) {
-        for (LoopHost brain : membersOf(conv.id()).brains()) {
-            com.dwinovo.numen.api.agent.tool.Asking asking = brain.questions().pending();
+        for (UUID member : membersOf(conv.id()).members()) {
+            LoopHost brain = ClientSeats.brain(member);
+            com.dwinovo.numen.api.agent.tool.Asking asking = brain == null ? null : brain.questions().pending();
             if (asking != null) {
                 return asking;
             }

@@ -1,7 +1,6 @@
 package com.dwinovo.numen.api.client.screen;
 
 
-import com.dwinovo.numen.api.agent.llm.ConvoLog;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.agent.provider.AssistantTurn;

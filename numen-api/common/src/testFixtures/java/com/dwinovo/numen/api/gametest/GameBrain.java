@@ -85,7 +85,7 @@ public final class GameBrain {
                         new Home(dirs.get(companion).resolve("her"), io), main::add, pipe.client(), minds.get(companion),
                         SCRIPT_ONLY, () -> false, () -> EventQueue.DEFAULT_LEVEL, bound -> "a GameTest persona",
                         bundled -> SkillRegistry.of(hub.library(SkillRegistry.KIND), bundled),
-                        id -> "owner"));
+                        id -> "owner", "gametest"));
                 made.bind(Slot.PERSONA, new Bound(owner, new EntryId("my", "gametest")));
                 return made;
             });
@@ -133,6 +133,25 @@ public final class GameBrain {
     /** 此刻向座位要她的状态(服务端写的运行期状态)。 */
     public java.util.concurrent.CompletableFuture<com.dwinovo.numen.api.seat.SeatClient.Sitting> state() {
         return link.pipe.client().state(her.getUUID());
+    }
+
+    /** 正在向服务端翻的那一页对话记录;没有在翻的是 null。 */
+    private java.util.concurrent.CompletableFuture<com.dwinovo.numen.api.seat.History.Page> reading;
+    private List<com.dwinovo.numen.api.agent.llm.ConvoState.Msg> recorded = List.of();
+
+    /**
+     * 她的对话记录里此刻读得到的消息(服务端落了盘的,和面板翻页读的同一份)。向服务端翻页是一个来回,每个服务器刻最多发一次、
+     * 答复落到下一刻,所以用例每刻问一次、等到它成立。
+     */
+    public List<com.dwinovo.numen.api.agent.llm.ConvoState.Msg> recorded() {
+        if (reading != null && reading.isDone()) {
+            recorded = reading.join().entries().stream().map(com.dwinovo.numen.api.agent.conversation.Transcript.Entry::msg).toList();
+            reading = null;
+        }
+        if (reading == null) {
+            reading = link.pipe.client().page(her.getUUID(), null, "", com.dwinovo.numen.api.seat.History.PAGE);
+        }
+        return recorded;
     }
 
     /** 座位坐上、目录取到了:大脑可以开工。 */

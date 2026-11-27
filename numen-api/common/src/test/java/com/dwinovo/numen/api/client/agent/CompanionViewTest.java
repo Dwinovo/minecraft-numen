@@ -2,7 +2,6 @@ package com.dwinovo.numen.api.client.agent;
 
 import com.dwinovo.numen.api.agent.goal.GoalState;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
-import com.dwinovo.numen.api.agent.llm.ConvoLog;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
 import com.dwinovo.numen.api.agent.loop.Phase;
 import com.dwinovo.numen.api.agent.provider.Usage;
@@ -30,8 +29,7 @@ class CompanionViewTest {
     private static final UUID FRIEND = UUID.randomUUID();
 
     private final List<Feed> heard = new ArrayList<>();
-    private final List<ConvoLog.Line> lines = new ArrayList<>();
-    private final CompanionView her = new CompanionView(HER, null, heard::add, lines::add);
+    private final CompanionView her = new CompanionView(HER, null, heard::add);
 
     private static CompanionState state(Phase phase, String compactProblem, List<String> outstanding) {
         return new CompanionState(phase, null, null, false, null, 0.0,
@@ -94,16 +92,6 @@ class CompanionViewTest {
         assertTrue(her.binds(Slot.PROVIDER, FRIEND, "my:prov1"), "在朋友的客户端上它才是他的那一条");
         assertTrue(!her.binds(Slot.VOICE, ME, "my:派蒙"), "没绑");
         assertEquals("小柚", her.binding(Slot.PROVIDER).by().shown());
-    }
-
-    @Test
-    void logLinesGoToTheViewAndTheTranscripts() {
-        ConvoLog.Line line = new ConvoLog.Line("a1", 1000, null, new ConvoState.Msg.User("<query>好</query>"));
-
-        her.apply(List.of(new Feed.Line(line)));
-
-        assertEquals(List.of(line), her.display());
-        assertEquals(List.of(line), lines);
     }
 
     @Test

@@ -142,6 +142,11 @@ class ExternalBrainOnClientTest {
     private final List<String> summoned = new CopyOnWriteArrayList<>();
 
     private StubSeatWorld world;
+
+    /** 服务端对话记录里此刻有的行:她经座位写下的东西落在那里。 */
+    private List<com.google.gson.JsonObject> recorded() {
+        return world.transcripts().read(world.conversation(HER), rows -> rows).join();
+    }
     private Seats seats;
     private SeatPipe pipe;
     private Scripted model;
@@ -166,7 +171,7 @@ class ExternalBrainOnClientTest {
             LoopHost made = new LoopHost(new LoopHost.Parts(companion, OWNER, new Home(dir.resolve("her"), io),
                     clientMain::add, pipe.client(), model, SCRIPT_ONLY, () -> mode.driving(companion),
                     () -> EventQueue.DEFAULT_LEVEL, bound -> "a test persona",
-                    bundled -> SkillRegistry.of(hub.library(SkillRegistry.KIND), bundled), id -> "主人"));
+                    bundled -> SkillRegistry.of(hub.library(SkillRegistry.KIND), bundled), id -> "主人", "test"));
             made.bind(com.dwinovo.numen.api.mind.Slot.PERSONA,
                     new Bound(OWNER, new com.dwinovo.numen.api.library.EntryId("my", "test")));
             return made;
@@ -329,7 +334,7 @@ class ExternalBrainOnClientTest {
         assertTrue(call(client, "list_companions", new JsonObject()).contains("Her"));
         JsonObject say = args("text", "你好呀");
         assertTrue(call(client, "say", say).contains("said"));
-        until("her words reached the seat", () -> !world.said.isEmpty() || !host.log().loadLines(10).isEmpty());
+        until("her words reached the seat", () -> !world.said.isEmpty() || !recorded().isEmpty());
         JsonObject summon = new JsonObject();
         summon.addProperty("name", "Newcomer");
         call(client, "create_companion", summon);

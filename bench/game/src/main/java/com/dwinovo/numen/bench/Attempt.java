@@ -12,8 +12,6 @@ import com.dwinovo.numen.api.agent.loop.LoopEvent;
 import com.dwinovo.numen.api.agent.loop.LoopStatus;
 import com.dwinovo.numen.api.agent.loop.RunEnd;
 import com.dwinovo.numen.api.mind.Bound;
-import com.dwinovo.numen.api.mind.Feed;
-import com.dwinovo.numen.api.mind.FeedEncoder;
 import com.dwinovo.numen.api.owner.Presence;
 import com.dwinovo.numen.api.owner.Replies;
 import com.dwinovo.numen.api.entity.CompanionRegistry;
@@ -150,7 +148,6 @@ final class Attempt {
     private NumenPlayer her;
     private ClientBrains brains;
     private LoopHost host;
-    private FeedEncoder encoder;
     private String promptHash = "";
     private final long startMs = System.currentTimeMillis();
     private long ticks;
@@ -230,7 +227,7 @@ final class Attempt {
             LoopHost made = new LoopHost(new LoopHost.Parts(companion, ownerId, new Home(home.resolve("her"), io),
                     mail::add, seat, mind, tools, () -> false, () -> EventQueue.DEFAULT_LEVEL,
                     bound -> "You are a test companion.",
-                    bundled -> SkillRegistry.of(hub.library(SkillRegistry.KIND), bundled), id -> "Owner"));
+                    bundled -> SkillRegistry.of(hub.library(SkillRegistry.KIND), bundled), id -> "Owner", "bench"));
             made.bind(com.dwinovo.numen.api.mind.Slot.PERSONA, new Bound(ownerId, BENCH_PERSONA));
             return made;
         });
@@ -238,7 +235,8 @@ final class Attempt {
         host = brains.get(her.getUUID());
         host.subscribe(meter);
         host.subscribe(this::onLoopEvent);
-        encoder = new FeedEncoder(host, this::heard);
+        seat.onRows((companion, conversation, rows) -> mail.add(() -> heard(rows)));
+        seat.watch(her.getUUID());
         scenario.setup(scene);
     }
 
@@ -253,7 +251,6 @@ final class Attempt {
             job.run();
         }
         brains.tick();
-        encoder.flush();
         if (end != null) {
             return;
         }
@@ -528,11 +525,10 @@ final class Attempt {
         }
     }
 
-    /** 她的大脑推给界面的东西。评测的主人没有界面;只把落进她日志的世界事件记进这次的记录。 */
-    private void heard(List<Feed> events) {
-        for (Feed feed : events) {
-            if (feed instanceof Feed.Line line && line.line().msg() instanceof ConvoState.Msg.User user
-                    && user.content().startsWith("<events>")) {
+    /** 服务端对话记录里新落盘的行。评测的主人没有界面;只把落进她对话的世界事件记进这次的记录。 */
+    private void heard(List<com.google.gson.JsonObject> rows) {
+        for (com.dwinovo.numen.api.agent.llm.Rows.Line line : com.dwinovo.numen.api.agent.llm.Rows.lines(rows)) {
+            if (line.msg() instanceof ConvoState.Msg.User user && user.content().startsWith("<events>")) {
                 transcript.write("event", "text", Transcript.clip(user.content()));
             }
         }

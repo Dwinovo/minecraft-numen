@@ -728,7 +728,6 @@ public final class ModLanguageData {
         adder.add("numen.chat.welcome.inventory", "Show me your inventory");
         adder.add("numen.chat.compacting", "Compacting history…");
         adder.add("numen.chat.compacted", "Earlier conversation compacted to a summary (originals kept on disk)");
-        adder.add("numen.chat.cleared", "Context cleared — she starts fresh (chat log kept)");
         adder.add("numen.chat.persona_changed", "Persona switched");
         adder.add("numen.chat.halted", "Interrupted: %s");
         adder.add("numen.cause.llm.stream_failed", "The reply broke off midway");
@@ -1503,7 +1502,6 @@ public final class ModLanguageData {
         adder.add("numen.chat.welcome.inventory", "看看你的背包");
         adder.add("numen.chat.compacting", "正在压缩历史…");
         adder.add("numen.chat.compacted", "更早的对话已压缩为摘要（原文保留在磁盘）");
-        adder.add("numen.chat.cleared", "上下文已清除，她从头开始（聊天记录保留）");
         adder.add("numen.chat.persona_changed", "人设已切换");
         adder.add("numen.chat.halted", "已中断：%s");
         adder.add("numen.cause.llm.stream_failed", "回应中途断了");

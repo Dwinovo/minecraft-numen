@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.client.chat;
 
-import com.dwinovo.numen.api.agent.llm.ConvoLog;
+import com.dwinovo.numen.api.agent.llm.QueryMarkup;
 
 /**
  * 看<b>对话</b>:主人和她说过的话,别的都不是这一份的内容。
@@ -19,8 +19,8 @@ public final class OwnerWordsMode implements ChatDisplayMode {
     @Override
     public String userText(String raw) {
         if (raw == null) return "";
-        // <query> 怎么认只有一处(ConvoLog.queries):面板、归并都从那里取,别各写一份正则
-        java.util.List<String> queries = ConvoLog.queries(raw);
+        // <query> 怎么认只有一处(QueryMarkup.queries):面板、归并都从那里取,别各写一份正则
+        java.util.List<String> queries = QueryMarkup.queries(raw);
         if (!queries.isEmpty()) return String.join("\n", queries).strip();
         return stripInjectedDirectives(raw);   // legacy / untagged owner message
     }
@@ -47,11 +47,7 @@ public final class OwnerWordsMode implements ChatDisplayMode {
                 .replaceAll("(?s)<event\\b[^>]*/>", "")
                 .replaceAll("(?s)<env>.*?</env>", "")
                 .replaceAll("(?s)<current_task>.*?</current_task>", "")
-                .replaceAll("(?s)<memory\b[^>]*>.*?</memory>", "")
-                // 目标的两块:设定时那份指令、续跑时那句"还差什么"。都是客户端注入的,
-                // 不是主人说的话;目标本身在面板顶上有常驻一行,不该再占一个气泡。
-                .replaceAll("(?s)<goal>.*?</goal>", "")
-                .replaceAll("(?s)<goal-progress\\b[^>]*>.*?</goal-progress>", "");
+                .replaceAll("(?s)<memory\b[^>]*>.*?</memory>", "");
         return out.replaceAll("\\n\\s*\\n+", "\n").strip();
     }
 }

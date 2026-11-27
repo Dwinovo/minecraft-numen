@@ -16,7 +16,7 @@ import java.util.zip.ZipInputStream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** 导出的 zip:她的对话日志和每条札记,原样的文件;别的东西(收件箱、绑定、台账)不在里面。 */
+/** 导出的 zip:她当前的对话记录和每条札记,原样的文件;别的东西(收件箱、绑定、台账)不在里面。 */
 class MemoryExportTest {
 
     private static Map<String, String> unzip(byte[] zip) throws IOException {
@@ -30,7 +30,7 @@ class MemoryExportTest {
     }
 
     @Test
-    void theChatLogAndEveryNoteAreInTheZip(@TempDir Path home) throws IOException {
+    void theConversationAndEveryNoteAreInTheZip(@TempDir Path home) throws IOException {
         Files.writeString(home.resolve("chat.jsonl"), "{\"type\":\"message\"}\n");
         Files.createDirectories(home.resolve("memory"));
         Files.writeString(home.resolve("memory").resolve("iron.md"), "铁在东边");
@@ -38,14 +38,14 @@ class MemoryExportTest {
         Files.writeString(home.resolve("inbox.jsonl"), "不在里面");
         Files.writeString(home.resolve("binding.json"), "{}");
 
-        Map<String, String> files = unzip(MemoryExport.zip(home));
+        Map<String, String> files = unzip(MemoryExport.zip(home, "{\"type\":\"user\"}\n"));
 
-        assertEquals(Map.of("chat.jsonl", "{\"type\":\"message\"}\n", "memory/home.md", "家在山脚",
+        assertEquals(Map.of("conversation.jsonl", "{\"type\":\"user\"}\n", "memory/home.md", "家在山脚",
                 "memory/iron.md", "铁在东边"), files);
     }
 
     @Test
     void aCompanionWhoNeverSaidAnythingExportsAnEmptyZip(@TempDir Path home) throws IOException {
-        assertTrue(unzip(MemoryExport.zip(home)).isEmpty());
+        assertTrue(unzip(MemoryExport.zip(home, "")).isEmpty());
     }
 }

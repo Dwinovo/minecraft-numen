@@ -96,7 +96,8 @@ public final class ClientServices {
                     return persona == null ? null : persona.text();
                 },
                 bundled -> SkillRegistry.of(machine.library(SkillRegistry.KIND), bundled),
-                who -> who.equals(player) ? "" : who.toString()));
+                who -> who.equals(player) ? "" : who.toString(),
+                Services.platform().modVersion(Constants.MOD_ID)));
     }
 
     /** 这条连接上的大脑。 */

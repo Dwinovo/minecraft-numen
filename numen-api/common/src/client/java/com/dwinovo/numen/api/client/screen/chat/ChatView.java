@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api.client.screen.chat;
 
-import com.dwinovo.numen.api.agent.llm.ConvoLog;
+import com.dwinovo.numen.api.agent.llm.QueryMarkup;
+import com.dwinovo.numen.api.agent.llm.Rows;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
 import com.dwinovo.numen.api.agent.conversation.Conversation;
 import com.dwinovo.numen.api.agent.conversation.Mentions;
@@ -691,8 +692,7 @@ public final class ChatView {
         for (int i = source.size() - 1; i >= 0; i--) {
             if (source.get(i).msg() instanceof ConvoState.Msg.User u) {
                 String c = u.content();
-                if (ConvoLog.PERSONA_DIVIDER.equals(c) || ConvoLog.COMPACT_DIVIDER.equals(c)
-                        || ConvoLog.CLEAR_DIVIDER.equals(c)) {
+                if (Rows.PERSONA_DIVIDER.equals(c) || Rows.COMPACT_DIVIDER.equals(c)) {
                     continue;
                 }
                 String shown = Quote.parse(ownerText(c)).body();
@@ -966,25 +966,19 @@ public final class ChatView {
             switch (msg) {
                 case ConvoState.Msg.User u -> {
                     flushProcess(f, bubbleMaxW);
-                    if (ConvoLog.PERSONA_DIVIDER.equals(u.content())) {
+                    if (Rows.PERSONA_DIVIDER.equals(u.content())) {
                         notice(out, I18n.get("numen.chat.persona_changed"), bubbleMaxW);
                         f.last = null;
                         continue;
                     }
-                    if (ConvoLog.COMPACT_DIVIDER.equals(u.content())) {
+                    if (Rows.COMPACT_DIVIDER.equals(u.content())) {
                         notice(out, I18n.get("numen.chat.compacted"), bubbleMaxW);
                         f.last = null;
                         continue;
                     }
-                    if (ConvoLog.CLEAR_DIVIDER.equals(u.content())) {
-                        notice(out, I18n.get("numen.chat.cleared"), bubbleMaxW);
-                        f.last = null;
-                        f.plans.clear();   // 清空之后她不记得之前那份计划,再写就是新的一条
-                        continue;
-                    }
                     String shown = ownerText(u.content());   // owner's words only, never injected content
                     if (shown.isEmpty()) continue;
-                    if (ConvoLog.scheduled(u.content())) {
+                    if (QueryMarkup.scheduled(u.content())) {
                         notice(out, I18n.get(com.dwinovo.numen.api.data.ModLanguageData.Keys.CHAT_SCHEDULED), bubbleMaxW);   // 主人定的定时到点说的,不是他此刻开的口
                         f.last = null;
                     }

@@ -44,19 +44,21 @@ public final class CompanionRegistry extends SavedData {
      *  {@code sharedWith} = 创建者把她分享给了谁(不含创建者自己);{@code owner} 加上这些人就是她的主人表,只存在这一处,
      *  见 {@code docs/adr/runtime/0006-keepers-ownership-use-provenance.md}。
      *  {@code leftAt} = 主人下令她下线那一刻的游戏时间(overworld 的 gameTime),再召唤回来时据此告诉她离开了多久;-1 = 没有这回事。
+     *  {@code conversation} = 她此刻的对话记录是哪一份(会话 uuid,文件在 {@code <存档>/numen/conversations/});清空上下文是换一个新的,
+     *  旧的留着;{@code null} = 还没有过,第一次要用时起一个。
      *  死亡不进名册:她死了就由原版重生流程当场重生,没有"死着等复活"的状态;老存档里的 {@code diedAt}、{@code deathCause}
      *  读档时被忽略,下一次存盘就不再写。 */
     public record Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos,
                         String skinValue, String skinSig, String skinRef,
                         String taskName, String taskLua, String taskOld, Outside outside, long leftAt,
-                        List<UUID> sharedWith) {
+                        List<UUID> sharedWith, UUID conversation) {
         public Entry {
             sharedWith = List.copyOf(sharedWith);
         }
 
         /** A companion with no borrowed skin, idle. */
         public Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos) {
-            this(name, owner, dimension, pos, "", "", "", "", "", "", Outside.NONE, -1L, List.of());
+            this(name, owner, dimension, pos, "", "", "", "", "", "", Outside.NONE, -1L, List.of(), null);
         }
 
         /** 她的主人们:创建者在前,后面是分享给的人,按加进来的先后。 */
@@ -78,38 +80,44 @@ public final class CompanionRegistry extends SavedData {
          */
         public Entry doing(String task, String lua) {
             return new Entry(name, owner, dimension, pos, skinValue, skinSig, skinRef,
-                    task == null ? "" : task, lua == null ? "" : lua, "", outside, leftAt, sharedWith);
+                    task == null ? "" : task, lua == null ? "" : lua, "", outside, leftAt, sharedWith, conversation);
         }
 
         /** 刷新落点(休眠/移动时的 respawn 提示),皮肤原样保留。 */
         public Entry movedTo(ResourceKey<Level> dimension, BlockPos pos) {
             return new Entry(name, owner, dimension, pos, skinValue, skinSig, skinRef,
-                    taskName, taskLua, taskOld, outside, leftAt, sharedWith);
+                    taskName, taskLua, taskOld, outside, leftAt, sharedWith, conversation);
         }
 
         /** 换上 Mojang 签名的皮肤数据(value+signature)。 */
         public Entry withSkin(String value, String sig, String ref) {
             return new Entry(name, owner, dimension, pos,
                     value == null ? "" : value, sig == null ? "" : sig, ref == null ? "" : ref, taskName, taskLua, taskOld, outside, leftAt,
-                    sharedWith);
+                    sharedWith, conversation);
         }
 
         /** 换一个"留在外面"的状态({@link Outside#NONE} = 不在外面)。 */
         Entry outside(Outside next) {
             return new Entry(name, owner, dimension, pos, skinValue, skinSig, skinRef,
-                    taskName, taskLua, taskOld, next, leftAt, sharedWith);
+                    taskName, taskLua, taskOld, next, leftAt, sharedWith, conversation);
         }
 
         /** 记下她被登出世界的游戏时间;-1 = 清掉。 */
         Entry leftAt(long at) {
             return new Entry(name, owner, dimension, pos, skinValue, skinSig, skinRef,
-                    taskName, taskLua, taskOld, outside, at, sharedWith);
+                    taskName, taskLua, taskOld, outside, at, sharedWith, conversation);
         }
 
         /** 换一份分享给的人(不含创建者)。 */
         Entry sharedWith(List<UUID> next) {
             return new Entry(name, owner, dimension, pos, skinValue, skinSig, skinRef,
-                    taskName, taskLua, taskOld, outside, leftAt, next);
+                    taskName, taskLua, taskOld, outside, leftAt, next, conversation);
+        }
+
+        /** 换一份对话记录。 */
+        Entry conversation(UUID next) {
+            return new Entry(name, owner, dimension, pos, skinValue, skinSig, skinRef,
+                    taskName, taskLua, taskOld, outside, leftAt, sharedWith, next);
         }
 
         /** 被服务器请出去时说的理由;不是服务器请出去的是空串。 */
@@ -146,11 +154,12 @@ public final class CompanionRegistry extends SavedData {
                 Codec.STRING.optionalFieldOf("removedFor", "").forGetter(e -> ""),
                 OUTSIDE.optionalFieldOf("outside", Outside.NONE).forGetter(Entry::outside),
                 Codec.LONG.optionalFieldOf("leftAt", -1L).forGetter(Entry::leftAt),
-                UUIDUtil.STRING_CODEC.listOf().optionalFieldOf("sharedWith", List.of()).forGetter(Entry::sharedWith)
+                UUIDUtil.STRING_CODEC.listOf().optionalFieldOf("sharedWith", List.of()).forGetter(Entry::sharedWith),
+                UUIDUtil.STRING_CODEC.optionalFieldOf("conversation").forGetter(e -> java.util.Optional.ofNullable(e.conversation()))
         ).apply(i, (name, owner, dimension, pos, skinValue, skinSig, skinRef, taskName, taskLua, taskOld, legacyRemovedFor,
-                    outside, leftAt, sharedWith) -> new Entry(name, owner, dimension, pos, skinValue, skinSig, skinRef,
-                taskName, taskLua, taskOld, legacyRemovedFor.isEmpty() ? outside : Outside.byServer(legacyRemovedFor),
-                leftAt, sharedWith)));
+                    outside, leftAt, sharedWith, conversation) -> new Entry(name, owner, dimension, pos, skinValue, skinSig,
+                skinRef, taskName, taskLua, taskOld, legacyRemovedFor.isEmpty() ? outside : Outside.byServer(legacyRemovedFor),
+                leftAt, sharedWith, conversation.orElse(null))));
     }
 
     private static final Codec<CompanionRegistry> CODEC = RecordCodecBuilder.create(i -> i.group(
@@ -283,6 +292,25 @@ public final class CompanionRegistry extends SavedData {
         entries.put(companionUuid, e.sharedWith(next));
         setDirty();
         return true;
+    }
+
+    /** 她此刻的对话记录是哪一份会话;还没有过就起一个并记下。名册上没有她是 {@code null}。 */
+    public UUID conversation(UUID companionUuid) {
+        Entry e = entries.get(companionUuid);
+        if (e == null) return null;
+        if (e.conversation() == null) {
+            entries.put(companionUuid, e.conversation(UUID.randomUUID()));
+            setDirty();
+        }
+        return entries.get(companionUuid).conversation();
+    }
+
+    /** 她接着在一份新的会话里写(清空上下文):旧的一份留在原处。名册上没有她什么也不做。 */
+    public void startConversation(UUID companionUuid, UUID conversation) {
+        Entry e = entries.get(companionUuid);
+        if (e == null) return;
+        entries.put(companionUuid, e.conversation(conversation));
+        setDirty();
     }
 
     /** 记下她被留在外面(服务器请出去的理由随名册落盘,主人下次上线还说得出)。 */

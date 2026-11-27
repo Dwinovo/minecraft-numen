@@ -134,12 +134,13 @@ class LoopHostTest {
         LibraryHub hub = LibraryHub.local(library, Switches.inMemory(), List.of(), Set.of());
         host = new LoopHost(new LoopHost.Parts(HER, OWNER, home, clientMain::add, pipe.client(), model, SCRIPT_ONLY,
                 () -> false, () -> EventQueue.DEFAULT_LEVEL, bound -> "a test persona",
-                bundled -> SkillRegistry.of(hub.library(SkillRegistry.KIND), bundled), id -> "主人"));
+                bundled -> SkillRegistry.of(hub.library(SkillRegistry.KIND), bundled), id -> "主人", "test"));
         host.bind(com.dwinovo.numen.api.mind.Slot.PERSONA,
                 new Bound(OWNER, new com.dwinovo.numen.api.library.EntryId("my", "test")));
         seats.bodyEntered(HER);
         Opened opened = pipe.client().open(HER, 0).get(5, TimeUnit.SECONDS);
-        host.attach(opened, Catalog.fromJson(pipe.client().catalog(HER).get(5, TimeUnit.SECONDS)));
+        host.attach(opened, Catalog.fromJson(pipe.client().catalog(HER).get(5, TimeUnit.SECONDS)),
+                pipe.client().openConversation(HER).get(5, TimeUnit.SECONDS));
     }
 
     /** 大脑一刻一刻地走,座位上来的回调在它的线程上做,直到条件成立;三秒还不成立就是没发生。 */
@@ -310,5 +311,56 @@ class LoopHostTest {
                 .map(m -> ((com.dwinovo.numen.api.agent.llm.ConvoState.Msg.Tool) m).content()).findFirst().orElse("");
         assertTrue(com.dwinovo.numen.api.agent.llm.ToolOutcome.failed(result), result);
         assertTrue(result.contains("chat channel"), result);
+    }
+
+    /** 同一只同伴在另一台电脑上的大脑:家是另一个目录,经另一条连接坐上她的座位,读服务端上她的对话记录。 */
+    private LoopHost anotherComputer() throws Exception {
+        pipe.disconnect();   // 原来那台电脑断线,她的座位上没人了
+        SeatPipe second = SeatPipe.connect(seats, OWNER, clientMain::add, THREADS);
+        Io io = NumenIo.inline("test");
+        LibraryHub hub = LibraryHub.local(new Home(dir.resolve("library2"), io), Switches.inMemory(), List.of(), Set.of());
+        LoopHost fresh = new LoopHost(new LoopHost.Parts(HER, OWNER, new Home(dir.resolve("her2"), io), clientMain::add,
+                second.client(), model, SCRIPT_ONLY, () -> false, () -> EventQueue.DEFAULT_LEVEL, bound -> "a test persona",
+                bundled -> SkillRegistry.of(hub.library(SkillRegistry.KIND), bundled), id -> "主人", "test"));
+        Opened opened = second.client().open(HER, 0).get(5, TimeUnit.SECONDS);
+        fresh.attach(opened, Catalog.fromJson(second.client().catalog(HER).get(5, TimeUnit.SECONDS)),
+                second.client().openConversation(HER).get(5, TimeUnit.SECONDS));
+        return fresh;
+    }
+
+    @Test
+    void herConversationLivesOnTheServerSoABrainOnAnotherComputerCarriesOnFromIt() throws Exception {
+        model.say("好的").say("接着聊");
+        host.submitPrompt("你好呀");
+        until("the first turn is recorded on the server", () -> world.transcripts()
+                .read(world.conversation(HER), rows -> rows.size()).join() >= 2);
+
+        LoopHost fresh = anotherComputer();
+        fresh.submitPrompt("还记得我吗");
+        long deadline = System.nanoTime() + 3_000_000_000L;
+        while (model.asked.size() < 2 && System.nanoTime() < deadline) {
+            for (Runnable task; (task = clientMain.poll()) != null; ) {
+                task.run();
+            }
+            fresh.tick();
+            Thread.sleep(5);
+        }
+
+        assertEquals(2, model.asked.size(), "the second brain asked the model");
+        String context = model.asked.get(1).messages().stream().map(Object::toString).reduce("", String::concat);
+        assertTrue(context.contains("你好呀") && context.contains("好的"), "the earlier conversation came with the seat: " + context);
+    }
+
+    @Test
+    void aGoalLivesInTheRecordSoTheNextBrainStillHasIt() throws Exception {
+        host.setGoal(com.dwinovo.numen.api.agent.goal.GoalState.of("挖 64 个铁", 1_000L), "/goal 挖 64 个铁");
+        model.say("好,这就去");
+        until("the goal row is on the server", () -> world.transcripts().read(world.conversation(HER),
+                rows -> com.dwinovo.numen.api.agent.llm.Rows.goal(com.dwinovo.numen.api.agent.llm.Rows.open(rows).goal()) != null)
+                .join());
+
+        LoopHost fresh = anotherComputer();
+
+        assertEquals("挖 64 个铁", fresh.goal().objective());
     }
 }
