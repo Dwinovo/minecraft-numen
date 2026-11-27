@@ -2,14 +2,15 @@ package com.dwinovo.numen.api.agent.llm;
 
 import com.dwinovo.numen.api.agent.provider.AssistantTurn;
 
+import com.google.gson.JsonObject;
+
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Consumer;
 
 /**
- * Per-entity conversation history. Lives on the **client** side now (LLM moved
- * off-server in the per-player-pays-tokens refactor), accessed solely from the
- * client main thread — no synchronisation needed.
+ * Per-entity conversation history, the brain's working copy of the conversation record. Lives on the **client**
+ * side (the brain runs on the owner's client), accessed solely from the client main thread — no synchronisation
+ * needed. The record itself is on the server; every change here is handed to the {@link Journal}, which writes it.
  *
  * <h2>Storage type</h2>
  * Plain provider-agnostic DTOs ({@link AssistantTurn} et al.) — no SDK
@@ -28,7 +29,15 @@ public final class ConvoState {
 
     /** Tagged union for conversation history. */
     public sealed interface Msg permits Msg.User, Msg.Assistant, Msg.Tool, Msg.Halt {
-        record User(String content) implements Msg {}
+        /**
+         * Someone said something, or the world did. {@code meta} marks text the owner did not type and the panel does
+         * not draw (a goal's instruction to her, the evaluator's feedback); the model reads it like any other user text.
+         */
+        record User(String content, boolean meta) implements Msg {
+            public User(String content) {
+                this(content, false);
+            }
+        }
         record Assistant(AssistantTurn turn) implements Msg {}
         record Tool(String toolCallId, String content) implements Msg {}
         /**
@@ -54,35 +63,72 @@ public final class ConvoState {
         }
     }
 
+    /**
+     * Where the conversation is written down: every change to the history is handed to it, in order. The record is
+     * append-only; compaction and clearing are recorded as what they are, not as edits.
+     */
+    public interface Journal {
+
+        /** Nothing is written (tests). */
+        Journal NONE = new Journal() {
+            @Override
+            public void append(Msg msg) { }
+
+            @Override
+            public void attach(String type, JsonObject fields) { }
+
+            @Override
+            public void compacted(String summary, int keptTail, JsonObject meta) { }
+
+            @Override
+            public void cleared() { }
+        };
+
+        /** A message was added to the history. */
+        void append(Msg msg);
+
+        /** A state or reminder that is not part of the history (a goal's status, a persona change). */
+        void attach(String type, JsonObject fields);
+
+        /**
+         * The history became {@code summary} plus its last {@code keptTail} messages, kept verbatim.
+         *
+         * @param meta accounting only (trigger, tokens before, duration)
+         */
+        void compacted(String summary, int keptTail, JsonObject meta);
+
+        /** The history was emptied: the conversation goes on in a new one, the old record stays as it was. */
+        void cleared();
+    }
+
     private final List<Msg> messages = new ArrayList<>();
     private int turnCount = 0;
 
-    /** Notified after every append — the persistence hook ({@link ConvoLog#append}). */
-    private final Consumer<Msg> sink;
+    /** Told about every change — the persistence hook. */
+    private final Journal journal;
 
-    /** In-memory only (tests, or persistence explicitly disabled). */
+    /** In-memory only (tests). */
     public ConvoState() {
-        this(m -> { });
+        this(Journal.NONE);
     }
 
-    /** Every appended message is also handed to {@code sink} (e.g. the JSONL log). */
-    public ConvoState(Consumer<Msg> sink) {
-        this.sink = sink;
+    public ConvoState(Journal journal) {
+        this.journal = journal;
     }
 
     /**
-     * Splice previously persisted history in at construction time, WITHOUT
-     * notifying the sink — these messages are already on disk; re-appending
-     * them would duplicate the file on every game launch.
+     * Splice a previously recorded history in at start-up, WITHOUT telling the
+     * journal — these messages are already in the record; writing them again
+     * would duplicate it on every start.
      */
     public void preload(List<Msg> history) {
         messages.addAll(history);
     }
 
     /**
-     * Swap the entire history for {@code replacement} WITHOUT notifying the
-     * sink — used by compaction, which records its boundary in the log through
-     * its own channel ({@link ConvoLog#appendCompactSummary}) rather than as
+     * Swap the entire history for {@code replacement} WITHOUT telling the
+     * journal — used by compaction and clearing, which the journal learns of
+     * through {@link Journal#compacted} and {@link Journal#cleared} rather than as
      * ordinary appended messages.
      */
     public void replaceAll(List<Msg> replacement) {
@@ -93,6 +139,11 @@ public final class ConvoState {
 
     public void addUser(String content) {
         push(new Msg.User(content));
+    }
+
+    /** Text the model reads but the owner did not type and the panel does not draw. */
+    public void addMeta(String content) {
+        push(new Msg.User(content, true));
     }
 
     public void addAssistant(AssistantTurn turn) {
@@ -109,7 +160,27 @@ public final class ConvoState {
 
     private void push(Msg msg) {
         messages.add(msg);
-        sink.accept(msg);
+        journal.append(msg);
+    }
+
+    /** Record a state or reminder that is not part of the history. */
+    public void attach(String type, JsonObject fields) {
+        journal.attach(type, fields);
+    }
+
+    /** The history becomes {@code summary} plus its last {@code kept} messages. */
+    public void compact(String summary, List<Msg> kept, JsonObject meta) {
+        journal.compacted(summary, kept.size(), meta);
+        List<Msg> next = new ArrayList<>();
+        next.add(new Msg.User(summary));
+        next.addAll(kept);
+        replaceAll(next);
+    }
+
+    /** Empty the history; the record goes on in a new conversation. */
+    public void clear() {
+        journal.cleared();
+        replaceAll(List.of());
     }
 
     public List<Msg> snapshot() {
