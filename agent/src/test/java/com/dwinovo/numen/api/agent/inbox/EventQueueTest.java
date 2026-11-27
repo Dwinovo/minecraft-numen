@@ -309,10 +309,10 @@ class EventQueueTest {
     void aScheduledQueryIsTheOwnersWordsWithItsSourceOnTheOpeningTag() {
         String scheduled = EventQueue.scheduledQuery("看看炉子", 3 * 24000L + 15250L);
 
-        assertEquals(List.of("看看炉子"), com.dwinovo.numen.api.agent.llm.ConvoLog.queries(scheduled));
-        assertTrue(com.dwinovo.numen.api.agent.llm.ConvoLog.scheduled(scheduled));
-        assertFalse(com.dwinovo.numen.api.agent.llm.ConvoLog.scheduled(EventQueue.query("看看炉子", 0L)));
-        assertFalse(com.dwinovo.numen.api.agent.llm.ConvoLog.scheduled(scheduled + "\n" + EventQueue.query("过来", 0L)),
+        assertEquals(List.of("看看炉子"), com.dwinovo.numen.api.agent.llm.QueryMarkup.queries(scheduled));
+        assertTrue(com.dwinovo.numen.api.agent.llm.QueryMarkup.scheduled(scheduled));
+        assertFalse(com.dwinovo.numen.api.agent.llm.QueryMarkup.scheduled(EventQueue.query("看看炉子", 0L)));
+        assertFalse(com.dwinovo.numen.api.agent.llm.QueryMarkup.scheduled(scheduled + "\n" + EventQueue.query("过来", 0L)),
                 "a message with the owner's own words in it is not shown as scheduled");
     }
 
@@ -583,11 +583,11 @@ class EventQueueTest {
         String said = EventQueue.query("过来", 3 * 24000L + 15250L, "player@ab12cd (Steve)");
 
         assertEquals("<query day=\"3\" t=\"21:15\" from=\"player@ab12cd (Steve)\">过来</query>", said);
-        assertEquals("player@ab12cd (Steve)", com.dwinovo.numen.api.agent.llm.ConvoLog.speaker(said));
-        assertEquals(List.of("过来"), com.dwinovo.numen.api.agent.llm.ConvoLog.queries(said));
+        assertEquals("player@ab12cd (Steve)", com.dwinovo.numen.api.agent.llm.QueryMarkup.speaker(said));
+        assertEquals(List.of("过来"), com.dwinovo.numen.api.agent.llm.QueryMarkup.queries(said));
         assertEquals(EventQueue.query("过来", 0L), EventQueue.query("过来", 0L, null), "no speaker, no mark");
-        assertEquals(null, com.dwinovo.numen.api.agent.llm.ConvoLog.speaker(EventQueue.query("过来", 0L)));
-        assertEquals(null, com.dwinovo.numen.api.agent.llm.ConvoLog.speaker(
+        assertEquals(null, com.dwinovo.numen.api.agent.llm.QueryMarkup.speaker(EventQueue.query("过来", 0L)));
+        assertEquals(null, com.dwinovo.numen.api.agent.llm.QueryMarkup.speaker(
                         said + "\n" + EventQueue.query("好", 0L, "player@ffffff (Alex)")),
                 "two owners' words in one message are not marked as one owner's");
     }

@@ -1,6 +1,6 @@
 package com.dwinovo.numen.api.agent.inbox;
 
-import com.dwinovo.numen.api.agent.llm.ConvoLog;
+import com.dwinovo.numen.api.agent.llm.QueryMarkup;
 import com.dwinovo.numen.api.store.AppendLog;
 
 import java.util.ArrayList;
@@ -302,34 +302,34 @@ public final class EventQueue {
 
     /**
      * 主人的话交给模型的样子:包进 {@code <query>},带说这句话那一刻的游戏日期与钟点({@link EventClock})。模型靠这个标记分清哪句是主人亲口说的、哪些是一同注入的事件与状态;
-     * 面板与日志认它只在 {@code ConvoLog.queries} 一处。
+     * 面板与日志认它只在 {@code QueryMarkup.queries} 一处。
      */
     public static String query(String words, long dayTime) {
         return query(words, dayTime, null);
     }
 
     /**
-     * 同 {@link #query(String, long)},开标签上另带是哪位主人说的({@link ConvoLog#speakerAttr});{@code speaker} 为 {@code null} 就不带
+     * 同 {@link #query(String, long)},开标签上另带是哪位主人说的({@link QueryMarkup#speakerAttr});{@code speaker} 为 {@code null} 就不带
      * (她只有一位主人,没人要区分)。
      */
     public static String query(String words, long dayTime, String speaker) {
-        return "<query" + EventClock.stamp(dayTime) + (speaker == null ? "" : ConvoLog.speakerAttr(speaker)) + ">"
+        return "<query" + EventClock.stamp(dayTime) + (speaker == null ? "" : QueryMarkup.speakerAttr(speaker)) + ">"
                 + words + "</query>";
     }
 
     /**
-     * 同 {@link #query(String, long, String)},另带这句话是在哪儿说的({@link ConvoLog#venueAttr});她的回话回到那里。
+     * 同 {@link #query(String, long, String)},另带这句话是在哪儿说的({@link QueryMarkup#venueAttr});她的回话回到那里。
      *
      * @param venue {@code whisper} 或 {@code group}
      */
     public static String query(String words, long dayTime, String speaker, String venue) {
-        return "<query" + EventClock.stamp(dayTime) + ConvoLog.speakerAttr(speaker) + ConvoLog.venueAttr(venue) + ">"
+        return "<query" + EventClock.stamp(dayTime) + QueryMarkup.speakerAttr(speaker) + QueryMarkup.venueAttr(venue) + ">"
                 + words + "</query>";
     }
 
-    /** 同 {@link #query},这句话是主人给她定的定时到点说的:开标签上带 {@link ConvoLog#SCHEDULED_ATTR},面板据此标"定时"。 */
+    /** 同 {@link #query},这句话是主人给她定的定时到点说的:开标签上带 {@link QueryMarkup#SCHEDULED_ATTR},面板据此标"定时"。 */
     public static String scheduledQuery(String words, long dayTime) {
-        return "<query" + EventClock.stamp(dayTime) + ConvoLog.SCHEDULED_ATTR + ">" + words + "</query>";
+        return "<query" + EventClock.stamp(dayTime) + QueryMarkup.SCHEDULED_ATTR + ">" + words + "</query>";
     }
 
     /** 溢出丢弃的说明文本——服务端暂存与客户端收件共用一句话。kind 就是这条条目的类型 {@link EventTypes#DROPPED}。 */

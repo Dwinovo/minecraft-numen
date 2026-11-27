@@ -1,7 +1,6 @@
 package com.dwinovo.numen.api.agent.memory;
 
 import com.dwinovo.numen.api.agent.llm.CompactSplit;
-import com.dwinovo.numen.api.agent.llm.ConvoLog;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
 import com.dwinovo.numen.api.agent.llm.LlmEndpoint;
 import com.dwinovo.numen.api.agent.loop.LoopEvent;
@@ -28,7 +27,7 @@ import java.util.function.Supplier;
  * <p>摘要请求不另设输出上限:输出多长由服务商层按这次请求剩下的窗口定,普通一轮与摘要共用
  * ({@link LlmEndpoint#optionsFor})。
  *
- * <p>纯 JVM:窗口多大、预留与近段预算多少、历史怎么量,都取自她此刻绑定的端点({@code endpoint},宿主给),落盘走 {@link ConvoLog}。
+ * <p>纯 JVM:窗口多大、预留与近段预算多少、历史怎么量,都取自她此刻绑定的端点({@code endpoint},宿主给),落盘走 {@link ConvoState} 的账({@link ConvoState.Journal})。
  */
 public final class Compactor implements MemoryPort {
 
@@ -164,7 +163,6 @@ public final class Compactor implements MemoryPort {
 
     private final String name;
     private final ConvoState convo;
-    private final ConvoLog log;
     private final Supplier<LlmEndpoint> endpoint;
     /** 上一次对话请求的实测体量(服务端报的 prompt tokens);0 = 还不知道。 */
     private long lastPromptTokens;
@@ -177,14 +175,12 @@ public final class Compactor implements MemoryPort {
 
     /**
      * @param name          日志里认这只同伴用的名字
-     * @param convo         会话历史;压缩与清空换的就是它
-     * @param log           会话日志;压缩与清空的边界落在这里
+     * @param convo         会话历史;压缩与清空换的就是它,边界经它的账落进对话记录
      * @param endpoint      这只同伴此刻绑定的端点:上下文窗口、预留与近段预算取自它,历史按它真正会发出去的样子估量
      */
-    public Compactor(String name, ConvoState convo, ConvoLog log, Supplier<LlmEndpoint> endpoint) {
+    public Compactor(String name, ConvoState convo, Supplier<LlmEndpoint> endpoint) {
         this.name = name;
         this.convo = convo;
-        this.log = log;
         this.endpoint = endpoint;
     }
 
@@ -371,17 +367,10 @@ public final class Compactor implements MemoryPort {
                 if (output > 0) {
                     meta.addProperty("summaryTokens", output);
                 }
-                // Boundary into the JSONL first (relaunches replay the compacted view;
-                // the raw pre-compaction history stays in the file as an archive; the kept
-                // tail is the last kept.size() messages of the history, which the boundary
-                // points at instead of copying), then
-                // swap the in-memory history without re-notifying the sink. The visible
-                // transcript only gains a divider — the owner's chat never vanishes.
-                log.appendCompactSummary(wrapped, kept.size(), meta);
-                List<ConvoState.Msg> next = new ArrayList<>();
-                next.add(new ConvoState.Msg.User(wrapped));
-                next.addAll(kept);
-                convo.replaceAll(next);
+                // 边界与摘要先进对话记录(重开时从边界起重放;整理前的原文留在记录里,
+                // 原文保留的近段是历史的最后 kept.size() 条,边界指着它们而不抄第二份),
+                // 再换内存里的历史。面板的记录只多一条分隔,主人的聊天不会消失。
+                convo.compact(wrapped, kept, meta);
                 AiLog.LOG.info(
                         "[numen-entity#{}] compaction done ({}): {} tokens → summary ({} chars) + {} preserved msg(s) in {} ms",
                         name, auto ? "auto" : "manual",
@@ -401,14 +390,12 @@ public final class Compactor implements MemoryPort {
     }
 
     /**
-     * 清空上下文——她带进下一轮的历史清成白纸,而<b>记录一个字不删</b>:日志 append-only,
-     * 落一条边界事件,重启后 {@code load} 从边界起步、{@code loadDisplay} 照常给全量。
-     * 绑定/人设/技能全不动:清的是对话,不是她是谁。
+     * 清空上下文——她带进下一轮的历史清成白纸,而<b>记录一个字不删</b>:对话从一个新的会话接着写,旧的一份留在原处
+     * (照 Claude Code 的 {@code /clear})。绑定/人设/技能全不动:清的是对话,不是她是谁。
      */
     @Override
     public void clear() {
-        log.appendClearBoundary();
-        convo.replaceAll(List.of());
+        convo.clear();
         AiLog.LOG.info("[numen-entity#{}] context cleared (the record is kept)", name);
     }
 

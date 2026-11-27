@@ -4,6 +4,7 @@ import com.dwinovo.numen.api.agent.http.CancelToken;
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
 import com.dwinovo.numen.api.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
+import com.dwinovo.numen.api.agent.llm.Rows;
 import com.dwinovo.numen.api.agent.loop.AgentLoop;
 import com.dwinovo.numen.api.agent.loop.Hold;
 import com.dwinovo.numen.api.agent.loop.LoopEvent;
@@ -11,22 +12,23 @@ import com.dwinovo.numen.api.agent.loop.ModelOutcome;
 import com.dwinovo.numen.api.agent.loop.ModelRequest;
 import com.dwinovo.numen.api.agent.loop.RunEnd;
 import com.dwinovo.numen.api.ai.AiLog;
+import com.google.gson.JsonObject;
 
 import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
- * 长期目标:设定、每次 run 做完后评估一次、没做完就推一条续跑、做完或卡住就收工。
+ * 长期目标,照 Claude Code 的 {@code /goal}:设定、每次 run 做完后评估一次、没做完就把评估员的话推回对话让她接着跑、做完就清掉。
+ * 目标的状态都是对话记录里的行({@code goal_status}),这里只管写它们和什么时候判。
  *
  * <p>它订阅循环内核的事件({@link #on}):一次 run 说完({@code RunEnded(DONE)})是评估的时机;开了新 run、
- * 被切断都作废在飞的评估;主人按停止时目标跟着收工。评估经 {@link AgentLoop#consult} 发出——不是一次 run,
- * 不带历史与工具,但用量照样进账。
+ * 被切断都作废在飞的评估;主人按停止不清目标(想收工说 {@code /goal clear})。评估经 {@link AgentLoop#consult} 发出——不是一次 run,
+ * 不带历史与工具,不进对话记录,但用量照样进账。
  *
- * <p>纯 JVM:目标落盘、这一刻的运行期状态、身体手上有没有活,都由宿主给。
+ * <p>纯 JVM:这一刻的运行期状态、身体手上有没有活,都由宿主给。
  */
 public final class GoalSteward {
 
@@ -41,7 +43,6 @@ public final class GoalSteward {
     private final EventQueue inbox;
     private final Supplier<String> runtimeState;
     private final BooleanSupplier bodyOnFiniteTask;
-    private final Consumer<GoalState> persist;
 
     /** 当前的长期目标;{@code null} = 没有。 */
     private GoalState goal;
@@ -53,19 +54,16 @@ public final class GoalSteward {
      * @param inbox            只读:队里还排着会叫醒她的条目就先不判——那些本来就会开起一次 run
      * @param runtimeState     这一刻的运行期状态({@code <runtime_state>}),评估器对着它判身体事实
      * @param bodyOnFiniteTask 身体手上有一件会结束的活(常驻的跟随不算)——那时不催
-     * @param persist          目标落盘(跨重进游戏活着)
-     * @param restored         读盘恢复的目标;{@code null} = 没有
+     * @param restored         读对话记录恢复的目标;{@code null} = 没有
      */
     public GoalSteward(String name, AgentLoop loop, ConvoState convo, EventQueue inbox,
-                       Supplier<String> runtimeState, BooleanSupplier bodyOnFiniteTask,
-                       Consumer<GoalState> persist, GoalState restored) {
+                       Supplier<String> runtimeState, BooleanSupplier bodyOnFiniteTask, GoalState restored) {
         this.name = name;
         this.loop = loop;
         this.convo = convo;
         this.inbox = inbox;
         this.runtimeState = runtimeState;
         this.bodyOnFiniteTask = bodyOnFiniteTask;
-        this.persist = persist;
         this.goal = restored;
     }
 
@@ -75,28 +73,25 @@ public final class GoalSteward {
     }
 
     /**
-     * 定一个目标并落盘。整份目标<b>只在设定时</b>交给她一次;之后每轮只补评估器那句"还差什么"。
-     * 死着、外接驾驶时只记下——那时内脑不开工,交出去也只会躺着。
+     * 定一个目标:写一条设定的 {@code goal_status}。整份目标<b>只在设定时</b>交给她一次({@link GoalPrompts#directive});
+     * 之后每轮只补评估员那句"还差什么"。死着、外接驾驶时只记下——那时内脑不开工,交出去也只会躺着。
      *
-     * @return 这一刻该不该把整份目标交给她({@link GoalPrompts#initialDirective});交出去走主人的话那条路,
-     *         聊天里要有主人打的那行字
+     * @return 这一刻该不该把指示交给她;交出去走主人的话那条路,聊天里要有主人打的那行字
      */
     public boolean set(GoalState next) {
         cancelJudging();   // 判的是上一个目标
         goal = next;
-        persist.accept(next);
+        status(next.objective(), false, null, true);
         Hold hold = loop.hold();
-        if (next == null || hold == Hold.DEAD || hold == Hold.EXTERNAL || hold == Hold.AWAY) {
+        if (hold == Hold.DEAD || hold == Hold.EXTERNAL || hold == Hold.AWAY) {
             return false;
         }
         next.countTurn();
-        persist.accept(next);
         return true;
     }
 
     /**
-     * 收工。目标只有"在"和"不在"两种,所以做完、放弃、跑够轮次、主人喊停——<b>结果都是这里</b>,
-     * 区别只在 {@code why} 那句话。
+     * 收工。目标只有"在"和"不在"两种,所以主人收工和做完的结果都是这里,区别只在 {@code why} 那句话。
      *
      * @param why 收工的原因,只进日志。<b>不往聊天栏说</b>——目标是后台跑着的东西,
      *            结束时不该弹一句打断主人;面板顶上那行消失本身就是信号,想追问 {@code /goal}
@@ -108,8 +103,22 @@ public final class GoalSteward {
         AiLog.LOG.info("[numen-entity#{}] goal ended ({} turns, {})",
                 name, goal.turnsExecuted(), why == null ? "cleared by the owner" : "ended after evaluation");
         cancelJudging();
+        status(goal.objective(), true, null, true);
         goal = null;
-        persist.accept(null);
+    }
+
+    /** 目标的一条状态写进对话记录:设定与清除({@code sentinel})、评估员的判定。 */
+    private void status(String condition, boolean met, String reason, boolean sentinel) {
+        JsonObject fields = new JsonObject();
+        fields.addProperty("condition", condition);
+        fields.addProperty("met", met);
+        if (reason != null) {
+            fields.addProperty("reason", reason);
+        }
+        if (sentinel) {
+            fields.addProperty("sentinel", true);
+        }
+        convo.attach(Rows.GOAL_STATUS, fields);
     }
 
     /** 内核的事件里目标这一侧要接的。 */
@@ -123,14 +132,8 @@ public final class GoalSteward {
                     steer();
                 }
             }
-            case LoopEvent.Halted halted -> {
-                cancelJudging();
-                if (halted.reason().endsGoal() && goal != null) {
-                    // 主人按停止 = 不要她接着跑了。目标跟着收工,否则这一轮刚断下一轮又自己续上,
-                    // 停止键就成了摆设。想接着做再说一次 /goal,成本就是一句话。
-                    clear("ended by the stop button: " + goal.objective());
-                }
-            }
+            // 切断作废在飞的评估;目标还在:主人按停止不清它(Claude Code 的打断不清),下一次她停下来照常判
+            case LoopEvent.Halted halted -> cancelJudging();
             // 目标的账单:主人得看得见这个目标到现在烧了多少。评估自己的用量在判完那一刻记给被判的那个目标
             case LoopEvent.ModelUsed used -> {
                 if (used.purpose() == LoopEvent.Purpose.TURN && goal != null) {
@@ -167,8 +170,6 @@ public final class GoalSteward {
             AiLog.LOG.debug("[numen-entity#{}] goal continuation yields: the body has a job running", name);
             return;
         }
-        // 额度不在这儿拦:每一轮的成果都要判过再说。拦在判定前面的话,最后一轮白干——
-        // 而那恰恰是最可能已经做完的一轮。额度只管"还要不要再推下一轮",见 finish。
         judge();
     }
 
@@ -211,32 +212,18 @@ public final class GoalSteward {
         goal.addTokens(answered.usage().fresh());
         var verdict = GoalPrompts.readVerdict(answered.turn().content());
         goal.setLastReason(verdict.reason());
-        boolean giveUp = goal.noteStuck(verdict.stuck());
         AiLog.LOG.info("[numen-entity#{}] goal evaluation, turn {}: {}", name, goal.turnsExecuted(),
-                verdict.met() ? "met" : verdict.stuck() ? "stuck x" + goal.stuckStreak() : "not yet");
+                verdict.met() ? "met" : "not yet");
+        status(goal.objective(), verdict.met(), verdict.reason(), false);
         if (verdict.met()) {
-            clear("goal met: " + verdict.reason());
+            AiLog.LOG.info("[numen-entity#{}] goal ended ({} turns, goal met)", name, goal.turnsExecuted());
+            goal = null;   // 判定的那一行已经是"做完了",不再写第二条清除
             return;
         }
-        if (giveUp) {
-            // 连着几轮同一堵墙:告诉主人卡在哪,别再转了。判"没进展"的是评估器,不是她自报
-            // ——她报不准,前面验过。
-            clear("cannot get past this, ended: " + verdict.reason() + " — rephrase it or lend a hand, then /goal again");
-            return;
-        }
-        if (!goal.hasTurnsLeft()) {
-            // 还没做完,但额度到顶了:停下来告诉主人,不是闷头继续——她"以为没做完"是
-            // 会一直转的,而每轮主请求两万 token 起。
-            clear("ran " + GoalState.MAX_GOAL_TURNS
-                    + " turns without finishing, ended (still missing: " + verdict.reason() + ") — say /goal again to go on");
-            return;
-        }
-        long now = System.currentTimeMillis();
         goal.countTurn();
-        persist.accept(goal);
-        // goal 在类型表里恒为急件、投递方式是接续,发送方不另标。
+        // 评估员的话进对话(元信息的 user 行)并叫醒她接着跑;goal 在类型表里恒为急件、投递方式是接续,发送方不另标。
         loop.push(List.of(new EventQueue.Entry(EventTypes.GOAL,
-                GoalPrompts.progress(verdict.reason(), goal, now, loop.dayTime()), now, false)));
+                GoalPrompts.feedback(goal.objective(), verdict.reason()), System.currentTimeMillis(), false)));
     }
 
     /**
@@ -247,8 +234,8 @@ public final class GoalSteward {
      * 满世界找矿四分钟。
      *
      * <p>从末尾往回扫到目标设定那条({@link GoalPrompts#isDirective}),字数封顶兜底——整理记忆
-     * 会把那条冲掉,不封顶就一路扫到会话开头。不记"设定时的历史位置":目标跨重进游戏活着,
-     * 重进后历史按条数上限读回、位置早就对不上了,扫到那条消息本身才是准的。
+     * 会把那条冲掉,不封顶就一路扫到会话开头。不记"设定时的历史位置":重进游戏后历史从最后一个整理边界起读回、
+     * 位置早就对不上了,扫到那条消息本身才是准的。
      */
     private String sinceGoalForJudge() {
         List<ConvoState.Msg> all = convo.snapshot();

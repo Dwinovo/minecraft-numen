@@ -3,9 +3,10 @@ package com.dwinovo.numen.api.agent.memory;
 import com.dwinovo.numen.api.agent.catalog.Api;
 import com.dwinovo.numen.api.agent.catalog.ThinkingTable;
 import com.dwinovo.numen.api.agent.llm.CompactSplit;
-import com.dwinovo.numen.api.agent.llm.ConvoLog;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
 import com.dwinovo.numen.api.agent.llm.LlmEndpoint;
+import com.dwinovo.numen.api.agent.llm.RowJournal;
+import com.dwinovo.numen.api.agent.llm.Rows;
 import com.dwinovo.numen.api.agent.loop.LoopEvent;
 import com.dwinovo.numen.api.agent.loop.MemoryPort;
 import com.dwinovo.numen.api.agent.loop.ModelOutcome;
@@ -18,9 +19,8 @@ import com.dwinovo.numen.api.agent.provider.RequestOptions;
 import com.dwinovo.numen.api.agent.provider.Usage;
 import com.google.gson.JsonObject;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
-import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -57,21 +57,54 @@ class CompactorTest {
                 .toList();
     }
 
-    private static Compactor compactor(ConvoState convo, ConvoLog log) {
-        return compactor(convo, log, PLAIN);
+    private static Compactor compactor(ConvoState convo) {
+        return compactor(convo, PLAIN);
     }
 
-    private static Compactor compactor(ConvoState convo, ConvoLog log, LlmEndpoint endpoint) {
-        return new Compactor("test", convo, log, () -> endpoint);
+    private static Compactor compactor(ConvoState convo, LlmEndpoint endpoint) {
+        return new Compactor("test", convo, () -> endpoint);
     }
 
-    private static ConvoLog logIn(Path dir) {
-        return ConvoLog.atFile(dir.resolve("chat.jsonl"));
+    /** 对话记录:写下的行按会话分开存,清空开一个新会话。 */
+    private static final class Record implements RowJournal.Sink {
+        final List<List<JsonObject>> conversations = new ArrayList<>(List.of(new ArrayList<>()));
+
+        @Override
+        public void rows(List<JsonObject> rows) {
+            conversations.getLast().addAll(rows);
+        }
+
+        @Override
+        public void newConversation() {
+            conversations.add(new ArrayList<>());
+        }
+
+        List<JsonObject> current() {
+            return conversations.getLast();
+        }
+
+        /** 重进游戏读回的上下文。 */
+        List<ConvoState.Msg> reopened() {
+            Rows.Opening opening = Rows.open(current());
+            return Rows.replay(opening.rows(), opening.last()).context();
+        }
+
+        List<ConvoState.Msg> shown() {
+            return Rows.lines(current()).stream().map(Rows.Line::msg).toList();
+        }
     }
 
-    /** 和游戏里一样接线:历史里的每条消息同时写进日志(整理的"保留"指向的就是日志里这些记录)。 */
-    private static ConvoState historyOf(int messages, ConvoLog log) {
-        ConvoState convo = new ConvoState(m -> log.append(m, null));
+    /** 和游戏里一样接线:历史里的每条消息同时写进对话记录(整理的"保留"指向的就是记录里这些行)。 */
+    private static ConvoState recorded(Record record) {
+        return new ConvoState(new RowJournal(new Rows.Writer("test"), m -> Rows.Stamp.NONE, record));
+    }
+
+    private static ConvoState historyOf(int messages) {
+        return historyOf(messages, new Record());
+    }
+
+    private static ConvoState historyOf(int messages, Record record) {
+        ConvoState convo = recorded(record);
         for (int i = 0; i < messages; i++) {
             if (i % 2 == 0) {
                 convo.addUser("第" + i + "句");
@@ -87,8 +120,8 @@ class CompactorTest {
     }
 
     @Test
-    void theGateFallsWhenTheLastRequestNearsTheWindow(@TempDir Path dir) {
-        Compactor c = compactor(historyOf(10, logIn(dir)), logIn(dir));
+    void theGateFallsWhenTheLastRequestNearsTheWindow() {
+        Compactor c = compactor(historyOf(10));
         c.on(turnUsed(40_000));
         assertFalse(c.compactionDue(), "离窗口还远");
 
@@ -97,26 +130,25 @@ class CompactorTest {
     }
 
     @Test
-    void aShortHistoryIsNotWorthCompactingOnItsOwn(@TempDir Path dir) {
-        Compactor c = compactor(historyOf(4, logIn(dir)), logIn(dir));
+    void aShortHistoryIsNotWorthCompactingOnItsOwn() {
+        Compactor c = compactor(historyOf(4));
         c.on(turnUsed(WINDOW));
         assertFalse(c.compactionDue(), "短于下限不自己动手——手动整理不看这个");
     }
 
     @Test
-    void onlyConversationCallsCountTowardTheGate(@TempDir Path dir) {
-        Compactor c = compactor(historyOf(10, logIn(dir)), logIn(dir));
+    void onlyConversationCallsCountTowardTheGate() {
+        Compactor c = compactor(historyOf(10));
         c.on(new LoopEvent.ModelUsed(new Usage(WINDOW, 10, 0, 0), LoopEvent.Purpose.GOAL));
         c.on(new LoopEvent.ModelUsed(new Usage(WINDOW, 10, 0, 0), LoopEvent.Purpose.COMPACT));
         assertEquals(0, c.contextPercent(), "目标评估与整理本身的体量不是对话上下文的体量");
     }
 
     @Test
-    void aSummaryReplacesTheHistoryAndLeavesADividerInTheRecord(@TempDir Path dir) {
-        ConvoLog written = logIn(dir);
-        ConvoState convo = historyOf(10, written);
-        Compactor c = compactor(convo, written);
-        ConvoLog log = logIn(dir);
+    void aSummaryReplacesTheHistoryAndLeavesADividerInTheRecord() {
+        Record record = new Record();
+        ConvoState convo = historyOf(10, record);
+        Compactor c = compactor(convo);
 
         MemoryPort.Compaction cut = c.compaction(false, "").orElseThrow();
         assertTrue(cut.requests().get(0).tools().isEmpty(), "整理不带工具");
@@ -125,8 +157,8 @@ class CompactorTest {
         assertTrue(applied);
         ConvoState.Msg first = convo.snapshot().get(0);
         assertTrue(((ConvoState.Msg.User) first).content().endsWith("## 目标\n主人要铁;基地在 0,64,0"), "回复整段就是摘要");
-        assertEquals(convo.snapshot(), log.load(100), "重进游戏读回的就是整理后的样子");
-        assertTrue(log.loadDisplay(100).contains(new ConvoState.Msg.User(ConvoLog.COMPACT_DIVIDER)),
+        assertEquals(convo.snapshot(), record.reopened(), "重进游戏读回的就是整理后的样子");
+        assertTrue(record.shown().contains(new ConvoState.Msg.User(Rows.COMPACT_DIVIDER)),
                 "面板上的记录只多一条分隔,之前的话一句不少");
     }
 
@@ -138,10 +170,9 @@ class CompactorTest {
      * 和教训就少一点,而且没人会发现。
      */
     @Test
-    void theSecondPassUpdatesTheLastSummaryInsteadOfChewingItAgain(@TempDir Path dir) {
-        ConvoLog log = logIn(dir);
-        ConvoState convo = historyOf(10, log);
-        Compactor c = compactor(convo, log);
+    void theSecondPassUpdatesTheLastSummaryInsteadOfChewingItAgain() {
+        ConvoState convo = historyOf(10);
+        Compactor c = compactor(convo);
         c.compaction(false, "").orElseThrow().apply(answered("主人要铁;基地在 0,64,0"));
         for (int i = 0; i < 10; i++) {
             convo.addUser("后来第" + i + "句");
@@ -156,19 +187,18 @@ class CompactorTest {
     }
 
     @Test
-    void anEmptySummaryLeavesTheHistoryAlone(@TempDir Path dir) {
-        ConvoLog log = logIn(dir);
-        ConvoState convo = historyOf(10, log);
+    void anEmptySummaryLeavesTheHistoryAlone() {
+        ConvoState convo = historyOf(10);
         List<ConvoState.Msg> before = convo.snapshot();
-        MemoryPort.Compaction cut = compactor(convo, log).compaction(true, "").orElseThrow();
+        MemoryPort.Compaction cut = compactor(convo).compaction(true, "").orElseThrow();
 
         assertFalse(cut.apply(answered("  ")));
         assertEquals(before, convo.snapshot());
     }
 
     @Test
-    void threeFailuresInARowStopTheAutoPathUntilTheHistoryChanges(@TempDir Path dir) {
-        Compactor c = compactor(historyOf(10, logIn(dir)), logIn(dir));
+    void threeFailuresInARowStopTheAutoPathUntilTheHistoryChanges() {
+        Compactor c = compactor(historyOf(10));
         c.on(turnUsed(WINDOW));
         for (int i = 0; i < 3; i++) {
             c.compaction(true, "").orElseThrow().failed("超时");
@@ -181,8 +211,8 @@ class CompactorTest {
     }
 
     /** 仿 DeepSeek 的长历史:每轮 用户一句 + 带思考回传的工具调用 + 工具结果,按线格式远超窗口。 */
-    private static ConvoState deepseekHistory(int rounds, ConvoLog log) {
-        ConvoState convo = new ConvoState(m -> log.append(m, null));
+    private static ConvoState deepseekHistory(int rounds) {
+        ConvoState convo = recorded(new Record());
         for (int i = 0; i < rounds; i++) {
             JsonObject extras = new JsonObject();
             extras.addProperty("reasoning_content", "思".repeat(700));
@@ -195,10 +225,9 @@ class CompactorTest {
     }
 
     @Test
-    void compactingBringsTheContextBelowTheTriggerEvenWhenReasoningIsReplayed(@TempDir Path dir) {
-        ConvoLog log = logIn(dir);
-        ConvoState convo = deepseekHistory(70, log);
-        Compactor c = compactor(convo, log, DEEPSEEK);
+    void compactingBringsTheContextBelowTheTriggerEvenWhenReasoningIsReplayed() {
+        ConvoState convo = deepseekHistory(70);
+        Compactor c = compactor(convo, DEEPSEEK);
         c.on(turnUsed(WINDOW - 12_000));
         assertTrue(c.compactionDue());
 
@@ -210,16 +239,15 @@ class CompactorTest {
     }
 
     @Test
-    void whenOnlyTheLastSummaryIsOlderThanTheKeptSpanThereIsNothingToCompact(@TempDir Path dir) {
-        ConvoLog log = logIn(dir);
-        ConvoState convo = new ConvoState(m -> log.append(m, null));
+    void whenOnlyTheLastSummaryIsOlderThanTheKeptSpanThereIsNothingToCompact() {
+        ConvoState convo = recorded(new Record());
         convo.addUser("[Conversation history compacted] The following is a summary of everything before this point; treat it as established and carry on:\n\n" + "旧".repeat(8_000));
         for (int i = 0; i < 4; i++) {
             convo.addUser("话".repeat(2_400));
             convo.addAssistant(new AssistantTurn("答".repeat(2_400), List.of(), null));
         }
         List<ConvoState.Msg> before = convo.snapshot();
-        Compactor c = compactor(convo, log);
+        Compactor c = compactor(convo);
         c.on(turnUsed(WINDOW));
 
         assertFalse(c.compactionDue(), "切完只剩旧摘要:闸门不放行,不空转");
@@ -229,27 +257,27 @@ class CompactorTest {
     }
 
     @Test
-    void clearingEmptiesTheContextButKeepsTheRecord(@TempDir Path dir) {
-        ConvoLog sink = ConvoLog.atFile(dir.resolve("chat.jsonl"));
-        ConvoState convo = new ConvoState(m -> sink.append(m, null));
+    void clearingEmptiesTheContextAndTheRecordGoesOnInANewConversationKeepingTheOldOne() {
+        Record record = new Record();
+        ConvoState convo = recorded(record);
         convo.addUser("你好");
-        Compactor c = compactor(convo, sink);
-        ConvoLog log = ConvoLog.atFile(dir.resolve("chat.jsonl"));
+        Compactor c = compactor(convo);
 
         c.clear();
 
         assertTrue(convo.snapshot().isEmpty());
-        assertTrue(log.load(100).isEmpty(), "模型那一侧从白纸开始");
-        assertEquals(List.of(new ConvoState.Msg.User("你好"), new ConvoState.Msg.User(ConvoLog.CLEAR_DIVIDER)),
-                log.loadDisplay(100), "记录一个字不删");
+        assertEquals(2, record.conversations.size(), "清空开了一个新的会话");
+        assertEquals(List.of(new ConvoState.Msg.User("你好")),
+                Rows.replay(Rows.open(record.conversations.get(0)).rows(), null).context(), "旧的一份一个字不删");
+        assertTrue(record.reopened().isEmpty(), "模型那一侧从白纸开始");
     }
 
     // ---- 触发 ----
 
     /** 每条回复只问一次:放行之后同一条回复不会再触发,压缩之后压缩前那条回复的旧用量也不触发。 */
     @Test
-    void aResponseTriggersAtMostOnceAndAStaleUsageNeverTriggersAfterACompaction(@TempDir Path dir) {
-        Compactor c = compactor(historyOf(10, logIn(dir)), logIn(dir));
+    void aResponseTriggersAtMostOnceAndAStaleUsageNeverTriggersAfterACompaction() {
+        Compactor c = compactor(historyOf(10));
         c.on(turnUsed(WINDOW - 5_000));
         assertTrue(c.compactionDue());
         assertFalse(c.compactionDue(), "同一条回复只问一次");
@@ -264,10 +292,9 @@ class CompactorTest {
 
     /** 线是 窗口 − 预留:档案里填的预留顶替缺省的 16384。 */
     @Test
-    void theReserveFromTheProfileMovesTheTriggerLine(@TempDir Path dir) {
-        ConvoLog log = logIn(dir);
-        Compactor byDefault = compactor(historyOf(10, log), log, endpoint("", "", WINDOW, 16_384, 20_000));
-        Compactor bigReserve = compactor(historyOf(10, log), log, endpoint("", "", WINDOW, 30_000, 20_000));
+    void theReserveFromTheProfileMovesTheTriggerLine() {
+        Compactor byDefault = compactor(historyOf(10), endpoint("", "", WINDOW, 16_384, 20_000));
+        Compactor bigReserve = compactor(historyOf(10), endpoint("", "", WINDOW, 30_000, 20_000));
 
         byDefault.on(turnUsed(40_000));
         bigReserve.on(turnUsed(40_000));
@@ -278,14 +305,13 @@ class CompactorTest {
 
     /** 近段原文的预算也读档案:填得小,保留的就少。 */
     @Test
-    void theKeepBudgetFromTheProfileDecidesHowMuchStaysVerbatim(@TempDir Path dir) {
-        ConvoLog log = logIn(dir);
-        ConvoState small = historyOf(40, log);
-        ConvoState large = historyOf(40, log);
+    void theKeepBudgetFromTheProfileDecidesHowMuchStaysVerbatim() {
+        ConvoState small = historyOf(40);
+        ConvoState large = historyOf(40);
 
-        compactor(small, log, endpoint("", "", WINDOW, 16_384, 100)).compaction(false, "").orElseThrow()
+        compactor(small, endpoint("", "", WINDOW, 16_384, 100)).compaction(false, "").orElseThrow()
                 .apply(answered("摘要"));
-        compactor(large, log, endpoint("", "", WINDOW, 16_384, 20_000)).compaction(false, "").orElseThrow()
+        compactor(large, endpoint("", "", WINDOW, 16_384, 20_000)).compaction(false, "").orElseThrow()
                 .apply(answered("摘要"));
 
         assertTrue(small.snapshot().size() < 20, "预算 100:只留末尾几条 " + small.snapshot().size());
@@ -304,9 +330,8 @@ class CompactorTest {
      * 思考不进文字,长的工具结果截断。
      */
     @Test
-    void theSummaryRequestHoldsTheHistoryAsTextInsideConversationTagsBeforeTheInstructions(@TempDir Path dir) {
-        ConvoLog log = logIn(dir);
-        ConvoState convo = new ConvoState(m -> log.append(m, null));
+    void theSummaryRequestHoldsTheHistoryAsTextInsideConversationTagsBeforeTheInstructions() {
+        ConvoState convo = recorded(new Record());
         JsonObject extras = new JsonObject();
         extras.addProperty("reasoning_content", "秘密思考");
         for (int i = 0; i < 5; i++) {
@@ -315,7 +340,7 @@ class CompactorTest {
                     extras, "秘密思考", PLAIN.origin()));
             convo.addToolResult("c" + i, "路".repeat(3_000));
         }
-        Compactor c = compactor(convo, log);
+        Compactor c = compactor(convo);
 
         ModelRequest request = c.compaction(false, "").orElseThrow().requests().get(0);
 
@@ -334,9 +359,8 @@ class CompactorTest {
 
     /** 关注点拼在每份提示词末尾:较早历史的一份和被切开那一轮的前缀一份。 */
     @Test
-    void aFocusIsAppendedToBothTheHistoryAndTheTurnPrefixPrompts(@TempDir Path dir) {
-        ConvoLog log = logIn(dir);
-        ConvoState convo = new ConvoState(m -> log.append(m, null));
+    void aFocusIsAppendedToBothTheHistoryAndTheTurnPrefixPrompts() {
+        ConvoState convo = recorded(new Record());
         for (int i = 0; i < 3; i++) {
             convo.addUser("更早的话" + i);
             convo.addAssistant(new AssistantTurn("答" + i, List.of(), null));
@@ -347,7 +371,7 @@ class CompactorTest {
             convo.addAssistant(new AssistantTurn("", List.of(new LlmToolCall("t" + i, "Lua", "{}")), null));
             convo.addToolResult("t" + i, "到了");
         }
-        Compactor c = compactor(convo, log, endpoint("", "", WINDOW, 16_384, 150));
+        Compactor c = compactor(convo, endpoint("", "", WINDOW, 16_384, 150));
 
         MemoryPort.Compaction cut = c.compaction(false, " 坐标别丢 ").orElseThrow();
 
@@ -367,15 +391,14 @@ class CompactorTest {
 
     /** 只有被切开的一轮、更早没有历史:前缀摘要接在"没有历史"后面;有上一份摘要时接在它后面。 */
     @Test
-    void aSplitTurnWithoutOlderHistoryUsesThePreviousSummaryOrSaysThereWasNone(@TempDir Path dir) {
-        ConvoLog log = logIn(dir);
-        ConvoState convo = new ConvoState(m -> log.append(m, null));
+    void aSplitTurnWithoutOlderHistoryUsesThePreviousSummaryOrSaysThereWasNone() {
+        ConvoState convo = recorded(new Record());
         convo.addUser("长".repeat(400));
         for (int i = 0; i < 6; i++) {
             convo.addAssistant(new AssistantTurn("", List.of(new LlmToolCall("t" + i, "Lua", "{}")), null));
             convo.addToolResult("t" + i, "到了");
         }
-        Compactor c = compactor(convo, log, endpoint("", "", WINDOW, 16_384, 150));
+        Compactor c = compactor(convo, endpoint("", "", WINDOW, 16_384, 150));
 
         MemoryPort.Compaction cut = c.compaction(false, "").orElseThrow();
 

@@ -1,7 +1,9 @@
 package com.dwinovo.numen.api.agent.conversation;
 
-import com.dwinovo.numen.api.agent.llm.ConvoLog;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
+import com.dwinovo.numen.api.agent.llm.QueryMarkup;
+import com.dwinovo.numen.api.agent.llm.Rows;
+import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -12,10 +14,10 @@ import java.util.OptionalInt;
 import java.util.UUID;
 
 /**
- * 一个会话的记录——从成员各自的日志里归并出来,不另存。
+ * 一个会话的记录——从成员各自的对话记录里归并出来,不另存。
  *
- * <p>存储按人,视图按会话(见 docs/group-chat.md §七):每只同伴一本日志,说出口的行盖着会话印;
- * 这里把成员的日志按印过滤、按时间交错。主人的一句话会被复制进每个醒着的成员的日志,各自
+ * <p>存储按人,视图按会话(见 docs/group-chat.md §七):每只同伴一份对话记录,说出口的行盖着会话印;
+ * 这里把成员的记录按印过滤、按时间交错。主人的一句话会被复制进每个醒着的成员的日志,各自
  * 盖各自的时间戳,所以副本靠<b>发言号 + 原文</b>归成一条(见 {@link Conversation#turn}),不看时间。
  * 没挂发言号的行(单成员会话)从不合并——那本来就只有一份。
  *
@@ -24,25 +26,26 @@ import java.util.UUID;
 public final class Transcript {
 
     /**
-     * 会话里的一行:什么时候、谁那本日志、消息本身,以及这一行在每本日志里的行编号。主人的一句话在每个醒着的成员
-     * 那儿各有一份副本,归并成一行之后,各份的编号都在 {@code ids} 里——翻页的游标要按各本日志各自翻过哪一行记。
+     * 会话里的一行:什么时候、谁那份记录、消息本身,以及这一行在每份记录里的行编号。主人的一句话在每个醒着的成员
+     * 那儿各有一份副本,归并成一行之后,各份的编号都在 {@code ids} 里——翻页的游标要按各份记录各自翻过哪一行记;
+     * {@code rows} 是留下的那一份副本的原始行,换到别处时消息从它读出来。
      */
-    public record Entry(long ts, UUID companion, ConvoState.Msg msg, Map<UUID, String> ids) {}
+    public record Entry(long ts, UUID companion, ConvoState.Msg msg, Map<UUID, String> ids, List<JsonObject> rows) {}
 
     private Transcript() {}
 
     /**
      * @param conversation 会话印;null = 就他俩
-     * @param logs         成员 → 她的日志行(面板视图)
+     * @param logs         成员 → 她的记录行(面板视图)
      */
-    public static List<Entry> merge(String conversation, Map<UUID, List<ConvoLog.Line>> logs) {
+    public static List<Entry> merge(String conversation, Map<UUID, List<Rows.Line>> logs) {
         List<Entry> all = new ArrayList<>();
-        for (Map.Entry<UUID, List<ConvoLog.Line>> e : logs.entrySet()) {
-            for (ConvoLog.Line line : e.getValue()) {
+        for (Map.Entry<UUID, List<Rows.Line>> e : logs.entrySet()) {
+            for (Rows.Line line : e.getValue()) {
                 if (Objects.equals(line.conv(), conversation)) {
                     Map<UUID, String> ids = new java.util.HashMap<>();
                     ids.put(e.getKey(), line.id());
-                    all.add(new Entry(line.ts(), e.getKey(), line.msg(), ids));
+                    all.add(new Entry(line.ts(), e.getKey(), line.msg(), ids, line.rows()));
                 }
             }
         }
@@ -77,6 +80,6 @@ public final class Transcript {
         if (turn.isEmpty()) {
             return null;
         }
-        return turn.getAsInt() + "\n" + String.join("\n", ConvoLog.queries(u.content()));
+        return turn.getAsInt() + "\n" + String.join("\n", QueryMarkup.queries(u.content()));
     }
 }

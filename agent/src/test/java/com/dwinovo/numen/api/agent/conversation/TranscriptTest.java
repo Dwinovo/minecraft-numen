@@ -1,8 +1,8 @@
 package com.dwinovo.numen.api.agent.conversation;
 
 import com.dwinovo.numen.api.agent.inbox.EventQueue;
-import com.dwinovo.numen.api.agent.llm.ConvoLog;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
+import com.dwinovo.numen.api.agent.llm.Rows;
 import com.dwinovo.numen.api.agent.provider.AssistantTurn;
 import org.junit.jupiter.api.Test;
 
@@ -23,17 +23,21 @@ class TranscriptTest {
     private static final UUID YOU = UUID.randomUUID();
     private static final UUID LAN = UUID.randomUUID();
 
-    private static ConvoLog.Line owner(long ts, String conv, int turn, String said, String audience) {
-        return new ConvoLog.Line(null, ts, conv, new ConvoState.Msg.User(
+    private static Rows.Line line(String id, long ts, String conv, ConvoState.Msg msg) {
+        return new Rows.Line(id, ts, conv, msg, List.of());
+    }
+
+    private static Rows.Line owner(long ts, String conv, int turn, String said, String audience) {
+        return line(null, ts, conv, new ConvoState.Msg.User(
                 EventQueue.query(said, 0L) + "\n" + Audience.line(turn, audience)));
     }
 
-    private static ConvoLog.Line reply(long ts, String conv, String said) {
-        return new ConvoLog.Line(null, ts, conv, new ConvoState.Msg.Assistant(new AssistantTurn(said, List.of(), null)));
+    private static Rows.Line reply(long ts, String conv, String said) {
+        return line(null, ts, conv, new ConvoState.Msg.Assistant(new AssistantTurn(said, List.of(), null)));
     }
 
-    private static Map<UUID, List<ConvoLog.Line>> logs(List<ConvoLog.Line> you, List<ConvoLog.Line> lan) {
-        Map<UUID, List<ConvoLog.Line>> m = new LinkedHashMap<>();
+    private static Map<UUID, List<Rows.Line>> logs(List<Rows.Line> you, List<Rows.Line> lan) {
+        Map<UUID, List<Rows.Line>> m = new LinkedHashMap<>();
         m.put(YOU, you);
         m.put(LAN, lan);
         return m;
@@ -85,8 +89,8 @@ class TranscriptTest {
     @Test
     void linesWithoutATurnNumberNeverMerge() {
         List<Transcript.Entry> t = Transcript.merge(null, logs(
-                List.of(new ConvoLog.Line(null, 1000, null, new ConvoState.Msg.User("<query>好</query>")),
-                        new ConvoLog.Line(null, 1100, null, new ConvoState.Msg.User("<query>好</query>"))),
+                List.of(line(null, 1000, null, new ConvoState.Msg.User("<query>好</query>")),
+                        line(null, 1100, null, new ConvoState.Msg.User("<query>好</query>"))),
                 List.of()));
 
         assertEquals(2, t.size());
@@ -95,11 +99,11 @@ class TranscriptTest {
     /** 翻页的游标要按各本日志各自翻过哪一行记:合并掉的副本,每一份的行编号都留在那一行上。 */
     @Test
     void aMergedCopyRemembersEveryLogsLineId() {
-        ConvoLog.Line mine = owner(1000, "G", 1, "我回来了", "小柚");
-        ConvoLog.Line hers = owner(1008, "G", 1, "我回来了", "阿岚");
+        Rows.Line mine = owner(1000, "G", 1, "我回来了", "小柚");
+        Rows.Line hers = owner(1008, "G", 1, "我回来了", "阿岚");
         List<Transcript.Entry> t = Transcript.merge("G", logs(
-                List.of(new ConvoLog.Line("a1", mine.ts(), mine.conv(), mine.msg())),
-                List.of(new ConvoLog.Line("b1", hers.ts(), hers.conv(), hers.msg()))));
+                List.of(line("a1", mine.ts(), mine.conv(), mine.msg())),
+                List.of(line("b1", hers.ts(), hers.conv(), hers.msg()))));
 
         assertEquals(1, t.size());
         assertEquals(java.util.Map.of(YOU, "a1", LAN, "b1"), t.get(0).ids());

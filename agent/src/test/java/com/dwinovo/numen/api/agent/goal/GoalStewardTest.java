@@ -12,7 +12,6 @@ import com.dwinovo.numen.api.agent.provider.Usage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -22,18 +21,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 长期目标挂在一个真的循环内核上:一次 run 说完才评估,评估不是 run,没做完就接着推一条续跑,
- * 做完、卡住、主人按停止就收工。
+ * 做完或主人收工就清掉,主人按停止不清。
  */
 class GoalStewardTest extends LoopHarness {
 
-    private final List<GoalState> persisted = new ArrayList<>();
     private boolean bodyBusy;
     private GoalSteward goals;
 
     @BeforeEach
     void setUpGoals() {
-        goals = new GoalSteward("test", loop, transcript, inbox, () -> "<runtime_state/>", () -> bodyBusy,
-                persisted::add, null);
+        goals = new GoalSteward("test", loop, transcript, inbox, () -> "<runtime_state/>", () -> bodyBusy, null);
         loop.subscribe(goals::on);
     }
 
@@ -41,8 +38,8 @@ class GoalStewardTest extends LoopHarness {
     private GoalState goalSetAndFirstRunDone(String objective) {
         GoalState goal = GoalState.of(objective, T0);
         assertTrue(goals.set(goal), "活着、没被外接驾驶:当场交给她");
-        loop.push(List.of(new EventQueue.Entry(EventTypes.QUERY,
-                EventQueue.query("/goal " + objective, 0L) + "\n" + GoalPrompts.initialDirective(goal), 0, false)));
+        loop.push(List.of(new EventQueue.Entry(EventTypes.QUERY, EventQueue.query("/goal " + objective, 0L), 0, false),
+                new EventQueue.Entry(EventTypes.GOAL_DIRECTIVE, GoalPrompts.directive(objective), 0, false)));
         model.last().say("好,这就去");
         return goal;
     }
@@ -77,7 +74,10 @@ class GoalStewardTest extends LoopHarness {
         assertFalse(isEvaluation(model.last()));
         assertTrue(model.last().lastUser().contains("背包里只有 20 个铁"), "只补评估器那句还差什么");
         assertEquals(2, goal.turnsExecuted());
-        assertEquals(goal, persisted.get(persisted.size() - 1), "续跑一轮就落盘一次");
+        assertEquals(new ConvoState.Msg.User("Stop hook feedback:\n[挖 64 个铁]: 背包里只有 20 个铁", true),
+                transcript.snapshot().get(transcript.snapshot().size() - 1), "评估员的话是元信息的 user 行");
+        assertEquals("背包里只有 20 个铁", attached.getLast().get("reason").getAsString());
+        assertFalse(attached.getLast().get("met").getAsBoolean());
     }
 
     @Test
@@ -88,7 +88,8 @@ class GoalStewardTest extends LoopHarness {
         verdict(GoalPrompts.MET + ": 背包里有 64 个铁锭");
 
         assertNull(goals.goal());
-        assertNull(persisted.get(persisted.size() - 1), "收工也落盘");
+        assertTrue(attached.getLast().get("met").getAsBoolean(), "判定那一行就是做完了");
+        assertEquals(2, attached.size(), "设定一条、判定一条,清除不再多写");
         assertEquals(callsBefore, model.calls.size(), "收工不再开 run");
     }
 
@@ -149,7 +150,8 @@ class GoalStewardTest extends LoopHarness {
 
         verdict(GoalPrompts.NOT_MET + ": 背包里只有 20 个铁");
 
-        String injected = model.last().lastUser();
+        String injected = model.last().request().messages().stream()
+                .map(m -> m instanceof ConvoState.Msg.User u ? u.content() : "").reduce("", (a, b) -> a + "\n" + b);
         assertTrue(injected.contains("背包里只有 20 个铁") && injected.contains("[阿岚] 我去东边"),
                 "续跑那一轮把旁听捎带进去");
     }
@@ -165,12 +167,32 @@ class GoalStewardTest extends LoopHarness {
     }
 
     @Test
-    void stopEndsTheGoal() {
+    void stopDoesNotEndTheGoal() {
         goalSetAndFirstRunDone("挖 64 个铁");
 
         loop.halt(HaltReason.OWNER_STOP);
 
-        assertNull(goals.goal(), "按了停止还自己续上的话,停止键就成了摆设");
+        assertEquals("挖 64 个铁", goals.goal().objective(), "照 Claude Code:打断不清目标,想收工说 /goal clear");
+    }
+
+    @Test
+    void clearingWritesTheClearingRowAndNothingContinues() {
+        goalSetAndFirstRunDone("挖 64 个铁");
+        goals.clear(null);
+
+        assertNull(goals.goal());
+        assertTrue(attached.getLast().get("sentinel").getAsBoolean());
+        assertTrue(attached.getLast().get("met").getAsBoolean());
+    }
+
+    @Test
+    void settingWritesTheSentinelRowWithTheCondition() {
+        goalSetAndFirstRunDone("挖 64 个铁");
+
+        assertEquals("goal_status", attached.getFirst().get("type").getAsString());
+        assertEquals("挖 64 个铁", attached.getFirst().get("condition").getAsString());
+        assertTrue(attached.getFirst().get("sentinel").getAsBoolean());
+        assertFalse(attached.getFirst().get("met").getAsBoolean());
     }
 
     @Test
@@ -191,7 +213,6 @@ class GoalStewardTest extends LoopHarness {
 
         assertFalse(goals.set(goal), "死着的时候交出去也只会躺着");
         assertEquals(goal, goals.goal());
-        assertEquals(goal, persisted.get(persisted.size() - 1));
     }
 
     @Test
@@ -207,8 +228,8 @@ class GoalStewardTest extends LoopHarness {
     @Test
     void theDirectiveIsRecognisedByTheSameMarkThatWritesIt() {
         GoalState goal = GoalState.of("挖 64 个铁", T0);
-        assertTrue(GoalPrompts.isDirective(GoalPrompts.initialDirective(goal)));
-        assertFalse(GoalPrompts.isDirective(GoalPrompts.progress("还差", goal, T0, 0L)));
+        assertTrue(GoalPrompts.isDirective(GoalPrompts.directive(goal.objective())));
+        assertFalse(GoalPrompts.isDirective(GoalPrompts.feedback(goal.objective(), "还差")));
         assertFalse(GoalPrompts.isDirective(new ConvoState.Msg.User("挖 64 个铁").content()));
     }
 }

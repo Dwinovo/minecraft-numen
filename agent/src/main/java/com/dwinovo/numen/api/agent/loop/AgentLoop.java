@@ -361,20 +361,32 @@ public final class AgentLoop {
 
     /**
      * 取出来的条目拼成一条 user 消息:现场块在前,世界的事按时间排进 {@code <events>},主人的话垫底
-     * (排版规则在 {@link EventQueue#render})。
+     * (排版规则在 {@link EventQueue#render});元信息的条目({@link EventTypes.Type#meta})各自一条元信息的 user 消息,排在它后面。
      */
     private void inject(List<EventQueue.Entry> batch) {
-        List<String> rendered = EventQueue.render(batch);
-        if (rendered.isEmpty()) {
+        List<EventQueue.Entry> told = batch.stream().filter(e -> !EventTypes.get(e.type()).meta()).toList();
+        List<EventQueue.Entry> meta = batch.stream().filter(e -> EventTypes.get(e.type()).meta())
+                .sorted(java.util.Comparator.comparingLong(EventQueue.Entry::ts)).toList();
+        List<String> rendered = EventQueue.render(told);
+        List<String> notes = meta.stream().map(e -> EventTypes.get(e.type()).toModel().apply(e.text()))
+                .filter(text -> text != null && !text.isBlank()).toList();
+        if (rendered.isEmpty() && notes.isEmpty()) {
             return;
         }
-        List<String> parts = new ArrayList<>();
         String preamble = host.injectionPreamble();
-        if (!preamble.isEmpty()) {
-            parts.add(preamble);
+        if (rendered.isEmpty()) {
+            if (!preamble.isEmpty()) {
+                transcript.addMeta(preamble);
+            }
+        } else {
+            List<String> parts = new ArrayList<>();
+            if (!preamble.isEmpty()) {
+                parts.add(preamble);
+            }
+            parts.addAll(rendered);
+            transcript.addUser(String.join("\n", parts));
         }
-        parts.addAll(rendered);
-        transcript.addUser(String.join("\n", parts));
+        notes.forEach(transcript::addMeta);
         transcript.resetTurnCount();   // 新输入开始一条新链:只是日志编号
         if (batch.stream().anyMatch(e -> EventTypes.get(e.type()).ownerWords())) {
             run.ownerSpoke = true;

@@ -640,7 +640,7 @@ class AgentLoopTest extends LoopHarness {
 
             assertEquals(0, inbox.count(EventTypes.GOAL), "排着的续跑是被取代的指令");
             assertEquals(1, inbox.count(EventTypes.TASK_FINISHED), "事实留着");
-            assertTrue(eventsOf(LoopEvent.Halted.class).get(0).reason().endsGoal());
+            
         }
 
         @Test
@@ -838,7 +838,7 @@ class AgentLoopTest extends LoopHarness {
             assertNull(loop.hold(), "登出不置停牌");
             assertEquals(1, inbox.count(EventTypes.GOAL), "不清队列");
             assertEquals(1, inbox.count(EventTypes.TASK_FINISHED));
-            assertFalse(eventsOf(LoopEvent.Halted.class).get(0).reason().endsGoal(), "目标保留");
+            
             assertEquals("the owner disconnected", ((ConvoState.Msg.Halt) lastMessage()).reason());
 
             worldEvent("task_finished", true);   // 离线补发的收尾

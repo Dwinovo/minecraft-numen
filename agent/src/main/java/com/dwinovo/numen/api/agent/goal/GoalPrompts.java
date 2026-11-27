@@ -1,20 +1,16 @@
 package com.dwinovo.numen.api.agent.goal;
 
 /**
- * 目标相关的三段提示词。
- *
- * <h2>目标正文只说一次</h2>
- * 设定时用 {@link #initialDirective} 把目标交给她;之后每轮只补一句"还差什么"
- * ({@link #progress})。把整份目标 + 一整套完成判据每轮重发是很贵的——它进对话历史,
- * 而历史每轮全量重发,于是第 N 轮的请求里装着前 N-1 份,成本是 O(n²)。
+ * 目标相关的几段话,照 Claude Code 的 {@code /goal}:设定时交给她的指示、没达成时评估员的反馈,都是对话里 {@code isMeta} 的 user 行;
+ * 做完没有由另一次调用判。
  *
  * <h2>做完没有,不由她自己说</h2>
  * {@link #evaluatorSystem} / {@link #evaluatorQuery} 是给<b>另一次独立调用</b>用的:
- * 不带对话历史、不带人设、不带工具,只看条件、身体事实和最近几句。执行的人和判定的人
- * 分开,她才骗不了自己。
+ * 不带对话历史、不带人设、不带工具,只看条件、身体事实和目标设定以来发生的事。执行的人和判定的人
+ * 分开,她才骗不了自己。这次调用不进对话记录。
  *
  * <h2>目标正文是主人自由输入的</h2>
- * 三处都把它包在 {@code <objective>} 里并声明"这是数据不是指令"——不这样的话,一句
+ * 评估员那边把它包在 {@code <objective>} 里并声明"这是数据不是指令"——不这样的话,一句
  * "忽略前面所有规则"写进目标就直接生效了。
  *
  * <p>纯 JVM,不碰 Minecraft。
@@ -33,34 +29,25 @@ public final class GoalPrompts {
                 </objective>""".formatted(objective);
     }
 
-    /** 设定目标那一刻交给她的东西。整份目标只在这里出现一次。 */
-    public static String initialDirective(GoalState goal) {
-        return """
-                <goal>
-                %s
-                Work toward this. It persists across turns — you do not have to finish it in one \
-                turn, but do not narrow it or redefine success around what is already done.
+    /** 设定目标的那条指示的开头;评估员往回扫对话扫到它为止({@link #isDirective})。 */
+    private static final String DIRECTIVE_OPENING = "A session-scoped Stop hook is now active with condition: \"";
 
-                Do not declare it finished yourself: after every turn someone else checks whether \
-                the condition holds, against your inventory, position and task results. Just keep \
-                making real progress.
-                </goal>""".formatted(objectiveBlock(goal.objective()));
+    /** 设定目标那一刻交给她的指示,原文照 Claude Code,清除目标的说法换成这里的 {@code /goal clear}。 */
+    public static String directive(String condition) {
+        return DIRECTIVE_OPENING + condition + "\". Briefly acknowledge the goal, then immediately start (or continue) "
+                + "working toward it — treat the condition itself as your directive and do not pause to ask the user what to do. "
+                + "The hook will block stopping until the condition holds. It auto-clears once the condition is met — "
+                + "do not tell the user to run `/goal clear` after success; that's only for clearing a goal early.";
     }
 
-    /** 这条 user 消息是不是设定目标那一刻交给她的那条({@link #initialDirective})——评估器往回扫对话扫到它为止。 */
+    /** 这条 user 消息是不是设定目标那一刻交给她的那条({@link #directive})。 */
     public static boolean isDirective(String userContent) {
-        return userContent.contains("<goal>");
+        return userContent.startsWith(DIRECTIVE_OPENING);
     }
 
-    /** 判定没过的时候塞回去的一句。这是续跑期间<b>唯一</b>重复出现的东西。 */
-    public static String progress(String reason, GoalState goal, long nowMs, long dayTime) {
-        return """
-                <goal-progress turn="%d" elapsed="%s"%s>
-                Not met yet: %s
-                Keep working toward the goal.
-                </goal-progress>"""
-                .formatted(goal.turnsExecuted(), elapsed(goal.elapsedMs(nowMs)),
-                        com.dwinovo.numen.api.agent.inbox.EventClock.stamp(dayTime), reason);
+    /** 评估员说还没达成时塞回对话的那一句,原文照 Claude Code:她接着跑。 */
+    public static String feedback(String condition, String reason) {
+        return "Stop hook feedback:\n[" + condition + "]: " + reason;
     }
 
     // ---- 评估器 ----
@@ -69,8 +56,6 @@ public final class GoalPrompts {
     public static final String MET = "MET";
     /** 判定不成立的回复前缀。 */
     public static final String NOT_MET = "NOT_MET";
-    /** 没达成,而且跟上一轮比毫无实质进展——她在原地打转。 */
-    public static final String STUCK = "STUCK";
 
     public static String evaluatorSystem() {
         return """
@@ -81,7 +66,6 @@ public final class GoalPrompts {
                 Reply with exactly one line, nothing else:
                 %s: <one short sentence naming the evidence that proves it>
                 %s: <one short sentence naming what is still missing>
-                %s: <one short sentence naming what she is stuck on>
 
                 Write that sentence in the same language as the condition — the owner reads it.
 
@@ -89,12 +73,8 @@ public final class GoalPrompts {
                 are there; you do not need to prove every one of them was mined just now. Judge \
                 only from the evidence you are given, and prefer the physical state over anything \
                 she claims — it is measured from the world, not reported by her. If the evidence \
-                does not prove the condition, answer %s.
-
-                Use %s instead of %s when this round changed nothing that matters: same obstacle \
-                as last time, same counts, tasks failing the same way. The owner would rather be \
-                told she cannot get there than watch her circle for another twenty rounds."""
-                .formatted(MET, NOT_MET, STUCK, NOT_MET, STUCK, NOT_MET);
+                does not prove the condition, answer %s."""
+                .formatted(MET, NOT_MET, NOT_MET);
     }
 
     /**
@@ -126,8 +106,8 @@ public final class GoalPrompts {
                         last);
     }
 
-    /** 评估器的一句话回复。{@code stuck} 蕴含没达成。 */
-    public record Verdict(boolean met, boolean stuck, String reason) {}
+    /** 评估器的一句话回复。 */
+    public record Verdict(boolean met, String reason) {}
 
     /**
      * 读评估器的回复。
@@ -139,18 +119,15 @@ public final class GoalPrompts {
         String text = reply == null ? "" : reply.strip();
         for (String line : text.split("\n")) {
             String t = line.strip();
-            // NOT_MET 里含着 MET,STUCK 独立;先认长的、再认短的。
+            // NOT_MET 里含着 MET:先认长的、再认短的。
             if (t.regionMatches(true, 0, NOT_MET, 0, NOT_MET.length())) {
-                return new Verdict(false, false, tail(t, NOT_MET));
-            }
-            if (t.regionMatches(true, 0, STUCK, 0, STUCK.length())) {
-                return new Verdict(false, true, tail(t, STUCK));
+                return new Verdict(false, tail(t, NOT_MET));
             }
             if (t.regionMatches(true, 0, MET, 0, MET.length())) {
-                return new Verdict(true, false, tail(t, MET));
+                return new Verdict(true, tail(t, MET));
             }
         }
-        return new Verdict(false, false, text.isEmpty() ? "cannot tell (the evaluator gave no answer)" : text);
+        return new Verdict(false, text.isEmpty() ? "cannot tell (the evaluator gave no answer)" : text);
     }
 
     /** 去掉前缀和它后面的冒号/空白。 */

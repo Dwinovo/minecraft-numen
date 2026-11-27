@@ -53,12 +53,17 @@ public final class EventTypes {
      */
     public static final String CLEAR = "clear";
     /**
-     * 长期目标的续跑块。
+     * 长期目标的续跑:评估员说还没做完时的那句反馈(Claude Code 的 {@code Stop hook feedback}),对话里元信息的 user 行。
      *
-     * <p>是文本(要拼给模型),但不进聊天流——那一大块 steering 给主人看没有意义,目标本身
-     * 在界面上另有一行。主人按停止就作废:那正是"我不要她接着跑了"。
+     * <p>是文本(要拼给模型),但不进聊天流——给主人看没有意义,目标本身在界面上另有一行。主人按停止时排着的这一条作废
+     * (目标不清:她下一次停下来照常判)。
      */
     public static final String GOAL = "goal";
+    /**
+     * 设定长期目标时交给她的指示(Claude Code 的 {@code /goal} 写下的那条元信息),跟主人打的那一行同批交出去。
+     * 同样不进聊天流、主人按停止时作废。
+     */
+    public static final String GOAL_DIRECTIVE = "goal_directive";
 
     // ---- 世界上发生的事,一种一行 ----
 
@@ -276,6 +281,8 @@ public final class EventTypes {
      * @param alwaysUrgent       {@code true} = 这类恒为急件,发送方怎么标都一样;{@code false} =
      *                           急不急由发送方在 push 时定。生效规则只在 {@link EventQueue} 一处。
      *                           急件的意思是"立刻叫醒她",所以只有 {@link Delivery#wakes} 的档能恒急
+     * @param meta               {@code true} = 这类条目的文字在对话里自成一条元信息的 user 行(模型读得到、面板不画),
+     *                           不并进主人的话与世界的事那一条
      * @throws IllegalArgumentException 声明恒急、投递档却不会叫醒她
      */
     public record Type(String id,
@@ -284,7 +291,14 @@ public final class EventTypes {
                        boolean clearedByInterrupt,
                        boolean fromOwner,
                        Delivery delivery,
-                       boolean alwaysUrgent) {
+                       boolean alwaysUrgent,
+                       boolean meta) {
+
+        /** 不是元信息的一种(绝大多数)。 */
+        public Type(String id, Function<String, String> toModel, Function<String, String> chatPreview,
+                    boolean clearedByInterrupt, boolean fromOwner, Delivery delivery, boolean alwaysUrgent) {
+            this(id, toModel, chatPreview, clearedByInterrupt, fromOwner, delivery, alwaysUrgent, false);
+        }
 
         public Type {
             if (alwaysUrgent && !delivery.wakes()) {
@@ -351,7 +365,9 @@ public final class EventTypes {
         register(new Type(COMPACT, s -> null, s -> s, true, true, Delivery.CONTROL, false));
         register(new Type(CLEAR, s -> null, s -> s, true, true, Delivery.CONTROL, false));
         // 续跑是评估器判过"还没做完"之后推的,这一推本身就是要她接着干。
-        register(new Type(GOAL, s -> s, s -> null, true, true, Delivery.FOLLOW_UP, true));
+        register(new Type(GOAL, s -> s, s -> null, true, true, Delivery.FOLLOW_UP, true, true));
+        // 设定目标时的指示:跟主人打的那一行同批交出去,不是主人说的话
+        register(new Type(GOAL_DIRECTIVE, s -> s, s -> null, true, false, Delivery.STEER, true, true));
         // 世界的事:恒急的几种是"她不知道,正在做的事就是错的",与她当时在干什么无关;
         // 其余由发的那一方按事情本身定(任务按 status、主人挨打按血线)。
         register(event(TASK_FINISHED, false));

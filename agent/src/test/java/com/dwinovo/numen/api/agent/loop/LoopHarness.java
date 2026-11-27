@@ -26,7 +26,25 @@ public abstract class LoopHarness {
 
     protected static final long T0 = 1_000_000L;
 
-    protected final ConvoState transcript = new ConvoState();
+    /** 账上记下的状态与提醒({@code attachment}),按先后:类型加字段。 */
+    protected final List<com.google.gson.JsonObject> attached = new ArrayList<>();
+    protected final ConvoState transcript = new ConvoState(new ConvoState.Journal() {
+        @Override
+        public void append(ConvoState.Msg msg) { }
+
+        @Override
+        public void attach(String type, com.google.gson.JsonObject fields) {
+            com.google.gson.JsonObject row = fields.deepCopy();
+            row.addProperty("type", type);
+            attached.add(row);
+        }
+
+        @Override
+        public void compacted(String summary, int keptTail, com.google.gson.JsonObject meta) { }
+
+        @Override
+        public void cleared() { }
+    });
     protected final EventQueue inbox = new EventQueue(EventQueue.Journal.NONE);
     protected final FakeModel model = new FakeModel();
     protected final FakeTools tools = new FakeTools();
