@@ -1,6 +1,6 @@
 # 0030 原版内容是内置的 Minecraft 插件:模组 numen_minecraft,Lua 命名空间 minecraft;引擎的模组 id 改成 numen
 
-- 状态:已接受,未落地
+- 状态:已接受,已落地
 - 日期:2026-11-27
 - 另见:[0014](0014-plugin-registrations-scoped.md)(插件登记有作用域)、[0029](0029-claude-style-prompt-and-api-search.md)(引擎不点名插件、
   上下文里只列插件命名空间)
@@ -54,3 +54,13 @@
 - 仓库结构直接说明架构:`numen-api/` 是引擎,`plugins/` 下全是插件,其中 `minecraft` 随引擎发。
 - 玩家只看到一个 Numen;开发者看到一个引擎加一组插件。
 - 一次大改名:所有原版内容的函数全名、构建与发版路径都变;移植到其他版本分支时要整体重做一遍。
+
+## 实现说明
+
+- 引擎模组 id `numen`,协议版本 13;原版内容在 `plugins/minecraft/`(模组 `numen_minecraft`、Lua 命名空间 `minecraft`),NeoForge 用 jarJar、Fabric 用 include 内嵌进引擎的 jar。
+- `minecraft.command`(原 `numen.mc`)在插件里;引擎只留 YSM 也在用的"以她的身份执行指令"(`Echo`、`EchoSource`、`Completions`)。
+- 知识来源扩展点删了;`minecraft.inv.recipes/uses/info` 只答原版的,JEI 是 `jei.lookup.*`,KubeJS 脚本用普通函数组登记自己的查询。
+- 坐标 `Pos` 是引擎的类型,加减比较与挪动在引擎自带的 Lua 模块 `numen.geometry` 里(经宿主登记,和插件随附模块同一条路、同一个取资源的平台服务);区域、格子集与造形状的方法在插件。
+- 引擎不再认识插件的扫描结构:插件把自己的"团"读成引擎认的格。
+- 引擎的 `numen` 下只剩 `numen.permission`、`numen.task`、`numen.geometry`。
+- 引擎里"够不着/离太远"一类报错不再点名插件函数,只说下一步做什么。
