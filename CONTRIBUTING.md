@@ -17,12 +17,12 @@ Each Minecraft version has its own branch named after the version; the default b
 On `1.20.1`, `1.20.2` and `1.20.4`, replace `neoforge` with `forge`.
 
 ```bash
-./gradlew :numen:fabric:build :numen:neoforge:build
-./gradlew :ai:test :script:test :agent:test :numen-api:common:test :numen:common:test
-./gradlew :numen:pathing:pathingBench -PpathingDataset=<目录>   # 寻路规划评测(纯 JVM,不要服务器;数据集在 Dwinovo/numen-pathfinding-benchmark,改寻路前后各跑一次,pathingBenchDiff 对比) / pathfinding planning benchmark (plain JVM, no server; dataset in Dwinovo/numen-pathfinding-benchmark; run before and after a pathing change, compare with pathingBenchDiff)
-./gradlew :numen:neoforge:runGameTestServer
-./gradlew :numen:fabric:runGameTestServer
-./gradlew :numen:neoforge:runGameTestServer -Pgametest=numen_slow,numen_pathing_slow   # 慢批:时限超过 600 刻的用例,含寻路可靠性矩阵(两分多钟);只在改了寻路的执行或走法前提时跑 / the slow batch: cases whose time limit is over 600 ticks, including the pathing reliability matrix (2+ minutes); run it only when you change pathing execution or move preconditions
+./gradlew :numen-api:fabric:build :numen-api:neoforge:build   # 成品是引擎的 jar,内置的 Minecraft 插件内嵌在里面 / the shipped jar is the engine's, with the built-in Minecraft plugin nested inside
+./gradlew :ai:test :script:test :agent:test :numen-api:common:test :plugins:minecraft:common:test
+./gradlew :plugins:minecraft:pathing:pathingBench -PpathingDataset=<目录>   # 寻路规划评测(纯 JVM,不要服务器;数据集在 Dwinovo/numen-pathfinding-benchmark,改寻路前后各跑一次,pathingBenchDiff 对比) / pathfinding planning benchmark (plain JVM, no server; dataset in Dwinovo/numen-pathfinding-benchmark; run before and after a pathing change, compare with pathingBenchDiff)
+./gradlew :plugins:minecraft:neoforge:runGameTestServer
+./gradlew :plugins:minecraft:fabric:runGameTestServer
+./gradlew :plugins:minecraft:neoforge:runGameTestServer -Pgametest=numen_slow,numen_pathing_slow   # 慢批:时限超过 600 刻的用例,含寻路可靠性矩阵(两分多钟);只在改了寻路的执行或走法前提时跑 / the slow batch: cases whose time limit is over 600 ticks, including the pathing reliability matrix (2+ minutes); run it only when you change pathing execution or move preconditions
 ./gradlew :plugins:tlm:runGameTestServer      # 车万女仆联动的那一批,单开一次跑批 / the Touhou Little Maid integration cases, a run of their own
 ./gradlew :plugins:ysm:gametest:runGameTestServer  # YSM 联动的那一批,同样单开一次跑批 / the Yes Steve Model integration cases, also a run of their own
 ./gradlew :plugins:ftbquests:runGameTestServer  # FTB Quests 联动的那一批,同样单开一次跑批 / the FTB Quests integration cases, also a run of their own
@@ -31,7 +31,7 @@ On `1.20.1`, `1.20.2` and `1.20.4`, replace `neoforge` with `forge`.
 # 结果不看机器快慢。/ The GameTest runs above (run datagenAll first) do not run on push; trigger "GameTest" by hand on the Actions page, platforms in parallel. The test server waits at the start of every tick for the pathing and program background threads to settle, so results do not depend on machine speed.
 # 端到端:起一台真的专用服,用原版客户端协议走一遍玩家能做的事(要先跑过 datagenAll,约 2 分钟)
 # End to end: starts a real dedicated server and drives it with a vanilla-protocol client (run datagenAll first; ~2 min)
-./gradlew :numen:neoforge:e2eTest
+./gradlew :plugins:minecraft:neoforge:e2eTest
 # 端到端时间长,不跟着推送跑;在 GitHub 的 Actions 页手动触发 "Slow tests"。
 # The end-to-end runs are long and do not run on push; trigger "Slow tests" by hand on the Actions page.
 # 排查与证明稳定的开关,加在 runGameTestServer 命令后面 / switches for investigating and proving stability, appended to a runGameTestServer command:

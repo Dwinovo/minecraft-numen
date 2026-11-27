@@ -22,7 +22,7 @@
 
 ## 这是什么
 
-**Numen API**（模组 id `numen_api`）是驱动 [Numen](https://github.com/Dwinovo/minecraft-numen) mod 的底层，独立成一个项目，对外提供一套**稳定的公共 API**。Numen mod 把 Numen API 打包在身上，插件则编译对接它。同伴会想、会说、会走、会挖、会打、会记事——这些能力全部住在 Numen API 里；Numen mod 只是在它之上叠了一套工具和技能。
+**Numen API**（模组 id `numen`）是驱动 [Numen](https://github.com/Dwinovo/minecraft-numen) mod 的底层，独立成一个项目，对外提供一套**稳定的公共 API**。玩家装的 Numen mod 就是它，原版的内容（工具和技能）是随它内置的 Minecraft 插件（模组 id `numen_minecraft`，Lua 命名空间 `minecraft`），和别的插件一样编译对接它。同伴会想、会说、会走、会挖、会打、会记事——这些能力全部住在 Numen API 里；内置的 Minecraft 插件只是在它之上叠了一套工具和技能。
 
 Numen API 提供这些东西：
 
@@ -121,7 +121,7 @@ artifact 发布在 [numen-maven](https://github.com/Dwinovo/numen-maven)。坐�
 com.dwinovo.numen:numen-api-<loader>-<mcversion>:<version>
 ```
 
-依赖精简版的公共 API jar（classifier 为 `api`）。运行时 Numen API 由 **Numen mod 提供**——它把 Numen API 打包在身上，插件自己不携带任何 Numen API 代码。
+依赖精简版的公共 API jar（classifier 为 `api`）。运行时 Numen API 由 **Numen mod 提供**——Numen mod 就是它（内置的 Minecraft 插件作为内嵌模组装在它的 jar 里），插件自己不携带任何 Numen API 代码。
 
 ```gradle
 repositories {
@@ -142,21 +142,21 @@ dependencies {
 
 `numen-ai`（模型接入与用量核算）、`numen-agent`（同伴大脑的循环内核、收件箱与长期目标）和 `numen-ui`（控件）会随依赖自动带进来——`NumenTool` 继承的 `IToolSpec` 就住在 `numen-ai` 里，少了它编译不过。它们的坐标同样带 MC 版本后缀：代码本身与 Minecraft 无关，但各版本分支上的这份源码目前并不相同。
 
-**要改 Numen API 本身的机制**，就依赖 Numen：
+**要改 Numen API 本身的机制**，就依赖完整的引擎（同一个坐标，不带 `api` 分类）：
 
 ```gradle
 dependencies {
     // Fabric
-    modImplementation "com.dwinovo.numen:numen-fabric-1.21.1:<version>"
+    modImplementation "com.dwinovo.numen:numen-api-fabric-1.21.1:<version>"
 
     // NeoForge / Forge（没有 modImplementation 这个关键字，那是 Loom 的）
-    // implementation "com.dwinovo.numen:numen-neoforge-1.21.1:<version>"
+    // implementation "com.dwinovo.numen:numen-api-neoforge-1.21.1:<version>"
 }
 ```
 
-Numen 会把对应的 `numen-api-*` 一并带出来，不用另写一行——Numen API 的类型出现在 Numen 的公开签名里（`AbstractCompanionTask<R extends TaskRecord>` 之类），所以它是 `api` scope 而非 `runtime`。
+要连内置的 Minecraft 插件（`minecraft.*` 那些函数的实现）一起，另依赖 `com.dwinovo.numen:numen_minecraft-<loader>-<mcversion>:<version>`；它运行时需要上面的引擎。
 
-> 两个模组的 `-common` 坐标（`numen-api-common-*` / `numen-common-*`）都别依赖。它们只有跨加载器那部分代码：没有加载器入口，`numen-api-common-*` 还没有语言文件，`numen-common-*` 也不内嵌 Numen API。能编译，装进游戏什么都不会发生。**带加载器名的那个坐标才是完整的。**
+> 两个模组的 `-common` 坐标（`numen-api-common-*` / `numen_minecraft-common-*`）都别依赖。它们只有跨加载器那部分代码：没有加载器入口，`numen-api-common-*` 还没有语言文件。能编译，装进游戏什么都不会发生。**带加载器名的那个坐标才是完整的。**
 
 ---
 

@@ -59,7 +59,7 @@ Numen 只经本模块寻路,旧的 `core/pathing` 已删除;下一步是合回 1
 
 ```
             ┌───────────────────────── Numen ───────────────────────────────┐
-            │ 任务 / 命令 / 感知    适配层 numen/nav:端口实现、路线簿、文案渲染 │
+            │ 任务 / 命令 / 感知    适配层 plugins/minecraft/nav:端口实现、路线簿、文案渲染 │
             └───────────────┬───────────────────────────────┬────────────────┘
                             │ 只经门面                        │ 实现端口
 ┌──────────────────────── pathing 模块(只依赖原版 MC)─────────────────────────┐
@@ -95,7 +95,7 @@ Numen 只经本模块寻路,旧的 `core/pathing` 已删除;下一步是合回 1
 含不含水、可不可能是可攀爬的、伤不伤身。推不出"什么都不用想"的状态既不是 `PASS` 也不是 `WHOLE`，搜索碰到就走精确的几何。
 快照里每个读到的层另解成一组按格的标志字(`WorldSnapshot.cellFlags`)，读一格是两次数组下标。
 
-够得着(`Reach`)、放方块时贴着哪一面(`Faces`)、放下去落在哪一格(`Replaceable`)是身体自己的事实，规划与身体共用一份，在 Numen API 的 `com.dwinovo.numen.api.entity`(`Reach` 只认眼睛的位置与交互距离，站在某一列时眼睛在哪由 `BodyStats.eye` 算)。点一格、挖一格只看够不够得着,中间隔着什么不问(body 0011);看不看得见(`Sight`)只答感知 `numen.scan.sight`,寻路不用它。
+够得着(`Reach`)、放方块时贴着哪一面(`Faces`)、放下去落在哪一格(`Replaceable`)是身体自己的事实，规划与身体共用一份，在 Numen API 的 `com.dwinovo.numen.api.entity`(`Reach` 只认眼睛的位置与交互距离，站在某一列时眼睛在哪由 `BodyStats.eye` 算)。点一格、挖一格只看够不够得着,中间隔着什么不问(body 0011);看不看得见(`Sight`)只答感知 `minecraft.scan.sight`,寻路不用它。
 
 **空中**(`Kinematics` 里的一族逐刻步进,ADR 0042):`fly`(创造飞行)、`glide`(鞘翅滑翔)、`boost`(烟花推力)。状态是位置加速度,输入是这一刻的键(前后左右、
 跳、潜行、疾跑、偏航与俯仰、烟花在不在推),下一刻的状态出;公式只取自原版 1.21.1(`LocalPlayer.aiStep` 的升降、`LivingEntity.aiStep` 的小速度归零、`Player.travel`
@@ -227,7 +227,7 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
 
 身体快照 `BodySnapshot` 不是端口，是宿主派发时从真实身体上抄下来交进来的值;规划与执行复核读同一个形状。
 
-### Numen 适配层(`numen/.../nav/`)
+### Numen 适配层(`plugins/minecraft/.../nav/`)
 
 - 端口的实现:`CompanionPorts`(组端口、组成本模型)、`GateTerrain`
   (`TerrainPolicy`)、`ThrowawayBlocks`(`Materials`);`Threats` 由 `Menace.dangers` 答。
@@ -237,7 +237,7 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
   `Walking.spec`,没路就照实收场。
 - 说给模型:结局、实际账、身体动作、路上被拒的格、不改地形的活要改的格渲染成英文、结局到 `FailureType` 的
   映射,只在 `NavText`;旅程账 `Journey`。
-- 给模型的寻路只有 `numen.move.walk`、`fly`、`glide`、`away`、`follow`(走、创造飞行与滑翔由调用方说,寻路不比价钱,ADR 0043、0044):去哪儿 `Where`、怎样算到 `Arrival`、编成目标 `Destination`,走路的任务
+- 给模型的寻路只有 `minecraft.move.walk`、`fly`、`glide`、`away`、`follow`(走、创造飞行与滑翔由调用方说,寻路不比价钱,ADR 0043、0044):去哪儿 `Where`、怎样算到 `Arrival`、编成目标 `Destination`,走路的任务
   `MoveToCompanionTask`,没有计划、承诺、途经点(见 `adr/pathing/0016-model-says-where-only.md`)。
 - 第 0 层按她的身体在活世界上答:她在哪个节点 `Feet`、她身边的地形 `Terrain`(待不待得住、能不能站、身体放不放得下、
   种类、托着她的格、迈不迈得进下一列;`scan_around`、钓鱼站位、建造表演、跟随落脚都问它)。
@@ -253,7 +253,7 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
 ## 五、模块与构建
 
 - Gradle 模块 `pathing` 对着原版编译(neoForm),不含加载器代码,随 Numen 的两个加载器 jar 平铺发出(`numen-loader.gradle`)。
-  包名 `com.dwinovo.numen.pathing`。
+  包名 `com.dwinovo.numen.plugins.minecraft.pathing`。
 - 依赖只有 Minecraft、fastutil、slf4j,加上 Numen API 的瘦 api jar(和插件同一扇门,编译期只看得见 Numen API 公开的那部分:
   `Controls`、`Look`、`Mouse`、`Hotbar`、`Physics`、`BodyAction`、`DigTime`、`Reach`、`Faces`、`Replaceable`);不依赖 `ai`、`agent`、Numen。往外的依赖在编译期就过不去。
 - Numen API 不依赖也不平铺 `pathing`;Numen 编译期依赖它(`compileOnly`),发行 jar 里平铺进去,不进 POM。联动插件不用它。
@@ -300,8 +300,8 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
 | 28 | 世界边界 | A* 整格在内，挖放内缩一格 | 第 0 层 |
 | 29 | 区块加载与搜索视图 | `CachedNavView` 在工作线程读活的区块调色板，不是注释说的冻结快照 | 第 2 层 `WorldSnapshot`:派发时拷一份方块段;读到的层(一个区段里 16×16 格)第一次读时整层解开,之后读一格是数组下标,没读过的层一格不解;估价问到的层也读这里,按高度范围读,调色板一个区段问一遍 |
 | 30 | 目标格保护(sacred)、目标移动与重根 | 分散在 `GoalCompiler`、`PlayerNav`、`Goal.keepsStop` | 第 2 层:`Goal.protection`、`Goal.keepsStop`、`Favoring` |
-| 31 | 载具 | 起步时静默下载具,没报给模型 | 走路的一趟从不自己下车:`Precondition.sitting` 受理就拒绝并指 `numen.use.dismount()`;坐在船上去一处位置是 `MoveToCompanionTask` 驾船(`BoatNav`)。模块的 `Driver` 不碰载具 |
-| 32 | 看不看得见一格(视线)★ | 09-29 补查:瞄点射线(`Aim.hits`)、到达复核(`Driver.sees`:瞄点加准星比对)、`use block` 的遮挡(瞄点加准星比对)各一份;"用一格方块"的到达只判几何,真机上一半结局是到了看不见 | 寻路不判:点一格、挖一格只看够不够得着(挑站位是 `Reach`,按下去那一刻是 `Mouse.reaches`),中间隔着什么不问(body 0011)。`Sight` 只答感知 `numen.scan.sight` |
+| 31 | 载具 | 起步时静默下载具,没报给模型 | 走路的一趟从不自己下车:`Precondition.sitting` 受理就拒绝并指 `minecraft.use.dismount()`;坐在船上去一处位置是 `MoveToCompanionTask` 驾船(`BoatNav`)。模块的 `Driver` 不碰载具 |
+| 32 | 看不看得见一格(视线)★ | 09-29 补查:瞄点射线(`Aim.hits`)、到达复核(`Driver.sees`:瞄点加准星比对)、`use block` 的遮挡(瞄点加准星比对)各一份;"用一格方块"的到达只判几何,真机上一半结局是到了看不见 | 寻路不判:点一格、挖一格只看够不够得着(挑站位是 `Reach`,按下去那一刻是 `Mouse.reaches`),中间隔着什么不问(body 0011)。`Sight` 只答感知 `minecraft.scan.sight` |
 | 33 | 能憋多久、一步憋不憋气 ★ | 09-30 真机:规划不知道要憋气,把她带进封顶的水下洞穴;Numen 的换气本能按"氧气不到 240"另判,计划内的水下三秒就被它接管;之后本能改成"游到最近能呼吸处要多久加余量"读同一份 `Breath`(见第十三节"憋气") | 规则第 1 层 `Breath`(身体快照),眼睛换不换得了气第 0 层 `Semantics.breathless`,一步憋不憋气 `Maneuver.submerged`;搜索、执行复核、诊断同一份,见第十三节"憋气" |
 | 34 | 身体怎么动(速度、起跳、下落、攀爬、每种走法几何上的最短耗时) ★ | 靶场量到:`ActionCosts` 写死原版玩家的速度常数,`JUMP_ONE_BLOCK` 是"升到一格高"的 3.2 刻、不是"落在高一格上"的 9 刻;`BodyStats.jumpHeight` 只判跳不跳得上;`Steering` 自己一份地面加速、摩擦、空中加速和几刻落地。上一格的估价实际/估价 1.74 | 第 0 层 `Kinematics`(读 `BodyStats` 的移动速度、起跳力度、重力与调用方给的脚下方块量,照原版逐刻推);已并入:`ActionCosts` 的物理耗时、`BodyStats.jumpHeight`、`Steering` 自算的那份。代价、估价、`Steering` 预判、`Gait` 的落地预判(`dropLanding`)、起跳点(`riseTicks`)、`Watchdog` 期限基数都读它 |
 | 35 | 身体此刻在路线的哪一步(往前认、往后退、离开路线) | 段状态机里一段 `track`,与到达判定各数一份"落在路线之外多久" | 第 3 层 `Tracker`(窗口、离开路线的刻数随它走);路线与进度只在 `Course`。到达一格是站在这一格上,不是站在它的中心:下一级落地后在这一列里停住即可(`DropControl`,`Steering.stop` 的容许范围),冲劲带过了落点中心也不回身走回去;要原地动手时才回中心(`Control.settle`)。平走进了落点这一列、脚却还踩在比落点高的薄板顶上(开着的活板门的板,宽 3/16,身子的另一侧离开板的内沿离中心只有 1/80 格)时照常收脚:停在正点上(`Steering.stop`),身子就离开了板的内沿,落下去。攀爬一步的落点是站着的(脚手架每格顶上的板)时,往上爬到落点的高度就松开跳、往下穿过起步那块板就松开潜行,让板托住身子(`ClimbControl`),认步等的仍是稳稳站在落点上 |
@@ -390,7 +390,7 @@ Numen 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(�
 
 改寻路机制、调常数、比版本的唯一依据:纯 JVM 程序,读数据集(独立仓库 `Dwinovo/numen-pathfinding-benchmark`)里的固定存档与题库,每道题在两种规格下走一遍真实的 `Trip`
 加虚拟身体,出分档报表(成功率附 Wilson 区间、起步耗时、单次最长思考、展开数、次优比的分位数)与前后对比。标准答案是单独的、可分片的一步;没有答案文件时报表没有次优比一列。
-`./gradlew :numen:pathing:pathingBench -PpathingDataset=<目录>`。真走评测与变化世界评测要身体,仍在 GameTest 服务器里。
+`./gradlew :plugins:minecraft:pathing:pathingBench -PpathingDataset=<目录>`。真走评测与变化世界评测要身体,仍在 GameTest 服务器里。
 
 ### GameTest(生成一个普通假玩家，交给 `Navigator.drive` 真走)
 
@@ -861,7 +861,7 @@ goto 超时、跟随报没路,还有 17 次 "Can't keep up"。新模块一行日
 `WorldSnapshot.SEARCH_RADIUS`(6 个区块)的快照、展开四万个节点——远处的矿要么伸出快照(`Unloaded`),要么预算用完(`OutOfBudget`),
 挖矿任务又把这些结局压成同一句"到不了",还要同一局面撞两次才收工。寻路模块这次不动,改的是用它的一方:
 
-- **工具边界画在一次规划看得清的地方**:挖矿只在工作区(`numen/nav/WorkArea`)里干——受理时她脚下为中心的球,半径上限由快照推出:
+- **工具边界画在一次规划看得清的地方**:挖矿只在工作区(`plugins/minecraft/nav/WorkArea`)里干——受理时她脚下为中心的球,半径上限由快照推出:
   从任何起点快照保证看得见水平 96 格,工作区直径取这么大(半径 48),区里任意两点在同一份快照里。竖直方向同一个半径;展开预算
   由第十三节切换记录里的量测估:实心石头挖 30 格隧道约一万一千个节点。区外的只报告,去不去归模型(`move_goto` 过去再挖)。
   `work collect` 的半径上限是同一个数,也改成以受理时的位置为中心。
@@ -944,7 +944,7 @@ goto 超时、跟随报没路,还有 17 次 "Can't keep up"。新模块一行日
 - **不缓手**:挖碎一格之后不等 5 刻(`DigTime.cooldown` 删了),两次右键之间不隔 4 刻;挖一格的定价是挖到碎的刻数(`ToolChoice.ticks`),
   与执行同一个出处。
 - **留着的**:倒水接坠落与收水看的是桶自己在服务端沿视线打的那一条(`Mouse.itemRayOn`),要等它真落在那一面上才按——那是服务端
-  真做的事。`Sight` 留在 Numen API 里只答 `numen.scan.sight`。
+  真做的事。`Sight` 留在 Numen API 里只答 `minecraft.scan.sight`。
 - **测试**:单测 `ArrivalTest.reachingABlockArrivesWhateverStandsInBetween`、`GoalsTest.reachingABlockDoesNotAskWhatStandsInBetween`;
   Numen 侧 GameTest 隔着墙挖到矿(`DigGameTests`)、隔着墙扳拉杆(`InteractGameTests`)。
 
@@ -989,7 +989,7 @@ goto 超时、跟随报没路,还有 17 次 "Can't keep up"。新模块一行日
 
 - **`PositionCosts.Region`**:一个函数式接口 `boolean contains(long cell)`(键是 `BlockPos.asLong`),只回答一格在不在里面。
   `Builder.forbid(Use, Region)` 把整片交进某一栏;`forbids` 先查逐格的禁令,再逐片问,再看"只许";合并时整片的禁令接在一起
-  (与逐格的一样取并集)。模块不认识区域怎么存,也不引用 Numen 的类型:宿主(`numen/nav/NamedAreas.region`)拿区域的小节位图实现它,
+  (与逐格的一样取并集)。模块不认识区域怎么存,也不引用 Numen 的类型:宿主(`plugins/minecraft/nav/NamedAreas.region`)拿区域的小节位图实现它,
   一次查表加一次取位;区域是不可变值,搜索线程逐格问。实现要不可变或线程安全、问一格要快——这是接口的约定。
 - 去一块区域不加到达:Numen 侧用 `Goals.anyOf` 组合现成的 `at`/`use`/`within`(成员有界,见已删的 `cli.md` 附录 G)。
 - 单测 `RouteSpecTest.aForbiddenRegionIsAskedCellByCellWithoutBeingSpelledOut`。
@@ -1190,7 +1190,7 @@ C* = 286、h ≈ 21,地面铺开半径约 37 格,11589 个节点。挖掘的代�
   执行时 `CompanionHands` 在活世界上再判同一格,答"要问"时不动手,交回 `Unasked`(裁决与那一格的征询项);Numen 的 `Trip` 停在
   那一格跟前、问主人,答应了接着走剩下的路,拒绝了那一格这一趟里当墙、从当时的位置重新规划,绕不开才以 `denied` 收场。
   开走前整条规划一次、把要问的格一次问完的那一步删了——它唯一的理由就是权限的时机。
-- **模块没加的**:模块不认识"一趟路的描述""计划""途经点";乘船、垫路料在 Numen 侧(`numen/nav`、`numen/task/move`)。
+- **模块没加的**:模块不认识"一趟路的描述""计划""途经点";乘船、垫路料在 Numen 侧(`plugins/minecraft/nav`、`plugins/minecraft/task/move`)。
 
 ### 她的输入层(10-07,1.21.1 之上,设计稿 `docs/input-pipeline.md` §七)
 
@@ -1202,7 +1202,7 @@ C* = 286、h ≈ 21,地面铺开半径约 37 格,11589 个节点。挖掘的代�
 - **鼠标**:`Crosshair`、`PlayerHands`、端口 `Effector`、Numen 的 `CompanionHands` 并成 Numen API 的 `Mouse`(`NumenPlayer.mouse()`):
   对指名的那一格、那只实体左键挖、右键用(点格子、点实体、只用手里的东西是同一个右键,结果是同一种 `Use.Pressed`,带"打开了一个界面"),同伴的每一下动手之前先过权限层
   (被拒交回 `Mouse.Refusal`,要问交回 `Refusal.Asks`)。`Ports` 只剩 `TerrainPolicy`、`Materials`、`Threats`;`Body` 交出 `controls()`、`look()`、
-  `mouse()`、`hotbar()`;`Snapshots` 挪到 `pathing.api`;挑工具拿到手上是 `ToolChoice.take`。`numen.use.block`、`item`、`entity`、`hit` 从同一个结果写回执。
+  `mouse()`、`hotbar()`;`Snapshots` 挪到 `pathing.api`;挑工具拿到手上是 `ToolChoice.take`。`minecraft.use.block`、`item`、`entity`、`hit` 从同一个结果写回执。
 - **统一松手**:`CompanionBrain` 换驱动者时,旧驱动者 `stop(PREEMPTED)` 之后统一松开键盘与鼠标;被顶掉的任务与反射不再各自松键。
 - **测试**:`TestBody` 自带一份 `Mouse`、`Look`、`Hotbar`;`DigWatch` 与 `AlterGameTests` 不再包端口,派生一个 `Mouse` 换在身体上。
 
@@ -1210,7 +1210,7 @@ C* = 286、h ≈ 21,地面铺开半径约 37 格,11589 个节点。挖掘的代�
 
 - **身体层**(Numen API):`Controls` 补 `LocalPlayer.aiStep` 缺的几段——双击跳(7 刻窗口)切换创造飞行(`ClientPackets.flying` 发能力包,`mayfly` 由服务端判)、
   从地面切上去时起跳、飞着按跳升按潜行降(每刻 ±3 × 飞行速度)、飞着落地停飞(`Physics.step` 在身体这一刻之后调 `Controls.afterTick`)、空中按下跳展开鞘翅
-  (`Controls.unfurl`)。`numen.use.glide` 走 `unfurl`,不留第二份展开逻辑。
+  (`Controls.unfurl`)。`minecraft.use.glide` 走 `unfurl`,不留第二份展开逻辑。
 - **步进器**:`Kinematics.fly/glide/boost` 逐项对原版公式的单测(`AirKinematicsTest`),与真身体逐刻对照的 GameTest(`AirGameTests`:创造飞行、滑翔、滑翔加烟花,误差上限 1e-9)。
 - **快照与走法集**:`BodySnapshot.mobility`、`Moves.forBody`(取代全局 `Moves.ALL`);步行的规划评测 `results.jsonl` 与改前逐字节相同。
 - **走法与估价**:`Takeoff`、`Fly`、`Land`,飞着的站姿 `Stance.Kind.FLYING`;估价按身体取,`EstimateAdmissibilityTest`、`EstimateConsistencyTest` 加了许飞的身体。
@@ -1247,8 +1247,8 @@ C* = 286、h ≈ 21,地面铺开半径约 37 格,11589 个节点。挖掘的代�
   与生产里 `Rig` 包着的服务端玩家是同一个接口,同一份 `Dynamics` 步进器逐刻推,碰撞按身体盒逐轴挤、落地与撞墙按原版的伤血公式),地形是固定参数、固定种子摆出来的 `Land`(经 `Terrain` 这扇窄口,与生产里的 `LiveWorld` 同一个接口;
   树林边与树下、丘陵、山脊、池塘、平地一百一十五格与四百格、飞着多出高墙、迫降后再起飞与收工、落点被占、烟花被拿光、爬到一半撞上树冠、被树叶顶住),烟花每支多推几刻是随机的,每个场景换六个种子各跑一遍。
   GameTest 只留短的(每条不超过 600 刻、固定方块):`GlideGameTests`(经 `Navigator`:平地四十五格起飞降落、范围与整列目标、没烟花从边沿滑、烟花不够与没鞘翅当场拒绝、穿鞘翅走路不误展开,
-  和"原版滑翔每一刻的位置与速度与 `Kinematics.glide` 对得上")与 `ElytraGameTests`(经 Lua 的 `numen.move.glide`:平地一段、只收一列、创造下照样滑翔、当场拒绝、被树叶顶住收工并报)、
-  `FlyGameTests`(`numen.move.fly`/`walk`:创造下走不飞飞才飞、悬停、不许飞当场拒绝、在飞时走先落地);单测 `GlideLineTest`、`AirwayTest`、`WatchdogTest`。
+  和"原版滑翔每一刻的位置与速度与 `Kinematics.glide` 对得上")与 `ElytraGameTests`(经 Lua 的 `minecraft.move.glide`:平地一段、只收一列、创造下照样滑翔、当场拒绝、被树叶顶住收工并报)、
+  `FlyGameTests`(`minecraft.move.fly`/`walk`:创造下走不飞飞才飞、悬停、不许飞当场拒绝、在飞时走先落地);单测 `GlideLineTest`、`AirwayTest`、`WatchdogTest`。
 - **已知取舍**:搜索是加权 A*(`AStar.WEIGHT` = 4),交出的路线至多比最优贵 4 倍;疾飞比疾跑快近 4 倍,所以在能走通的开阔地上,走路的路线常因这个倍数先被搜到,
   飞行只在走不通(峡谷、半空的目标、高墙)或一路够长时才挑上。要在能走通的地方也按价钱挑飞,得给飞行的身体另调这个权重,等评测数据再定。
   这只说创造飞行的 A*(`move.fly`);`move.walk` 从不飞,`move.glide` 只用鞘翅。

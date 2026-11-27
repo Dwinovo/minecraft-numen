@@ -22,7 +22,7 @@
 
 ## What it is
 
-**Numen API** (mod id `numen_api`) is the layer that powers the [Numen](https://github.com/Dwinovo/minecraft-numen) mod, packaged as a standalone project with a **stable public API**. The Numen mod bundles Numen API; addons compile against it. Everything the companion can do — think, talk, move, mine, fight, remember — lives here; Numen is just one set of tools and skills stacked on top.
+**Numen API** (mod id `numen`) is the layer that powers the [Numen](https://github.com/Dwinovo/minecraft-numen) mod, packaged as a standalone project with a **stable public API**. The Numen mod that players install is this engine, and the vanilla content (tools and skills) is the built-in Minecraft plugin shipped inside it (mod id `numen_minecraft`, Lua namespace `minecraft`); it compiles against Numen API like any other addon. Everything the companion can do — think, talk, move, mine, fight, remember — lives here; the built-in Minecraft plugin is just one set of tools and skills stacked on top.
 
 What Numen API provides:
 
@@ -119,7 +119,7 @@ Artifacts are published to [numen-maven](https://github.com/Dwinovo/numen-maven)
 com.dwinovo.numen:numen-api-<loader>-<mcversion>:<version>
 ```
 
-Depend on the slim public-API jar (classifier `api`). At runtime Numen API is **provided by the Numen mod**, which bundles it — an addon ships no Numen API code of its own.
+Depend on the slim public-API jar (classifier `api`). At runtime Numen API is **provided by the Numen mod** — that mod is the engine itself, with the built-in Minecraft plugin nested inside its jar; an addon ships no Numen API code of its own.
 
 ```gradle
 repositories {
@@ -140,21 +140,21 @@ Swap the loader (`fabric` / `forge` / `neoforge`) and Minecraft version to match
 
 `numen-ai` (model access and usage accounting) and `numen-ui` (widgets) come along transitively — `IToolSpec`, which `NumenTool` extends, lives in `numen-ai`, so without it your tool will not compile. Their coordinates carry the MC-version suffix too: the code itself has nothing to do with Minecraft, but the copy on each version branch is not currently the same.
 
-**To change Numen API mechanics themselves**, depend on Numen:
+**To change Numen API mechanics themselves**, depend on the full engine (the same coordinate, without the `api` classifier):
 
 ```gradle
 dependencies {
     // Fabric
-    modImplementation "com.dwinovo.numen:numen-fabric-1.21.1:<version>"
+    modImplementation "com.dwinovo.numen:numen-api-fabric-1.21.1:<version>"
 
     // NeoForge / Forge (there is no modImplementation there — that's a Loom keyword)
-    // implementation "com.dwinovo.numen:numen-neoforge-1.21.1:<version>"
+    // implementation "com.dwinovo.numen:numen-api-neoforge-1.21.1:<version>"
 }
 ```
 
-Numen pulls the matching `numen-api-*` in with it — no second line needed. Numen API's types appear in Numen's own public signatures (`AbstractCompanionTask<R extends TaskRecord>` and friends), so it is an `api` dependency, not a runtime one.
+To also get the built-in Minecraft plugin (the implementation of the `minecraft.*` functions), add `com.dwinovo.numen:numen_minecraft-<loader>-<mcversion>:<version>`; at runtime it needs the engine above.
 
-> Do not depend on either mod's `-common` coordinate (`numen-api-common-*` / `numen-common-*`). They hold only the cross-loader code: no loader entrypoint; `numen-api-common-*` also has no language files, and `numen-common-*` does not nest Numen API. They compile, and then do nothing in game. **The loader-named coordinate is the complete one.**
+> Do not depend on either mod's `-common` coordinate (`numen-api-common-*` / `numen_minecraft-common-*`). They hold only the cross-loader code: no loader entrypoint; `numen-api-common-*` also has no language files. They compile, and then do nothing in game. **The loader-named coordinate is the complete one.**
 
 ---
 

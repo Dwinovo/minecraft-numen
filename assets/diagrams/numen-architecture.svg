@@ -23,8 +23,8 @@
   <text x="80" y="204" font-size="16" font-weight="700" fill="#1F2328">Lua API</text>
   <text x="80" y="223" font-size="12" fill="#555B62">atomic actions, composed freely in a sandboxed Lua program</text>
   <g font-family="Menlo, Consolas, monospace" font-size="11" fill="#1F2328" text-anchor="middle" dominant-baseline="central">
-    <rect x="80"  y="240" width="138" height="26" rx="4" fill="#FFFFFF" stroke="#9DB8D8"/><text x="149" y="253">numen.scan</text>
-    <rect x="226" y="240" width="138" height="26" rx="4" fill="#FFFFFF" stroke="#9DB8D8"/><text x="295" y="253">numen.move</text>
+    <rect x="80"  y="240" width="138" height="26" rx="4" fill="#FFFFFF" stroke="#9DB8D8"/><text x="149" y="253">minecraft.scan</text>
+    <rect x="226" y="240" width="138" height="26" rx="4" fill="#FFFFFF" stroke="#9DB8D8"/><text x="295" y="253">minecraft.move</text>
     <rect x="372" y="240" width="138" height="26" rx="4" fill="#FFFFFF" stroke="#9DB8D8"/><text x="441" y="253">tlm.maid</text>
     <rect x="518" y="240" width="138" height="26" rx="4" fill="#FFFFFF" stroke="#9DB8D8"/><circle cx="579" cy="253" r="1.8" fill="#1F2328"/><circle cx="587" cy="253" r="1.8" fill="#1F2328"/><circle cx="595" cy="253" r="1.8" fill="#1F2328"/>
   </g>

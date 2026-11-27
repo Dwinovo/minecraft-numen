@@ -47,7 +47,7 @@ NumenEvents.register(event => {
 | `plugin.bodyState(body => 文字)` | 每轮从她身上读一段状态,拼进她看到的身体状态 |
 | `plugin.gear({slots(body){…}, kindsOf(body, stack){…}})` | 一个穿戴来源 |
 | `plugin.rangedWeapon(名字, weapon => …)` | 一种远程武器(枪、魔杖),攻击任务像用弓一样用它,见下一节 |
-| `plugin.knowledgeSource(种类, source => …)` | 一个知识来源:物品说明或配方(见下) |
+| `plugin.knowledgeSource(种类, source => …)` | 一个物品查询:物品说明或配方,成为这个插件自己的 `<名字空间>.lookup.<种类>`(见下) |
 
 一个函数 `group.fn(名字, fn => …)` 里:`summary`(必填)、`param(名字, 类型, 说明)`、`option(名字, 类型, 说明, 不写时会怎样)`、`rest`、
 `returns(类型)`、`example`、`note`、`run(call => …)`。类型名:`string`、`integer`、`number`、`boolean`、`block`、`item`、`id`、`pos`,
@@ -55,8 +55,8 @@ NumenEvents.register(event => {
 
 ## 把整合包的知识交给她
 
-她问"这个怎么做""能拿来做什么""这个是干嘛的"(`numen.inv.recipes`、`numen.inv.uses`、`numen.inv.info`)时,动词会把游戏的配方表、
-装了 JEI 的主人客户端和**你的脚本**的答复合在一起,每条注明出自哪个来源。脚本里登记一个来源,写法同函数:
+游戏自己的配方表她问 `minecraft.inv.recipes`、`minecraft.inv.uses`、`minecraft.inv.info`,JEI 她问 `jei.lookup.*`;**你的脚本**里的知识是这个插件自己的
+函数 `<名字空间>.lookup.recipes|uses|info`,她在插件说明里读到它。脚本里登记一个查询,写法同函数:
 
 ```js
 NumenEvents.register(event => {
@@ -81,8 +81,7 @@ NumenEvents.register(event => {
 ```
 
 `run` 收物品 id,`info` 返回一串说明文字;`recipes`、`uses` 返回一串配方对象,必填 `category`(配方类型或机器的 id)与 `item`(产出),
-可选 `id`、`makes`、`ingredients`、`catalysts`、`categoryName`、`alsoMakes`、`ticks`。`provides`(这个来源多给哪一类信息)必填:来源哪天没答上,
-她据此知道缺了什么。`notProvided` 如实写你给不了的字段,不写不猜。
+可选 `id`、`makes`、`ingredients`、`catalysts`、`categoryName`、`alsoMakes`、`ticks`。`provides`(这个查询答什么)必填,成为函数的说明,她据此知道该不该问它。`notProvided` 如实写你给不了的字段(也写进说明),不写不猜。同一种查询一个插件写一次。
 
 ## 动世界只能经受权的动作
 
@@ -93,7 +92,7 @@ NumenEvents.register(event => {
 ```js
 group.fn('pet', fn => fn
   .summary('Right-click an animal within reach.')
-  .param('animal', 'string', 'Its id, like cow@3f9a1c from numen.scan.entities.')
+  .param('animal', 'string', 'Its id, like cow@3f9a1c from minecraft.scan.entities.')
   .pending()
   .run(call => call.useEntity(call.arg('animal'), (her, animal) => {
     call.report('petted ' + animal.name.string)
@@ -104,7 +103,7 @@ group.fn('pet', fn => fn
 
 模组带来的枪是"远程攻击"这个已有动作上的新名词。两种接法:
 
-- **让攻击任务自己用枪**(`plugin.rangedWeapon`):`numen.fight.attack` 像用弓一样挑枪、走位到枪的环里、瞄准、开枪、连发,没弹药就换别的。
+- **让攻击任务自己用枪**(`plugin.rangedWeapon`):`minecraft.fight.attack` 像用弓一样挑枪、走位到枪的环里、瞄准、开枪、连发,没弹药就换别的。
 - **让模型一次开一枪**(一个受权的函数):模型调 `tacz.gun.fire(目标)`,见后面的第二个例子。
 
 两种都过权限层:该不该打由权限层按 `attack` 裁决,你的脚本只说"怎么射"。
@@ -161,7 +160,7 @@ NumenEvents.register(event => event.plugin('tacz', plugin => {
   plugin.group('gun', 'Guns from Timeless and Classic Guns.', group => {
     group.fn('fire', fn => fn
       .summary('Fire the gun in your hand once at a creature.')
-      .param('target', 'string', 'Its id, like zombie@3f9a1c from numen.scan.entities.')
+      .param('target', 'string', 'Its id, like zombie@3f9a1c from minecraft.scan.entities.')
       .returns('string')
       .pending()
       .example('tacz.gun.fire("zombie@3f9a1c")')

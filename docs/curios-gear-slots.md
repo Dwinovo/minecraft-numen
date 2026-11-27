@@ -119,7 +119,7 @@ public interface GearSlot {
   - 仓库 `maven.theillusivec4.top`,用 `exclusiveContent` 只放 `top.theillusivec4.curios`;
   - `compileOnly "top.theillusivec4.curios:curios-neoforge:${curios_version}:api"`,加上 `:numen-api:neoforge` 的 `apiJar`;
   - `curios_version=9.5.1+1.21.1`;
-  - `settings.gradle` 里 include,`numen/neoforge` 里 `compileOnly` 并加进 jar;
+  - `settings.gradle` 里 include,`plugins/minecraft/neoforge` 里 `compileOnly` 并加进 jar;
   - `Builtin.java` 里 `gate.open("curios", "curios", …)`。
 - **第一版不带技能文档。**
 

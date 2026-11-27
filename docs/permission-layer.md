@@ -148,7 +148,7 @@ numen.answer(Questions.BLOCK_OWNER, "my_claims", (level, center, chunkRadius) ->
 | `use.block`、`use.entity`、`use.hit`、`use.item` | 按下去之前送指名的那一格、那只实体上的动作:右键一格方块,先是手里的东西会做的事(问一圈 `ClickActions`),再是 `use_block`;没被吃掉、落到手里的东西自用时再问 `use_item` |
 | 往容器里放、从容器里取(`container.put`、`container.take`、`furnace.take`、`lectern.take` 等) | 右键打开它的那一下送 `use_block`(或 `use_entity`);界面开了之后搬东西不再送任何动作 |
 | `inv.drop` | 每次送 `drop` |
-| `numen.mc.run` | 解析通了才送 `command(根名)`;服务器不让她用的当场失败,不送 |
+| `minecraft.command.run` | 解析通了才送 `command(根名)`;服务器不让她用的当场失败,不送 |
 | 她改设置 | 调严直接写入并回执;调松、往名单里加发卡 |
 
 **征询协议:**

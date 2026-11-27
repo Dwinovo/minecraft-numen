@@ -1,15 +1,15 @@
-# numen.shape 对齐 WorldEdit
+# minecraft.shape 对齐 WorldEdit
 
 状态:第一期(纯几何)已实现(10-27),第二、三期待做;下面写的是现状,和 WorldEdit 源码对不上的地方已按源码改过。WorldEdit 源码:`D:\01_Projects\WorldEdit`(提交 8aa2205),下文 `ES` 指 `worldedit-core/.../EditSession.java`。
 
 ## 一、定位
 
-- `numen.shape` 是她的"手":**叫法和操作对齐 WorldEdit**,但**只产出或变换一串格(Cells)**,从不改世界。落进世界只有一条路:`numen.build.place`(征询、报料、权限层、如实回执)。
+- `minecraft.shape` 是她的"手":**叫法和操作对齐 WorldEdit**,但**只产出或变换一串格(Cells)**,从不改世界。落进世界只有一条路:`minecraft.build.place`(征询、报料、权限层、如实回执)。
 - 两个名词照 WorldEdit 分:
   - **选区**(`Region`):带形状的选区(cuboid、cyl、ellipsoid、sphere、poly、convex),记得自己的形状参数,所以 `expand`、`contract` 这些能照 WE 按形状改;`r:cells()` 展开成只有位置的格。
   - **剪贴板**:每格带方块的 `Cells`,和现在一样。
   - 收"一片格"的操作两样都收:只有位置的 `Cells`(diff、扫描交回的)就当一块任意形状的选区。
-- **凡是 WE 的操作都对齐**。改世界的那些拆成"读世界 → 算出格",落进世界仍只走 `numen.build.place`。只有本质上不是"放方块"的才不做(见第二节末)。
+- **凡是 WE 的操作都对齐**。改世界的那些拆成"读世界 → 算出格",落进世界仍只走 `minecraft.build.place`。只有本质上不是"放方块"的才不做(见第二节末)。
 - 不做审查、不替模型判断好坏;要什么形状由模型组合。
 - WorldEdit 是 GPL-3.0,Numen 是 LGPL-3.0:**只对齐语义和名字,不搬代码**。
 
@@ -58,11 +58,11 @@
 | `r:trim(mask)` | `//trim` | 过蒙版的格的外包盒,交回长方体选区;一格都不过就报错 |
 | `r:deform(fn)` | `//deform` | WE 的表达式换成 Lua 函数:`fn(x, y, z)` 返回源格的 x, y, z;源格一次读完。不做 `-l`(剪贴板作源) |
 
-读世界只读已加载的区块;选区里有没加载的格就整个调用失败,并说出是哪一片(附 `numen.move.walk` 的提示)。
+读世界只读已加载的区块;选区里有没加载的格就整个调用失败,并说出是哪一片(附 `minecraft.move.walk` 的提示)。
 
 世界里一格是什么、挡不挡移动、一列多高,各只有一个读法:Java 的 `LoadedBlocks`(只经 `BlockScanner.loadedChunk` 读已加载区块)。WE 的材质判据对到原版:`#solid` 与"挡移动"是 `blocksMotion()`,`#fullcube` 是整格碰撞形状,空气是 `isAir()`,液体是 `LiquidBlock`;不手写方块名单。
 
-读世界的 Java 原语在 `numen.shape` 组里,名字与 Lua 里 WE 叫法的包装不同,免得合并进同一张 `numen.shape` 表时冲突:`read`、`matching`、`interior`(hollow)、`tops`(overlay)、`naturalized`、`smoothed`、`restated`(`^`)、`holes`(fill、fillr);`drain` `fixwater` `fixlava` `snow` `thaw` `green` `gravity` `heightmap` 没有对应的 Lua 包装,直接叫 WE 的名字。它们都返回 Cells。结果里与世界已经一样的格不写(省格数)。
+读世界的 Java 原语在 `minecraft.shape` 组里,名字与 Lua 里 WE 叫法的包装不同,免得合并进同一张 `minecraft.shape` 表时冲突:`read`、`matching`、`interior`(hollow)、`tops`(overlay)、`naturalized`、`smoothed`、`restated`(`^`)、`holes`(fill、fillr);`drain` `fixwater` `fixlava` `snow` `thaw` `green` `gravity` `heightmap` 没有对应的 Lua 包装,直接叫 WE 的名字。它们都返回 Cells。结果里与世界已经一样的格不写(省格数)。
 
 ### 模式(pattern)与蒙版(mask)
 
@@ -81,7 +81,7 @@
 
 ### 选区编辑(照 WE 按形状)
 
-`r:expand` / `r:contract`、`r:expand_vert()`(`//expand vert`,读 `numen.shape.y_range()`)、`r:shift`、`r:outset` / `r:inset`(`opts.horizontal` 即 `-h`、`opts.vertical` 即 `-v`),各形状的语义照 `SelectionCommands.java:392/429/458/478`、`ExpandCommands.java:124`:长方体按边,圆柱与球按半径(改变量加起来要是偶数、绕中心),多边形只上下,凸体与任意形状不能改。选区本身不变,每次返回改过的新选区。方向写 `"north"`…`"down"`(或 `n s e w u d`)、向量、或一串方向。`r:trim(mask)` 读世界,在上面读世界的表里。
+`r:expand` / `r:contract`、`r:expand_vert()`(`//expand vert`,读 `minecraft.shape.y_range()`)、`r:shift`、`r:outset` / `r:inset`(`opts.horizontal` 即 `-h`、`opts.vertical` 即 `-v`),各形状的语义照 `SelectionCommands.java:392/429/458/478`、`ExpandCommands.java:124`:长方体按边,圆柱与球按半径(改变量加起来要是偶数、绕中心),多边形只上下,凸体与任意形状不能改。选区本身不变,每次返回改过的新选区。方向写 `"north"`…`"down"`(或 `n s e w u d`)、向量、或一串方向。`r:trim(mask)` 读世界,在上面读世界的表里。
 
 ### 调原版生成器的(读世界 → 格)
 
@@ -128,7 +128,7 @@
 | `r:count(mask)` | `//count` | 过蒙版的格数 |
 | `r:distr(opts)` | `//distr` | `{name, count}` 的列表,多的在前;`opts.mask` 只数过蒙版的,`opts.separate` 按方块状态分 |
 
-扫描工具里没有同样的统计(`numen.scan` 数的是成团的方块),所以是新的一处;读世界走 `LoadedBlocks`,蒙版走 `ShapeMasks`。`-c`(剪贴板)与分页不做:Cells 是值,没有会话剪贴板;列表是完整的。
+扫描工具里没有同样的统计(`minecraft.scan` 数的是成团的方块),所以是新的一处;读世界走 `LoadedBlocks`,蒙版走 `ShapeMasks`。`-c`(剪贴板)与分页不做:Cells 是值,没有会话剪贴板;列表是完整的。
 
 ### 不做的,及原因
 
@@ -148,11 +148,11 @@
 2. **方块状态的旋转和翻转只有一份实现,在 Java**(`BlockTurns`),删掉了 `shape.lua` 里手写的 `turned()`。
    - 原版每种方块自己实现了 `BlockState.rotate(Rotation)` 和 `mirror(Mirror)`:水平面里 90° 倍数的转动与水平镜像一律走它们(铁轨的 `shape`、合成器的 `orientation`、门的 `hinge`、楼梯的内外角、模组方块都自己处理)。
    - 原版不覆盖的(竖直翻转、绕 X/Z 转、不是 90° 倍数的转动)照 WE 的 `BlockTransformExtent`:方向属性取变换后最接近的方向,`axis`、16 档 `rotation`、东南西北四面、铁轨 `shape`、合成器 `orientation` 同理;`half`/`type` 随竖直翻转上下互换,楼梯 `shape` 与箱子 `type` 随水平翻转(含绕 X、Z 转半圈)左右互换。变换后落不进这个方块取值范围的(只有 x、z 两种的 `axis` 转到竖直)保持原样。
-   - Lua 把变换写成 3×3 阵(旋转与翻转的约定只在 Lua 里一处),Java 按阵分路:`numen.shape.transform_blocks(blocks, matrix)`。没变的写法原样交回,变了的保留方块名、写了的属性及先后、NBT 原文,转后变了值的没写属性补在后面;NBT 不丢。
+   - Lua 把变换写成 3×3 阵(旋转与翻转的约定只在 Lua 里一处),Java 按阵分路:`minecraft.shape.transform_blocks(blocks, matrix)`。没变的写法原样交回,变了的保留方块名、写了的属性及先后、NBT 原文,转后变了值的没写属性补在后面;NBT 不丢。
 3. **转心照 WE 用剪贴板原点。** Cells 带一个 `origin`:
    - 生成函数记放置点 `at`(选区也记着,`:set`、`:cells()` 带给 Cells),`copy` 记她当时站的格(第二期);
-   - `shift`、`paste`、`move` 跟着移动;没给原点的 Cells(扫描、`numen.shape.cells(list)` 的)原点是外包盒最小的那一角;`numen.shape.cells(list, origin)` 可以指定。
-   - 原点不在数据里:Lua 的表只要多一个字段,交给 Java 时就不是一串格了,所以它挂在这串格自己的元表上(`__origin`),`numen.build.place` 看到的仍是纯粹的一串格。
+   - `shift`、`paste`、`move` 跟着移动;没给原点的 Cells(扫描、`minecraft.shape.cells(list)` 的)原点是外包盒最小的那一角;`minecraft.shape.cells(list, origin)` 可以指定。
+   - 原点不在数据里:Lua 的表只要多一个字段,交给 Java 时就不是一串格了,所以它挂在这串格自己的元表上(`__origin`),`minecraft.build.place` 看到的仍是纯粹的一串格。
    原来缺省绕世界原点 (0,0,0) 转,结果离工地几十万格,已改掉。
 4. **改名一次改完,不留别名**:
    - `box` 改为 `cuboid(a, b):set(...)` 或 `:faces(...)`;
@@ -163,8 +163,8 @@
 
 ## 四、实现分工
 
-- **几何留在 Lua 模块 `numen.shape`**:模型能读它的源码,方法也挂在 `Cells` 上,和现在一样。
-- **Lua 做不了的,由 Java 提供少量原语,Lua 调用**(`numen.shape` 组里,`tools/shape/`):
+- **几何留在 Lua 模块 `minecraft.shape`**:模型能读它的源码,方法也挂在 `Cells` 上,和现在一样。
+- **Lua 做不了的,由 Java 提供少量原语,Lua 调用**(`minecraft.shape` 组里,`tools/shape/`):
   - `transform_blocks(blocks, matrix)`:方块状态的旋转和翻转(原版 `rotate`、`mirror`,不覆盖的照 WE);
   - `pattern(text)`:pattern 解析(标签、随机状态、`/setblock` 写法校验,原版 `BlockStateParser` 经 `BuildStates.parse`),交回带权重的几组方块,每格怎么掷骰子在 Lua 里;
   - `max_cells()`、`y_range()`:一串格的上限、维度的最低最高一格;
@@ -172,7 +172,7 @@
   每件只有一个实现,Lua 不再自己猜方块状态。
 - 上限仍是 `LuaCodecs.MAX_CELLS` = 16384,超了报错并说明怎么拆(Lua 向 `max_cells()` 问一次,不再抄一份数字)。一次运行两次宿主调用之间的指令预算是 100 万条:几千格的操作没事,一万五千格上下的转、翻、空心大球会撞上它,拆成几块各放一次即可。
 - 图案里 Cells 平铺(`#clipboard` 的位置):外包盒在世界里重复,格在盒里同一位置的方块;盒里没有格的地方这一格没有方块(那一格不在结果里)。
-- 选区的包围盒是它的格真正的外包盒(WE 的圆柱、椭球的包围盒在半径带 .5 时少一格,不照搬)。选区不按世界高度夹(`expand_vert` 除外),放不进世界的格由 `numen.build.place` 报。
+- 选区的包围盒是它的格真正的外包盒(WE 的圆柱、椭球的包围盒在半径带 .5 时少一格,不照搬)。选区不按世界高度夹(`expand_vert` 除外),放不进世界的格由 `minecraft.build.place` 报。
 
 ## 五、验证
 

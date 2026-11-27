@@ -163,7 +163,7 @@ QQ、Discord、弹幕(渠道桥)─┤  (每只一个)        └─ 外部大�
 - **绑定**:库条目的绑定(人设、模型档案、声线)是主人客户端的事,存在她家里的 `binding.json`,形状只在 `Bindings` 一处(`{"by": 绑的人, "id": "命名空间:名字"}`);服务端只在主人表变了时让被移出的人绑的几项退回未绑定(`CompanionBinding.releaseBoundBy`)。
 - **召唤只有一个入口** `Companions.summonFor`:召唤卡、`/numen player summon`、外部大脑的 `create_companion` 都走它。名字合 MC 规则、不撞在线的别人、每人上限(`server.json` 的 `maxCompanions`,0 = 不限)。
 - **面板导出与清空**:导出把她家里的 `chat.jsonl` 与 `memory/` 打成 zip 存到主人选的地方(`MemoryExport`),清空删掉日志、札记、长期目标;都在主人客户端本机做,不经服务器。
-- **本机文件**按 `Homes.clientDir()` 住进 `config/numen/client/`;早年的 `config/numen_api/`(`ConfigRootMigration`)与旧位置的界面偏好(`ClientFiles`)照旧在启动时接过来。
+- **本机文件**按 `Homes.clientDir()` 住进 `config/numen/client/`;旧位置的界面偏好(`ClientFiles`)照旧在启动时接过来。
 
 **谁看得见她的话**:只给她的主人——回话回给说话的那一位:面板里的会话回在面板,命令切进的会话回在带 `[会话名]` 的聊天行,`/msg` 回私信(§二);面板上的动态她的每一位装了客户端的主人都收得到。
 装了客户端的主人另有头顶气泡、聊天栏打字机与朗读(`SpeechBubbles`)。她不止一位主人时,`<query>` 的开标签上写明是哪一位说的(`from="player@短码 (名字)"`),
@@ -197,7 +197,7 @@ her.hotbar()    // 快捷栏:hold(格)、grip(东西),每次换了都交回 Body
   几样读它——走路的按键、弓与掷物、桶自己沿视线打的那一条(`itemRayOn`)、飞行。手不缓:挖碎一格下一刻就挖下一格,右键每刻都能按;
   挖一格要花多久照原版逐刻累进度、由服务端确认。
 - **每一下如实交回结果。** 左键交回 `Strike`(还在挖 / 挖掉了什么 / 被拒及理由 / 够不着没按);右键交回 `Use`(正挖着或够不着没按 / 按了:游戏接没接、
-  世界变了哪几格、打开了什么界面 / 被拒)。点格子、点实体、只用手里的东西是同一个右键、同一种结果,`numen.use.*` 都从它写回执。右键按住(拉弓、吃喝、举盾)
+  世界变了哪几格、打开了什么界面 / 被拒)。点格子、点实体、只用手里的东西是同一个右键、同一种结果,`minecraft.use.*` 都从它写回执。右键按住(拉弓、吃喝、举盾)
   与左键按住挖一样归鼠标管。
 - **挖出来的东西当场进背包。** 她的手挖碎一格(`ServerPlayerGameMode.destroyBlock`)那一段里生成的掉落物,结束时逐件走原版的拾取
   (`ItemEntity.playerTouch`:拾取事件、统计照常),放不下的留在原地;谁驱动她的手都一样,只在 `Harvest` 一处。背包满了那一声仍由
@@ -206,7 +206,7 @@ her.hotbar()    // 快捷栏:hold(格)、grip(东西),每次换了都交回 Body
   由驱动者决定怎么问(寻路是走到那一格停下问);不许是 `Refusal.Denied`;服务端把挖掘退回来是 `Refusal.Server`(身体汇报,不是裁决)。
   判据只认身体是谁:是同伴就过权限层,普通假玩家照原版;别人自己 `new` 一个同伴的鼠标也绕不过去。
 - **原版公式只有一个出处。** `DigTime`(挖掘进度,从 `DigTime.Mining` 算,不碰真身体也能算)、`Reach`(走到位的判据)、`Faces`(点哪一面、贴着哪一面放)、`Replaceable`
-  身体与寻路规划共用;`Sight`(看不看得见)只答感知 `numen.scan.sight`;挑工具归 `ToolChoice.take`。纯规划的几何(`Footing`、`Stepping`、`Clearance`)与规划用的身体快照留在 pathing。
+  身体与寻路规划共用;`Sight`(看不看得见)只答感知 `minecraft.scan.sight`;挑工具归 `ToolChoice.take`。纯规划的几何(`Footing`、`Stepping`、`Clearance`)与规划用的身体快照留在 pathing。
 - **换驱动者时统一松手。** `CompanionBrain` 每刻只选一个驱动者(反射 > 同步 > 当前任务 > 空闲姿态),换人那一刻调完旧驱动者的 `stop` 就把键全松、
   挖掘进度清零、右键松开,新驱动者从干净的身体开始;任务与反射不各自松键。
 - **寻路怎么接。** 身体端口 `Body` 留在 pathing,交出那具玩家与这四件,寻路直接用;`Ports` 里只剩寻路自己的策略。

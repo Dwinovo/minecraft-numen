@@ -7,9 +7,9 @@ licenses/GPL-3.0.txt for the GNU GPL it builds on).
 This file covers the project's original art instead, collectively the "Assets":
 
   - the in-game textures under
-    `numen-api/common/src/main/resources/assets/numen_api/textures/`;
-  - the mod icons `numen-api/common/src/main/resources/numen_api.png` and
-    `numen/common/src/main/resources/numen.png`;
+    `numen-api/common/src/main/resources/assets/numen/textures/`;
+  - the mod icons `numen-api/common/src/main/resources/numen.png` and
+    `plugins/minecraft/common/src/main/resources/numen_minecraft.png`;
   - the logos and branding images under `assets/branding/`.
 
 Diagrams (CC BY 4.0, NOT covered by the reservation below)
@@ -31,7 +31,7 @@ These icon sprites are not the project's art. They are converted from
 pixelarticons (https://github.com/halfmage/pixelarticons) with
 `tools/pixelarticons.py`, and stay under their own licence:
 
-  - `numen-api/common/src/main/resources/assets/numen_api/textures/gui/sprites/
+  - `numen-api/common/src/main/resources/assets/numen/textures/gui/sprites/
     icon_copy.png`, `icon_refresh.png`, `icon_edit.png`, `icon_delete.png`,
     `icon_flag.png`, `icon_menu.png`, `icon_back.png`,
     `icon_more.png`, `icon_user.png`, `icon_users.png`, `icon_user_plus.png`,

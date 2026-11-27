@@ -11,27 +11,27 @@ pass^k、轮数、token、每次成功的成本与失败类型。每次改命令
 
 ```bash
 # 只跑两种基线(标准解、空操作),不花 API:验证场景与断言
-./gradlew --no-daemon :numen:neoforge:runBench -Dbench.repeats=0
+./gradlew --no-daemon :plugins:minecraft:neoforge:runBench -Dbench.repeats=0
 
 # 真实模型,每个场景 3 次(key 只从环境变量读)
-NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :numen:neoforge:runBench -Dbench.repeats=3
+NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :plugins:minecraft:neoforge:runBench -Dbench.repeats=3
 
 # 并行跑:几个服务器进程各跑一份场景,跑完并成一份结果(几份由 bench.parallel 给,不给按处理器数取,见 §九)
-NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :numen:neoforge:runBenchParallel -Dbench.repeats=3 -Pbench.parallel=4
+NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :plugins:minecraft:neoforge:runBenchParallel -Dbench.repeats=3 -Pbench.parallel=4
 
 # 车万女仆的考题:挂着车万女仆单开一次(原版那次不挂)
 NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :plugins:tlm:runBench -Dbench.repeats=3
 
 # 只考某一套、某几个场景
-./gradlew --no-daemon :numen:neoforge:runBench -Pbench=vanilla -Dbench.scenarios=mine_iron,guard_owner -Dbench.repeats=0
+./gradlew --no-daemon :plugins:minecraft:neoforge:runBench -Pbench=vanilla -Dbench.scenarios=mine_iron,guard_owner -Dbench.repeats=0
 
 # 对比两份结果(路径相对仓库根,报告打到标准输出)
-./gradlew --no-daemon -q :bench:compare -Pbefore=numen/neoforge/runs/bench/results/<时间戳> -Pafter=numen/neoforge/runs/bench/results/<时间戳>
+./gradlew --no-daemon -q :bench:compare -Pbefore=plugins/minecraft/neoforge/runs/bench/results/<时间戳> -Pafter=plugins/minecraft/neoforge/runs/bench/results/<时间戳>
 ```
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
-| `bench`(只能用 `-P`) | 本次运行带的全部套件:`:numen:neoforge:runBench` 是 `vanilla`,`:plugins:tlm:runBench` 是 `tlm`(套件名出自根 `build.gradle` 的 `numenSuites` 表) | 考哪几套,逗号隔开;其余的套件一个都不登记 |
+| `bench`(只能用 `-P`) | 本次运行带的全部套件:`:plugins:minecraft:neoforge:runBench` 是 `vanilla`,`:plugins:tlm:runBench` 是 `tlm`(套件名出自根 `build.gradle` 的 `numenSuites` 表) | 考哪几套,逗号隔开;其余的套件一个都不登记 |
 | `bench.scenarios` | 空 = 选中的套件里的全部 | 再收窄到哪几个场景,逗号隔开:场景名(`mine_iron`)或 `组名/场景名` |
 | `bench.repeats` | 3 | 真实模型每个场景跑几次;0 = 只跑基线 |
 | `bench.provider` | `deepseek` | 厂家,models.dev 的厂家 id(同产品的型号目录,见 `docs/llm.md`) |
@@ -53,11 +53,11 @@ NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :plugins:tlm:runBench -Dbench.r
 ```
 GameTest 服务器(runs/bench)
 ├─ 模组 numen            被测的模块:产品本体(联动的代码在它里面),原样
-├─ 模组 numen_api_gametest  Numen API 的 GameTest 支持(开发期小模组,不进发行 jar):登记套件入口、模拟主人的连接(夹具里的 OwnerLine)
+├─ 模组 numen_gametest  Numen API 的 GameTest 支持(开发期小模组,不进发行 jar):登记套件入口、模拟主人的连接(夹具里的 OwnerLine)
 └─ 模组 numen_bench      评测:只在 runBench 里加载
      ├─ :bench           纯 JVM:记录、统计、报告、对比
      ├─ :bench:game      考场:场景接口、运行器、模型基线;只依赖 Numen API,不认识任何插件
-     └─ 考题源码集        numen/common/src/bench(Numen 的,套件 vanilla)、plugins/<联动>/src/bench(联动的)
+     └─ 考题源码集        plugins/minecraft/common/src/bench(Numen 的,套件 vanilla)、plugins/<联动>/src/bench(联动的)
 ```
 
 - **大脑**:就是产品里主人客户端上的大脑 `LoopHost`(经 `ClientBrains` 建,和 GameTest 夹具 `GameBrain` 同一套接法,座位用进程内的管道),只注入三样:模型(`Mind`,真实的或基线)、
@@ -101,7 +101,7 @@ API 返回 402(余额不足)时不再调模型,余下的真实模型运行全部
 
 ## 四、加一个场景
 
-场景实现 `Scenario`。考题跟着被测的模块走(Numen 的在 `numen/common/src/bench`,联动的在联动自己的 `src/bench`),一组是一个 GameTest
+场景实现 `Scenario`。考题跟着被测的模块走(Numen 的在 `plugins/minecraft/common/src/bench`,联动的在联动自己的 `src/bench`),一组是一个 GameTest
 套件,用 `Bench.suite` 登记:套件类实现 `GameTestSuite`(和别的 GameTest 同一个机制:按名字报到、由运行配置选),资源
 `META-INF/numen/gametest/套件名`(如 `tlm`)写套件类的全名:
 
@@ -163,7 +163,7 @@ public final class TlmBench implements GameTestSuite {
 
 ## 六、报告
 
-写到 `<游戏目录>/results/<时间戳>/`(原版是 `numen/neoforge/runs/bench/results/`,车万女仆那次是
+写到 `<游戏目录>/results/<时间戳>/`(原版是 `plugins/minecraft/neoforge/runs/bench/results/`,车万女仆那次是
 `plugins/tlm/runs/bench/results/`):
 
 - `runs.jsonl`:一次一行。字段:`suite`、`scenario`、`variant`(solution / noop / live)、`attempt`、`commit`、
@@ -219,16 +219,16 @@ GameTest 管,不在这里测。场景分三集:**回归集**每次改动都跑,*
 
 | 集 | 场景 | 搭了什么 | 主人说 | 成功 | 负面 | 标准解 |
 |---|---|---|---|---|---|---|
-| 回归 | `mine_iron` | 七乘七、四层的石堆里埋 12 块铁矿,包里一把石镐 | 帮我挖 10 个铁回来。 | 粗铁 ≥ 10 | 没死 | `numen.scan.blocks("iron_ore", {radius = 12})`,`while #found > 0` 循环先 `numen.move.walk(found[1], {arrive = "dig", costs = {dig = true, place = true, consent = false}})` 后 `numen.work.dig(found[1])`、再扫一次;再站进挖空的芯、`numen.work.collect()` |
-| 回归 | `craft_stone_pickaxe` | 空地,包里 3 块橡木原木,旁边一堆三乘三、两层的露天石头 | 给我做把石镐。 | 包里有石镐(子目标按里程碑:工作台、木镐、圆石) | 没死 | `numen.inv.make` 木板、工作台、木棍,`numen.build.place` 放工作台,`numen.inv.make("wooden_pickaxe")`,`numen.move.walk` 石堆边、`numen.work.dig` 上层三块、`numen.work.collect()`,`numen.inv.make("stone_pickaxe")` |
-| 回归 | `dig_deep_diamond` | 十四层实心石头,钻石矿埋在她正下方 12 格(手够不着),包里一把铁镐 | 我们脚底下深处埋着钻石,去挖上来。 | 钻石在她包里、主人包里,或掉在主人碰撞箱外扩 5 格以内 | 没死 | `numen.move.walk(<矿>, {arrive = "dig", costs = {dig = true, place = true, consent = false}})`、`numen.work.dig(<矿>)`、`numen.work.collect()` |
-| 回归 | `chest_in_wall` | 三格厚的石墙,箱子嵌在墙根只露朝她的一面(头顶一格玻璃),里面 5 颗钻石 | 把箱子里的钻石拿给我。 | 5 颗钻石在她包里、主人包里,或掉在主人碰撞箱外扩 5 格以内 | 没死 | `numen.move.walk(<箱子>, {arrive = "use"})`、`numen.container.take(<箱子>, "minecraft:diamond")` |
-| 回归 | `guard_owner` | 夜里、简单难度;主人生存模式、60 点血站在场地当中,三只僵尸在他身边五六格外;她在另一头(十几格,防御本能不替她出手),包里一把铁剑 | 保护我! | 三只僵尸全死 | 没死、主人活着 | 三行 `numen.fight.attack(<一只>)`。指标 `owner_health`:收场时主人剩的血,不作判据 |
-| 回归 | `build_wall_between_posts` | 两根三格高的栅栏柱相距 5 格(之间 4 格空位),包里正好 12 块圆石 | 在那两根柱子之间砌一堵三格高的圆石墙。 | 目标墙格(两柱之间 4×3)的 F1 ≥ 0.9:目标格与场地里实际圆石格的交集,精确率 = 交集 ÷ 实际圆石格,召回率 = 交集 ÷ 目标格(照 IGLU) | 没死、两根柱子还在 | `numen.move.walk` 墙南两格,`numen.build.place(numen.shape.cuboid(<墙左下>, <墙右上>):set("cobblestone"))` |
-| 能力 | `iron_pickaxe_chain` | 三棵树(各四格原木)、一堆四乘三两层的露天石头、两乘二的露天铁矿、两块露天煤矿,她空手;预算 60 轮、20 分钟 | 给我做一把铁镐。 | 包里有铁镐(子目标按里程碑:工作台、木镐、石镐、熔炉、铁锭、铁镐) | 没死 | `numen.work.mine` 一棵树,`numen.inv.make` 木板、工作台、木棍、木镐,`numen.work.mine` 石堆,`numen.inv.make("stone_pickaxe")`,`numen.work.mine` 煤矿与铁矿,`numen.inv.make("furnace")`、`numen.build.place` 放熔炉、`numen.inv.smelt(<熔炉>, "raw_iron", 3)`、`numen.inv.make("iron_pickaxe")` |
-| 能力 | `harvest_and_bread` | 六乘四的麦田,中间一排水,一侧两排麦子熟了(12 株)、另一侧两排没熟(12 株),田和麦子都记成主人放的;场地里一张工作台,她空手 | 把田里熟了的麦子收了,做几个面包给我。 | 面包 ≥ 3(在她包里、主人包里,或掉在主人碰撞箱外扩 5 格以内) | 没死、没熟的麦子一株没拆 | `numen.work.dig` 熟的两排、`numen.work.collect()`、`numen.inv.make("bread", 3)`、拿着种子 `numen.use.block` 补种、`numen.inv.give` 面包给主人;子目标:收了熟的、补种 |
-| 车万女仆 | `maid_farmhand` | 一只野生女仆,三乘三的湿耕地(旁边一格水),她包里一块蛋糕和 16 颗小麦种子 | 把那只女仆收了,让她帮我种这块地。 | 女仆归她、女仆当前工作是种地、女仆格子里有种子 | 没死、女仆活着 | `numen.move.walk(<女仆>, {arrive = "near", range = 2})`、`numen.use.entity(<女仆>, {item = "minecraft:cake"})`、`tlm.maid.give(<女仆>, "minecraft:wheat_seeds")`、`tlm.maid.task("touhou_little_maid:farm")`、`tlm.maid.config({home = true})`;子目标:驯服、交种子、切模式、家模式开着且家在耕地附近 |
-| 车万女仆 | `revive_maid` | 她的一只女仆搭场景时就已死(墓碑里有她的东西和胶片,maid_died 急件先到),车万女仆的祭坛用代码搭好,她包里有青金石、金锭、红石、铁锭、煤各一(`altar_recipe/reborn_maid`),P 点满 | 把女仆救回来,别用神社。 | 场地里有一只活着、归她的女仆,墓碑没了 | 没死 | 走到墓碑旁 `numen.use.entity(<墓碑>)` 取胶片,再逐根走到祭坛的六根柱子旁 `numen.gear.hold(<一样>)`、`numen.use.block(<柱顶>)`,放齐就复活 |
+| 回归 | `mine_iron` | 七乘七、四层的石堆里埋 12 块铁矿,包里一把石镐 | 帮我挖 10 个铁回来。 | 粗铁 ≥ 10 | 没死 | `minecraft.scan.blocks("iron_ore", {radius = 12})`,`while #found > 0` 循环先 `minecraft.move.walk(found[1], {arrive = "dig", costs = {dig = true, place = true, consent = false}})` 后 `minecraft.work.dig(found[1])`、再扫一次;再站进挖空的芯、`minecraft.work.collect()` |
+| 回归 | `craft_stone_pickaxe` | 空地,包里 3 块橡木原木,旁边一堆三乘三、两层的露天石头 | 给我做把石镐。 | 包里有石镐(子目标按里程碑:工作台、木镐、圆石) | 没死 | `minecraft.inv.make` 木板、工作台、木棍,`minecraft.build.place` 放工作台,`minecraft.inv.make("wooden_pickaxe")`,`minecraft.move.walk` 石堆边、`minecraft.work.dig` 上层三块、`minecraft.work.collect()`,`minecraft.inv.make("stone_pickaxe")` |
+| 回归 | `dig_deep_diamond` | 十四层实心石头,钻石矿埋在她正下方 12 格(手够不着),包里一把铁镐 | 我们脚底下深处埋着钻石,去挖上来。 | 钻石在她包里、主人包里,或掉在主人碰撞箱外扩 5 格以内 | 没死 | `minecraft.move.walk(<矿>, {arrive = "dig", costs = {dig = true, place = true, consent = false}})`、`minecraft.work.dig(<矿>)`、`minecraft.work.collect()` |
+| 回归 | `chest_in_wall` | 三格厚的石墙,箱子嵌在墙根只露朝她的一面(头顶一格玻璃),里面 5 颗钻石 | 把箱子里的钻石拿给我。 | 5 颗钻石在她包里、主人包里,或掉在主人碰撞箱外扩 5 格以内 | 没死 | `minecraft.move.walk(<箱子>, {arrive = "use"})`、`minecraft.container.take(<箱子>, "minecraft:diamond")` |
+| 回归 | `guard_owner` | 夜里、简单难度;主人生存模式、60 点血站在场地当中,三只僵尸在他身边五六格外;她在另一头(十几格,防御本能不替她出手),包里一把铁剑 | 保护我! | 三只僵尸全死 | 没死、主人活着 | 三行 `minecraft.fight.attack(<一只>)`。指标 `owner_health`:收场时主人剩的血,不作判据 |
+| 回归 | `build_wall_between_posts` | 两根三格高的栅栏柱相距 5 格(之间 4 格空位),包里正好 12 块圆石 | 在那两根柱子之间砌一堵三格高的圆石墙。 | 目标墙格(两柱之间 4×3)的 F1 ≥ 0.9:目标格与场地里实际圆石格的交集,精确率 = 交集 ÷ 实际圆石格,召回率 = 交集 ÷ 目标格(照 IGLU) | 没死、两根柱子还在 | `minecraft.move.walk` 墙南两格,`minecraft.build.place(minecraft.shape.cuboid(<墙左下>, <墙右上>):set("cobblestone"))` |
+| 能力 | `iron_pickaxe_chain` | 三棵树(各四格原木)、一堆四乘三两层的露天石头、两乘二的露天铁矿、两块露天煤矿,她空手;预算 60 轮、20 分钟 | 给我做一把铁镐。 | 包里有铁镐(子目标按里程碑:工作台、木镐、石镐、熔炉、铁锭、铁镐) | 没死 | `minecraft.work.mine` 一棵树,`minecraft.inv.make` 木板、工作台、木棍、木镐,`minecraft.work.mine` 石堆,`minecraft.inv.make("stone_pickaxe")`,`minecraft.work.mine` 煤矿与铁矿,`minecraft.inv.make("furnace")`、`minecraft.build.place` 放熔炉、`minecraft.inv.smelt(<熔炉>, "raw_iron", 3)`、`minecraft.inv.make("iron_pickaxe")` |
+| 能力 | `harvest_and_bread` | 六乘四的麦田,中间一排水,一侧两排麦子熟了(12 株)、另一侧两排没熟(12 株),田和麦子都记成主人放的;场地里一张工作台,她空手 | 把田里熟了的麦子收了,做几个面包给我。 | 面包 ≥ 3(在她包里、主人包里,或掉在主人碰撞箱外扩 5 格以内) | 没死、没熟的麦子一株没拆 | `minecraft.work.dig` 熟的两排、`minecraft.work.collect()`、`minecraft.inv.make("bread", 3)`、拿着种子 `minecraft.use.block` 补种、`minecraft.inv.give` 面包给主人;子目标:收了熟的、补种 |
+| 车万女仆 | `maid_farmhand` | 一只野生女仆,三乘三的湿耕地(旁边一格水),她包里一块蛋糕和 16 颗小麦种子 | 把那只女仆收了,让她帮我种这块地。 | 女仆归她、女仆当前工作是种地、女仆格子里有种子 | 没死、女仆活着 | `minecraft.move.walk(<女仆>, {arrive = "near", range = 2})`、`minecraft.use.entity(<女仆>, {item = "minecraft:cake"})`、`tlm.maid.give(<女仆>, "minecraft:wheat_seeds")`、`tlm.maid.task("touhou_little_maid:farm")`、`tlm.maid.config({home = true})`;子目标:驯服、交种子、切模式、家模式开着且家在耕地附近 |
+| 车万女仆 | `revive_maid` | 她的一只女仆搭场景时就已死(墓碑里有她的东西和胶片,maid_died 急件先到),车万女仆的祭坛用代码搭好,她包里有青金石、金锭、红石、铁锭、煤各一(`altar_recipe/reborn_maid`),P 点满 | 把女仆救回来,别用神社。 | 场地里有一只活着、归她的女仆,墓碑没了 | 没死 | 走到墓碑旁 `minecraft.use.entity(<墓碑>)` 取胶片,再逐根走到祭坛的六根柱子旁 `minecraft.gear.hold(<一样>)`、`minecraft.use.block(<柱顶>)`,放齐就复活 |
 
 世界:和平、正午且不走时间、晴天、不刷怪,每次运行开场都拨回这个样子;场景要别的就在搭场景时改,只管这一次
 (`guard_owner` 改成夜里、简单难度)。

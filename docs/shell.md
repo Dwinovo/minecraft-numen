@@ -188,7 +188,7 @@
 
 ### 回执:标准管道加结局
 
-回执像一个进程的输出:一个结局,三条管道。逐次调用的流水没有了——此前每次 API 调用记一行("line 5 numen.inv.count: ok — 0"),循环里查
+回执像一个进程的输出:一个结局,三条管道。逐次调用的流水没有了——此前每次 API 调用记一行("line 5 minecraft.inv.count: ok — 0"),循环里查
 一百遍背包就是一百行,真机上一次 52 轮的会话里工具结果占去约 9 万词元,大半是这些行。标准环境里没有这种流水。
 
 - **结局**(第一行,像退出状态):跑完是 `ok · 3 calls · 2 s`;出错写停在哪一行、错误值写出来的样子(种类、消息、`usage:`、`hint:`);被停下写停在
@@ -196,7 +196,7 @@
 - **stderr**:API 与运行时**主动报告**的事,写不写、写什么由各 API 自己定,像命令行工具自己往 stderr 写:身体做了什么(一件占身体的活的整段
   实际账——`NavText` 一处写成,`BodyDelta` 写出的装备用坏、主人点头允许了什么、权限拦下了什么都在里面;点一下这类短活只说游戏接没接,之后变了什么她自己看,control 0022)、一次
   查询没看全哪里,以及**每一次 API 调用的失败**——她用 `pcall` 接住了也写,同 Unix:失败的程序照样往 stderr 写,处不处理是调用方的事。
-  每条带行号与函数名:`line 5 numen.fight.attack: killed minecraft:cow …`;失败的是 `line 5 numen.work.dig: out_of_reach — 原因`。**只返回值、
+  每条带行号与函数名:`line 5 minecraft.fight.attack: killed minecraft:cow …`;失败的是 `line 5 minecraft.work.dig: out_of_reach — 原因`。**只返回值、
   没什么可报告的调用什么也不写**。连续相同的条合并成一条加 `(×N)`。程序等着收尾的身体活,它的账就是一条 stderr,这件活的收尾只在这里说,
   不另发事件;程序停下时还在跑的活,收尾才是一条 task_finished 事件。
 - **returned**:`return` 的值。
@@ -224,8 +224,8 @@ line 3 work.dig: bad_argument — argument 'place': a position is one table with
 ```
 ok · 3 calls · 12 s
 stderr:
-line 2 numen.move.walk: reached 120,64,-35 … En route I had to break 2 stone
-line 3 numen.work.dig: dug 4 minecraft:iron_ore …
+line 2 minecraft.move.walk: reached 120,64,-35 … En route I had to break 2 stone
+line 3 minecraft.work.dig: dug 4 minecraft:iron_ore …
 returned: 4
 ```
 
@@ -319,7 +319,7 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
 - **位置只有一种写法**:一格是 Pos `{x = 120, y = 64, z = -35}`,一列是 `{x = …, z = …}`,一个高度是 `{y = …}`。小数按所在的
   那一格算(`BlockPos.containing`),所以 `status.self().pos` 原样能交。任何带 `pos` 字段的表(Block、Entity、Item、一团的
   `nearest`)放在位置那一格就是它的 `pos`;收实体的参数收编号或带 `id` 的表。读法只在 `Positions` 一处。
-- **她带着的一样东西有两种写法**:物品 id,或 `numen.inv.items()` 交回的那一项(Stack,带 `item`、`count`、`details`、`kind`)。只写 id
+- **她带着的一样东西有两种写法**:物品 id,或 `minecraft.inv.items()` 交回的那一项(Stack,带 `item`、`count`、`details`、`kind`)。只写 id
   是这种物品的哪一叠都行——拿到手上、丢、穿戴取主手那一叠、否则格号最小的那一叠;交回那一项就只用那一种(装着钻石的潜影盒与空盒、
   附魔的剑与没附魔的)。收它的参数:`use.block/item/entity` 的 `item`、`gear.wear`、`gear.hold`、`inv.eat`、`inv.drop`、
   `container.put` 以及各工作方块那一组里从她背包放进去的每一样。说一种物品本身的参数(`inv.count`、配方、`container.take`、
@@ -367,7 +367,7 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
 |---|---|---|
 | ⓪ 身体控制 | 寻路执行、瞄准、换工具、追着转头、等冷却、憋气;模型看不见 | Java,任务与身体 |
 | ① 原子 API | 对一个名词做一种意图;每刻控制在里面;过权限层;做的事报告给模型 | Java,登记处生成 Lua 函数 |
-| ② 内置模块 | 常见的组合(`numen.move.explore`、`numen.work.mine`、`numen.inv.make`、`numen.shape` …) | Lua,随模组或插件发布(jar 里 `numen/modules/<名字空间>/<组>.lua`),服务器起来时同步进服务器目录 `server/modules/` |
+| ② 内置模块 | 常见的组合(`minecraft.move.explore`、`minecraft.work.mine`、`minecraft.inv.make`、`minecraft.shape` …) | Lua,随模组或插件发布(jar 里 `numen/modules/<名字空间>/<组>.lua`),服务器起来时同步进服务器目录 `server/modules/` |
 | ③ 这一轮的程序 | `Lua` 工具的 `code` | Lua |
 
 权限层只守在 ①;反射独立于各层,能打断程序。判据:**秒级的决策进 Lua;每刻的控制、重计算(寻路搜索、大范围扫描)、权限、
@@ -380,14 +380,14 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
 - 程序里按名字直接用,**没有 `require`**:写了是 `no_function`,hint 是按名字用的写法;`Lua` 工具的说明里写明不需要也不能 require。第一次用到才装(沙箱全局表的 `__index`),每段程序一个新环境,所以热重载不用重启。模块名写错报"没有叫 X 的模块"
   并列出有哪些;一个模块读不通、跑出错、没返回表,只坏用到它的那一行。
 - 和第 ① 层的组同名的模块(`move`、`work`……)给那一组加函数。
-- 原来的内置脚本 `mine` 成了 `numen.work` 模块里的 `numen.work.mine(blocks)`(返回挖了几格),和 `numen.work.collect` 同组:
+- 原来的内置脚本 `mine` 成了 `minecraft.work` 模块里的 `minecraft.work.mine(blocks)`(返回挖了几格),和 `minecraft.work.collect` 同组:
   "挖出这些方块"是 work 这个领域的组合,名字照组里动词的写法。"整段当程序跑、`...` 取参"删了。
 
 ### 存在哪、怎么升级、怎么还原
 
 规矩只在 Numen API 的 `Modules` 一处:
 
-- **名字就是路径。** 模块名两段 `名字空间.组`,文件在 `<名字空间>/<组>.lua`:`numen/work.lua` 是 `numen.work`,`tlm/skin.lua` 是 `tlm.skin`。
+- **名字就是路径。** 模块名两段 `名字空间.组`,文件在 `<名字空间>/<组>.lua`:`minecraft/work.lua` 是 `minecraft.work`,`tlm/skin.lua` 是 `tlm.skin`。
 - **jar 只把内置放进去,升级照 dpkg 的 conffile。** Numen 与插件经 `NumenApi.bundleContent` 交来 jar 里的 `numen/` 目录(模块在
   `numen/modules/<名字空间>/`,Numen 自己也这样,没有特殊待遇),服务器起来时同步进服务器目录,清单 `.shipped.json` 记每个文件
   的来源与指纹:没改过的换成这一版;管理员改过的留着、新版写在旁边的 `.new` 并提示;删了的不再放回;来源卸载了,没改过的一起删、改过的
@@ -409,38 +409,38 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
 
 ### 全名与名字空间
 
-- 脚本里一律写全名:Numen API 与 Numen 的是 `numen.<组>.<函数>`(`numen.work.dig`),插件的是 `<模组 id>.<组>.<函数>`
+- 脚本里一律写全名:Numen API 与 Numen 的是 `numen.<组>.<函数>`(`minecraft.work.dig`),插件的是 `<模组 id>.<组>.<函数>`
   (`tlm.maid.task`、`kaleidoscope.pot.fill`)。名字空间由登记者定(`NumenPlugins.register(名字空间, …)`),路线、移动等组
   不改登记代码就落在 `numen.*` 下。模块按名字空间与组放(§九),和同名的组合在一起。
 - 没有名词的增删改查。Lua 不留状态,世界就是状态:区域、设计、存下来的扫描结果都删了;要记住的东西只走 memory 工具。
 
 ### 值带方法(照 mineflayer)
 
-- **Pos**(`numen.shape.pos(x, y, z)`):`p:offset(dx, dy, dz)`、`p:dist(q)`、`p + q`、`p - q`、`p == q`。
-- **Block、Entity、Item**:带 `pos` 的数据;身体动作永远是 `numen.*` 的函数,收这些对象(`numen.work.dig(b)`、
-  `numen.fight.attack(e)`)。
-- **Cells**(`numen.shape.*` 画出来的):`shift(dx, dy, dz)`、`union(other)`、`minus(other)`,和 WorldEdit 的剪贴板一样带原点(画在哪、粘贴落在哪):
+- **Pos**(`minecraft.shape.pos(x, y, z)`):`p:offset(dx, dy, dz)`、`p:dist(q)`、`p + q`、`p - q`、`p == q`。
+- **Block、Entity、Item**:带 `pos` 的数据;身体动作永远是 `numen.*` 的函数,收这些对象(`minecraft.work.dig(b)`、
+  `minecraft.fight.attack(e)`)。
+- **Cells**(`minecraft.shape.*` 画出来的):`shift(dx, dy, dz)`、`union(other)`、`minus(other)`,和 WorldEdit 的剪贴板一样带原点(画在哪、粘贴落在哪):
   `rotate(y, x, z)`(度数)、`flip(dir)`、`stack(count, dir, opts)`、`move(count, dir, leave)`、`paste(at)`、`revolve(count)`;当一块任意形状的选区时还有
-  `set`、`walls`、`faces`、`center`(图案 pattern 的写法见 `numen.shape.pattern`)。
-- **Region**(`numen.shape.cuboid`、`cyl`…不给图案时交回的选区,记着自己的形状参数):`cells()`、`set`、`walls`、`faces`、`center`,
+  `set`、`walls`、`faces`、`center`(图案 pattern 的写法见 `minecraft.shape.pattern`)。
+- **Region**(`minecraft.shape.cuboid`、`cyl`…不给图案时交回的选区,记着自己的形状参数):`cells()`、`set`、`walls`、`faces`、`center`,
   `expand`、`contract`、`shift`、`outset`、`inset`(照形状改,返回改过的选区);读世界的(只读已加载区块,交回 Cells):`replace(mask, pattern)`、
   `overlay`、`hollow`、`naturalize`、`smooth`、`snowsmooth`、`deform(fn)`、`forest(tree, density)`、`flora(density)`,`trim(mask)` 交回选区;选区信息 `size()`、`count(mask)`、`distr(opts)`。Cells 也收这些方法(当任意形状的选区)。
-- **Cluster**(`numen.scan.blocks` 交回的一团):`filter(keep)`、`minus(other)`。
-- **Recipe**(`numen.inv.recipes`、`numen.inv.uses`、`numen.inv.craftable`):编号、类别(配方类型的 id,模组机器也有)、合出几件、每格的料;合成配方带最小的格和还缺什么;`recipes`、`uses` 外包一层 `{recipes, omitted, sources}`:合并各知识来源(原版配方表、JEI、脚本)的答复,条数按来源封顶,超出的数如实说,没答上的来源写明原因(control 0016)。
+- **Cluster**(`minecraft.scan.blocks` 交回的一团):`filter(keep)`、`minus(other)`。
+- **Recipe**(`minecraft.inv.recipes`、`minecraft.inv.uses`、`minecraft.inv.craftable`):编号、类别(配方类型的 id,模组机器也有)、合出几件、每格的料;合成配方带最小的格和还缺什么;`recipes`、`uses` 外包一层 `{recipes, omitted, sources}`:合并各知识来源(原版配方表、JEI、脚本)的答复,条数按来源封顶,超出的数如实说,没答上的来源写明原因(control 0016)。
 - 查不到交 nil 或空表;失败抛 `{kind, message, hint, data}`。数打印成十进制原样,不出科学计数法。
-- 方法写在类所在的模块里(`Pos`、`Cells`、`Region` 在 `numen.shape`,`Cluster` 在 `numen.scan`),登记的类用
+- 方法写在类所在的模块里(`Pos`、`Cells`、`Region` 在 `minecraft.shape`,`Cluster` 在 `minecraft.scan`),登记的类用
   `methodsIn` 指过去;帮助里类的方法从模块的注释读出来。
 
 ### 原子与组合各归其位
 
 | 删掉或改原子的 | 组合去了哪 |
 |---|---|
-| `build.new/drop/delete/show/designs/built`、原语 `set/place/line/layer/cylinder/sphere/copy` | 几何是模块 `numen.shape`(`cyl`、`sphere`、`line`、`layer`…);放格子是 `numen.build.place(cells)` 一遍 |
+| `build.new/drop/delete/show/designs/built`、原语 `set/place/line/layer/cylinder/sphere/copy` | 几何是模块 `minecraft.shape`(`cyl`、`sphere`、`line`、`layer`…);放格子是 `minecraft.build.place(cells)` 一遍 |
 | `build.at` 放到放完 | `build.place` 整份走一遍(站不住的排到队尾、只重试一次),没放好的在回执里报剩余;要不要再来一轮由模型自己定 |
 | `scan.blocks` 的 `into` 与区域 | `scan.blocks` 交回团,`work.mine(cluster)` 先走后挖(§十二) |
 | `use.block` 的左键、`use.gui/transfer/shift/close` | 左键一下 `use.hit`,挖是 `work.dig`;界面不给她,对一个目标做事是那种目标自己的一组函数(`container`、`furnace`……,control 0021) |
-| `inv.craft` 找配方、找台 | `inv.craft` 在自己的格里或点名的工作台上合一次,`numen.inv.make` 挑配方与工作台 |
-| `inv.take`(创造取物) | `numen.creative.give` |
+| `inv.craft` 找配方、找台 | `inv.craft` 在自己的格里或点名的工作台上合一次,`minecraft.inv.make` 挑配方与工作台 |
+| `inv.take`(创造取物) | `minecraft.creative.give` |
 | `work.fish` 钓几条、常驻 | 一次调用抛一竿,钓几条是程序里调几次 |
 | `fight.attack` 里的逃跑(DISENGAGE) | 逃跑本能 `FleeChain`(反射层):打不过且有东西在追就跑,跑不掉让出身体接着打 |
 | 森罗 `kaleidoscope.pot.cook` 一口气做完 | 锅上的一步一个函数(`oil/base/fill/lid/stir/plate`),`kaleidoscope.pot.cook` 是模块;翻炒那段时间窗留在 Java |
@@ -465,9 +465,9 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
 
 | 函数 | 说什么 |
 |---|---|
-| `numen.move.walk(目标, 距离?)` | 去一处。目标:Pos、Block、Entity(它此刻在哪)、一团(Cluster)或一串格(Cells)、一列 `{x, z}`、一个高度 `{y}`。不写距离:Pos/列/高度站进去(Pos 在岩石里就挖进去),Block/实体/一团站不进去,走到旁边(2 格内);写了距离:不超过那么远 |
-| `numen.move.away(某物, 距离)` | 离它至少多远 |
-| `numen.move.follow(谁?, {distance, seconds})` | 跟着(不给就是主人),总有结束:`seconds` 不写是 60 秒;走法同 `to` |
+| `minecraft.move.walk(目标, 距离?)` | 去一处。目标:Pos、Block、Entity(它此刻在哪)、一团(Cluster)或一串格(Cells)、一列 `{x, z}`、一个高度 `{y}`。不写距离:Pos/列/高度站进去(Pos 在岩石里就挖进去),Block/实体/一团站不进去,走到旁边(2 格内);写了距离:不超过那么远 |
+| `minecraft.move.away(某物, 距离)` | 离它至少多远 |
+| `minecraft.move.follow(谁?, {distance, seconds})` | 跟着(不给就是主人),总有结束:`seconds` 不写是 60 秒;走法同 `to` |
 
 - **走法**(`Walking.spec`):能走就不挖,绕太远才挖;垫路料是出厂的 `numen:throwaway`。物理安全留在寻路:不挖脚下、
   头顶落沙、会放出流体的格,摔落按血量。
@@ -475,17 +475,17 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
   从她当时的位置重新规划绕开;同一行规则问出来的同一种东西不再问第二遍;绕不开才以 `denied` 收场。观察模式下权限层拒一切改动,她自然只走。
 - **没有计划**:一截一截规划、走、从当时位置按同一份规格接着规划;不比对路上动了哪些格。
 - **载具**:坐在船上去一处位置就把船开到离目标最近的水面(目标在岸上停岸边、仍坐着);别的载具、`away`、`follow` 受理就拒绝并指
-  `numen.use.dismount()`;走路的一趟从不自己下车。
+  `minecraft.use.dismount()`;走路的一趟从不自己下车。
 - **回执**(`Walked`,`to`/`away`/`follow` 共用,失败时是错误的 `data`):`pos`、`distance_left`、`dug`、`placed`、`rulings`(问过主人的格与
   答复、规则当场不许的格);回执末尾那一句另说挖了什么、放了什么、被拒了什么、潜了几段水。
 - 动手的工具自己走过去:`use.block/entity/hit` 够不着先走到能按的地方;`work.dig` 走到够得着剩下最多格的地方再挖。判据只在动作
   那一处(`Arrival.use/dig`)。`build.place` 不走,站在原地放;`build.diff` 只读。
-- 库:`numen.move.explore(dir, {until_, seconds, hop})` 一跳一跳 `move.walk` 到前面一列的 4 格内。
+- 库:`minecraft.move.explore(dir, {until_, seconds, hop})` 一跳一跳 `move.walk` 到前面一列的 4 格内。
 - 登记:`numen.codec(Where.class, …)`;读法在 `task/move/Where`,怎样算到在 `Arrival`,编成目标在 `Destination`,任务是 `MoveToCompanionTask`。
 
 ### 删掉的
 
-`numen.route` 整组、`numen.move.go`、计划对象(`Plan`/`Plans`/`RouteText`)、`move.flee`、描述里除去处与距离的一切(`arrive`、`stops`、
+`numen.route` 整组、`minecraft.move.go`、计划对象(`Plan`/`Plans`/`RouteText`)、`move.flee`、描述里除去处与距离的一切(`arrive`、`stops`、
 `mode`、`costs`、`avoid*`、`allow`、`materials`);早先的 `route.new/via/…`、`move.goto_`、`throwaway` 组、`alter`、路线存档。
 
 ## 十二、两版合在一起(10-04)
@@ -493,17 +493,17 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
 §十(全名、值带方法、删名词)与 §十一(路线描述、计划、越界才问)合到同一条线上:命名空间、各组的形状、模块目录、删区域与设计
 按 §十;路线、移动、垫路料、寻路、征询卡片、计划与描述按 §十一。两边都碰到的几处:
 
-- **一团与一串格进目标**:`numen.move.walk`、`away` 收扫描交回的 Cluster 与 `numen.shape` 画的 Cells。
-- **`numen.work.mine(cluster)`**:`numen.work.dig(cluster)` 自己走到够得着那一团最多格的地方挖,挖出来的东西当场进她背包,
-  一轮一轮直到那一团不剩(`left == 0`);一轮一格也没挖到抛 `failed`,有东西放不下留在了地上(`on_ground`)也抛 `failed`。`numen.work.dig` 收一团就是收它的每一格。
+- **一团与一串格进目标**:`minecraft.move.walk`、`away` 收扫描交回的 Cluster 与 `minecraft.shape` 画的 Cells。
+- **`minecraft.work.mine(cluster)`**:`minecraft.work.dig(cluster)` 自己走到够得着那一团最多格的地方挖,挖出来的东西当场进她背包,
+  一轮一轮直到那一团不剩(`left == 0`);一轮一格也没挖到抛 `failed`,有东西放不下留在了地上(`on_ground`)也抛 `failed`。`minecraft.work.dig` 收一团就是收它的每一格。
   GameTest 的挖矿辅助(`GameTestKit.mine`)与评测 `mine_iron` 的标准解是同一个流程拆成原子调用。
 - **挖出来的东西当场进背包**(11-24,body 0011):她的手挖碎一格(`ServerPlayerGameMode.destroyBlock`)那一段里生成的掉落物——方块本身的、
   连带碎掉的(火把、箱子里的东西)——结束时逐件走原版的拾取,放不下的留在原地;这是身体的事,只在 Numen API 的 `Harvest` 一处,
-  走路途中挖的、左键点一下碎的也一样。`numen.work.dig` 不等掉落物、不记去向:回执说这一趟进了背包的各几个
+  走路途中挖的、左键点一下碎的也一样。`minecraft.work.dig` 不等掉落物、不记去向:回执说这一趟进了背包的各几个
   (`Into my inventory: 3 raw_iron`)、放不下留在哪(`Did not fit in my inventory and stayed on the ground: …`),数据是 `got`
-  (`{item, count}`)与 `on_ground`(`{item, count, pos}`),出自同一本账(`Harvest.Ledger`)。`numen.work.collect` 只捡本来就在地上的东西
-  (`items` 收 `numen.scan.entities` 交回的 Item)。
-- `numen.work.collect` 等模块里的走路一律是 `numen.move.walk`;`numen.inv.*` 开箱子的走路由 `use.block` 自己做;垫路料只有标签
+  (`{item, count}`)与 `on_ground`(`{item, count, pos}`),出自同一本账(`Harvest.Ledger`)。`minecraft.work.collect` 只捡本来就在地上的东西
+  (`items` 收 `minecraft.scan.entities` 交回的 Item)。
+- `minecraft.work.collect` 等模块里的走路一律是 `minecraft.move.walk`;`minecraft.inv.*` 开箱子的走路由 `use.block` 自己做;垫路料只有标签
   `#numen:throwaway` 一份。
 - **登记不合规矩当场抛出**:`NumenPlugins.register` 不再接住插件登记块里的异常记一行日志——那样一组会悄悄缺席(例子读不通、
   没声明返回……),模型看到的 API 少了一块却没人知道。现在异常原样抛出、启动失败,那句话写着名字空间、组、动作与哪条规矩。
@@ -528,9 +528,9 @@ public final class LocateApi {                         // 一组:一个公开类
     public record Biome(@Doc("Biome id or #tag ...") String biome) {}
 
     @Fn("Find the nearest biome of a type: its column, compass direction and distance.")
-    @Example("numen.locate.biome(\"minecraft:warped_forest\")")
+    @Example("minecraft.locate.biome(\"minecraft:warped_forest\")")
     @Note("Searches YOUR CURRENT dimension only ...")
-    @SeeAlso({"numen.locate.structure", "numen.scan.entities"})
+    @SeeAlso({"minecraft.locate.structure", "minecraft.scan.entities"})
     public static Pending<Located> biome(ServerCall call, Biome args) { ... }
 }
 ```
@@ -550,11 +550,11 @@ public final class LocateApi {                         // 一组:一个公开类
   `ProgramLimits.CLIENT_ANSWER_TICKS` 内没答复,这次调用以 `timeout` 失败,失败或超时后原样再调一次必须安全;② 客户端的答复不可信,
   权限层与任何裁决不读客户端函数的返回值;③ 只是通知主人的事走单向事件(`NumenApi.emit`,进她的收件箱),不走反向请求;
   ④ 一次收一批键、在客户端就地过滤只回小结果,别在循环里逐条问(N+1)。`ClientCall` 的 Javadoc 是这条的全文。
-- **失败只抛 `ApiError(kind, message, hint, data)`**;`hint` 是能照抄的下一行程序,用 `Call.of("numen.move.walk", pos,
+- **失败只抛 `ApiError(kind, message, hint, data)`**;`hint` 是能照抄的下一行程序,用 `Call.of("minecraft.move.walk", pos,
   Map.of("arrive", "dig"))` 写,不手拼。查不到不是失败:交回空表或 nil。函数说参数此刻不成立抛 `IllegalArgumentException`,和读不成
   同一种 `bad_argument`(附用法与帮助的写法)。
 - **值转换**(`LuaCodecs`):record 是一张表(字段说明来自 `@Doc`,`@Folded` 的字段收起来,`@Flatten` 的第一个组件摊进这张表并成为
-  父类,`@Methods("numen.scan")` 说值带的方法写在哪个模块),枚举是小写的名字,内置 `Pos`、`Block`、`Entity`、`Item`、`Stack`、`EntityRef`、
+  父类,`@Methods("minecraft.scan")` 说值带的方法写在哪个模块),枚举是小写的名字,内置 `Pos`、`Block`、`Entity`、`Item`、`Stack`、`EntityRef`、
   `StackRef`、`Place`、`Target`……;一种自己的类型登记一次 `numen.codec(X.class, codec)`(读、写与签名里写成什么在同一个对象上)。类名:Numen API 自己的
   不带前缀(`Plan`、`Clicked`),插件的带名字空间(`tlm.Maid`)。
 - **够不着、用一只实体、过权限是原语**:`call.entity(ref)` 认出点名的实体(不在了是 `not_found`),`call.reach(entity, Reach.hand())`
@@ -631,7 +631,7 @@ public record Located(boolean found, Optional<Place> pos, Optional<String> direc
                       Optional<Integer> horizontalDistance, Optional<Integer> searched, String dimension) {}
 
 @Fn("Find the nearest biome of a type: its column, compass direction and distance.")
-@Example("numen.locate.biome(\"#minecraft:is_forest\")")
+@Example("minecraft.locate.biome(\"#minecraft:is_forest\")")
 public static Pending<Located> biome(ServerCall call, Biome args) {
     return call.sync(new LocateBiomeTaskRecord(call, deadline(call), args.biome()));   // 按刻分片的搜索
 }
@@ -640,10 +640,10 @@ public static Pending<Located> biome(ServerCall call, Biome args) {
 **占身体的活**(进任务槽,程序等它收尾;重启后再跑的那一行就是这次调用写成的那一行,点名的实体写的是它的身份——种类@UUID 前六位,重启后认的还是同一只):
 
 ```java
-public record Attack(@Doc("The entity to fight: an Entity from numen.scan.entities, or its id (zombie@3f9a1c).") EntityRef entity) {}
+public record Attack(@Doc("The entity to fight: an Entity from minecraft.scan.entities, or its id (zombie@3f9a1c).") EntityRef entity) {}
 
 @Fn("Attack one entity until it is dead, lost or out of reach.")
-@Example("numen.fight.attack(\"zombie@3f9a1c\")")
+@Example("minecraft.fight.attack(\"zombie@3f9a1c\")")
 public static Job<Fought> attack(ServerCall call, Attack args) {
     Entity target = call.entity(args.entity());
     AttackTaskRecord record = new AttackTaskRecord(call.fn(), call.callId(), ..., List.of(target.getId()), false);
@@ -672,7 +672,7 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 ```
 
 脚本里:`tlm.maid.task("touhou_little_maid:farm", {maid = m})` 交回 `{maid = "maid@3f9a1c", task = "touhou_little_maid:farm"}`;离得远是
-`out_of_reach`,`err.hint` 是 `numen.move.walk({x = …}, 2)`。
+`out_of_reach`,`err.hint` 是 `minecraft.move.walk({x = …}, 2)`。
 
 ### 重启后接着做、`/numen drive`
 
@@ -681,7 +681,7 @@ public static Pending<Switched> task(ServerCall call, Task args) {
   按一行命令记下的活读进来只为说清它没接回来(日志与 task_finished 都说这一版不再跑它),不做转接。
 - `/numen drive <同伴> <程序>`(OP)是一段 Lua 程序,经同一个入口跑,整张回执说给发令人。`/numen permission …`、`/numen consent …`
   照旧。
-- `/help` 那一套挖 Brigadier 的帮助只留给 `numen.mc.run("help give")`:原版与模组的指令在原版的指令树上解析、执行,写不通附用法与最接近
+- `/help` 那一套挖 Brigadier 的帮助只留给 `minecraft.command.run("help give")`:原版与模组的指令在原版的指令树上解析、执行,写不通附用法与最接近
   的候选。
 
 ### 评测按函数统计

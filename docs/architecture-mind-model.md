@@ -14,8 +14,8 @@ key、模型档案、人设、她的模块与技能都在主人的客户端上;�
 ToolRegistry 工具、ReflexRegistry 本能名册)。第三方内容包与 Numen 地位平等。
 
 **测试是被测项目的源码集(`test`、`gametest`、`e2e`),评测(bench)是独立模块。** 单测、GameTest 用例、端到端场景都放在它们测的那个项目里
-(如 `numen/common/src/gametest`、`numen/common/src/e2e`),按平台跑的任务挂在平台项目上(`:numen:neoforge:runGameTestServer`、
-`:numen:neoforge:e2eTest`);不为测试另开模块。评测要真模型、有自己的统计与记录,是独立模块 `bench`。
+(如 `plugins/minecraft/common/src/gametest`、`plugins/minecraft/common/src/e2e`),按平台跑的任务挂在平台项目上(`:plugins:minecraft:neoforge:runGameTestServer`、
+`:plugins:minecraft:neoforge:e2eTest`);不为测试另开模块。评测要真模型、有自己的统计与记录,是独立模块 `bench`。
 
 **寻路是 Numen(Numen API 的第一个插件)的内容,独立成模块,经端口接入;规划与执行共用一份地形几何。** `pathing` 只依赖
 原版与 Numen API 公开的那部分(瘦 api jar),随 Numen 的加载器 jar 发出,Numen API 不依赖它。设计稿见 `docs/pathing.md`。
@@ -23,7 +23,7 @@ ToolRegistry 工具、ReflexRegistry 本能名册)。第三方内容包与 Numen
 一个快捷栏 `Hotbar` 与它留下的记录 `BodyAction`、每刻一次的物理步进 `Physics`、挖出来的东西当场进背包的 `Harvest`,以及身体与寻路规划共用的原版公式与几何(`DigTime`、`Reach`、
 `Faces`、`Replaceable`;`Sight` 只答感知)——是 Numen API 的公开部分(`com.dwinovo.numen.api.entity`),`NumenPlayer.controls()`、`look()`、`mouse()`、
 `hotbar()` 各给出一件,谁驱动她都用同一份;第三方想自己写一套寻路(还能挖、能放),按它们让她动。设计与取舍见 `docs/input-pipeline.md` §七。
-寻路模块的身体端口 `Body` 在寻路这一侧,Numen 的适配层 `numen/nav` 的 `CompanionBody` 把同伴接进去(无状态:寻路只经
+寻路模块的身体端口 `Body` 在寻路这一侧,Numen 的适配层 `plugins/minecraft/nav` 的 `CompanionBody` 把同伴接进去(无状态:寻路只经
 `entity()`、`controls()`、`look()`、`mouse()`、`hotbar()`、`snapshot()` 用身体,不按身体对象存状态);许可、垫路料、要避开的生物三个端口也由适配层实现。
 `CompanionBrain` 换驱动者时统一松开键盘与鼠标。
 Numen 的任务、命令、感知、反射只经门面、规格、目标与身体机制用寻路,地形几何、挖掘定价这类机器
@@ -50,7 +50,7 @@ bench:game → bench, numen-api  bench 纯 JVM;考场不认识 numen 与插件
 | `script` | 她写的一段程序:语言接口、回执、API 答复与错误、函数说明、资源上限、Lua 适配 | `lua`、`ai` | Minecraft、`agent`、Numen API |
 | `agent` | 大脑本身:收件箱、长期目标、对话、记忆压缩、循环与一段程序的执行(`Program`,要读收件箱的急件规则,所以在这里不在 `script`) | `ai`、`script` | Minecraft、Numen API |
 | `numen-api` | 机器:身体、任务槽、登记口、工具运输、权限适配、程序在服务端的入口;发行 jar 平铺上面所有纯 JVM 模块 | 上面全部 + Minecraft | `numen`、`plugins/*`、`bench` |
-| `numen`(含 `numen/pathing`) | 第一个插件:工具、任务、本能、内容与寻路 | Numen API 的瘦 api jar,以及纯 JVM 模块的类型;`numen/pathing` 只依赖原版与瘦 api jar | `plugins/*`;`numen-api` 不引用它 |
+| `numen`(含 `plugins/minecraft/pathing`) | 第一个插件:工具、任务、本能、内容与寻路 | Numen API 的瘦 api jar,以及纯 JVM 模块的类型;`plugins/minecraft/pathing` 只依赖原版与瘦 api jar | `plugins/*`;`numen-api` 不引用它 |
 | `plugins/*` | 与别的模组的联动,一个联动一个目录,目标模组不在就不加载 | Numen API 的瘦 api jar,以及纯 JVM 模块的类型 | `numen`、彼此、被 `numen-api` 引用 |
 | `bench` / `bench:game` | 真模型评测:`bench` 是记录与统计;`bench:game` 是游戏里那一半 | `bench:game` 依赖 `bench` 与 `numen-api`;`bench` 无 | 插件与 `numen` 的类(考场只认 Numen API);不发布、不进发行 jar |
 
@@ -59,7 +59,7 @@ bench:game → bench, numen-api  bench 纯 JVM;考场不认识 numen 与插件
 common 不分平台走两条路。Mixin 类只在各自的 `mixin` 包里,`mixin` 包外不引用它们。**客户端与服务端之间的协议是 Numen 自己的规范**:每种包一个频道名,
 字节布局由 common 里的 `StreamCodec` 定,不带任何加载器的封装,所以 Fabric、NeoForge 的客户端与 NeoForge、Fabric 的服务端两两相通。
 
-寻路留在 `numen/pathing`:它是 Numen 这个插件的内容,第三方插件要寻路自己带一份;Numen API 不开寻路扩展点,只公开寻路和手动驱动共用的身体机制(键盘、视角、鼠标、快捷栏、物理步进与原版公式几何)。
+寻路留在 `plugins/minecraft/pathing`:它是 Numen 这个插件的内容,第三方插件要寻路自己带一份;Numen API 不开寻路扩展点,只公开寻路和手动驱动共用的身体机制(键盘、视角、鼠标、快捷栏、物理步进与原版公式几何)。
 ## 零、总纲:她看一眼很贵
 
 **根本约束:人能一直盯着屏幕,看一眼几乎免费;她每看一次要花一轮模型调用。** 所以凡是会改世界的决定,
@@ -78,7 +78,7 @@ common 不分平台走两条路。Mixin 类只在各自的 `mixin` 包里,`mixin
   **一条原子命令 = 对一个对象做一种意图**:可以含完成这个意图必需的动作层控制(对准、换工具、清掉挡着它的格),
   不在几种会改世界的方案之间替她选,不碰它那个对象以外的东西。挖只挖、寻路只寻路、移动只移动、合成只合一次。
 - **组合交给脚本(DSL),不交给胖命令。** 脚本用 Lua 写,每个命令函数背后是一条普通命令;流程固定的活(挖一团矿、
-  照蓝图建造、挑配方找工作台)写成随模组发布的模块(`numen.work.mine`、`numen.inv.make`),她读得到、
+  照蓝图建造、挑配方找工作台)写成随模组发布的模块(`minecraft.work.mine`、`minecraft.inv.make`),她读得到、
   改得了(改的是主人客户端上同名的一份,盖着内置的;内置的随 jar 走,升级时不动主人改过的)。**没有不可拆的行为:秒级的决策循环进脚本(打哪只、
   下一只、何时撤),每刻都要转的控制进原子命令内部(追着保持在够得着处、等冷却出手)。**
 - **反射是事先写好、条件触发的策略**,不是框架的例外;当前计划已覆盖的情况它让开。
@@ -200,7 +200,7 @@ CONTROL   否      不插进 run,等闲下来执行            开不了 run 时
 - 判定口诀:"这是发生了一件事,还是她此刻的样子?"事 → 发事件进队列;样子 → 状态片段。她四周此刻有谁是后一种:`<nearby>`
   每次请求现取(`Nearby`),不进历史。
 - **一只生物只有一种名字**:`种类@短码`(`zombie@3f9a1c`,短码是 UUID 前六位),玩家(含别的同伴)也一样,写 `player@ab12cd`;名字只是附在后面给人读的(`player@ab12cd (Steve)`),不是身份。事件、`<nearby>`、
-  `numen.scan.entities` 的 `id` 和所有收实体的函数参数是同一套(`EntityLabel` 一处生成与解析),跨重启不变。点名的那只不在附近,
+  `minecraft.scan.entities` 的 `id` 和所有收实体的函数参数是同一套(`EntityLabel` 一处生成与解析),跨重启不变。点名的那只不在附近,
   工具当场如实拒绝;撞码也拒绝并列出候选。
 
 ## 五、Reflex(本能)登记处

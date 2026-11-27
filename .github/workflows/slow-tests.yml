@@ -36,7 +36,7 @@ jobs:
         run: ./gradlew datagenAll --no-daemon -x javadoc
 
       - name: Run e2e (neoforge)
-        run: ./gradlew :numen:neoforge:e2eTest --no-daemon
+        run: ./gradlew :plugins:minecraft:neoforge:e2eTest --no-daemon
 
       - name: Upload logs on failure
         if: failure()
