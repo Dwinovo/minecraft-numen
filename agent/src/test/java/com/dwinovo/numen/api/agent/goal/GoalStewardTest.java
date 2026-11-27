@@ -30,7 +30,7 @@ class GoalStewardTest extends LoopHarness {
 
     @BeforeEach
     void setUpGoals() {
-        goals = new GoalSteward("test", loop, transcript, inbox, () -> "<runtime_state/>", () -> bodyBusy, null);
+        goals = new GoalSteward("test", loop, transcript, inbox, () -> "<runtime_state/>", () -> bodyBusy);
         loop.subscribe(goals::on);
     }
 
@@ -173,6 +173,23 @@ class GoalStewardTest extends LoopHarness {
         loop.halt(HaltReason.OWNER_STOP);
 
         assertEquals("挖 64 个铁", goals.goal().objective(), "照 Claude Code:打断不清目标,想收工说 /goal clear");
+    }
+
+    @Test
+    void clearingTheContextLeavesTheGoalBehindInTheOldConversation() {
+        goalSetAndFirstRunDone("挖 64 个铁");
+
+        goals.on(new LoopEvent.TranscriptBoundary(LoopEvent.Boundary.CLEAR));
+
+        assertNull(goals.goal(), "目标是旧会话里的行,新会话里没有它");
+    }
+
+    @Test
+    void aGoalReadFromTheRecordIsPickedUpWithoutWritingARow() {
+        goals.restore(GoalState.restored(new com.dwinovo.numen.api.agent.llm.Rows.Goal("挖 64 个铁", T0, 2, "还差 30 个")));
+
+        assertEquals("挖 64 个铁", goals.goal().objective());
+        assertTrue(attached.isEmpty(), "记录里本来就有");
     }
 
     @Test

@@ -54,22 +54,26 @@ public final class GoalSteward {
      * @param inbox            只读:队里还排着会叫醒她的条目就先不判——那些本来就会开起一次 run
      * @param runtimeState     这一刻的运行期状态({@code <runtime_state>}),评估器对着它判身体事实
      * @param bodyOnFiniteTask 身体手上有一件会结束的活(常驻的跟随不算)——那时不催
-     * @param restored         读对话记录恢复的目标;{@code null} = 没有
      */
     public GoalSteward(String name, AgentLoop loop, ConvoState convo, EventQueue inbox,
-                       Supplier<String> runtimeState, BooleanSupplier bodyOnFiniteTask, GoalState restored) {
+                       Supplier<String> runtimeState, BooleanSupplier bodyOnFiniteTask) {
         this.name = name;
         this.loop = loop;
         this.convo = convo;
         this.inbox = inbox;
         this.runtimeState = runtimeState;
         this.bodyOnFiniteTask = bodyOnFiniteTask;
-        this.goal = restored;
     }
 
     /** 当前的长期目标;{@code null} = 没有。 */
     public GoalState goal() {
         return goal;
+    }
+
+    /** 读了对话记录,里面还有一个没做完的目标:接着它(不写行,记录里本来就有);没有目标是 {@code null}。 */
+    public void restore(GoalState restored) {
+        cancelJudging();
+        goal = restored;
     }
 
     /**
@@ -130,6 +134,13 @@ public final class GoalSteward {
             case LoopEvent.RunEnded ended -> {
                 if (ended.end() instanceof RunEnd.Done) {
                     steer();
+                }
+            }
+            // 清空上下文是换了一个新的会话,目标是旧会话里的行,不跟过去
+            case LoopEvent.TranscriptBoundary boundary -> {
+                if (boundary.kind() == LoopEvent.Boundary.CLEAR) {
+                    cancelJudging();
+                    goal = null;
                 }
             }
             // 切断作废在飞的评估;目标还在:主人按停止不清它(Claude Code 的打断不清),下一次她停下来照常判
