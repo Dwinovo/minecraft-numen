@@ -428,7 +428,7 @@ class ProgramTest {
     }
 
     @Test
-    void aModulesCallsGoOutOneByOneAndTheModuleRecordsTheProgramThatUsedIt() {
+    void aModulesCallsGoOutOneByOne() {
         Program program = run("""
                 local n = pit.out("ores")
                 return n + 1
@@ -438,19 +438,16 @@ class ProgramTest {
         program.taskFinished(finished("t1 done dug"));
         assertTrue(receipt().get("success").getAsBoolean(), outcome.receipt());
         assertEquals(4L, outcome.returned());
-        assertEquals(List.of(new Program.Used("pit", new ScriptCall.Tally(true, 0, null))), outcome.used());
     }
 
     @Test
-    void aProgramStoppedInsideAModuleRecordsWhereItStoppedForThatModule() {
+    void aProgramStoppedInsideAModuleSaysWhereItStopped() {
         run("""
                 local x = 1
                 pit.out("ores")
                 """);
         answerLast(error("out of reach"));
         assertTrue(message().startsWith("The script stopped at line 2"), message());
-        assertEquals(List.of(new Program.Used("pit", new ScriptCall.Tally(false, 2, outcome.used().get(0).tally()
-                .error()))), outcome.used());
     }
 
     @Test

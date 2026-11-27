@@ -317,7 +317,7 @@ class ExternalBrainOnClientTest {
         until("the program reached the body", () -> world.programs.running.keySet().stream().anyMatch(id -> id.startsWith("ext-")));
         String id = world.programs.running.keySet().stream().filter(k -> k.startsWith("ext-")).findFirst().orElseThrow();
         world.programs.finish(id, new Program.Outcome("{\"success\":true,\"message\":\"done\"}",
-                new ScriptCall.Ending(ScriptCall.Status.OK, null), List.of(), List.of(), null, 0, java.util.Map.of()));
+                new ScriptCall.Ending(ScriptCall.Status.OK, null), List.of(), null, 0, java.util.Map.of()));
         until("the receipt came back", running::isDone);
         assertTrue(running.get().contains("done"), running.get());
     }

@@ -855,11 +855,6 @@ public final class LuaEngine implements ScriptEngine {
             }
         }
 
-        @Override
-        public List<String> modules() {
-            return running == null ? List.of() : running.modules();
-        }
-
         private Step answer(Answer answer) {
             try {
                 answers.put(answer);

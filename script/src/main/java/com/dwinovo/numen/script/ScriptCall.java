@@ -34,21 +34,9 @@ public final class ScriptCall {
          */
         Invocation invocation(ScriptRun.Call call);
 
-        /** 一段用到了这个模块的程序结束了(跑完、出错或被停下),记进这个模块的战绩。 */
-        void tally(String module, Tally tally);
-
         /** 墙钟,毫秒。 */
         long now();
     }
-
-    /**
-     * 用到某个模块的一段程序的结局,记战绩用。
-     *
-     * @param ok    程序跑到了最后
-     * @param line  没跑完时停在程序的哪一行;跑完是 0
-     * @param error 没跑完的原因;跑完是 null
-     */
-    public record Tally(boolean ok, int line, String error) {}
 
     /**
      * 一件身体活收尾了。
@@ -185,21 +173,13 @@ public final class ScriptCall {
     }
 
     /**
-     * 停在调用之间:主人说话、来了急件、这一轮被切断。用到的每个模块记一次没跑完;回执写明停在哪一行、为什么。
+     * 停在调用之间:主人说话、来了急件、这一轮被切断。回执写明停在哪一行、为什么。
      *
      * @param why 为什么停,一句话(含那件还在跑的活怎样了)
      */
     public End stop(String why) {
-        tally(new Tally(false, pending == null ? 0 : pending.call.line(), why));
         run.close();
         return stopped(why);
-    }
-
-    /** 这段程序用到的每个模块记一次。 */
-    private void tally(Tally tally) {
-        for (String module : run.modules()) {
-            host.tally(module, tally);
-        }
     }
 
     // ---- 往下走 ----
@@ -207,7 +187,6 @@ public final class ScriptCall {
     private Next advance(ScriptRun.Step step) {
         while (true) {
             if (step instanceof ScriptRun.Done done) {
-                tally(done.ok() ? new Tally(true, 0, null) : new Tally(false, done.line(), done.error()));
                 return new Next.Done(finalEnd(done));
             }
             ScriptRun.Call call = (ScriptRun.Call) step;

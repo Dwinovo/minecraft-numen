@@ -57,18 +57,6 @@ public record ProgramResult(String program, Program.Outcome outcome, long genera
             calls.add(c);
         }
         o.add("calls", calls);
-        JsonArray used = new JsonArray();
-        for (Program.Used u : outcome.used()) {
-            JsonObject m = new JsonObject();
-            m.addProperty("module", u.module());
-            m.addProperty("ok", u.tally().ok());
-            m.addProperty("line", u.tally().line());
-            if (u.tally().error() != null) {
-                m.addProperty("error", u.tally().error());
-            }
-            used.add(m);
-        }
-        o.add("used", used);
         if (outcome.stoppedFor() != null) {
             o.addProperty("stopped_for", outcome.stoppedFor());
         }
@@ -84,16 +72,10 @@ public record ProgramResult(String program, Program.Outcome outcome, long genera
             calls.add(new ScriptCall.Called(c.get("function").getAsString(), c.get("call").getAsString(),
                     text(c, "first"), text(c, "kind")));
         }
-        List<Program.Used> used = new ArrayList<>();
-        for (JsonElement e : o.getAsJsonArray("used")) {
-            JsonObject m = e.getAsJsonObject();
-            used.add(new Program.Used(m.get("module").getAsString(), new ScriptCall.Tally(m.get("ok").getAsBoolean(),
-                    m.get("line").getAsInt(), text(m, "error"))));
-        }
         return new Program.Outcome(o.get("receipt").getAsString(),
                 new ScriptCall.Ending(ScriptCall.Status.valueOf(ending.get("status").getAsString()
                         .toUpperCase(Locale.ROOT)), text(ending, "error_kind")),
-                List.copyOf(calls), List.copyOf(used), text(o, "stopped_for"));
+                List.copyOf(calls), text(o, "stopped_for"));
     }
 
     private static String text(JsonObject o, String name) {

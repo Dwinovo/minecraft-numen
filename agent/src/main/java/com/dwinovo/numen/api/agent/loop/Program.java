@@ -64,34 +64,30 @@ public final class Program {
         long now();
     }
 
-    /** 用到了某个模块的这段程序的结局,客户端据此记那个模块的战绩。 */
-    public record Used(String module, ScriptCall.Tally tally) {}
-
     /**
      * 一段程序跑完了。
      *
      * @param receipt 回执:成败与文字({@code success}、{@code message}),交给模型的全部
      * @param ending  怎么结束的(跑完、出错、被停下),出错时错误值的种类;大脑与评测读它,不读回执的文字
      * @param calls   每次 API 调用的结局,按先后
-     * @param used    用到的每个模块和这段程序的结局
      * @param stoppedFor 程序是被叫停的(主人开口、急件、切断)时,为什么停,一句话,含等着的那件活怎样了("your owner spoke; t8 keeps
      *                   running");别的结局是 null。工具口据此给同一批里没执行的调用写原因,不去读回执的文字
      * @param returned   程序 {@code return} 的值原样;进程内的测试与工具读它,回执里是截过的文字
      * @param failure    出错时完整的错误值({@code kind}、{@code message}、{@code hint}、{@code fn}、{@code data});同 {@code returned}
      */
-    public record Outcome(String receipt, ScriptCall.Ending ending, List<ScriptCall.Called> calls, List<Used> used,
+    public record Outcome(String receipt, ScriptCall.Ending ending, List<ScriptCall.Called> calls,
                           String stoppedFor, Object returned, java.util.Map<String, Object> failure) {
 
         /** 没有 {@code return} 的值与完整错误值的结局。 */
-        public Outcome(String receipt, ScriptCall.Ending ending, List<ScriptCall.Called> calls, List<Used> used,
+        public Outcome(String receipt, ScriptCall.Ending ending, List<ScriptCall.Called> calls,
                        String stoppedFor) {
-            this(receipt, ending, calls, used, stoppedFor, null, null);
+            this(receipt, ending, calls, stoppedFor, null, null);
         }
 
-        /** 一段没能开跑的程序的结局:一张失败的回执,没有调用,没有模块。 */
+        /** 一段没能开跑的程序的结局:一张失败的回执,没有调用。 */
         public static Outcome refused(String why) {
             return new Outcome(ToolOutcome.failure(why), new ScriptCall.Ending(ScriptCall.Status.ERROR,
-                    ErrorKind.FAILED.wire()), List.of(), List.of(), null);
+                    ErrorKind.FAILED.wire()), List.of(), null);
         }
 
         /** 一张回执(服务端写的那份 JSON)里的文字,模型读的就是它。 */
@@ -111,7 +107,6 @@ public final class Program {
     private final Executor serial;
     private final Consumer<Outcome> ended;
     private final List<ScriptCall.Called> calls = new ArrayList<>();
-    private final List<Used> used = new ArrayList<>();
 
     private ScriptCall script;
     /** 程序接下来要做的事;没有是 null。 */
@@ -227,7 +222,7 @@ public final class Program {
                     done = true;
                     ended.accept(new Outcome(ToolOutcome.failure("the program could not be run: " + broke),
                             new ScriptCall.Ending(ScriptCall.Status.ERROR, ErrorKind.FAILED.wire()),
-                            List.copyOf(calls), List.copyOf(used), null));
+                            List.copyOf(calls), null));
                 }
             } finally {
                 outstanding.decrementAndGet();
@@ -297,7 +292,7 @@ public final class Program {
     private void end(ScriptCall.End end, String stoppedFor) {
         collect();
         done = true;
-        ended.accept(new Outcome(end.receipt(), end.ending(), List.copyOf(calls), List.copyOf(used), stoppedFor,
+        ended.accept(new Outcome(end.receipt(), end.ending(), List.copyOf(calls), stoppedFor,
                 end.returned(), end.failure()));
     }
 
@@ -329,7 +324,7 @@ public final class Program {
         calls.addAll(script.drainCalled());
     }
 
-    /** 程序结束时 {@link ScriptCall} 把用到的每个模块报过来,记下:客户端据此记战绩。 */
+    /** 程序里的调用交给 {@link Port} 读成动作。 */
     private final class Recording implements ScriptCall.Host {
 
         @Override
@@ -340,11 +335,6 @@ public final class Program {
         @Override
         public Invocation invocation(ScriptRun.Call call) {
             return port.invocation(call);
-        }
-
-        @Override
-        public void tally(String module, ScriptCall.Tally tally) {
-            used.add(new Used(module, tally));
         }
 
         @Override

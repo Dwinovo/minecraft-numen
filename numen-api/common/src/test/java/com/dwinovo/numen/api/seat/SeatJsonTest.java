@@ -31,8 +31,6 @@ class SeatJsonTest {
                 new ScriptCall.Ending(ScriptCall.Status.ERROR, "failed"),
                 List.of(new ScriptCall.Called("numen.work.dig", "numen.work.dig(\"stone\")", "stone", "no_path"),
                         new ScriptCall.Called("numen.status.self", "numen.status.self()", null, null)),
-                List.of(new Program.Used("my.lumber", new ScriptCall.Tally(false, 3, "boom")),
-                        new Program.Used("numen.work", new ScriptCall.Tally(true, 0, null))),
                 "your owner spoke; t8 keeps running");
     }
 
@@ -42,7 +40,7 @@ class SeatJsonTest {
                 new BodyTask("t1", "numen.work.dig", false, "numen.activity.dig", List.of("oak")), 77, 6000));
         assertEquals(result, ProgramResult.fromJson(result.toJson()));
         Program.Outcome inProcess = new Program.Outcome("{\"success\":true,\"message\":\"m\"}",
-                new ScriptCall.Ending(ScriptCall.Status.OK, null), List.of(), List.of(), null, 42, java.util.Map.of());
+                new ScriptCall.Ending(ScriptCall.Status.OK, null), List.of(), null, 42, java.util.Map.of());
         JsonObject wire = ProgramResult.outcomeJson(inProcess);
         assertTrue(!wire.has("returned") && !wire.has("failure"), wire.toString());
     }

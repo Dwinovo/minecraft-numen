@@ -150,7 +150,7 @@ class CompanionToolPortTest {
     }
 
     private static Program.Outcome ended(String receipt) {
-        return new Program.Outcome(receipt, new ScriptCall.Ending(ScriptCall.Status.OK, null), List.of(), List.of(), null);
+        return new Program.Outcome(receipt, new ScriptCall.Ending(ScriptCall.Status.OK, null), List.of(), null);
     }
 
     @Test

@@ -87,8 +87,7 @@ class SeatsTest {
     private static Program.Outcome outcome(String message) {
         return new Program.Outcome("{\"success\":true,\"message\":\"" + message + "\"}",
                 new ScriptCall.Ending(ScriptCall.Status.OK, null),
-                List.of(new ScriptCall.Called("numen.status.self", "numen.status.self()", null, null)),
-                List.of(new Program.Used("my.lumber", new ScriptCall.Tally(true, 3, null))), null);
+                List.of(new ScriptCall.Called("numen.status.self", "numen.status.self()", null, null)), null);
     }
 
     // ---- 谁坐得上 ----

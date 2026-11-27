@@ -139,7 +139,6 @@ class LuaEngineTest {
         ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(table("route", new JsonPrimitive("home"))));
         assertTrue(done.ok());
         assertEquals(Map.of("walked", Map.of("route", "home")), done.value(), "跑完交出 return 的值");
-        assertEquals(List.of("numen.move"), run.modules(), "用到的模块,记战绩用");
     }
 
     @Test
