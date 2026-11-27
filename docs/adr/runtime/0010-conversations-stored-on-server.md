@@ -1,0 +1,62 @@
+# 0010 对话存在服务端,格式照 Claude Code 的会话记录;目标是对话里的一行
+
+- 状态:已接受
+- 日期:2026-11-28
+- 修订:[0008](0008-brain-on-owners-client.md)(上下文全在主人客户端)、[0002](0002-storage-files-three-layers.md)(对话日志照 pi 的格式)
+- 另见:control 0028(提问工具照 Claude Code)、control 0029(系统提示照 Claude Code)
+
+## 背景
+
+- 现在一只同伴一份 `chat.jsonl`,放在她的创建者的电脑上(`config/numen/client/companions/<她>/chat.jsonl`),目标另存 `goal.json`。面板看一个会话,
+  是客户端把几个成员的本地日志现拼出来的;单聊没拼上,面板就空了(`Conversations#membersOf` 只认存过的群)。
+- 往后对话要能换人接着聊(记录书,物品另起一份 ADR),群里会有好几个真玩家:同一份记录要被不同电脑上的人读到,一个成员不在线时群里的话也要有地方
+  先存着。存在某个人的电脑上做不到,QQ、Discord、Grok Bot 都存在服务端。
+- 用户:"完全对齐 grok 和 claude 的机制,群聊、流对齐 grok,存储格式、goal 之类的对齐 claude";"这一轮先把聊天记录放服务端去存","群聊先不考虑太复杂机制"。
+- 长期目标照 Claude Code 的 `/goal`(11-27 实测其会话记录):状态就是会话里的 `goal_status` 行;不防死循环,"条件不合理是玩家或上游的事,不兜底"。
+
+## 决定
+
+心智模型:**对话是服务端的一份记录,脑子在主人的客户端上读它、往后写它。** 记录只往后追加;一段对话同一时刻只有一个写的人,就是坐着她座位的那个客户端。
+脑子仍在主人客户端(0008 不变):key、模型、调模型、她的收件箱都不动。
+
+1. **存在哪。** `<存档>/numen/conversations/<会话 uuid>.jsonl`,一段对话一个文件,文件名就是会话 id。目录按内容叫,不认识载体(以后的书、指令、界面都只是
+   指着某个会话 id)。服务端在她的登记项里记着她**当前的会话 id**;清空上下文就是换一个新的会话 id(照 Claude Code 的 `/clear` 开新会话),旧文件留着。
+2. **格式照 Claude Code 的会话记录。** 一行一条 JSON,没有文件头,只追加。每行有 `type`、`uuid`、`parentUuid`(串成链)、`timestamp`、`version`(Numen 的版本)。
+   - `user`:有人说话(`message.content` 是字符串),或工具结果(`content` 是 `tool_result` 块,行上带 `sourceToolAssistantUUID`);元信息的那几条带 `isMeta: true`;
+     被打断写一条内容是 `[Request interrupted by user]` 的 `user` 行。
+   - `assistant`:她的回复,`message` 照 Anthropic 的消息(`id`、`model`、`stop_reason`、`content` 是 `text`/`thinking`/`tool_use` 块);照 Claude Code
+     一个块一行,同一条回复共用 `message.id`。接 OpenAI 协议的厂家在发出前转换,记录里只有这一种写法。调模型出错照 Claude Code 写一条 `isApiErrorMessage: true` 的
+     `assistant` 行;面板要翻成玩家语言的,另带结构化的 `code` 与 `args`。
+   - `attachment`:往后追加的提醒,`attachment.type` 分种类:`goal_status`、世界上的事、换了人设、目录变了等。发给模型时渲染成 `<system-reminder>`。
+   - `system`:`subtype: compact_boundary` 是压缩边界(`parentUuid` 为空,`logicalParentUuid` 指回压缩前最后一条,`compactMetadata` 记触发方式与前后用量),
+     紧跟一条 `isCompactSummary: true` 的 `user` 行是摘要;上下文从最后一个边界起重放。
+   - 我们加的字段只有两个,照 Grok Bot:`user` 行的 `from`(谁说的,`player@短码` 或同伴的身份)、每行的 `conv`(这一行属于哪个群,单聊为空)。
+     Claude Code 自己的字段(`cwd`、`gitBranch`、`entrypoint`、文件快照、权限决定)不要。
+   - 认不得的 `type` 读时跳过、留在文件里;插件自己的记录是 `<命名空间>:<名字>` 类型的行,不进上下文也不进面板。
+   - 换模型、换思考档位不再单独记:模型名在每条 `assistant` 的 `message.model` 里。
+3. **谁能写、谁能读。** 写:只有坐着她座位的客户端(0008 的座位只认创建者),经座位追加,服务端按到达顺序落盘。读:她的主人表上的人(0006)能翻页、能订阅新行。
+   一个写的人,所以没有冲突合并,也不加锁。
+4. **怎么同步。** 座位上加三件事(名字定稿以代码为准):
+   - 开座位时取她当前会话**最后一个压缩边界起**的全部行,脑子在内存里拼上下文;压缩过的老行不传。
+   - 脑子每写成一行就沿座位追加;连接有序,不另做确认协议。断线时脑子本来就停(0008),最多丢掉在飞的半轮。
+   - 面板从服务端翻页、订阅服务端推来的新行。主人自己的面板也走这条:落了盘的才是记录,不从本机脑子另取一份。正在吐字的那一段只是脑子给本机面板的实时显示,
+     不进记录,成形之后以服务端推来的那一行为准。
+5. **群,这一轮不改机制。** 仍是现在的样子:每个成员的行写在她自己的会话里,带 `conv`;"这个群发生了什么"由服务端把各成员的行按 `conv` 归并(现有的 `History`
+   搬到服务端)。群自己的公共记录、Grok 式的叫醒与 `SendMessage` 以后另定。
+6. **目标是对话里的一行,照 Claude Code 的 `/goal`。**
+   - 设定、清除各写一条 `sentinel: true` 的 `goal_status`(`condition`、`met`);当前目标就是文件里最后一条 `goal_status`(压缩不影响,文件从不删改)。
+   - 设定时追加一条 `isMeta` 的 `user` 行,原文照 Claude Code:
+     `A session-scoped Stop hook is now active with condition: "<条件>". Briefly acknowledge the goal, then immediately start (or continue) working toward it — treat the condition itself as your directive and do not pause to ask the user what to do. The hook will block stopping until the condition holds. It auto-clears once the condition is met — do not tell the user to run `/goal clear` after success; that's only for clearing a goal early.`
+     其中 `/goal clear` 换成 Numen 里清除目标的说法。
+   - 她每停一次评估一次(时机沿用现在的:身体手上还有会结束的活、收件箱里还排着会叫醒她的条目时先不判):结果写一条 `goal_status`(`met`、`reason`);没达成再追加一条 `isMeta` 的 `user` 行
+     `Stop hook feedback:\n[<条件>]: <理由>`,接着跑;达成就清掉。评估员那次模型调用不进记录。
+   - 删掉:`goal.json`、轮数上限(`MAX_GOAL_TURNS`)、"卡住"判定与连卡收工(`STUCK`、`STUCK_STREAK_TO_GIVE_UP`)。主人按停止**不**清目标(Claude Code 的打断不清)。
+7. **不迁移。** 主人电脑上的旧 `chat.jsonl`、`goal.json` 不再读,也不替玩家删;读旧格式、升级旧版本的代码一并删掉(beta)。
+8. **这一轮不动的**:她的收件箱、用量、定时、札记仍在主人客户端;物品(记录书等)、上下文分层重排、群聊机制另起。
+
+## 后果
+
+- 服主看得到她的对话(文件在服务器上)。这和"书能交给别人"是同一件事;常见问题里要写明。key 仍只在主人电脑上。
+- 换一台电脑、同一个服,她的对话还在;换一个服,对话留在那个世界里。跨世界的东西(key、偏好,以后的全局 AGENTS.md)在主人客户端。
+- 面板只有一个来源,单聊没历史那一类 bug 没了生根的地方。
+- 目标跟着对话走:以后对话能换人接着聊,目标一起过去。

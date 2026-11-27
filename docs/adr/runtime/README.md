@@ -6,11 +6,12 @@
 | 编号 | 日期 | 决定 | 状态 |
 |---|---|---|---|
 | [0001](0001-server-agent-two-brains.md) | 10-16 | 服务端 Agent:只有服务端大脑与外部大脑,配置与 key 归服主 | 已接受,在落地 |
-| [0002](0002-storage-files-three-layers.md) | 10-16 | 存储用文件,分三层;格式照 pi 的会话日志 | 已接受,在落地 |
+| [0002](0002-storage-files-three-layers.md) | 10-16 | 存储用文件,分三层;格式照 pi 的会话日志 | 已接受,在落地;对话格式被 0010 修订 |
 | [0003](0003-network-off-main-thread.md) | 10-16 | 我们的客户端只走 MC 的连接,网络包不拖慢刻 | 已接受,在落地 |
 | [0004](0004-host-library-is-the-server-directory.md) | 10-21 | 房主的"我的"就是服务器目录,"内置"改叫"服务器提供" | 已接受,已落地 |
 | [0005](0005-skins-are-pngs-in-a-folder-signed-on-use.md) | 10-21 | 皮肤是文件夹里的 png,用时才签,签名缓存按内容寻址 | 已接受,已落地;签名在哪一端被 0009 修订 |
 | [0006](0006-keepers-ownership-use-provenance.md) | 11-13 | 她有一张主人表:归属只认创建者,使用问主人表,每项绑定记着是谁绑的 | 已接受,在落地 |
 | [0007](0007-paper-removed.md) | 11-25 | 移除 Paper:只做模组加载器上的服务端,设计默认玩家装了客户端 | 已接受,已落地;修订 0001 |
-| [0008](0008-brain-on-owners-client.md) | 11-25 | 大脑在主人的客户端,身体在服务端:两端之间只有一个座位,说 JSON-RPC | 已接受,已落地;修订 0001、control 0011 |
+| [0008](0008-brain-on-owners-client.md) | 11-25 | 大脑在主人的客户端,身体在服务端:两端之间只有一个座位,说 JSON-RPC | 已接受,已落地;修订 0001、control 0011;上下文的存放被 0010 修订 |
 | [0009](0009-skins-signed-by-the-chooser.md) | 11-25 | 皮肤由挑的人的客户端签好交给服务端,服务端只验签和穿上 | 已接受,在落地;修订 0005 |
+| [0010](0010-conversations-stored-on-server.md) | 11-28 | 对话存在服务端,格式照 Claude Code 的会话记录;目标是对话里的一行 | 已接受 |
