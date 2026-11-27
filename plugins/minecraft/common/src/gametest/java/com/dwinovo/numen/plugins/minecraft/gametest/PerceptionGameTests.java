@@ -533,7 +533,7 @@ public class PerceptionGameTests {
         });
     }
 
-    /** 查物品事实:金苹果能吃(给出饱食值),一叠 64,不是方块物品;来源表里有原版这一个、答了。 */
+    /** 查物品事实:金苹果能吃(给出饱食值),一叠 64,不是方块物品。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void lookup_item_info_reports_what_the_game_knows(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_inspector", new BlockPos(3, 2, 3), false);
@@ -547,12 +547,6 @@ public class PerceptionGameTests {
                             && facts.getAsJsonObject("food").get("nutrition").getAsInt() == 4
                             && !facts.has("places"),
                     "the facts are not the golden apple's: " + whole);
-            boolean answered = false;
-            for (var source : whole.getAsJsonArray("sources")) {
-                answered |= source.getAsJsonObject().get("source").getAsString().equals("numen")
-                        && source.getAsJsonObject().get("status").getAsString().equals("answered");
-            }
-            helper.assertTrue(answered, "the vanilla source is not named as answering: " + whole);
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }

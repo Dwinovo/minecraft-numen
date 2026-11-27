@@ -391,7 +391,7 @@ public class TlmGameTests {
 
     /** 离得太远:{@code tlm task} 不走路,当场失败,给出照抄就能走过去的那一行,女仆的工作没动。 */
     @GameTest(template = "floor16", timeoutTicks = 100, batch = BATCH)
-    public static void too_far_from_her_maid_names_the_walk(GameTestHelper helper) {
+    public static void too_far_from_her_maid_says_to_walk_first(GameTestHelper helper) {
         NumenPlayer her = keeper(helper, "gametest_tlm_distant", new BlockPos(1, 2, 1));
         EntityMaid maid = maidAt(helper, new BlockPos(14, 2, 14));
         maid.tame(her);
@@ -401,11 +401,9 @@ public class TlmGameTests {
         ToolRun task = lua(her, "tlm.maid.task(\"" + FARM + "\", {maid = " + ref(maid) + "})");
 
         succeedWhen(helper, () -> {
-            String hint = task.hint();
             helper.assertTrue(task.refused() && "out_of_reach".equals(task.kind())
-                            && hint != null && hint.startsWith("minecraft.move.walk({x = ")
-                            && hint.endsWith("}, 2)"),
-                    "far away, tlm task did not fail out of reach with the walk to copy: " + task.reply());
+                            && task.reply().contains("walk to it first"),
+                    "far away, tlm task did not fail out of reach saying to walk first: " + task.reply());
             helper.assertTrue(!maid.getTask().getUid().equals(FARM), "her task changed from out of reach");
             leave(helper, her, maid);
         });

@@ -27,7 +27,7 @@ final class NumenGuide {
             - `numen.task` shows and stops what your body is doing and sets timers, `minecraft.time` waits, `numen.permission` shows and tightens what your owner lets you do, and `minecraft.command.run` runs one Minecraft command as a player would type it.
 
             ## Making things
-            Start from `minecraft.inv.recipes(item)`: it returns every recipe for the item, with its id and category, from every source that is installed. `minecraft.inv.uses(item)` and `minecraft.inv.info(item)` answer the opposite questions. Then:
+            Start from `minecraft.inv.recipes(item)`: it returns every recipe for the item in the game's recipe list, with its id and category. `minecraft.inv.uses(item)` and `minecraft.inv.info(item)` answer the opposite questions. Then:
             - Crafting is `minecraft.inv.make(item, count)`, which picks the recipe, finds or places a crafting table when the grid needs one, and crafts until there are enough; `minecraft.inv.craft` crafts one recipe once.
             - Smelting, blasting and smoking is `minecraft.inv.smelt(furnace, item, count)`, which fuels the furnace, waits and takes out what is cooked.
             - Don't use `minecraft.use.block` to "make" something: it clicks, it does not craft.

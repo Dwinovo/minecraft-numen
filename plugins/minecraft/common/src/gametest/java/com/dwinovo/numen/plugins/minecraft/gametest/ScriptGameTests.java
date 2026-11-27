@@ -79,7 +79,7 @@ public class ScriptGameTests {
             helper.assertTrue(level.getBlockState(first).isAir() && level.getBlockState(second).isAir(),
                     "not both cells were cleared: " + msg);
             helper.assertTrue(msg.startsWith("ok · 2 calls"), msg);
-            helper.assertTrue(msg.matches("(?s).*\nstderr:\nline 1 numen\\.build\\.place: .*\nline 2 numen\\.build\\.place: .*"),
+            helper.assertTrue(msg.matches("(?s).*\nstderr:\nline 1 minecraft\\.build\\.place: .*\nline 2 minecraft\\.build\\.place: .*"),
                     "a line did not wait for its task to finish and report its account: " + msg);
             CompanionFactory.despawn(level.getServer(), her);
         });
@@ -115,7 +115,7 @@ public class ScriptGameTests {
                     helper.assertTrue(round.result(script) == null, "the cut-off turn was handed a result");
                     String msg = JsonParser.parseString(round.programReceipt()).getAsJsonObject().get("message")
                             .getAsString();
-                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(numen\\.move\\.walk\\) after 1 call: "
+                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(minecraft\\.move\\.walk\\) after 1 call: "
                             + "this turn was cut off; t\\d+ was stopped too\\. Nothing after that ran\\..*"), msg);
                     helper.assertTrue(level.getBlockState(kept).is(Blocks.STONE), "the line after the stop ran");
                     CompanionFactory.despawn(level.getServer(), her);
@@ -142,7 +142,7 @@ public class ScriptGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(round.hasSettled(), "the script did not stop when the owner spoke"))
                 .thenExecute(() -> {
                     String msg = message(round, script);
-                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(numen\\.move\\.walk\\) after 1 call: "
+                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(minecraft\\.move\\.walk\\) after 1 call: "
                             + "your owner spoke; t\\d+ keeps running\\..*"), msg);
                     TaskRecord<?> now = CompanionTickDispatcher.currentTaskFor(her.getUUID());
                     helper.assertTrue(now != null && now.getToolName().equals("minecraft.move.walk"),

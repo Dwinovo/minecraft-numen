@@ -111,8 +111,11 @@ public final class GameTestKit {
      * numen 自己的 GameTest 这次开没开。夹具(只给用例用的命令组与任务)在用例类的静态块里登记,得先问这一句——评测的运行也带着
      * numen 的用例类,她的工具表与命令索引里不该多出夹具。判据只有套件机制那一处({@link GameTestSuites#selected})。
      */
+    /** 本插件的用例所在的套件名(登记在 META-INF/numen/gametest/ 下,根 build.gradle 的 numenSuites 表里同一个名字)。 */
+    static final String SUITE = "numen";
+
     static boolean numenTestsEnabled() {
-        return GameTestSuites.selected(Constants.MOD_ID);
+        return GameTestSuites.selected(SUITE);
     }
 
     /** 这条用例的步骤,代替原版的 {@code helper.startSequence()}:一步失败只让这一条用例失败,见 {@link Steps}。 */
