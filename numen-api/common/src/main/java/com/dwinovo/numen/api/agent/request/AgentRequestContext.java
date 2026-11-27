@@ -27,17 +27,14 @@ public final class AgentRequestContext {
      * @param runtimeXml  这一刻的运行期状态({@link RuntimeState#xml})
      * @param personaText 人设正文;没有为 {@code null}(见 {@link SystemPromptComposer#compose})
      * @param catalog     服务端的目录(见 {@link SystemPromptComposer#compose})
-     * @param hers        她自己的模块
-     * @param disabled    她关掉的内置模块
      * @param skillsXml   她能用的技能的表
      * @param tools       她这一轮看得到的工具({@code ToolBook#all})
      */
     public static ModelRequest turn(List<ConvoState.Msg> history, String runtimeXml, String personaText,
                                     com.dwinovo.numen.api.seat.Catalog catalog,
-                                    java.util.Map<String, String> hers, java.util.Set<String> disabled,
                                     String skillsXml, List<NumenTool> tools) {
         return new ModelRequest(attach(history, runtimeXml), tools,
-                SystemPromptComposer.compose(personaText, catalog, hers, disabled, skillsXml));
+                SystemPromptComposer.compose(personaText, catalog, skillsXml));
     }
 
     /**

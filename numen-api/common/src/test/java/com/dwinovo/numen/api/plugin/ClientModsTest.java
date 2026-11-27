@@ -84,14 +84,14 @@ class ClientModsTest {
     }
 
     private static boolean listed() {
-        return ApiDocs.index(Modules.of(HER, java.util.Map.of(), Set.of())).contains("gtcm.pad");
+        return ApiDocs.index(Modules.of(HER)).contains("gtcm.pad");
     }
 
     @Test
     void anOwnerWhoHasNotReportedSeesNeitherTheGroupNorItsHelpNorItsSkill() {
         assertFalse(listed());
-        assertTrue(ApiDocs.help("gtcm.pad", Modules.of(HER, java.util.Map.of(), Set.of())) == null && ApiDocs.help("gtcm.pad.read", Modules.of(HER, java.util.Map.of(), Set.of())) == null
-                && ApiDocs.help(NAMESPACE, Modules.of(HER, java.util.Map.of(), Set.of())) == null);
+        assertTrue(ApiDocs.help("gtcm.pad", Modules.of(HER)) == null && ApiDocs.help("gtcm.pad.read", Modules.of(HER)) == null
+                && ApiDocs.help(NAMESPACE, Modules.of(HER)) == null);
         assertFalse(skillListed(), "the bundled skill of the client-only mod is not offered");
     }
 
@@ -107,7 +107,7 @@ class ClientModsTest {
         Presence.reported(OWNER, Presence.PROTOCOL);
         assertTrue(Presence.ready(OWNER, Set.of(NAMESPACE)));
         assertTrue(Presence.hasClient(OWNER) && listed());
-        assertTrue(ApiDocs.help("gtcm.pad.read", Modules.of(HER, java.util.Map.of(), Set.of())) != null);
+        assertTrue(ApiDocs.help("gtcm.pad.read", Modules.of(HER)) != null);
         assertTrue(skillListed());
     }
 

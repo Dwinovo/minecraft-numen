@@ -38,8 +38,7 @@ import static com.dwinovo.numen.gametest.GameTestKit.*;
 
 /**
  * 程序从入口跑:模型一次回复里的一段程序,经内脑派发的同一个顺序({@link GameTestKit#round})逐个派 API 调用——占身体的等它收尾
- * 再往下走;成功直接返回值、失败抛错,程序按它分支;主人停止或开口时停在调用之间,回执如实写停在哪一行。模块:按名字直接用,
- * 存、读、列、删、还原出厂的,改了文件下一次就用新的,坏了只影响用它的程序,战绩记在主人那一份里;内置的
+ * 再往下走;成功直接返回值、失败抛错,程序按它分支;主人停止或开口时停在调用之间,回执如实写停在哪一行;内置的
  * numen.work.mine 挖空一块埋在石头里的矿;计划写进回执,对话流据此画清单。
  */
 public class ScriptGameTests {
@@ -52,16 +51,6 @@ public class ScriptGameTests {
 
     private static JsonObject receipt(Round round, LlmToolCall call) {
         return JsonParser.parseString(round.result(call)).getAsJsonObject();
-    }
-
-    /** {@code numen.module.list} 交回的清单里叫 {@code name} 的那一份;没有是 null。 */
-    private static JsonObject module(ToolRun list, String name) {
-        for (var row : valueIn(list.reply()).getAsJsonArray()) {
-            if (row.getAsJsonObject().get("name").getAsString().equals(name)) {
-                return row.getAsJsonObject();
-            }
-        }
-        return null;
     }
 
     private static String message(Round round, LlmToolCall call) {
@@ -206,155 +195,6 @@ public class ScriptGameTests {
                 .thenSucceed();
     }
 
-    /** 出厂的一个夹具模块:改它、删它、还原它,不碰别的 GameTest 在用的出厂模块。 */
-    private static final String COPIED = "gt.copied";
-
-    static {
-        if (GameTestKit.numenTestsEnabled()) {
-            // 登记成内置模块,和随模组发布的在同一处
-            com.dwinovo.numen.api.script.BuiltinModules.register(COPIED, """
-                    -- Test fixture: a built-in module to change, delete and reset.
-                    local M = {}
-                    ---Say which version this is.
-                    function M.version() return 1 end
-                    return M
-                    """);
-        }
-    }
-
-    /**
-     * 出厂模块装在她的目录里,读得到、改得了、删得掉、还原得回:{@code numen.module.show} 给出全文;她照抄一份、加一个函数,存成同名的
-     * ——程序里用的就是改过的,原有的函数照样在;清单标出"出厂的,改过";{@code {factory = true}} 还看得到出厂原文;删掉之后程序里没有了,
-     * 不会自己装回;{@code reset} 装回出厂那一份,她加的函数没了。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_scripts")
-    public static void a_factory_module_is_changed_deleted_and_reset(GameTestHelper helper) {
-        NumenPlayer her = spawnAt(helper, "gametest_lua_copier", new BlockPos(2, 2, 2), false);
-        ToolRun shown = lua(her, "return numen.module.show(\"" + COPIED + "\")");
-        helper.assertTrue(shown.receipt() != null && shown.receipt().contains("function M.version()"),
-                "the factory module does not read as itself: " + shown.receipt());
-        ToolRun saved = lua(her, """
-                local code = numen.module.show("gt.copied").code
-                local mine = string.gsub(code, "\\nreturn M%s*$", "\\nfunction M.gt_marker() return 7 end\\nreturn M\\n")
-                numen.module.save(mine, {name = "gt.copied"})
-                """);
-        helper.assertTrue(saved.ranToTheEnd(), "her change was not saved: " + saved.receipt());
-        ToolRun changed = lua(her, "return gt.copied.gt_marker() + gt.copied.version()");
-        helper.assertTrue(changed.ranToTheEnd() && changed.receipt().contains("returned: 8"),
-                "her change was not used: " + changed.receipt());
-        JsonObject listed = module(lua(her, "numen.module.list()"), COPIED);
-        helper.assertTrue(listed != null && listed.get("summary").getAsString().startsWith("Test fixture")
-                && listed.get("whose").getAsString().equals("built in, changed"), "the list: " + listed);
-        helper.assertTrue(lua(her, "return numen.module.show(\"" + COPIED + "\", {factory = true}).code").receipt()
-                        .contains("function M.version()") && !lua(her, "return numen.module.show(\"" + COPIED
-                        + "\", {factory = true}).code").receipt().contains("gt_marker"), "the factory text is gone");
-        ToolRun deleted = lua(her, "numen.module.delete(\"" + COPIED + "\")");
-        helper.assertTrue(deleted.succeeded(), deleted.reply());
-        ToolRun unused = lua(her, "return gt.copied.version()");
-        helper.assertTrue(!unused.ranToTheEnd() && unused.receipt().contains("no_function"),
-                "a deleted module is still used: " + unused.receipt());
-        JsonObject gone = module(lua(her, "numen.module.list()"), COPIED);
-        helper.assertTrue(gone != null && gone.get("whose").getAsString().equals("built in, deleted; "
-                + "numen.module.reset(\"" + COPIED + "\") brings it back"), "the list does not say it was deleted: " + gone);
-        ToolRun reset = lua(her, "numen.module.reset(\"" + COPIED + "\")");
-        helper.assertTrue(reset.succeeded(), reset.reply());
-        ToolRun back = lua(her, "return gt.copied.version(), type(gt.copied.gt_marker)");
-        helper.assertTrue(back.ranToTheEnd() && back.receipt().contains("returned: 1"),
-                "reset did not bring the factory text back: " + back.receipt());
-        helper.assertTrue(!lua(her, "return gt.copied.gt_marker()").ranToTheEnd(), "her function outlived the reset");
-        CompanionFactory.despawn(helper.getLevel().getServer(), her);
-        helper.succeed();
-    }
-
-    /**
-     * 她存一个自己的模块(在 my 下)、读它、在两段程序里按名字 {@code my.gt_clear} 用它;读不通的、改第 ① 层函数的、不在
-     * my 下又不是内置名字的不收、说为什么;主人拿编辑器改了文件,下一段程序就用新的;目录里一个坏模块只让用到它的程序出错;她自己的
-     * 删得掉。模块目录是这次 GameTest 专用的,不是主人的。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
-    public static void she_saves_uses_and_deletes_a_module_of_her_own(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer her = spawnAt(helper, "gametest_lua_saver", new BlockPos(2, 2, 2), true);
-        BlockPos cell = helper.absolutePos(new BlockPos(4, 2, 2));
-        level.setBlockAndUpdate(cell, Blocks.STONE.defaultBlockState());
-        java.nio.file.Path dir = GameTestKit.programs(her).modules().dir();
-        helper.assertTrue(dir.toString().contains("numen-gametest-modules-"),
-                "GameTest reads modules from " + dir + ", not from its own empty directory");
-
-        ToolRun flat = lua(her, "numen.module.save(\"-- Flat.\\nreturn {}\", {name = \"gt_flat\"})");
-        helper.assertTrue(!flat.succeeded() && flat.reply().contains("my.gt_flat"),
-                "a module of her own was kept outside my: " + flat.reply());
-        ToolRun broken = lua(her, "numen.module.save(\"-- Never compiles.\\nlocal x = = 1\", {name = \"my.gt_broken\"})");
-        helper.assertTrue(!broken.succeeded() && broken.reply().contains("my.gt_broken:2:"),
-                "a module that does not compile was kept: " + broken.reply());
-        ToolRun redefines = lua(her, "numen.module.save(\"-- Takes numen.build.place.\\nlocal M = {}\\nfunction numen.build.place() end\\n"
-                + "return M\", {name = \"my.gt_thief\"})");
-        helper.assertTrue(!redefines.succeeded() && redefines.reply().contains("numen.build.place is an API function"),
-                "a module that redefines an API function was kept: " + redefines.reply());
-
-        ToolRun saved = lua(her, "numen.module.save(\"-- Clearing cells.\\nlocal M = {}\\n---Clear one cell.\\n"
-                + "function M.cell(p)\\n  numen.build.place({{name = 'air', pos = p}})\\nend\\nreturn M\", {name = \"my.gt_clear\"})");
-        helper.assertTrue(saved.succeeded() && "my.gt_clear".equals(saved.field("name")) && "new".equals(saved.field("how")),
-                saved.reply());
-        ToolRun shown = lua(her, "numen.module.show(\"my.gt_clear\")");
-        helper.assertTrue(shown.succeeded() && "yours".equals(shown.field("whose"))
-                && String.valueOf(shown.field("code")).contains("function M.cell(p)")
-                && Long.valueOf(0).equals(shown.field("runs")), shown.reply());
-
-        String at = com.dwinovo.numen.api.sdk.Positions.literal(cell);
-        LlmToolCall run = programCall("my.gt_clear.cell(" + at + ")");
-        Round first = round(helper, her, run);
-        Round[] second = new Round[1];
-
-        steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(first.hasSettled(), "the first program has not finished"))
-                .thenExecute(() -> {
-                    String msg = message(first, run);
-                    helper.assertTrue(msg.startsWith("ok · ") && msg.contains("\nline 1 numen.build.place: "), msg);
-                    helper.assertTrue(level.getBlockState(cell).isAir(), "the module did not clear the cell");
-                    level.setBlockAndUpdate(cell, Blocks.STONE.defaultBlockState());
-                })
-                .thenExecute(() -> second[0] = round(helper, her, programCall("my.gt_clear.cell(" + at + ")")))
-                .thenWaitUntil(() -> helper.assertTrue(second[0].hasSettled() && level.getBlockState(cell).isAir(),
-                        "the second program did not clear the cell and end"))
-                .thenWaitUntil(() -> {
-                    ToolRun list = lua(her, "numen.module.list()");
-                    JsonObject mine = module(list, "my.gt_clear");
-                    helper.assertTrue(mine != null && mine.get("summary").getAsString().equals("Clearing cells.")
-                                    && mine.get("whose").getAsString().equals("yours"), "the record does not add up: " + mine);
-                    JsonObject work = module(list, "numen.work");
-                    helper.assertTrue(work != null && work.get("whose").getAsString().equals("built in"), list.reply());
-                })
-                .thenExecute(() -> {
-                    // 主人拿编辑器改了文件:/reload 之后,下一段程序就用新的
-                    try {
-                        java.nio.file.Files.writeString(dir.resolve("my").resolve("gt_clear.lua"),
-                                "-- Clearing cells.\nlocal M = {}\n---Say which version this is.\n"
-                                        + "function M.version() return 2 end\nreturn M\n");
-                        java.nio.file.Files.writeString(dir.resolve("my").resolve("gt_rotten.lua"), "local M = {\n");
-                    } catch (java.io.IOException e) {
-                        throw new java.io.UncheckedIOException(e);
-                    }
-                    GameTestKit.programs(her).modules().reload();
-                    ToolRun edited = lua(her, "return my.gt_clear.version()");
-                    helper.assertTrue(edited.ranToTheEnd() && edited.receipt().contains("returned: 2"),
-                            "the edited file was not used: " + edited.receipt());
-                    ToolRun untouched = lua(her, "return my.gt_clear.version() + 1");
-                    helper.assertTrue(untouched.ranToTheEnd(), "a broken module nobody uses broke a program: "
-                            + untouched.receipt());
-                    ToolRun rotten = lua(her, "return my.gt_rotten.x");
-                    helper.assertTrue(!rotten.ranToTheEnd() && rotten.receipt().contains("module my.gt_rotten does not "
-                            + "compile"), rotten.receipt());
-                    helper.assertTrue(lua(her, "numen.module.delete(\"my.gt_rotten\")").succeeded(), "the rotten one stays");
-                    ToolRun deleted = lua(her, "numen.module.delete(\"my.gt_clear\")");
-                    helper.assertTrue(deleted.succeeded(), deleted.reply());
-                    helper.assertTrue(!lua(her, "numen.module.show(\"my.gt_clear\")").succeeded(),
-                            "the deleted module is still there");
-                    CompanionFactory.despawn(level.getServer(), her);
-                })
-                .thenSucceed();
-    }
-
     /**
      * 形状里要游戏在场才答得出的两件:图案的标签({@code ##logs} 是标签里每个方块的默认状态,{@code ##*oak_logs} 是它们的每一种状态)读自这个世界
      * 加载好的数据包,{@code expand_vert} 把选区拉到这个维度的最低到最高一格。
@@ -485,7 +325,7 @@ public class ScriptGameTests {
                         local me = numen.status.self()
                         local words = gt.gt_client.hello()
                         return me.name .. ":" .. words
-                        """, Modules.of(her.getUUID(), java.util.Map.of(), java.util.Set.of()), true), ServerSeats.transport(), CallObserver.NONE, result::set))
+                        """, Modules.of(her.getUUID()), true), ServerSeats.transport(), CallObserver.NONE, result::set))
                 .thenWaitUntil(() -> {
                     seat.pump();
                     helper.assertTrue(result.get() != null, "the receipt has not come back");
@@ -553,7 +393,7 @@ public class ScriptGameTests {
                   if x.category == "gt:press" then machine = x.sources[1] .. ":" .. x.category_name end
                 end
                 return table.concat(state, ",") .. "|" .. tostring(merged) .. "|" .. tostring(machine)
-                """, Modules.of(her.getUUID(), java.util.Map.of(), java.util.Set.of()), true), ServerSeats.transport(), CallObserver.NONE, result::set);
+                """, Modules.of(her.getUUID()), true), ServerSeats.transport(), CallObserver.NONE, result::set);
 
         steps(helper)
                 .thenWaitUntil(() -> {
@@ -600,10 +440,10 @@ public class ScriptGameTests {
                     helper.assertTrue(seat.seated(), "her seat is not open");
                 })
                 .thenExecute(() -> {
-                    helper.assertFalse(com.dwinovo.numen.api.sdk.ApiDocs.index(Modules.of(her.getUUID(), java.util.Map.of(), java.util.Set.of())).contains("gtcm.pad"),
+                    helper.assertFalse(com.dwinovo.numen.api.sdk.ApiDocs.index(Modules.of(her.getUUID())).contains("gtcm.pad"),
                             "the index lists a client-only mod the owner's client did not report");
                     ServerPrograms.run(her, her.getUUID(), owner.getUUID(), new ServerPrograms.Request(
-                            "padless-" + UUID.randomUUID(), "return pcall(gtcm.pad.read)", Modules.of(her.getUUID(), java.util.Map.of(), java.util.Set.of()), true),
+                            "padless-" + UUID.randomUUID(), "return pcall(gtcm.pad.read)", Modules.of(her.getUUID()), true),
                             ServerSeats.transport(), CallObserver.NONE, refused::set);
                 })
                 .thenWaitUntil(() -> helper.assertTrue(refused.get() != null, "the refusal has not come back"))
@@ -617,10 +457,10 @@ public class ScriptGameTests {
                     com.dwinovo.numen.api.owner.Replies.hello(owner, com.dwinovo.numen.api.owner.Presence.PROTOCOL,
                             java.util.Set.of("gtcm"));
                     seat.pump();
-                    helper.assertTrue(com.dwinovo.numen.api.sdk.ApiDocs.index(Modules.of(her.getUUID(), java.util.Map.of(), java.util.Set.of())).contains("gtcm.pad"),
+                    helper.assertTrue(com.dwinovo.numen.api.sdk.ApiDocs.index(Modules.of(her.getUUID())).contains("gtcm.pad"),
                             "the index does not list a client-only mod the owner's client reported");
                     ServerPrograms.run(her, her.getUUID(), owner.getUUID(), new ServerPrograms.Request(
-                            "padded-" + UUID.randomUUID(), "return gtcm.pad.read()", Modules.of(her.getUUID(), java.util.Map.of(), java.util.Set.of()), true),
+                            "padded-" + UUID.randomUUID(), "return gtcm.pad.read()", Modules.of(her.getUUID()), true),
                             ServerSeats.transport(), CallObserver.NONE, answered::set);
                 })
                 .thenWaitUntil(() -> {
@@ -657,7 +497,7 @@ public class ScriptGameTests {
                 })
                 .thenExecute(() -> ServerPrograms.run(her, her.getUUID(), owner.getUUID(),
                         new ServerPrograms.Request("big-" + UUID.randomUUID(),
-                                "return gt.gt_client.length([==[" + text + "]==])", Modules.of(her.getUUID(), java.util.Map.of(), java.util.Set.of()), true),
+                                "return gt.gt_client.length([==[" + text + "]==])", Modules.of(her.getUUID()), true),
                         ServerSeats.transport(), CallObserver.NONE, result::set))
                 .thenWaitUntil(() -> {
                     seat.pump();

@@ -15,10 +15,7 @@ public final class SeatMethods {
     public static final String SEAT_OPEN = "seat/open";
     /** 她能做什么(目录),按注册表现取:{@code companion};答复见 {@code SeatCatalog}。 */
     public static final String CATALOG_GET = "catalog/get";
-    /**
-     * 跑一段程序:{@code companion}、{@code generation}、{@code program}、{@code code}、她的模块清单 {@code modules}(名字到内容哈希)与她关掉的内置
-     * 模块 {@code disabled};答复是 {@link ProgramResult}。
-     */
+    /** 跑一段程序:{@code companion}、{@code generation}、{@code program}、{@code code}、{@code keeper};答复是 {@link ProgramResult}。 */
     public static final String PROGRAM_RUN = "program/run";
     /** 叫程序停在调用之间:{@code companion}、{@code program}、{@code why}。 */
     public static final String PROGRAM_INTERRUPT = "program/interrupt";
@@ -28,8 +25,6 @@ public final class SeatMethods {
     public static final String BODY_STOP = "body/stop";
     /** 她此刻的样子({@code <runtime_state>})与游戏刻:{@code companion}。 */
     public static final String STATE_GET = "state/get";
-    /** 一个内置模块的原文:{@code companion}、{@code name};答复 {@code {code}},没有这一份是 {@code null}。 */
-    public static final String MODULES_BUILTIN = "modules/builtin";
     /** 读一份随模组与插件发布的技能:{@code companion}、{@code name}、可选 {@code file}(附属文件的相对路径);答复见 {@code SkillText}。 */
     public static final String SKILL_READ = "skill/read";
     /** 她要说的话,由服务端在 {@code spoken} 说的地方说出来:{@code companion}、{@code text}、{@code spoken}(见 {@code Spoken#toJson})。 */
@@ -49,6 +44,4 @@ public final class SeatMethods {
     public static final String CATALOG_CHANGED = "catalog/changed";
     /** 请求:程序里只有主人客户端答得了的函数:{@code companion}、{@code function}、{@code args};答复是那次调用的 {@code ApiReply}。 */
     public static final String CLIENT_CALL = "client/call";
-    /** 请求:程序用到的她的模块,服务端按内容哈希缓存,缺哪份要哪份:{@code companion}、{@code hashes};答复 {@code {modules: {哈希: 正文}}}。 */
-    public static final String MODULES_GET = "modules/get";
 }

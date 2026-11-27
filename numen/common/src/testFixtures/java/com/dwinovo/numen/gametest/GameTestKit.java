@@ -783,52 +783,19 @@ public final class GameTestKit {
 
     /**
      * 每只同伴一个扮大脑的程序宿主:程序、停止都交给产品里同一个入口({@link com.dwinovo.numen.api.program.ServerPrograms}),
-     * 客户端函数的反向请求经主人的客户端({@link com.dwinovo.numen.api.gametest.OwnerClient})答;她的模块是这一次运行专用的目录。身体到第一次
+     * 客户端函数的反向请求经主人的客户端({@link com.dwinovo.numen.api.gametest.OwnerClient})答。身体到第一次
      * 有客户端函数的请求时才登记进名册。
      */
     static final class Programs implements com.dwinovo.numen.api.program.ProgramHost {
 
         private final net.minecraft.server.MinecraftServer server;
         private final com.dwinovo.numen.api.gametest.OwnerClient transport;
-        /** 主人客户端上她的模块:内置的取自这一次运行里登记过的,她自己的落在这一次专用的目录里。 */
-        private final com.dwinovo.numen.api.script.HerModules hers;
         private final java.util.Map<String, java.util.function.Consumer<com.dwinovo.numen.api.agent.loop.Program.Outcome>>
                 waiting = new java.util.concurrent.ConcurrentHashMap<>();
 
         private Programs(net.minecraft.server.MinecraftServer server, UUID owner) {
             this.server = server;
             this.transport = new com.dwinovo.numen.api.gametest.OwnerClient(server, owner);
-            try {
-                this.hers = new com.dwinovo.numen.api.script.HerModules(new com.dwinovo.numen.api.home.Home(
-                        java.nio.file.Files.createTempDirectory("numen-gametest-modules-"),
-                        com.dwinovo.numen.api.NumenIo.inline("numen-gametest")), new FactoryModules());
-            } catch (java.io.IOException e) {
-                throw new java.io.UncheckedIOException(e);
-            }
-        }
-
-        /** 内置模块,GameTest 里就在这个进程里。 */
-        private static final class FactoryModules implements com.dwinovo.numen.api.script.HerModules.Builtins {
-            @Override
-            public java.util.Set<String> names() {
-                return com.dwinovo.numen.api.script.BuiltinModules.all().keySet();
-            }
-
-            @Override
-            public boolean loaded() {
-                return true;
-            }
-
-            @Override
-            public String code(String name) {
-                var builtin = com.dwinovo.numen.api.script.BuiltinModules.get(name);
-                return builtin == null ? null : builtin.code();
-            }
-        }
-
-        /** 主人客户端上她的模块。 */
-        com.dwinovo.numen.api.script.HerModules modules() {
-            return hers;
         }
 
         /** 跑一段程序,{@code observer} 看着它的每次调用。 */
@@ -837,17 +804,13 @@ public final class GameTestKit {
             waiting.put(programId, done);
             transport.serve(companion, new com.dwinovo.numen.api.sdk.ClientContext() {
                 @Override
-                @SuppressWarnings("unchecked")
                 public <T> T of(Class<T> type) {
-                    if (type != com.dwinovo.numen.api.script.HerModules.class) {
-                        throw new IllegalArgumentException("a GameTest client has no " + type.getSimpleName());
-                    }
-                    return (T) hers;
+                    throw new IllegalArgumentException("a GameTest client has no " + type.getSimpleName());
                 }
             });
             com.dwinovo.numen.api.program.ServerPrograms.run(NumenPlayer.findByUuid(server, companion), companion,
                     companion, new com.dwinovo.numen.api.program.ServerPrograms.Request(programId, code,
-                            com.dwinovo.numen.api.script.Modules.of(companion, hers.hers(), hers.disabled()), true), transport, observer, outcome -> {
+                            com.dwinovo.numen.api.script.Modules.of(companion), true), transport, observer, outcome -> {
                         var to = waiting.remove(programId);
                         if (to != null) {
                             to.accept(outcome);
@@ -1233,22 +1196,6 @@ public final class GameTestKit {
         /** 最近那段程序的结构化结局,见 {@link GameTestKit#dataOf}。 */
         com.google.gson.JsonObject data() {
             return run.data();
-        }
-    }
-
-    /**
-     * 一张按输出预算分页的清单,从第一页往后翻,直到哪一页里有 {@code needle}:清单跨次攒下来,要找的那条落在第几页由
-     * 前面有多少条定。翻到最后一页也没有、或者哪一页失败了,返回那一页,由用例的断言说明白。
-     *
-     * @param function 不带别的参数的那个函数,如 {@code numen.module.list}
-     */
-    static ToolRun pageWith(NumenPlayer body, String function, String needle) {
-        for (int page = 1; ; page++) {
-            ToolRun run = lua(body, function + "({page = " + page + "})");
-            if (!run.succeeded() || run.reply().contains(needle)
-                    || !run.reply().contains("page = " + (page + 1) + " to continue.]")) {
-                return run;
-            }
         }
     }
 

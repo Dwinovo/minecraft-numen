@@ -19,7 +19,7 @@
 依据:POSIX 工具语法规范、GNU 长选项约定、clig.dev(Command Line Interface Guidelines)。
 
 1. **结构**:`组 动词 [对象...] [--选项 值]...`。组是领域名词(move、work、route、scan、use、inv、gear、build、
-   fight、time、creative、task、module 等);脚本里一律写全名 `numen.<组>.<函数>`,插件是 `<模组 id>.<组>.<函数>`(§十)。
+   fight、time、creative、task 等);脚本里一律写全名 `numen.<组>.<函数>`,插件是 `<模组 id>.<组>.<函数>`(§十)。
 2. **一条命令只有一种位置参数**——它要操作的东西,可以多个;其余一律是 `--选项`。
 3. **对象写法全局统一、只在一处解析**:坐标是三个数(`120 64 -35`,也收 `120,64,-35`);路线是名字;实体是运行时 id;
    方块与物品是 id(`minecraft:` 可省);标签 `#minecraft:logs`。命令只声明"我的对象是哪一类"。
@@ -75,7 +75,7 @@
 | `work.fish` | 抛一竿,钓上来或如实失败 | 不再抛 |
 | `time.wait` | 站着等几秒,主人一喊停就停 | — |
 
-模块函数(Lua 写的,随模组发,`numen.module.show` 看得到全文;和组同名的模块给那一组加函数)在同一张目录里、和动作一样调用:
+模块函数(Lua 写的,随模组发;和组同名的模块给那一组加函数)在同一张目录里、和动作一样调用:
 
 | 模块函数 | 由哪几个原子函数组成 |
 |---|---|
@@ -185,7 +185,6 @@
 （`CompanionToolPort`）认出它属于已作废的那一批,把它作为一条 `program_stopped` 事件放进她的收件箱——正文就是程序写的那份有界回执
 本身，写明切断前做了什么、停在哪。投递档是捎带（`AMBIENT`）：她没要求这份回执，但身体做了的事必须让她知道，随下一次调模型交出；不叫醒她——
 切断本来是主人的决定，停止键之后停牌要等主人再开口，为这份回执多开一轮没有意义；也不进聊天流。主人断线导致的切断，回执无处可送，不下发。
-- 程序被停下,它用到的每个模块也记一次战绩(没跑完、停在哪一行、为什么)。
 
 ### 回执:标准管道加结局
 
@@ -205,7 +204,7 @@
 
 框架不判断哪个函数是只读的、哪个是动作:一个函数有没有话要说,是它自己的事(§十三)。
 
-**工具结果只有文字**:回执是 `{success, message}`,`message` 就是交给模型的全部(成败在第一行),同 Bash 的输出。规则只在 `ToolOutcome.modelText` 一处,所有工具(`lua`、`skill`、`todo`、`memory`、远端 MCP 工具)和所有出口(对话历史变成请求的 `ProtocolView`、压缩估算、外接智能体经 `McpEndpoint` 拿到的结果)都问它;不是信封的(技能正文)原样。对话历史里存的就是这个信封,界面据 `success` 画成败、从成功的 `todo` 画清单。**没有 `data`**:此前回执带一个 `data`(`status`、`calls`、`returned` 原值、`error`),模型会把它连同文字一起读进去(`return` 一个大值时原值要读两遍),产品里却没有任何代码读它。现在结构化的结局只在程序结果那一层(`Program.Outcome`):`ending`(`status` ok / error / stopped,出错时错误值的种类)、每次调用的记录(`ScriptCall.Called`,评测按函数统计和调试日志读)、用到的模块、`stopped_for`,这些都交给大脑的工具口;程序 `return` 的值原样与完整的错误值(`returned`、`failure`)**不进回执**,只在结局对象上,GameTest 与 `ApiTester` 经 `CallObserver.ended` 读。评测的 `Meter` 经循环事件 `ProgramEnded` 读 `ending` 与调用数。历史文件格式不变:新写的工具结果就是 `{success, message}`;旧档里带 `data` 的程序结果照旧读得进,送给模型时同样只剩 `message`。
+**工具结果只有文字**:回执是 `{success, message}`,`message` 就是交给模型的全部(成败在第一行),同 Bash 的输出。规则只在 `ToolOutcome.modelText` 一处,所有工具(`Lua`、`Skill`、`TodoWrite`、`Memory`、远端 MCP 工具)和所有出口(对话历史变成请求的 `ProtocolView`、压缩估算、外接智能体经 `McpEndpoint` 拿到的结果)都问它;不是信封的(技能正文)原样。对话历史里存的就是这个信封,界面据 `success` 画成败、从成功的 `TodoWrite` 画清单。**没有 `data`**:此前回执带一个 `data`(`status`、`calls`、`returned` 原值、`error`),模型会把它连同文字一起读进去(`return` 一个大值时原值要读两遍),产品里却没有任何代码读它。现在结构化的结局只在程序结果那一层(`Program.Outcome`):`ending`(`status` ok / error / stopped,出错时错误值的种类)、每次调用的记录(`ScriptCall.Called`,评测按函数统计和调试日志读)、用到的模块、`stopped_for`,这些都交给大脑的工具口;程序 `return` 的值原样与完整的错误值(`returned`、`failure`)**不进回执**,只在结局对象上,GameTest 与 `ApiTester` 经 `CallObserver.ended` 读。评测的 `Meter` 经循环事件 `ProgramEnded` 读 `ending` 与调用数。历史文件格式不变:新写的工具结果就是 `{success, message}`;旧档里带 `data` 的程序结果照旧读得进,送给模型时同样只剩 `message`。
 
 **有界,缩略从不静默**(数值都在 `ScriptLimits`):stderr 一条至多 `STDERR_RECORD_CHARS`,整栏至多 `STDERR_CHARS`,超出的写明还有多少字、
 多少条没显示;stdout 至多 `PRINTED_CHARS`,超出的写明少了多少字。`print`、`return`、错误值里出现的表都经同一个渲染器
@@ -235,10 +234,6 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
 ```
 
 (停在第 1 行时那件活还没收尾,回执里没有它的 stderr 条目。)
-### 模块:`module` 组
-
-见 §九。模块是唯一一种存下来的 Lua:一个文件返回一张函数表,程序按名字直接用;唯一从头跑的程序是 `lua` 工具这一轮的 `code`。
-
 ## 五、落地
 
 在集成分支上两路并行:**命令层**(十条规矩与登记检查、对象统一解析、原子化 `work dig`/`collect`、`area parts/has`、
@@ -373,8 +368,7 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
 | ⓪ 身体控制 | 寻路执行、瞄准、换工具、追着转头、等冷却、憋气;模型看不见 | Java,任务与身体 |
 | ① 原子 API | 对一个名词做一种意图;每刻控制在里面;过权限层;做的事报告给模型 | Java,登记处生成 Lua 函数 |
 | ② 内置模块 | 常见的组合(`numen.move.explore`、`numen.work.mine`、`numen.inv.make`、`numen.shape` …) | Lua,随模组或插件发布(jar 里 `numen/modules/<名字空间>/<组>.lua`),服务器起来时同步进服务器目录 `server/modules/` |
-| ③ 她的模块 | 她存下来或改过的函数表 | Lua,主人的"我的":`players/<uuid>/modules/<名字空间>/<组>.lua` |
-| ④ 这一轮的程序 | `lua` 工具的 `code` | Lua |
+| ③ 这一轮的程序 | `lua` 工具的 `code` | Lua |
 
 权限层只守在 ①;反射独立于各层,能打断程序。判据:**秒级的决策进 Lua;每刻的控制、重计算(寻路搜索、大范围扫描)、权限、
 反射、名词的存取与校验留 Java。**
@@ -382,9 +376,8 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
 ### 一种文件:模块
 
 - 模块返回一张函数表(`local M = {} … function M.chop(t) … end … return M`),正文开头一行注释说它做什么,每个函数上面几行
-  LuaLS 注释说它做什么、收什么、返回什么——`<api>` 索引与 `api.help("模块")` 都从这些注释生成,和第 ① 层的签名同一种写法。
-- 程序里按名字直接用,**没有 `require`**:写了是 `no_function`,hint 是按名字用的写法;`<api>` 索引里写明"不需要也不能
-  require"。第一次用到才装(沙箱全局表的 `__index`),每段程序一个新环境,所以热重载不用重启。模块名写错报"没有叫 X 的模块"
+  LuaLS 注释说它做什么、收什么、返回什么——`ApiSearch` 的答复都从这些注释生成,和第 ① 层的签名同一种写法。
+- 程序里按名字直接用,**没有 `require`**:写了是 `no_function`,hint 是按名字用的写法;`Lua` 工具的说明里写明不需要也不能 require。第一次用到才装(沙箱全局表的 `__index`),每段程序一个新环境,所以热重载不用重启。模块名写错报"没有叫 X 的模块"
   并列出有哪些;一个模块读不通、跑出错、没返回表,只坏用到它的那一行。
 - 和第 ① 层的组同名的模块(`move`、`work`……)给那一组加函数。
 - 原来的内置脚本 `mine` 成了 `numen.work` 模块里的 `numen.work.mine(blocks)`(返回挖了几格),和 `numen.work.collect` 同组:
@@ -394,23 +387,13 @@ The script stopped at line 1 (move.walk) after 1 call: your owner spoke; t12 kee
 
 规矩只在 Numen API 的 `Modules` 一处:
 
-- **名字就是路径,库是内置加我的。** 模块是一种库(`docs/input-pipeline.md` §六"库:内置与我的"):服务器目录里的是内置(管理员管),
-  主人目录里的是他的"我的",同一主人的同伴共用,主人能拿编辑器改(单人游戏就是本机文件;改了 `/reload` 才读到)。模块名两段
-  `名字空间.组`,文件在 `<名字空间>/<组>.lua`:`numen/work.lua` 是 `numen.work`,`tlm/skin.lua` 是 `tlm.skin`,`my/lumber.lua`
-  是 `my.lumber`——`my` 只是她习惯放自己模块的名字空间,没有别的特殊规则。程序运行时只读这两个目录,同名时她的优先。
+- **名字就是路径。** 模块名两段 `名字空间.组`,文件在 `<名字空间>/<组>.lua`:`numen/work.lua` 是 `numen.work`,`tlm/skin.lua` 是 `tlm.skin`。
 - **jar 只把内置放进去,升级照 dpkg 的 conffile。** Numen 与插件经 `NumenApi.bundleContent` 交来 jar 里的 `numen/` 目录(模块在
   `numen/modules/<名字空间>/`,Numen 自己也这样,没有特殊待遇),服务器起来时同步进服务器目录,清单 `.shipped.json` 记每个文件
   的来源与指纹:没改过的换成这一版;管理员改过的留着、新版写在旁边的 `.new` 并提示;删了的不再放回;来源卸载了,没改过的一起删、改过的
-  留下标"来源已卸载"。她不碰服务器目录:存一份和内置同名的,写进主人的"我的"(复制再改),盖着内置的;账本 `modules/modules.json`
-  记下她改它时那份内置的指纹,内置后来变了就标"内置有新版"。
-- `numen.module.save(code, {name = …})` 存(不写名字存成下一个空着的 `my.module_N`),`numen.module.delete(name)` 删(她自己的删掉;
-  内置的对她关掉,开关记在主人的偏好里,文件原样在服务器上),`numen.module.reset(name)` 删掉她盖着的那份、打开关着的,还原成内置的,
-  `numen.module.list()` 标出每一份是内置的、改过的还是她的,`numen.module.show(name, {factory = true})` 看内置原文。
-- 存前和运行时同一个解释器装一次(`ScriptEngine.checkModule`):读不通、不返回表、给第 ① 层的名字赋值都拒,回执说哪一行、
-  给 hint。主人拿编辑器绕过存直接改的文件,运行时同一条规则照样拦着。
-- 改模块不问主人(权限层只管世界与身体);存、改、删都写进回执与服务端日志。
-- 战绩(用到它的程序跑了几段、跑完几段、最近一次没跑完停在哪一行为什么)记在同一本账里;`numen.module.*` 都是服务端函数,
-  外接大脑(MCP)走同一处。
+  留下标"来源已卸载"。她不碰服务器目录。
+- 登记时和运行时同一个解释器装一次(`ScriptEngine.checkModule`):读不通、不返回表、给第 ① 层的名字赋值都拒,回执说哪一行、
+  给 hint。
 
 ### 第 ① 层不可覆盖
 
@@ -747,12 +730,6 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 
 一段程序以任何方式结束(跑完、出错、打断、切断、主人断线)都经 `ServerPrograms.run` 里 `Program` 的结局回调这一处,在那里 `ClientCalls.close`:
 它在等的反向请求全部撤掉、不再交回,排着还没发的也不发。
-
-### 她的模块:真源只有一个
-
-真源是服务器上主人名下的 `lua/` 目录里的文件。`Modules` 就是程序的模块来源:程序用到一个模块才去读那个文件(只读正文,不查能不能编译),
-读与存、删、还原、记战绩都在同一把锁里(Windows 上正被读的文件换不掉)。程序里 `numen.module.save/delete/reset` 与 `numen.api.help` 是普通服务端函数
-(`ServerCall.companion()` 给出她是谁),改了文件之后同一段程序往后用到的就是新的;已经装进虚拟机的那份不变。战绩在程序结束时由 `ServerPrograms` 一处记。
 
 ### 回执:给模型读的,按构造有界
 

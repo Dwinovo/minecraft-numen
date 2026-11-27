@@ -2,6 +2,7 @@ package com.dwinovo.numen.api.script;
 
 import com.dwinovo.numen.api.agent.scope.Handle;
 import com.dwinovo.numen.api.agent.scope.Scope;
+import com.dwinovo.numen.api.library.LibraryKind;
 import com.dwinovo.numen.script.ScriptEngine;
 
 import java.io.IOException;
@@ -37,8 +38,11 @@ public final class BuiltinModules {
      */
     public record Builtin(String code, String summary) {}
 
-    /** 一个根下放模块的目录名:内置的(模组与插件的资源)与她自己的(主人客户端上的库)都用它。 */
+    /** 一个根下放模块的目录名(模组与插件的资源)。 */
     public static final String DIR = "modules";
+
+    /** 模块这种库:一条一个文件,{@code <根>/modules/<名字空间>/<组>.lua}。 */
+    public static final LibraryKind KIND = LibraryKind.files(DIR, ScriptEngine.IN_USE.extension());
 
     private static final SortedMap<String, Builtin> MODULES = new TreeMap<>();
 

@@ -10,7 +10,6 @@ import com.dwinovo.numen.api.mcp.server.McpMode;
 import com.dwinovo.numen.api.mcp.client.McpClientConfig;
 import com.dwinovo.numen.api.persona.PersonaLibrary;
 import com.dwinovo.numen.api.platform.Services;
-import com.dwinovo.numen.api.script.HerModules;
 import com.dwinovo.numen.api.seat.SeatClient;
 
 import java.util.List;
@@ -96,7 +95,6 @@ public final class ClientServices {
                     PersonaLibrary.Persona persona = personas.get(bound.id().toString());
                     return persona == null ? null : persona.text();
                 },
-                builtins -> new HerModules(machine.libraryHome(), builtins),
                 bundled -> SkillRegistry.of(machine.library(SkillRegistry.KIND), bundled),
                 who -> who.equals(player) ? "" : who.toString()));
     }

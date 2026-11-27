@@ -37,7 +37,6 @@ import com.dwinovo.numen.api.network.payload.OwnerInputPayload;
 import com.dwinovo.numen.api.network.payload.SeatPayload;
 import com.dwinovo.numen.api.network.payload.ServerHelloPayload;
 import com.dwinovo.numen.api.permission.ConsentAnswer;
-import com.dwinovo.numen.api.script.HerModules;
 import com.dwinovo.numen.api.seat.Catalog;
 import com.dwinovo.numen.api.seat.SeatClient;
 import com.dwinovo.numen.mcp.rpc.RpcException;
@@ -128,7 +127,6 @@ final class HeadlessOwner implements AutoCloseable {
             LoopHost made = new LoopHost(new LoopHost.Parts(companion, me, new Home(home.resolve(companion.toString()), io),
                     main, seat, new LlmMind(() -> providers, models), SCRIPT_ONLY, () -> false,
                     () -> EventQueue.DEFAULT_LEVEL, bound -> "You are a test companion.",
-                    builtins -> new HerModules(library, builtins),
                     bundled -> SkillRegistry.of(hub.library(SkillRegistry.KIND), bundled), who -> ""));
             made.bind(Slot.PROVIDER, new Bound(me, profileId));
             made.bind(Slot.PERSONA, new Bound(me, new EntryId("my", "e2e")));

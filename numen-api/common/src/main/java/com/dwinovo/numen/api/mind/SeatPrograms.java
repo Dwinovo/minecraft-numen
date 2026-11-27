@@ -3,7 +3,6 @@ package com.dwinovo.numen.api.mind;
 import com.dwinovo.numen.api.Constants;
 import com.dwinovo.numen.api.agent.loop.Program;
 import com.dwinovo.numen.api.program.ProgramHost;
-import com.dwinovo.numen.api.script.HerModules;
 import com.dwinovo.numen.api.seat.ProgramResult;
 import com.dwinovo.numen.api.seat.SeatClient;
 import com.dwinovo.numen.api.seat.SeatState;
@@ -18,8 +17,7 @@ import java.util.function.LongSupplier;
 
 /**
  * 大脑把她的程序交给座位去跑({@link ProgramHost} 的这一头):一整段程序经 {@code program/run} 送到服务端的身体旁边,结局恰好交回一次;
- * 叫停、切断、叫停身体各是座位上的一个请求。程序起跑时带上她的模块清单与关掉的内置模块,用到的模块这一头按结局记战绩
- * ({@link HerModules#tally})。结局里带着那一刻她的样子,交给 {@code states}。
+ * 叫停、切断、叫停身体各是座位上的一个请求。结局里带着那一刻她的样子,交给 {@code states}。
  *
  * <p>线程:交回结局在 {@code main} 上(座位的答复在网络线程上到,这里切回大脑的线程)。
  */
@@ -27,7 +25,6 @@ final class SeatPrograms implements ProgramHost {
 
     private final SeatClient seat;
     private final UUID companion;
-    private final HerModules modules;
     private final Executor main;
     private final LongSupplier generation;
     private final Consumer<SeatState> states;
@@ -36,11 +33,10 @@ final class SeatPrograms implements ProgramHost {
     /** 等答复的程序;切断后晚到的结局换一个收件人({@link #afterwards}),不等了的摘掉。 */
     private final Map<String, Consumer<Program.Outcome>> waiting = new ConcurrentHashMap<>();
 
-    SeatPrograms(SeatClient seat, UUID companion, HerModules modules, Executor main, LongSupplier generation,
+    SeatPrograms(SeatClient seat, UUID companion, Executor main, LongSupplier generation,
                  Consumer<SeatState> states, java.util.function.Supplier<UUID> keeper) {
         this.seat = seat;
         this.companion = companion;
-        this.modules = modules;
         this.main = main;
         this.generation = generation;
         this.states = states;
@@ -50,7 +46,7 @@ final class SeatPrograms implements ProgramHost {
     @Override
     public void run(UUID who, String programId, String code, Consumer<Program.Outcome> done) {
         waiting.put(programId, done);
-        seat.run(companion, generation.getAsLong(), programId, code, modules.manifest(), modules.disabled(), keeper.get())
+        seat.run(companion, generation.getAsLong(), programId, code, keeper.get())
                 .whenComplete((result, failed) -> main.execute(() -> answered(programId, result, failed)));
     }
 
@@ -63,10 +59,6 @@ final class SeatPrograms implements ProgramHost {
             outcome = Program.Outcome.refused("the program did not run: " + cause.getMessage());
         } else {
             states.accept(result.state());
-            long now = System.currentTimeMillis();
-            for (Program.Used used : result.outcome().used()) {
-                modules.tally(used.module(), used.tally().ok(), used.tally().line(), used.tally().error(), now);
-            }
             outcome = result.outcome();
         }
         if (to != null) {   // 不等了的就没有收件人

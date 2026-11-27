@@ -27,7 +27,6 @@ import com.dwinovo.numen.api.mind.ClientBrains;
 import com.dwinovo.numen.api.mind.ConsentVenues;
 import com.dwinovo.numen.api.mind.LoopHands;
 import com.dwinovo.numen.api.mind.LoopHost;
-import com.dwinovo.numen.api.script.HerModules;
 import com.dwinovo.numen.api.store.Io;
 import com.dwinovo.numen.mcp.client.HttpClientTransport;
 import com.dwinovo.numen.mcp.client.McpClient;
@@ -161,28 +160,12 @@ class ExternalBrainOnClientTest {
         model = new Scripted();
         Io io = NumenIo.inline("test");
         Home library = new Home(dir.resolve("library"), io);
-        HerModules modules = new HerModules(library, new HerModules.Builtins() {
-            @Override
-            public Set<String> names() {
-                return Set.of();
-            }
-
-            @Override
-            public boolean loaded() {
-                return true;
-            }
-
-            @Override
-            public String code(String name) {
-                return null;
-            }
-        });
         LibraryHub hub = LibraryHub.local(library, Switches.inMemory(), List.of(), Set.of());
         venues = new ConsentVenues((companion, id, decision, note) -> answered.add(companion + "#" + id + ":" + decision + ":" + note));
         brains = new ClientBrains(pipe.client(), clientMain::add, companion -> {
             LoopHost made = new LoopHost(new LoopHost.Parts(companion, OWNER, new Home(dir.resolve("her"), io),
                     clientMain::add, pipe.client(), model, SCRIPT_ONLY, () -> mode.driving(companion),
-                    () -> EventQueue.DEFAULT_LEVEL, bound -> "a test persona", builtins -> modules,
+                    () -> EventQueue.DEFAULT_LEVEL, bound -> "a test persona",
                     bundled -> SkillRegistry.of(hub.library(SkillRegistry.KIND), bundled), id -> "主人"));
             made.bind(com.dwinovo.numen.api.mind.Slot.PERSONA,
                     new Bound(OWNER, new com.dwinovo.numen.api.library.EntryId("my", "test")));

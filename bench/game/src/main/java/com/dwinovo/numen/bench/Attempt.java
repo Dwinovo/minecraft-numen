@@ -11,7 +11,6 @@ import com.dwinovo.numen.api.agent.loop.Hold;
 import com.dwinovo.numen.api.agent.loop.LoopEvent;
 import com.dwinovo.numen.api.agent.loop.LoopStatus;
 import com.dwinovo.numen.api.agent.loop.RunEnd;
-import com.dwinovo.numen.api.agent.prompt.NumenPrompts;
 import com.dwinovo.numen.api.mind.Bound;
 import com.dwinovo.numen.api.mind.Feed;
 import com.dwinovo.numen.api.mind.FeedEncoder;
@@ -45,7 +44,6 @@ import com.dwinovo.numen.api.library.Switches;
 import com.dwinovo.numen.api.mind.ClientBrains;
 import com.dwinovo.numen.api.mind.LoopHost;
 import com.dwinovo.numen.api.script.BuiltinModules;
-import com.dwinovo.numen.api.script.HerModules;
 import com.dwinovo.numen.api.seat.SeatClient;
 import com.dwinovo.numen.api.seat.ServerSeats;
 import com.dwinovo.numen.api.permission.ConsentDesk;
@@ -215,23 +213,6 @@ final class Attempt {
                 ServerSeats.received(Fragments.crossed(Wire.TO_SERVER, SeatPayload.TO_SERVER_CODEC,
                         SeatPayload.frame(Wire.TO_SERVER, message)), owner));
         Home library = new Home(home.resolve("library"), io);
-        HerModules modules = new HerModules(library, new HerModules.Builtins() {
-            @Override
-            public java.util.Set<String> names() {
-                return BuiltinModules.all().keySet();
-            }
-
-            @Override
-            public boolean loaded() {
-                return true;
-            }
-
-            @Override
-            public String code(String name) {
-                BuiltinModules.Builtin builtin = BuiltinModules.get(name);
-                return builtin == null ? null : builtin.code();
-            }
-        });
         LibraryHub hub = LibraryHub.local(library, Switches.inMemory(), List.of(), java.util.Set.of());
         UUID ownerId = owner.getUUID();
         ToolBook tools = new ToolBook() {
@@ -248,7 +229,7 @@ final class Attempt {
         brains = new ClientBrains(seat, mail::add, companion -> {
             LoopHost made = new LoopHost(new LoopHost.Parts(companion, ownerId, new Home(home.resolve("her"), io),
                     mail::add, seat, mind, tools, () -> false, () -> EventQueue.DEFAULT_LEVEL,
-                    bound -> NumenPrompts.DEFAULT_PERSONA, builtins -> modules,
+                    bound -> "You are a test companion.",
                     bundled -> SkillRegistry.of(hub.library(SkillRegistry.KIND), bundled), id -> "Owner"));
             made.bind(com.dwinovo.numen.api.mind.Slot.PERSONA, new Bound(ownerId, BENCH_PERSONA));
             return made;

@@ -87,7 +87,7 @@ final class CountingApi implements NumenApi {
         door.bundleContent(root);
         if (root != null) {
             ledger.accept(PluginRoster.Kind.SKILL, entries(root, SkillRegistry.KIND));
-            ledger.accept(PluginRoster.Kind.MODULE, entries(root, com.dwinovo.numen.api.script.HerModules.KIND));
+            ledger.accept(PluginRoster.Kind.MODULE, entries(root, com.dwinovo.numen.api.script.BuiltinModules.KIND));
         }
     }
 

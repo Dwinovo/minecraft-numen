@@ -25,7 +25,6 @@ import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.library.LibraryHub;
 import com.dwinovo.numen.api.library.Switches;
 import com.dwinovo.numen.api.mind.LoopHost;
-import com.dwinovo.numen.api.script.HerModules;
 import com.dwinovo.numen.api.store.Io;
 import com.dwinovo.numen.script.ScriptCall;
 import org.junit.jupiter.api.BeforeEach;
@@ -121,7 +120,6 @@ class LoopHostTest {
     private Seats seats;
     private SeatPipe pipe;
     private Scripted model;
-    private HerModules modules;
     private LoopHost host;
 
     @BeforeEach
@@ -133,25 +131,9 @@ class LoopHostTest {
         Io io = NumenIo.inline("test");
         Home home = new Home(dir.resolve("her"), io);
         Home library = new Home(dir.resolve("library"), io);
-        modules = new HerModules(library, new HerModules.Builtins() {
-            @Override
-            public Set<String> names() {
-                return Set.of();
-            }
-
-            @Override
-            public boolean loaded() {
-                return true;
-            }
-
-            @Override
-            public String code(String name) {
-                return null;
-            }
-        });
         LibraryHub hub = LibraryHub.local(library, Switches.inMemory(), List.of(), Set.of());
         host = new LoopHost(new LoopHost.Parts(HER, OWNER, home, clientMain::add, pipe.client(), model, SCRIPT_ONLY,
-                () -> false, () -> EventQueue.DEFAULT_LEVEL, bound -> "a test persona", builtins -> modules,
+                () -> false, () -> EventQueue.DEFAULT_LEVEL, bound -> "a test persona",
                 bundled -> SkillRegistry.of(hub.library(SkillRegistry.KIND), bundled), id -> "主人"));
         host.bind(com.dwinovo.numen.api.mind.Slot.PERSONA,
                 new Bound(OWNER, new com.dwinovo.numen.api.library.EntryId("my", "test")));
@@ -211,15 +193,12 @@ class LoopHostTest {
     }
 
     @Test
-    void aProgramTheModelWritesRunsAtTheBodyWithHerModulesAndItsReceiptComesBack() throws Exception {
-        modules.save("my.pit", "-- Dig a pit.\nlocal M = {}\nfunction M.dig() end\nreturn M\n");
-        model.program("call-1", "my.pit.dig()").say("挖好了");
+    void aProgramTheModelWritesRunsAtTheBodyAndItsReceiptComesBack() throws Exception {
+        model.program("call-1", "return 1").say("挖好了");
 
         host.submitPrompt("挖个坑");
         until("the program reached the body", () -> world.programs.running.containsKey("call-1"));
 
-        assertEquals(Set.of("my.pit"), world.programs.modulesOf("call-1").hers().keySet(),
-                "the module she wrote reached the body through modules/get");
         world.programs.finish("call-1", new Program.Outcome("{\"success\":true,\"message\":\"done\"}",
                 new ScriptCall.Ending(ScriptCall.Status.OK, null), List.of(), List.of(), null, 0, java.util.Map.of()));
         until("the receipt woke the second request", () -> model.asked.size() == 2);

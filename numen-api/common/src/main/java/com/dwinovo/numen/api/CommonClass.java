@@ -77,7 +77,7 @@ public class CommonClass {
 
     /**
      * Numen API 自己的几组 API 函数,走宿主自己的登记({@code NumenPlugins.registerHost}),和 Numen 与插件登记进同一张表:{@code api}(帮助)、{@code mc}(原版与模组的
-     * 指令)、{@code task}(手上的活与表)、{@code module}(Lua 模块)。它们属于 Numen API:谁登记了函数,谁都指望帮助与这几样在。
+     * 指令)、{@code task}(手上的活与表)。它们属于 Numen API:谁登记了函数,谁都指望帮助与这几样在。
      */
     public static void registerApi() {
         com.dwinovo.numen.api.NumenPlugins.registerHost(numen -> {
@@ -88,10 +88,6 @@ public class CommonClass {
             numen.api("permission", "What your owner lets you do to the world: read it, tighten it yourself, ask "
                     + "your owner to loosen it.", com.dwinovo.numen.api.permission.PermissionApi.class);
             numen.api("task", "The background task and your pending timers.", com.dwinovo.numen.api.task.TaskApi.class);
-            numen.api(com.dwinovo.numen.api.script.ModuleApi.GROUP, "Modules — functions written in "
-                    + com.dwinovo.numen.script.ScriptEngine.IN_USE.language() + " that programs use by name, kept "
-                    + "as files (numen/work.lua is numen.work): the built-in ones, your own, "
-                    + "and how the programs that used them went.", com.dwinovo.numen.api.script.ModuleApi.class);
         });
     }
 }

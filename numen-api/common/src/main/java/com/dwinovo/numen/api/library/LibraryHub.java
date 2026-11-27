@@ -12,8 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 接进来的 MCP 服务器的推荐配置……)开张时同步进去({@link Shipped#sync}),主人自己写的、改的也在这一份里;条目是随模组带来的、改过了,
  * 还是自己的,看清单({@link Shipped.Manifest})。各库的消费方(人设、模型档案、声线、技能、MCP 工具)拿同一种库的同一份 {@link Library},读写的是同一个对象。
  *
- * <p>随模组发布的技能与内置模块不在这里:它们在服务端,客户端从座位上的目录知道名字、用到时才取(见 {@code SkillRegistry.Bundled}、
- * {@code HerModules.Builtins})。
+ * <p>随模组发布的技能不在这里:它们在服务端,客户端从座位上的目录知道名字、用到时才取(见 {@code SkillRegistry.Bundled})。
  *
  * <p>线程:任何线程取;写走货架的车道。
  */

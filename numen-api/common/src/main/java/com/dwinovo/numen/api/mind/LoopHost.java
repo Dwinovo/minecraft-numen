@@ -54,7 +54,6 @@ import com.dwinovo.numen.api.data.ModLanguageData.Keys;
 import com.dwinovo.numen.api.event.NumenEvents;
 import com.dwinovo.numen.api.home.Home;
 import com.dwinovo.numen.api.library.EntryId;
-import com.dwinovo.numen.api.script.HerModules;
 import com.dwinovo.numen.api.seat.Catalog;
 import com.dwinovo.numen.api.seat.Opened;
 import com.dwinovo.numen.api.seat.SeatClient;
@@ -108,13 +107,12 @@ public final class LoopHost implements ClientContext {
      * @param driving    驾驶席是不是在外接大脑手里
      * @param initiative 主动性档位 1~10
      * @param persona    她绑的人设的正文;没有这个人设返回 {@code null}
-     * @param modules    她自己的模块(内置的原文在服务端,见 {@link SeatSources})
      * @param skills     她自己的技能(随发布的在座位那一头,见 {@link SeatSources})
      * @param playerName 一位玩家给人看的名字;不知道是空串
      */
     public record Parts(UUID companion, UUID creator, Home home, Executor main, SeatClient seat, Mind mind,
                         ToolBook tools, BooleanSupplier driving, IntSupplier initiative,
-                        Function<Bound, String> persona, Function<HerModules.Builtins, HerModules> modules,
+                        Function<Bound, String> persona,
                         Function<SkillRegistry.Bundled, SkillRegistry> skills, Function<UUID, String> playerName) {}
 
     private static final String CHAT = "chat.jsonl";
@@ -133,7 +131,6 @@ public final class LoopHost implements ClientContext {
     private final BodyMirror body = new BodyMirror();
     private final NoteBook notes;
     private final SeatSources sources;
-    private final HerModules modules;
     private final SkillRegistry skills;
     private final SeatPrograms programs;
     private final CompanionToolPort tools;
@@ -196,9 +193,8 @@ public final class LoopHost implements ClientContext {
         JsonDoc scheduleDoc = new JsonDoc(home.file(SCHEDULES), JsonDoc.Format.of(1), home.io());
         this.schedules = new OwnerSchedules(scheduleDoc, readDoc(scheduleDoc));
         this.sources = new SeatSources(parts.seat(), companion, () -> catalog);
-        this.modules = parts.modules().apply(sources.builtins);
         this.skills = parts.skills().apply(sources.skills);
-        this.programs = new SeatPrograms(parts.seat(), companion, modules, parts.main(), () -> generation,
+        this.programs = new SeatPrograms(parts.seat(), companion, parts.main(), () -> generation,
                 this::stateArrived, () -> spoken.who());
         ToolAnchor anchor = new ToolAnchor() {
             @Override
@@ -252,8 +248,6 @@ public final class LoopHost implements ClientContext {
             }
         });
         parts.seat().serveContext(companion, this);
-        parts.seat().serveModules(companion, hash -> modules.hers().values().stream()
-                .filter(code -> com.dwinovo.numen.api.library.Fingerprint.of(code).equals(hash)).findFirst().orElse(null));
     }
 
     /** 把落盘的东西读回内存:绑定、台账、对话尾巴。一次死在半途的回合留下没结果的调用或没回复的 user 消息,原样留着。 */
@@ -320,11 +314,10 @@ public final class LoopHost implements ClientContext {
         sources.refresh();
     }
 
-    /** 客户端函数在这里取她的大脑里的东西:她的模块、札记、技能、目录。 */
+    /** 客户端函数在这里取她的大脑里的东西:札记、技能、目录。 */
     @Override
     public <T> T of(Class<T> type) {
-        Object found = type == HerModules.class ? modules
-                : type == NoteBook.class ? notes
+        Object found = type == NoteBook.class ? notes
                 : type == SkillRegistry.class ? skills
                 : type == Catalog.class ? catalog : null;
         if (found == null) {
@@ -443,11 +436,6 @@ public final class LoopHost implements ClientContext {
         return queue;
     }
 
-    /** 她自己的模块:{@code numen.module} 各函数读写它。 */
-    public HerModules modules() {
-        return modules;
-    }
-
     /** 她的札记。 */
     public NoteBook notes() {
         return notes;
@@ -465,8 +453,7 @@ public final class LoopHost implements ClientContext {
 
     /** 这一轮请求的系统提示:人设、操作核心、技能表、API 索引……内置大脑读的就是它,外接大脑经 MCP 的 guide 工具取同一份。 */
     public String systemPrompt() {
-        return SystemPromptComposer.compose(personaText(), catalog, modules.hers(), modules.disabled(),
-                skills.formatXml());
+        return SystemPromptComposer.compose(personaText(), catalog, skills.formatXml());
     }
 
     /** 下一次请求里 {@code <runtime_state>} 此刻的样子:最近一次服务端说的。 */
@@ -956,7 +943,7 @@ public final class LoopHost implements ClientContext {
             // xml 只算一次:记下来的必须就是发出去的那一份
             String xml = body.xml();
             ModelRequest request = AgentRequestContext.turn(convo.snapshot(), xml, personaText(), catalog,
-                    modules.hers(), modules.disabled(), skills.formatXml(), parts.tools().all());
+                    skills.formatXml(), parts.tools().all());
             if (trace != null) {
                 trace.turn(runId, n, turnBody(endpoint, xml));
             }

@@ -146,11 +146,6 @@ public final class ClientMachine {
         return hub.library(kind);
     }
 
-    /** 他的各库在磁盘上的位置(她的模块也放在这里)。 */
-    public Home libraryHome() {
-        return library;
-    }
-
     /** 这台电脑上她的东西的根。 */
     public Home home() {
         return home;

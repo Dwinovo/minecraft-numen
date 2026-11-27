@@ -7,8 +7,6 @@ import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
-import java.util.TreeSet;
 
 /**
  * {@code catalog/get} 的答复在客户端这一头的样子:她能做什么,服务端的注册表拥有的那些。大脑拿它拼系统提示;目录的内容由服务端定,
@@ -34,13 +32,6 @@ public record Catalog(String version, JsonObject api, List<SkillInfo> skills, Li
         o.getAsJsonArray("instincts").forEach(i -> instincts.add(i.getAsString()));
         return new Catalog(o.get("version").getAsString(), o.getAsJsonObject("api"), List.copyOf(skills),
                 List.copyOf(instincts));
-    }
-
-    /** 内置模块的名字。 */
-    public Set<String> builtinModules() {
-        Set<String> names = new TreeSet<>();
-        api.getAsJsonArray("modules").forEach(m -> names.add(m.getAsJsonObject().get("name").getAsString()));
-        return names;
     }
 
     private static JsonObject emptyApi() {

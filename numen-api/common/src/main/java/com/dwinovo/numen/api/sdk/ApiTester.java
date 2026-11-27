@@ -273,7 +273,7 @@ public final class ApiTester {
         return run(her, companion, code, Modules.factory());
     }
 
-    /** 同上,她的模块是 {@code modules}(如 {@code Modules.of(companion)},程序里存的模块落在那个目录里,下一段程序读得到)。 */
+    /** 同上,程序能用的模块是 {@code modules}(如 {@code Modules.of(companion)})。 */
     public static Run run(NumenPlayer her, UUID companion, String code, Modules modules) {
         return run(her, companion, code, modules, NO_SEATS.transport());
     }

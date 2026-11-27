@@ -18,7 +18,6 @@ import com.dwinovo.numen.api.library.LibraryHub;
 import com.dwinovo.numen.api.library.Switches;
 import com.dwinovo.numen.api.mind.ClientBrains;
 import com.dwinovo.numen.api.mind.LoopHost;
-import com.dwinovo.numen.api.script.HerModules;
 import com.dwinovo.numen.api.seat.SeatPipe;
 import com.dwinovo.numen.api.seat.ServerSeats;
 import net.minecraft.server.MinecraftServer;
@@ -75,35 +74,17 @@ public final class GameBrain {
         final Map<UUID, Mind> minds = new HashMap<>();
         final Map<UUID, Path> dirs = new HashMap<>();
         final Set<UUID> sitting = ConcurrentHashMap.newKeySet();
-        final HerModules modules;
 
         Link(UUID owner, Path dir) {
             this.pipe = ServerSeats.pipe(owner, main::add, THREADS);
             var io = NumenIo.inline("numen-gametest");
             Home library = new Home(dir.resolve("library"), io);
-            this.modules = new HerModules(library, new HerModules.Builtins() {
-                @Override
-                public Set<String> names() {
-                    return com.dwinovo.numen.api.script.BuiltinModules.all().keySet();
-                }
-
-                @Override
-                public boolean loaded() {
-                    return true;
-                }
-
-                @Override
-                public String code(String name) {
-                    var builtin = com.dwinovo.numen.api.script.BuiltinModules.get(name);
-                    return builtin == null ? null : builtin.code();
-                }
-            });
             LibraryHub hub = LibraryHub.local(library, Switches.inMemory(), List.of(), Set.of());
             this.brains = new ClientBrains(pipe.client(), main::add, companion -> {
                 LoopHost made = new LoopHost(new LoopHost.Parts(companion, owner,
                         new Home(dirs.get(companion).resolve("her"), io), main::add, pipe.client(), minds.get(companion),
                         SCRIPT_ONLY, () -> false, () -> EventQueue.DEFAULT_LEVEL, bound -> "a GameTest persona",
-                        builtins -> modules, bundled -> SkillRegistry.of(hub.library(SkillRegistry.KIND), bundled),
+                        bundled -> SkillRegistry.of(hub.library(SkillRegistry.KIND), bundled),
                         id -> "owner"));
                 made.bind(Slot.PERSONA, new Bound(owner, new EntryId("my", "gametest")));
                 return made;
@@ -147,11 +128,6 @@ public final class GameBrain {
     /** 她的大脑。 */
     public LoopHost host() {
         return host;
-    }
-
-    /** 她的模块(主人客户端上的)。 */
-    public HerModules modules() {
-        return link.modules;
     }
 
     /** 此刻向座位要她的状态(服务端写的运行期状态)。 */

@@ -57,11 +57,7 @@ public final class ScriptTool implements NumenTool {
                 + " minutes, and when it runs " + ScriptLimits.INSTRUCTIONS_PER_SLICE + " instructions without "
                 + "calling one. Your owner speaking, an urgent event or the stop button stops it between calls; a body "
                 + "job it was waiting for then keeps running (the stop button stops it too), and its end arrives as "
-                + "a task_finished event.\n"
-                + "- Modules (listed in <api>) are functions written in " + engine.language() + " that a program uses "
-                + "by name, with no require: `numen.work.collect()`. `numen.module.show(\"numen.work\")` prints one; "
-                + "numen.module.save keeps a module you wrote (its text: functions put in a table, and the table "
-                + "returned) under a name for later programs.";
+                + "a task_finished event.";
     }
 
     /** 一段程序能做 API 里的任何事(拆、杀、放、丢),什么都可能发生:按最保守的写。 */

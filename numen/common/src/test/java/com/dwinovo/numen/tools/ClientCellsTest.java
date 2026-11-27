@@ -68,7 +68,7 @@ class ClientCellsTest {
         for (int count : new int[] {5844, LuaCodecs.MAX_CELLS}) {
             UUID her = UUID.randomUUID();
             ApiTester.Run run = ApiTester.run(null, her, "local c = gt.gt_cells.cells(" + count + ") return #c",
-                    Modules.of(her, java.util.Map.of(), java.util.Set.of()), CLIENT);
+                    Modules.of(her), CLIENT);
             assertTrue(run.ok(), count + ": " + run.message());
             assertEquals(count, run.returned().getAsInt());
         }
