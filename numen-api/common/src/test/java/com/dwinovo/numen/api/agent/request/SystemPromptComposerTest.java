@@ -44,7 +44,8 @@ class SystemPromptComposerTest {
                 + "- you swim up for air");
         assertTrue(0 <= fixed && fixed < memory && memory < others && others < persona && persona < skillList
                 && skillList < api && api < instincts, prompt);
-        assertTrue(prompt.endsWith("- you swim up for air"), "nothing follows the last part: " + prompt);
+        assertTrue(prompt.endsWith("- you swim up for air\n\nWhat you explicitly do always takes priority over an instinct."),
+                "the instincts close the prompt with the priority sentence: " + prompt);
     }
 
     @Test

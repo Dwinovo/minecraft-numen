@@ -43,6 +43,7 @@ class ReflexRegistryTest {
         int armor = overview.indexOf("会自动穿上更好的盔甲");
         assertTrue(mlg >= 0 && armor > mlg, "顺序该是报到顺序:" + overview);
         assertTrue(overview.contains("\n- 会用水桶自救高坠\n- 会自动穿上更好的盔甲"), "每条本能一行:" + overview);
+        assertTrue(overview.endsWith("\n\nWhat you explicitly do always takes priority over an instinct."), overview);
     }
 
     @Test

@@ -84,4 +84,7 @@ public final class NumenPrompts {
 
     /** 本能一节的抬头与引导语:接着一条本能一行 {@code - …}。 */
     public static final String INSTINCTS_INTRO = "# Instincts\nYour body does these on its own and tells you through an event when it does:";
+
+    /** 本能一节的末句:单独一段,接在本能列表之后。你明确做的事压过本能。 */
+    public static final String INSTINCTS_OUTRO = "What you explicitly do always takes priority over an instinct.";
 }

@@ -48,7 +48,7 @@ public final class ReflexRegistry {
 
     /**
      * The reflex overview for the model: the "# Instincts" section of the system prompt,
-     * every registered reflex's self-description one per line. Empty when nothing is registered.
+     * every registered reflex's self-description one per line, then one sentence saying explicit actions win. Empty when nothing is registered.
      */
     public static synchronized String overview() {
         return overview(descriptions());
@@ -59,7 +59,7 @@ public final class ReflexRegistry {
         if (lines.isEmpty()) return "";
         StringBuilder sb = new StringBuilder(NumenPrompts.INSTINCTS_INTRO);
         lines.forEach(line -> sb.append("\n- ").append(line));
-        return sb.toString();
+        return sb.append("\n\n").append(NumenPrompts.INSTINCTS_OUTRO).toString();
     }
 
     /** Test hook: wipe the roster. */
