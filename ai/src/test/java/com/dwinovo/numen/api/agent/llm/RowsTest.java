@@ -196,13 +196,15 @@ class RowsTest {
     @Test
     void everyRowCarriesTheGroupAndAUserRowWhoSaidIt() {
         Rows.Writer writer = new Rows.Writer("1.0");
-        List<JsonObject> rows = new ArrayList<>(writer.write(USER, new Rows.Stamp("G", "player@ab12cd")));
-        rows.addAll(writer.write(REPLY, new Rows.Stamp("G", null)));
+        ConvoState.Msg said = new ConvoState.Msg.User("<query>去挖点铁</query>", false, "player@ab12cd");
+        List<JsonObject> rows = new ArrayList<>(writer.write(said, new Rows.Stamp("G")));
+        rows.addAll(writer.write(REPLY, new Rows.Stamp("G")));
 
         assertEquals("G", rows.get(0).get("conv").getAsString());
         assertEquals("player@ab12cd", rows.get(0).get("from").getAsString());
         assertEquals("G", rows.get(1).get("conv").getAsString());
         assertFalse(rows.get(1).has("from"));
+        assertEquals(said, context(rows).getFirst(), "who said it comes back with the words");
         assertEquals("G", Rows.lines(rows).getFirst().conv());
         assertTrue(Rows.lines(rows).getFirst().ts() > 0);
     }

@@ -23,7 +23,7 @@ import java.util.UUID;
  * <ul>
  *   <li>{@code user}:{@code message.content} 是字符串(有人说话;元信息带 {@code isMeta});或是一个 {@code tool_result} 块
  *       (工具结果,行上带 {@code sourceToolAssistantUUID});内容是 {@link #INTERRUPTED} 的一行是主人叫停了这一轮;
- *       {@code isCompactSummary} 的一行是整理的摘要。{@code from} 是说话的人。</li>
+ *       {@code isCompactSummary} 的一行是整理的摘要。{@code from} 是说话的人({@code player@短码}),一行只有一个人的话。</li>
  *   <li>{@code assistant}:{@code message} 照 Anthropic 的消息({@code id}、{@code model}、{@code stop_reason}、{@code content}),
  *       一个块({@code thinking}、{@code text}、{@code tool_use})一行,同一条回复共用 {@code message.id}。
  *       {@code isApiErrorMessage} 的一行是这一轮没能完成(模型调用失败、死亡、登出……),说明在文字块里,{@code code} 与
@@ -72,13 +72,12 @@ public final class Rows {
     private Rows() {}
 
     /**
-     * 这一行是谁、在哪儿说的。
+     * 这一行在哪儿写下的。
      *
      * @param conv 群的会话印;单聊是 {@code null}
-     * @param from 说话的人({@code player@短码});不是谁说的话是 {@code null}。只盖在 {@code user} 行上
      */
-    public record Stamp(String conv, String from) {
-        public static final Stamp NONE = new Stamp(null, null);
+    public record Stamp(String conv) {
+        public static final Stamp NONE = new Stamp(null);
     }
 
     /** 面板记录的一行:消息本身,加上它是什么时候记的、记在哪个会话印名下、由哪几行(物理上的)组成。 */
@@ -213,8 +212,8 @@ public final class Rows {
             if (user.meta()) {
                 row.addProperty("isMeta", true);
             }
-            if (stamp.from() != null && !stamp.from().isBlank()) {
-                row.addProperty("from", stamp.from());
+            if (user.from() != null && !user.from().isBlank()) {
+                row.addProperty("from", user.from());
             }
             row.add("message", userMessage(user.content()));
             return row;
@@ -557,7 +556,7 @@ public final class Rows {
             return new Item(Role.TALK, new ConvoState.Msg.Halt(OWNER_STOP_WORDS, OWNER_STOP_CODE, List.of()), List.of(row));
         }
         return new Item(bool(row, "isMeta") ? Role.CONTEXT_ONLY : Role.TALK,
-                new ConvoState.Msg.User(text, bool(row, "isMeta")), List.of(row));
+                new ConvoState.Msg.User(text, bool(row, "isMeta"), row.has("from") ? string(row, "from") : null), List.of(row));
     }
 
     private static ConvoState.Msg.Halt errorOf(JsonObject row) {

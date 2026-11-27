@@ -302,17 +302,18 @@ class EventQueueTest {
     @Test
     void theOwnersWordsCarryTheGameDateAndTimeTheyWereSaid() {
         // 主人的话带说话那一刻的游戏日期钟点(第 3 天 21:15 = 3 * 24000 + 15250 刻),和世界的事同一种写法
-        assertEquals("<query day=\"3\" t=\"21:15\">去挖铁矿</query>", EventQueue.query("去挖铁矿", 3 * 24000L + 15250L));
+        assertEquals("<query day=\"3\" t=\"21:15\" from=\"player@ab12cd\">去挖铁矿</query>",
+                EventQueue.query("去挖铁矿", 3 * 24000L + 15250L, "player@ab12cd"));
     }
 
     @Test
     void aScheduledQueryIsTheOwnersWordsWithItsSourceOnTheOpeningTag() {
-        String scheduled = EventQueue.scheduledQuery("看看炉子", 3 * 24000L + 15250L);
+        String scheduled = EventQueue.scheduledQuery("看看炉子", 3 * 24000L + 15250L, "player@ab12cd");
 
         assertEquals(List.of("看看炉子"), com.dwinovo.numen.api.agent.llm.QueryMarkup.queries(scheduled));
         assertTrue(com.dwinovo.numen.api.agent.llm.QueryMarkup.scheduled(scheduled));
-        assertFalse(com.dwinovo.numen.api.agent.llm.QueryMarkup.scheduled(EventQueue.query("看看炉子", 0L)));
-        assertFalse(com.dwinovo.numen.api.agent.llm.QueryMarkup.scheduled(scheduled + "\n" + EventQueue.query("过来", 0L)),
+        assertFalse(com.dwinovo.numen.api.agent.llm.QueryMarkup.scheduled(EventQueue.query("看看炉子", 0L, "player@ab12cd")));
+        assertFalse(com.dwinovo.numen.api.agent.llm.QueryMarkup.scheduled(scheduled + "\n" + EventQueue.query("过来", 0L, "player@ab12cd")),
                 "a message with the owner's own words in it is not shown as scheduled");
     }
 
@@ -579,16 +580,24 @@ class EventQueueTest {
     }
 
     @Test
-    void aQueryNamesItsSpeakerOnTheOpeningTagOnlyWhenGivenOne() {
-        String said = EventQueue.query("过来", 3 * 24000L + 15250L, "player@ab12cd (Steve)");
+    void aQueryAlwaysNamesItsSpeakerAndTheEntryRemembersWhoSpokeAcrossTheJournalAndTheWire() {
+        EventQueue.Entry said = EventQueue.said("过来", 3 * 24000L + 15250L, "player@ab12cd (Steve)", null, null, 5L);
 
-        assertEquals("<query day=\"3\" t=\"21:15\" from=\"player@ab12cd (Steve)\">过来</query>", said);
-        assertEquals("player@ab12cd (Steve)", com.dwinovo.numen.api.agent.llm.QueryMarkup.speaker(said));
-        assertEquals(List.of("过来"), com.dwinovo.numen.api.agent.llm.QueryMarkup.queries(said));
-        assertEquals(EventQueue.query("过来", 0L), EventQueue.query("过来", 0L, null), "no speaker, no mark");
-        assertEquals(null, com.dwinovo.numen.api.agent.llm.QueryMarkup.speaker(EventQueue.query("过来", 0L)));
-        assertEquals(null, com.dwinovo.numen.api.agent.llm.QueryMarkup.speaker(
-                        said + "\n" + EventQueue.query("好", 0L, "player@ffffff (Alex)")),
-                "two owners' words in one message are not marked as one owner's");
+        assertEquals("<query day=\"3\" t=\"21:15\" from=\"player@ab12cd (Steve)\">过来</query>", said.text());
+        assertEquals("player@ab12cd (Steve)", said.speaker());
+        assertEquals("player@ab12cd", said.speakerId(), "the row records the identity without the name");
+        assertEquals(List.of("过来"), com.dwinovo.numen.api.agent.llm.QueryMarkup.queries(said.text()));
+        assertEquals("player@ab12cd (Steve)", EventQueue.Entry.fromJson(said.toJson()).speaker(), "it travels in the entry's JSON");
+    }
+
+    @Test
+    void aWordsEntryQueuedKeepsItsSpeakerInTheQueue() {
+        EventQueue q = new EventQueue(EventQueue.Journal.NONE);
+
+        q.push(EventTypes.QUERY, "<query>x</query>", T0, true, null, "player@ab12cd (Steve)");
+        q.push(EventTypes.TASK_FINISHED, "done", T0, false);
+
+        assertEquals(java.util.Arrays.asList("player@ab12cd", null), q.entries().stream().map(EventQueue.Entry::speakerId).toList());
+        assertEquals("player@ab12cd", q.chatPreview().get(0).speaker());
     }
 }

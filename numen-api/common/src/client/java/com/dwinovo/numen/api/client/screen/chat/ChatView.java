@@ -983,7 +983,7 @@ public final class ChatView {
                         f.last = null;
                     }
                     Quote q = Quote.parse(shown);   // 引用回复:第一行画成气泡顶上的引用条
-                    Keeper other = otherOwner(entry.companion(), u.content());
+                    Keeper other = otherOwner(entry.companion(), u.from());
                     if (other == null) {
                         out.add(bubble(true, null, rich(q.body(), true), TXT,
                                 OWN_FILL, innerW, null,
@@ -1077,7 +1077,7 @@ public final class ChatView {
                 boolean control = com.dwinovo.numen.api.agent.inbox.EventTypes.COMPACT.equals(preview.type())
                         || com.dwinovo.numen.api.agent.inbox.EventTypes.CLEAR.equals(preview.type());
                 String shown = control ? controlShown(preview.text()) : ownerText(preview.text());
-                if (!shown.isEmpty()) queued.putIfAbsent(shown, control ? null : otherOwner(her, preview.text()));
+                if (!shown.isEmpty()) queued.putIfAbsent(shown, control ? null : otherOwner(her, preview.speaker()));
             }
             compacting |= status.phase() == com.dwinovo.numen.api.agent.loop.Phase.COMPACT;
         }
@@ -1159,10 +1159,11 @@ public final class ChatView {
     /**
      * 这句主人的话若是她的另一位主人说的,是那一位;本机的玩家说的是 {@code null}(见 {@link NumenRoster#otherSpeaker})。
      *
-     * @param companion 这句话出自哪只的日志:说话人在她的主人表里认
+     * @param companion 这句话出自哪只的记录:说话人在她的主人表里认
+     * @param from      记录里的说话人
      */
-    private static Keeper otherOwner(UUID companion, String content) {
-        return NumenRoster.instance().otherSpeaker(companion, content, ClientCompanions.viewer());
+    private static Keeper otherOwner(UUID companion, String from) {
+        return NumenRoster.instance().otherSpeaker(companion, from, ClientCompanions.viewer());
     }
 
     private Bubble bubble(boolean own, String label, Doc body, int ink, int fill,

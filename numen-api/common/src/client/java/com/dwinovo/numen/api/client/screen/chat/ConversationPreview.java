@@ -66,7 +66,7 @@ public final class ConversationPreview {
                     && !ChatDisplayModes.current().assistantText(a.turn().content()).isBlank()) {
                 lastSaid = Math.max(lastSaid, e.ts());
             } else if (e.msg() instanceof ConvoState.Msg.User u
-                    && NumenRoster.instance().otherSpeaker(e.companion(), u.content(), me) != null
+                    && NumenRoster.instance().otherSpeaker(e.companion(), u.from(), me) != null
                     && !ChatDisplayModes.current().userText(u.content()).isBlank()) {
                 lastSaid = Math.max(lastSaid, e.ts());
             }
@@ -77,7 +77,7 @@ public final class ConversationPreview {
                 String t = flat(com.dwinovo.numen.api.agent.conversation.Quote.parse(
                         ChatDisplayModes.current().userText(u.content())).body());   // 引的那句不进预览
                 if (!t.isEmpty()) {
-                    var other = NumenRoster.instance().otherSpeaker(e.companion(), u.content(), me);
+                    var other = NumenRoster.instance().otherSpeaker(e.companion(), u.from(), me);
                     out = new Line((other == null ? I18n.get(ModLanguageData.Keys.RAIL_YOU) : other.shown()) + ": " + t,
                             e.ts());
                 }

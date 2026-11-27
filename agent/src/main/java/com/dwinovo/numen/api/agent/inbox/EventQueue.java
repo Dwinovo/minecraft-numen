@@ -60,16 +60,23 @@ public final class EventQueue {
      *               {@code data}),随条目一起到,给等这件活的程序;不进她读的文字、不落盘。别的条目是 null
      * @param id     稳定的编号:入队时由队列盖上(发送方不用给),落盘、重启后不变,面板据此认出"这条还排着"。
      *               还没入队的条目是 null
+     * @param speaker 这是谁说的话,写给模型读的样子({@code player@短码 (名字)},名字可以没有);世界上的事、不是谁说的话是 null。
+     *               随条目落盘、上线;{@code <query>} 上的说话人与记录里的 {@code from} 都从它来
      */
     public record Entry(String type, String text, long ts, boolean urgent, com.google.gson.JsonObject result,
-                        String id) {
+                        String id, String speaker) {
 
         public Entry(String type, String text, long ts, boolean urgent) {
-            this(type, text, ts, urgent, null, null);
+            this(type, text, ts, urgent, null, null, null);
         }
 
         public Entry(String type, String text, long ts, boolean urgent, com.google.gson.JsonObject result) {
-            this(type, text, ts, urgent, result, null);
+            this(type, text, ts, urgent, result, null, null);
+        }
+
+        /** 说话人的身份({@code player@短码}),不带名字;不是谁说的话是 null。 */
+        public String speakerId() {
+            return speaker == null ? null : QueryMarkup.identityOf(speaker);
         }
 
         /**
@@ -87,6 +94,9 @@ public final class EventQueue {
             if (urgent) {
                 o.addProperty("urgent", true);
             }
+            if (speaker != null) {
+                o.addProperty("speaker", speaker);
+            }
             return o;
         }
 
@@ -102,7 +112,8 @@ public final class EventQueue {
             return new Entry(field(o, "type") ? o.get("type").getAsString() : null, o.get("text").getAsString(),
                     field(o, "ts") ? o.get("ts").getAsLong() : 0L,
                     o.has("urgent") && o.get("urgent").getAsBoolean(), null,
-                    field(o, "id") ? o.get("id").getAsString() : null);
+                    field(o, "id") ? o.get("id").getAsString() : null,
+                    field(o, "speaker") ? o.get("speaker").getAsString() : null);
         }
 
         private static boolean field(com.google.gson.JsonObject o, String key) {
@@ -144,7 +155,7 @@ public final class EventQueue {
         // 读回来的条目同样过急件规则:盘上的标记是写下它的那一版定的,生效与否以现在的类型表为准
         for (Entry e : this.journal.load()) {
             entries.add(new Entry(e.type(), e.text(), e.ts(), urgent(EventTypes.get(e.type()), e.urgent()), null,
-                    e.id() != null ? e.id() : freshId()));
+                    e.id() != null ? e.id() : freshId(), e.speaker()));
         }
     }
 
@@ -171,11 +182,17 @@ public final class EventQueue {
 
     /** 同上,条目带着一件身体活的结果({@link Entry#result})入队;结果只在内存里,落盘的不带它。 */
     public boolean push(String type, String text, long now, boolean urgent, com.google.gson.JsonObject result) {
+        return push(type, text, now, urgent, result, null);
+    }
+
+    /** 同上,条目记着是谁说的({@link Entry#speaker})。 */
+    public boolean push(String type, String text, long now, boolean urgent, com.google.gson.JsonObject result,
+                        String speaker) {
         if (text == null || text.isBlank()) {
             return false;
         }
         boolean effective = urgent(EventTypes.get(type), urgent);
-        entries.add(new Entry(type, text, now, effective, result, freshId()));
+        entries.add(new Entry(type, text, now, effective, result, freshId(), speaker));
         while (entries.size() > cap) {
             entries.remove(evictee());
             dropped++;
@@ -301,20 +318,12 @@ public final class EventQueue {
     }
 
     /**
-     * 主人的话交给模型的样子:包进 {@code <query>},带说这句话那一刻的游戏日期与钟点({@link EventClock})。模型靠这个标记分清哪句是主人亲口说的、哪些是一同注入的事件与状态;
-     * 面板与日志认它只在 {@code QueryMarkup.queries} 一处。
-     */
-    public static String query(String words, long dayTime) {
-        return query(words, dayTime, null);
-    }
-
-    /**
-     * 同 {@link #query(String, long)},开标签上另带是哪位主人说的({@link QueryMarkup#speakerAttr});{@code speaker} 为 {@code null} 就不带
-     * (她只有一位主人,没人要区分)。
+     * 主人的话交给模型的样子:包进 {@code <query>},带说这句话那一刻的游戏日期与钟点({@link EventClock})与说话的人
+     * ({@link QueryMarkup#speakerAttr},单个主人也带)。模型靠这个标记分清哪句是主人亲口说的、是谁说的、哪些是一同注入的事件与状态;
+     * 面板与记录认它只在 {@code QueryMarkup.queries} 一处。
      */
     public static String query(String words, long dayTime, String speaker) {
-        return "<query" + EventClock.stamp(dayTime) + (speaker == null ? "" : QueryMarkup.speakerAttr(speaker)) + ">"
-                + words + "</query>";
+        return "<query" + EventClock.stamp(dayTime) + QueryMarkup.speakerAttr(speaker) + ">" + words + "</query>";
     }
 
     /**
@@ -328,8 +337,26 @@ public final class EventQueue {
     }
 
     /** 同 {@link #query},这句话是主人给她定的定时到点说的:开标签上带 {@link QueryMarkup#SCHEDULED_ATTR},面板据此标"定时"。 */
-    public static String scheduledQuery(String words, long dayTime) {
-        return "<query" + EventClock.stamp(dayTime) + QueryMarkup.SCHEDULED_ATTR + ">" + words + "</query>";
+    public static String scheduledQuery(String words, long dayTime, String speaker) {
+        return "<query" + EventClock.stamp(dayTime) + QueryMarkup.speakerAttr(speaker) + QueryMarkup.SCHEDULED_ATTR + ">"
+                + words + "</query>";
+    }
+
+    /**
+     * 一句主人的话进收件箱的那一条:{@code <query>} 与条目上记的说话人都从 {@code speaker} 这一处来。
+     *
+     * @param venue 说话的地方({@code whisper}、{@code group}),面板里说的话是 {@code null}
+     * @param after 挂在 {@code <query>} 外面的东西(场合、技能正文):模型看得到,面板不画;没有是 {@code null}
+     */
+    public static Entry said(String words, long dayTime, String speaker, String venue, String after, long now) {
+        String query = venue == null ? query(words, dayTime, speaker) : query(words, dayTime, speaker, venue);
+        return new Entry(EventTypes.QUERY, after == null || after.isBlank() ? query : query + "\n" + after, now, false, null,
+                null, speaker);
+    }
+
+    /** 同 {@link #said},这句话是主人定的定时到点说的。 */
+    public static Entry saidOnSchedule(String words, long dayTime, String speaker, long now) {
+        return new Entry(EventTypes.QUERY, scheduledQuery(words, dayTime, speaker), now, false, null, null, speaker);
     }
 
     /** 溢出丢弃的说明文本——服务端暂存与客户端收件共用一句话。kind 就是这条条目的类型 {@link EventTypes#DROPPED}。 */
@@ -616,14 +643,19 @@ public final class EventQueue {
      * 待发列表里的一条:条目的编号(面板据此认出"这条还排着",落进日志后换成落盘的那一行)、类型、进聊天流的样子。
      * 整理、清空两种控制条目的 {@code text} 是语言键,由界面按主人的语言翻。
      */
-    public record Preview(String id, String type, String text) {}
+    public record Preview(String id, String type, String text, String speaker) {
+
+        public Preview(String id, String type, String text) {
+            this(id, type, text, null);
+        }
+    }
 
     /** 待发列表(给聊天流看):按类型表渲染,返回 null 的类型不出现。 */
     public List<Preview> chatPreview() {
         List<Preview> out = new ArrayList<>();
         for (Entry e : entries) {
             String s = EventTypes.get(e.type()).chatPreview().apply(e.text());
-            if (s != null) out.add(new Preview(e.id(), e.type(), s));
+            if (s != null) out.add(new Preview(e.id(), e.type(), s, e.speakerId()));
         }
         return List.copyOf(out);
     }

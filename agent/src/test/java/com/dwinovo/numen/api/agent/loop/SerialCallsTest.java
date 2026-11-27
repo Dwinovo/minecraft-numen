@@ -92,7 +92,7 @@ class SerialCallsTest {
     }
 
     private static EventQueue.Entry ownerWords(String words) {
-        return new EventQueue.Entry(EventTypes.QUERY, EventQueue.query(words, 0L), 0, false);
+        return new EventQueue.Entry(EventTypes.QUERY, EventQueue.query(words, 0L, "player@000001 (Owner)"), 0, false);
     }
 
     @Test

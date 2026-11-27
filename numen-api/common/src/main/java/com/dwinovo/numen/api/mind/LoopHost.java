@@ -11,7 +11,6 @@ import com.dwinovo.numen.api.agent.inbox.ExternalWait;
 import com.dwinovo.numen.api.agent.inbox.JsonlJournal;
 import com.dwinovo.numen.api.agent.llm.ConvoState;
 import com.dwinovo.numen.api.agent.llm.LlmEndpoint;
-import com.dwinovo.numen.api.agent.llm.QueryMarkup;
 import com.dwinovo.numen.api.agent.llm.RowJournal;
 import com.dwinovo.numen.api.agent.llm.Rows;
 import com.dwinovo.numen.api.agent.loop.AgentLoop;
@@ -278,23 +277,14 @@ public final class LoopHost implements ClientContext {
         tokens.load();
     }
 
-    /**
-     * 对话记录里这一行的 {@code conv} 与说话的人:{@code conv} 是她此刻在答的那句话所在的群;主人的话({@code <query>})盖上说话的人,
-     * 多位主人时 {@code <query>} 上自己带着,只有一位时就是创建者。别的行不盖。
-     */
+    /** 对话记录里这一行的 {@code conv}:她此刻在答的那句话所在的群。说话的人在消息自己身上({@code Msg.User#from})。 */
     private Rows.Stamp stamp(ConvoState.Msg msg) {
-        Spoken to = spoken;
-        String from = null;
-        if (msg instanceof ConvoState.Msg.User user && !user.meta()) {
-            String marked = QueryMarkup.speaker(user.content());
-            EntityLabel.ShownPlayer shown = marked == null ? null : EntityLabel.readShown(marked);
-            if (shown != null) {
-                from = shown.id();
-            } else if (!QueryMarkup.queries(user.content()).isEmpty()) {
-                from = "player@" + EntityLabel.code(to.who());
-            }
-        }
-        return new Rows.Stamp(to.conversation(), from);
+        return new Rows.Stamp(spoken.conversation());
+    }
+
+    /** 创建者在对话里的身份,写给模型读的样子:{@code player@短码},知道名字的带上名字。主人自己说的话都记在它名下。 */
+    private String owner() {
+        return EntityLabel.shown(parts.creator(), parts.playerName().apply(parts.creator()));
     }
 
     private static JsonObject readDoc(JsonDoc doc) {
@@ -544,8 +534,7 @@ public final class LoopHost implements ClientContext {
      */
     public boolean submitPrompt(String text) {
         this.spoken = Spoken.panel(parts.creator());
-        return deliver(new EventQueue.Entry(EventTypes.QUERY, EventQueue.query(text, clock.dayTime, null),
-                System.currentTimeMillis(), false));
+        return deliver(EventQueue.said(text, clock.dayTime, owner(), null, null, System.currentTimeMillis()));
     }
 
     /**
@@ -554,15 +543,13 @@ public final class LoopHost implements ClientContext {
      */
     public boolean submitCommand(String echo, String expanded) {
         this.spoken = Spoken.panel(parts.creator());
-        return deliver(new EventQueue.Entry(EventTypes.QUERY, EventQueue.query(echo, clock.dayTime, null)
-                + (expanded == null || expanded.isBlank() ? "" : "\n" + expanded), System.currentTimeMillis(), false));
+        return deliver(EventQueue.said(echo, clock.dayTime, owner(), null, expanded, System.currentTimeMillis()));
     }
 
     /** 主人给她定的定时到点了,说那句话:和主人的话同一条路进收件箱,开标签上带来源,面板据此标"定时"。 */
     private boolean submitScheduled(String text) {
         this.spoken = Spoken.panel(parts.creator());
-        return deliver(new EventQueue.Entry(EventTypes.QUERY, EventQueue.scheduledQuery(text, clock.dayTime),
-                System.currentTimeMillis(), false));
+        return deliver(EventQueue.saidOnSchedule(text, clock.dayTime, owner(), System.currentTimeMillis()));
     }
 
     /** 渠道(桥接、弹幕)带来的一件世界上发生的事,和服务端自己的事件同一个构造口。 */
@@ -710,7 +697,7 @@ public final class LoopHost implements ClientContext {
         if (goals.set(next)) {
             this.spoken = Spoken.panel(parts.creator());
             long now = System.currentTimeMillis();
-            loop.push(List.of(new EventQueue.Entry(EventTypes.QUERY, EventQueue.query(echo, clock.dayTime, null), now, false),
+            loop.push(List.of(EventQueue.said(echo, clock.dayTime, owner(), null, null, now),
                     new EventQueue.Entry(EventTypes.GOAL_DIRECTIVE, GoalPrompts.directive(next.objective()), now, false)));
         }
     }

@@ -98,11 +98,9 @@ class NumenRosterTest {
         NumenRoster.instance().replaceAll("w1", List.of(shared(), new NumenRoster.Entry(B, "阿岩")));
         NumenRoster roster = NumenRoster.instance();
 
-        assertEquals(new Keeper(STEVE, "Steve"),
-                roster.otherSpeaker(A, "<query from=\"player@3f9a1c (Steve)\">修一下镐子</query>", ALEX));
-        assertNull(roster.otherSpeaker(A, "<query from=\"player@3f9a1c (Steve)\">修一下镐子</query>", STEVE), "自己说的");
-        assertNull(roster.otherSpeaker(A, "<query>修一下镐子</query>", ALEX), "没标是谁说的:她那时只有一位主人");
-        assertNull(roster.otherSpeaker(A, "<query source=\"schedule\">该睡了</query>", ALEX), "定时说的,不是谁亲口说的");
+        assertEquals(new Keeper(STEVE, "Steve"), roster.otherSpeaker(A, "player@3f9a1c", ALEX));
+        assertNull(roster.otherSpeaker(A, "player@3f9a1c", STEVE), "自己说的");
+        assertNull(roster.otherSpeaker(A, null, ALEX), "没记是谁说的:不是谁亲口说的");
         assertTrue(roster.severalKeepers(A));
         assertFalse(roster.severalKeepers(B), "主人表没有说的不算");
         assertFalse(roster.severalKeepers(UUID.randomUUID()), "不在名册上");

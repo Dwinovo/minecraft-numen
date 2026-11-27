@@ -215,7 +215,7 @@ class LoopHostTest {
                 com.dwinovo.numen.api.talk.Venue.WHISPER, null);
 
         seats.publish(HER, new EventQueue.Entry(EventTypes.QUERY,
-                EventQueue.query("你好", 6000, "player@abcdef (Friend)", "whisper"), 5L, false), whisper);
+                EventQueue.query("你好", 6000, "player@abcdef (Friend)", "whisper"), 5L, false, null, null, "player@abcdef (Friend)"), whisper);
 
         until("her program reached the body", () -> world.programs.running.containsKey("call-2"));
         assertEquals(FRIEND, world.programs.keepers.get("call-2"), "the program acts for the one she is answering");
@@ -362,5 +362,19 @@ class LoopHostTest {
         LoopHost fresh = anotherComputer();
 
         assertEquals("挖 64 个铁", fresh.goal().objective());
+    }
+
+    @Test
+    void theOwnersWordsAreMarkedWithWhoSaidThemEvenWithASingleOwnerAndTheRowRecordsIt() throws Exception {
+        model.say("好的");
+        host.submitPrompt("你好呀");
+        until("the first turn is recorded on the server", () -> world.transcripts()
+                .read(world.conversation(HER), rows -> rows.size()).join() >= 2);
+
+        com.google.gson.JsonObject row = world.transcripts().read(world.conversation(HER), rows -> rows.getFirst()).join();
+
+        assertEquals("player@000000", row.get("from").getAsString());
+        assertTrue(model.asked.getFirst().messages().stream().anyMatch(m -> m.toString().contains("from=\"player@000000 (主人)\"")),
+                "the model is told who is speaking");
     }
 }

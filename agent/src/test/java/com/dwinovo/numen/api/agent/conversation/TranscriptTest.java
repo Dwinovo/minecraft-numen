@@ -29,7 +29,7 @@ class TranscriptTest {
 
     private static Rows.Line owner(long ts, String conv, int turn, String said, String audience) {
         return line(null, ts, conv, new ConvoState.Msg.User(
-                EventQueue.query(said, 0L) + "\n" + Audience.line(turn, audience)));
+                EventQueue.query(said, 0L, "player@000001 (Owner)") + "\n" + Audience.line(turn, audience)));
     }
 
     private static Rows.Line reply(long ts, String conv, String said) {

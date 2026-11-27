@@ -140,12 +140,13 @@ public final class NumenRoster {
     }
 
     /**
-     * 这条主人的话({@code content} 是日志里那条 user 消息)若是她的另一位主人说的,是那一位;{@code viewer} 自己说的、没标是谁说的
-     * (她只有一位主人,或不是谁亲口说的)是 {@code null}。聊天流的气泡、左栏的最后一句、未读都按这一处认。
+     * 这句主人的话若是她的另一位主人说的,是那一位;{@code viewer} 自己说的、没记是谁说的(不是谁亲口说的)是 {@code null}。
+     * 聊天流的气泡、左栏的最后一句、未读都按这一处认。
+     *
+     * @param from 记录里这句话的说话人({@code player@短码});没有是 {@code null}
      */
-    public Keeper otherSpeaker(UUID companion, String content, UUID viewer) {
-        String marked = com.dwinovo.numen.api.agent.llm.QueryMarkup.speaker(content);
-        Keeper said = marked == null ? null : speaker(companion, marked);
+    public Keeper otherSpeaker(UUID companion, String from, UUID viewer) {
+        Keeper said = from == null ? null : speaker(companion, from);
         return said == null || said.uuid().equals(viewer) ? null : said;
     }
 

@@ -45,7 +45,7 @@ class InjectedMarkupIsStrippedTest {
     @Test
     void theStampOnAQueryIsNotPartOfWhatTheOwnerSaid() {
         EventQueue q = new EventQueue(EventQueue.Journal.NONE);
-        q.push(EventTypes.QUERY, EventQueue.query("去挖铁", 3 * 24000L + 15250L), T0, true);
+        q.push(EventTypes.QUERY, EventQueue.query("去挖铁", 3 * 24000L + 15250L, "player@000001 (Owner)"), T0, true);
 
         assertEquals("去挖铁", new OwnerWordsMode().userText(render(q)));
     }

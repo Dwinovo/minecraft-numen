@@ -37,7 +37,7 @@ class TranscriptsTest {
             B, UUID.fromString("00000000-0000-0000-0000-0000000000b1"));
 
     private static ConvoState.Msg ownerSays(String said, int turn) {
-        return new ConvoState.Msg.User(EventQueue.query(said, 0L) + "\n" + Audience.line(turn, "阿岚"));
+        return new ConvoState.Msg.User(EventQueue.query(said, 0L, "player@000001 (Owner)") + "\n" + Audience.line(turn, "阿岚"));
     }
 
     @Test

@@ -193,7 +193,7 @@ class ConversationRecordTest {
         get(owner.open(OTHER, 0));
         ConversationOpened hers = get(owner.openConversation(HER));
         ConversationOpened others = get(owner.openConversation(OTHER));
-        Rows.Stamp group = new Rows.Stamp("G", null);
+        Rows.Stamp group = new Rows.Stamp("G");
         owner.appendRows(HER, hers.conversation(), written(new Rows.Writer("t"), group, replied("我在"),
                 replied("她也在")));
         owner.appendRows(OTHER, others.conversation(), written(new Rows.Writer("t"), group, replied("我也在")));

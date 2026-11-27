@@ -48,7 +48,7 @@ class SeatJsonTest {
     @Test
     void anEventComesBackEqualWithItsEntryAndOutcome() {
         SeatEvent plain = SeatEvent.of(HER, 3, new EventQueue.Entry("task_finished", "<event kind=\"task_finished\"/>", 9L,
-                true, null, "e7"), 12, 6000).withSeq(5);
+                true, null, "e7", "player@ab12cd (Steve)"), 12, 6000).withSeq(5);
         assertEquals(plain, SeatEvent.fromJson(plain.toJson()));
         SeatEvent stopped = SeatEvent.ofOutcome(HER, 3, new EventQueue.Entry("program_stopped", "cut", 9L, false),
                 outcome(), 13, 6000).withSeq(6);

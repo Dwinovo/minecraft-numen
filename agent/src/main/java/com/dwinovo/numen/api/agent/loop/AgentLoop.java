@@ -127,7 +127,7 @@ public final class AgentLoop {
             if (e.text() == null || e.text().isBlank()) {
                 continue;
             }
-            boolean asUrgent = inbox.push(e.type(), e.text(), e.ts() > 0 ? e.ts() : now, e.urgent());
+            boolean asUrgent = inbox.push(e.type(), e.text(), e.ts() > 0 ? e.ts() : now, e.urgent(), null, e.speaker());
             AiLog.LOG.info("[numen-entity#{}] queued {}{} ({} chars)", name, e.type(), asUrgent ? " URGENT" : "",
                     e.text().length());
             queued.add(new Queued(e, asUrgent));
@@ -360,16 +360,27 @@ public final class AgentLoop {
     }
 
     /**
-     * 取出来的条目拼成一条 user 消息:现场块在前,世界的事按时间排进 {@code <events>},主人的话垫底
-     * (排版规则在 {@link EventQueue#render});元信息的条目({@link EventTypes.Type#meta})各自一条元信息的 user 消息,排在它后面。
+     * 取出来的条目拼成 user 消息:现场块在前,世界的事按时间排进 {@code <events>},主人的话垫底(排版规则在 {@link EventQueue#render});
+     * 一条消息只放一个人的话:几个人的话各自一条,按各人第一次出现的先后相接,不是谁说的话(世界的事)并进第一条。
+     * 元信息的条目({@link EventTypes.Type#meta})各自一条元信息的 user 消息,排在它们后面。
      */
     private void inject(List<EventQueue.Entry> batch) {
         List<EventQueue.Entry> told = batch.stream().filter(e -> !EventTypes.get(e.type()).meta()).toList();
         List<EventQueue.Entry> meta = batch.stream().filter(e -> EventTypes.get(e.type()).meta())
                 .sorted(java.util.Comparator.comparingLong(EventQueue.Entry::ts)).toList();
-        List<String> rendered = EventQueue.render(told);
+        List<String> speakers = told.stream().map(EventQueue.Entry::speakerId).filter(java.util.Objects::nonNull).distinct().toList();
+        List<List<EventQueue.Entry>> messages = new ArrayList<>();
+        if (speakers.size() <= 1) {
+            messages.add(told);
+        } else {
+            for (String speaker : speakers) {
+                messages.add(told.stream().filter(e -> e.speakerId() == null ? speaker.equals(speakers.get(0))
+                        : speaker.equals(e.speakerId())).toList());
+            }
+        }
         List<String> notes = meta.stream().map(e -> EventTypes.get(e.type()).toModel().apply(e.text()))
                 .filter(text -> text != null && !text.isBlank()).toList();
+        List<List<String>> rendered = messages.stream().map(EventQueue::render).filter(r -> !r.isEmpty()).toList();
         if (rendered.isEmpty() && notes.isEmpty()) {
             return;
         }
@@ -378,13 +389,14 @@ public final class AgentLoop {
             if (!preamble.isEmpty()) {
                 transcript.addMeta(preamble);
             }
-        } else {
+        }
+        for (int i = 0; i < rendered.size(); i++) {
             List<String> parts = new ArrayList<>();
-            if (!preamble.isEmpty()) {
+            if (i == 0 && !preamble.isEmpty()) {
                 parts.add(preamble);
             }
-            parts.addAll(rendered);
-            transcript.addUser(String.join("\n", parts));
+            parts.addAll(rendered.get(i));
+            transcript.addUser(String.join("\n", parts), speakers.isEmpty() ? null : speakers.get(Math.min(i, speakers.size() - 1)));
         }
         notes.forEach(transcript::addMeta);
         transcript.resetTurnCount();   // 新输入开始一条新链:只是日志编号

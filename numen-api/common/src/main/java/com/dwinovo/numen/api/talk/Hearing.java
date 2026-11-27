@@ -100,12 +100,7 @@ public final class Hearing {
 
     /** 主人的话(会叫醒她)交给模型的那一条:带说话人的身份,私聊与群里还带说话的地方。 */
     private static EventQueue.Entry query(String text, String who, String venue, String audience) {
-        long day = ServerSeats.dayTime();
-        String body = venue == null ? EventQueue.query(text, day, who) : EventQueue.query(text, day, who, venue);
-        if (audience != null) {
-            body += "\n" + audience;
-        }
-        return new EventQueue.Entry(EventTypes.QUERY, body, System.currentTimeMillis(), false);
+        return EventQueue.said(text, ServerSeats.dayTime(), who, venue, audience, System.currentTimeMillis());
     }
 
     /** 旁听到的那一行的正文:{@code [谁] 说了什么}。事件的壳由投递口盖。 */

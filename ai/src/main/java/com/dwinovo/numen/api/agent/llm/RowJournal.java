@@ -28,7 +28,7 @@ public final class RowJournal implements ConvoState.Journal {
     private final Sink sink;
 
     /**
-     * @param stamp 一条消息的 {@code conv} 与说话的人;状态与边界行盖 {@code stamp.apply(null)}
+     * @param stamp 一条消息的 {@code conv};状态与边界行盖 {@code stamp.apply(null)}
      */
     public RowJournal(Rows.Writer writer, Function<ConvoState.Msg, Rows.Stamp> stamp, Sink sink) {
         this.writer = writer;

@@ -30,12 +30,18 @@ public final class ConvoState {
     /** Tagged union for conversation history. */
     public sealed interface Msg permits Msg.User, Msg.Assistant, Msg.Tool, Msg.Halt {
         /**
-         * Someone said something, or the world did. {@code meta} marks text the owner did not type and the panel does
-         * not draw (a goal's instruction to her, the evaluator's feedback); the model reads it like any other user text.
+         * Someone said something, or the world did. {@code meta} marks text the owner did not type and the panel does not
+         * draw (a goal's instruction to her, the evaluator's feedback); the model reads it like any other user text.
+         * {@code from} is who said the words ({@code player@shortcode}); {@code null} when the text is no one's words
+         * (world events, meta). One message holds the words of one speaker only.
          */
-        record User(String content, boolean meta) implements Msg {
+        record User(String content, boolean meta, String from) implements Msg {
+            public User(String content, boolean meta) {
+                this(content, meta, null);
+            }
+
             public User(String content) {
-                this(content, false);
+                this(content, false, null);
             }
         }
         record Assistant(AssistantTurn turn) implements Msg {}
@@ -139,6 +145,11 @@ public final class ConvoState {
 
     public void addUser(String content) {
         push(new Msg.User(content));
+    }
+
+    /** Someone's words: {@code from} is who said them ({@code player@shortcode}), {@code null} when it is no one's words. */
+    public void addUser(String content, String from) {
+        push(new Msg.User(content, false, from));
     }
 
     /** Text the model reads but the owner did not type and the panel does not draw. */

@@ -133,7 +133,7 @@ class JsonlJournalTest {
         JsonlJournal journal = JsonlJournal.atFile(file());
         EventQueue q = new EventQueue(journal);
         q.push(EventTypes.TASK_FINISHED, "<event day=\"2\" t=\"09:30\">矿挖完了</event>", T0, true);
-        q.push(EventTypes.QUERY, EventQueue.query("辛苦了", 3 * 24000L), T0, true);
+        q.push(EventTypes.QUERY, EventQueue.query("辛苦了", 3 * 24000L, "player@000001 (Owner)"), T0, true);
 
         EventQueue reopened = new EventQueue(journal);
 
@@ -142,7 +142,7 @@ class JsonlJournalTest {
         assertEquals(1, reopened.count(EventTypes.QUERY));
         String out = String.join("\n", EventQueue.render(reopened.takeEntries(T0, 0L)));
         assertTrue(out.contains("<event day=\"2\" t=\"09:30\">矿挖完了</event>"), out);
-        assertTrue(out.contains("<query day=\"3\" t=\"06:00\">辛苦了</query>"), out);
+        assertTrue(out.contains("<query day=\"3\" t=\"06:00\" from=\"player@000001 (Owner)\">辛苦了</query>"), out);
     }
 
     @Test

@@ -158,7 +158,7 @@ public record CompanionState(Phase phase, Hold hold, Cause holdReason, boolean b
         if (o.get("queued") instanceof JsonArray arr) {
             for (JsonElement e : arr) {
                 JsonObject p = e.getAsJsonObject();
-                previews.add(new EventQueue.Preview(string(p, "id"), string(p, "type"), string(p, "text")));
+                previews.add(preview(p));
             }
         }
         return new CompanionState(
@@ -206,11 +206,12 @@ public record CompanionState(Phase phase, Hold hold, Cause holdReason, boolean b
         put(o, "id", p.id());
         o.addProperty("type", p.type());
         o.addProperty("text", p.text());
+        put(o, "speaker", p.speaker());
         return o;
     }
 
     static EventQueue.Preview preview(JsonObject o) {
-        return new EventQueue.Preview(string(o, "id"), string(o, "type"), string(o, "text"));
+        return new EventQueue.Preview(string(o, "id"), string(o, "type"), string(o, "text"), string(o, "speaker"));
     }
 
     private static JsonObject usage(Usage u) {
